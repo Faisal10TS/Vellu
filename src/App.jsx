@@ -204,9 +204,27 @@ export default function App() {
   };
 
   const handleSendInvoice = async (id) => {
+    const appt = appointments.find(a => a.id === id);
+    if (!appt) return;
+    try {
+      await supabase.functions.invoke("send-invoice", {
+        body: {
+          clientName: appt.client_name,
+          clientEmail: appt.client_email,
+          serviceName: appt.service_name,
+          servicePrice: appt.service_price,
+          serviceDuration: appt.service_duration,
+          date: appt.date,
+          time: appt.time,
+          businessName: profile?.business_name || "Vellu",
+          invoiceId: appt.id?.slice(-6),
+        },
+      });
+    } catch (e) {
+      console.error("Email error:", e);
+    }
     await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
     fetchAppointments();
-    const appt = appointments.find(a => a.id === id);
     setPreviewInvoice(appt);
   };
 
