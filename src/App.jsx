@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { HashRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
 
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
@@ -1086,11 +1086,11 @@ function AppInner() {
 export default function VelluApp() {
   const [lang, setLang] = useState("nl");
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Routes>
         <Route path="/" element={<AppInner />} />
         <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   );
 }
