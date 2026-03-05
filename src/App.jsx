@@ -109,31 +109,8 @@ const T = {
   }
 };
 
-// ─── DEMO SALONS ─────────────────────────────────────────────
-const DEMO_SALONS = {
-  "studio-rosa": {
-    id: "studio-rosa", name: "Studio Rosa", city: "Amsterdam", accent: "#e8a598",
-    services: [
-      { id: "1", name_nl: "Wimper Lift & Tint", name_en: "Lash Lift & Tint", price: 65, duration: 60, photos: [] },
-      { id: "2", name_nl: "Wenkbrauw Laminering", name_en: "Brow Lamination", price: 45, duration: 45, photos: [] },
-    ],
-    appointments: [
-      { id: "a1", client_name: "Sophie Berg", service_name: "Wimper Lift & Tint", time: "10:00", date: fmt(today), service_price: 65, status: "confirmed", client_email: "sophie@email.com", invoice_sent: false },
-      { id: "a2", client_name: "Emma Janssen", service_name: "Wenkbrauw Laminering", time: "13:30", date: fmt(today), service_price: 45, status: "completed", client_email: "emma@email.com", invoice_sent: false },
-    ]
-  },
-  "vellu-nails": {
-    id: "vellu-nails", name: "Vellu Nails", city: "Rotterdam", accent: "#c9a96e",
-    services: [
-      { id: "3", name_nl: "Klassieke Manicure", name_en: "Classic Manicure", price: 35, duration: 45, photos: [] },
-      { id: "4", name_nl: "Gel Nagels", name_en: "Gel Nails", price: 55, duration: 75, photos: [] },
-      { id: "5", name_nl: "Pedicure", name_en: "Pedicure", price: 50, duration: 60, photos: [] },
-    ],
-    appointments: [
-      { id: "b1", client_name: "Lisa de Groot", service_name: "Gel Nagels", time: "11:00", date: fmt(today), service_price: 55, status: "confirmed", client_email: "lisa@email.com", invoice_sent: false },
-    ]
-  }
-};
+// ─── NO DEMO SALONS (removed) ────────────────────────────────
+const DEMO_SALONS = {};
 
 // ─── CSS ─────────────────────────────────────────────────────
 const makeCSS = (accent) => `
@@ -302,15 +279,16 @@ function Header({ title, subtitle, right, onBack, accent }) {
 }
 
 // ─── LANDING ─────────────────────────────────────────────────
-function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = DEMO_SALONS }) {
+function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
   const t = T[lang];
   const [slugInput, setSlugInput] = useState("");
   const [error, setError] = useState("");
 
   const goToSlug = (slug) => {
-    const found = DEMO_SALONS[slug.toLowerCase().trim()];
-    if (found) { setError(""); onSelectSalon(found); }
-    else setError(t.salonNotFound);
+    const clean = slug.toLowerCase().trim();
+    if (!clean) return;
+    // Navigate to vellu.cc/slug — the SalonRoute will handle Supabase lookup
+    window.location.href = "/" + clean;
   };
 
   return (
@@ -326,26 +304,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = DE
             <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(237,232,224,0.28)" }}>Beauty booking</div>
           </div>
 
-          {/* Demo salons */}
-          <div style={{ marginBottom: 20 }}>
-            <SL>{t.availableSalons}</SL>
-            {Object.values(DEMO_SALONS).map(salon => (
-              <div key={salon.id} className="salon-pill" onClick={() => onSelectSalon(salon)}>
-                <div>
-                  <div style={{ fontWeight: 500, fontSize: 14, color: "#ede8e0" }}>{salon.name}</div>
-                  <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 2, letterSpacing: "0.04em" }}>
-                    vellu.cc/<span style={{ color: salon.accent }}>{salon.id}</span> · {salon.city}
-                  </div>
-                </div>
-                <span style={{ color: salon.accent, fontSize: 18 }}>→</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Manual slug input */}
+          {/* Slug input */}
           <SL>{t.orEnterSlug}</SL>
           <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            <input className="input-field" placeholder="bijv. studio-rosa" value={slugInput} onChange={e => setSlugInput(e.target.value)}
+            <input className="input-field" placeholder={lang === "nl" ? "bijv. studio-rosa" : "e.g. studio-rosa"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)}
               style={{ borderRadius: 14 }} />
             <button className="btn-ghost" style={{ flexShrink: 0, padding: "0 18px", whiteSpace: "nowrap" }} onClick={() => goToSlug(slugInput)}>{t.goToSalon}</button>
@@ -1056,9 +1018,7 @@ function SalonRoute({ lang, setLang }) {
 
   useEffect(() => {
     const load = async () => {
-      // Check demo salons first
-      if (DEMO_SALONS[slug]) { setSalon(DEMO_SALONS[slug]); setLoading(false); return; }
-      // Then check Supabase
+      // Check Supabase
       const { data, error } = await supabase.from("profiles").select("*, services(*)").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       setSalon({
