@@ -661,6 +661,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const deletePhoto = (serviceId, idx) => update(d => { d.services = d.services.map(s => s.id === serviceId ? {...s, photos: s.photos.filter((_,i) => i !== idx)} : s); return d; });
 
   const copyLink = () => {
+    navigator.clipboard.writeText(`vellu.cc/${salonData.id}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
