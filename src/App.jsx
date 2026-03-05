@@ -354,7 +354,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = DE
 
           {/* Owner link */}
           <div style={{ marginTop: 24, textAlign: "center" }}>
-            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={onOwnerEnter}>👑 {lang === "nl" ? "Eigenaar inloggen" : "Owner login"}</button>
+            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => window.location.href = "/owner"}>👑 {lang === "nl" ? "Eigenaar inloggen" : "Owner login"}</button>
           </div>
         </div>
       </div>
@@ -1007,6 +1007,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   );
 }
 
+// ─── OWNER ENTRY PAGE (vellu.cc/owner) ───────────────────────
+function OwnerEntryPage({ lang, setLang }) {
+  const navigate = useNavigate();
+  const [owner, setOwner] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleLogin = (u) => setOwner(u);
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(`vellu.cc/${owner.slug}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (owner) {
+    return (
+      <div style={{ background: "#111", minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px" }}>
+        <OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={() => setOwner(null)} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#0d0b0a", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 16px" }}>
+      <OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} />
+    </div>
+  );
+}
+
 // ─── SALON ROUTE WRAPPER ─────────────────────────────────────
 function SalonRouteWrapper({ lang, setLang }) {
   const { slug } = useParams();
@@ -1089,6 +1118,7 @@ export default function VelluApp() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<AppInner />} />
+        <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
         <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
       </Routes>
     </BrowserRouter>
