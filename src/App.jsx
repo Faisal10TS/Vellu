@@ -285,9 +285,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const [error, setError] = useState("");
 
   const goToSlug = (slug) => {
-    const clean = slug.toLowerCase().trim();
+    // Strip vellu.cc/ or www.vellu.cc/ prefix if user pasted full link
+    let clean = slug.toLowerCase().trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/^(www\.)?vellu\.cc\//, "");
     if (!clean) return;
-    // Navigate to vellu.cc/slug — the SalonRoute will handle Supabase lookup
     window.location.href = "/" + clean;
   };
 
