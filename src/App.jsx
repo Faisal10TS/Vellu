@@ -73,6 +73,14 @@ const T = {
     selectVariant:"Kies een variant", selectExtras:"Extra's toevoegen",
     noVariants:"Geen varianten", noExtras:"Geen extra's",
     addToCalendar:"Toevoegen aan agenda", googleCalendar:"Google Agenda", appleCalendar:"Apple / Outlook",
+    invoiceDetails:"Factuurgegevens", address:"Adres", kvkNumber:"KVK-nummer", btwId:"BTW-id", ibanNumber:"IBAN",
+    invoicePrefix:"Factuur prefix", invoiceSettings:"Vul je factuurgegevens in om wettelijk correcte facturen te sturen",
+    reviews:"Reviews", writeReview:"Review schrijven", rating:"Beoordeling", reviewComment:"Hoe was je ervaring?",
+    submitReview:"Verstuur review", reviewSubmitted:"Bedankt voor je review!", noReviews:"Nog geen reviews",
+    analytics:"Analytics", weeklyRevenue:"Omzet deze week", monthlyRevenue:"Omzet deze maand",
+    totalRevenue:"Totale omzet", totalAppts:"Totaal afspraken", avgRating:"Gem. beoordeling",
+    popularServices:"Populairste behandelingen", busiestDays:"Drukste dagen",
+    revenueOverTime:"Omzet verloop", bookings:"boekingen",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -118,6 +126,14 @@ const T = {
     selectVariant:"Choose a variant", selectExtras:"Add extras",
     noVariants:"No variants", noExtras:"No extras",
     addToCalendar:"Add to calendar", googleCalendar:"Google Calendar", appleCalendar:"Apple / Outlook",
+    invoiceDetails:"Invoice details", address:"Address", kvkNumber:"Chamber of Commerce", btwId:"VAT ID", ibanNumber:"IBAN",
+    invoicePrefix:"Invoice prefix", invoiceSettings:"Fill in your invoice details to send legally compliant invoices",
+    reviews:"Reviews", writeReview:"Write a review", rating:"Rating", reviewComment:"How was your experience?",
+    submitReview:"Submit review", reviewSubmitted:"Thank you for your review!", noReviews:"No reviews yet",
+    analytics:"Analytics", weeklyRevenue:"Revenue this week", monthlyRevenue:"Revenue this month",
+    totalRevenue:"Total revenue", totalAppts:"Total appointments", avgRating:"Avg. rating",
+    popularServices:"Most popular services", busiestDays:"Busiest days",
+    revenueOverTime:"Revenue over time", bookings:"bookings",
   }
 };
 
@@ -435,6 +451,48 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   );
 }
 
+// ─── REVIEW FORM ────────────────────────────────────────────
+function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const submit = async () => {
+    if (rating === 0) return;
+    await supabase.from("reviews").insert({
+      owner_id: salon.owner_id,
+      client_name: clientName,
+      client_email: clientEmail,
+      rating,
+      comment: comment || null
+    });
+    setSubmitted(true);
+  };
+
+  if (submitted) {
+    return (
+      <div style={{ textAlign: "center", padding: "16px 0" }}>
+        <div style={{ fontSize: 13, color: "#86efac" }}>{t.reviewSubmitted}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", textAlign: "left" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)", marginBottom: 10 }}>{t.writeReview}</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[1,2,3,4,5].map(s => (
+          <span key={s} onClick={() => setRating(s)} style={{ fontSize: 26, cursor: "pointer", color: s <= rating ? accent : "rgba(237,232,224,0.15)", transition: "all 0.15s", transform: s <= rating ? "scale(1.1)" : "none" }}>★</span>
+        ))}
+      </div>
+      <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
+        style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
+      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined }}
+        onClick={submit} disabled={rating === 0}>{t.submitReview}</button>
+    </div>
+  );
+}
+
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const accent = initialSalon.accent || ACCENT;
@@ -732,7 +790,26 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                 </div>
               </div>
 
-              <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto" }} onClick={reset}>{t.newBooking}</button>
+              <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+
+              {/* Write a review */}
+              <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+            </div>
+          )}
+
+          {/* Reviews section - always visible at bottom when not in booking flow */}
+          {!done && step === 1 && initialSalon.reviews?.length > 0 && (
+            <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
+              <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+              {initialSalon.reviews.slice(0, 3).map(r => (
+                <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid rgba(237,232,224,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                    <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name}</span>
+                    <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                  </div>
+                  {r.comment && <div style={{ fontSize: 11, color: "rgba(237,232,224,0.45)", lineHeight: 1.5 }}>{r.comment}</div>}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -859,12 +936,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       if (data) {
         // Load appointments
         const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
+        // Load reviews
+        const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
           name: data.business_name || prev.name,
           city: data.city || prev.city,
           accent: data.accent_color || prev.accent,
+          address: data.address || "",
+          kvk_number: data.kvk_number || "",
+          btw_id: data.btw_id || "",
+          iban: data.iban || "",
+          invoice_prefix: data.invoice_prefix || "INV",
+          next_invoice_number: data.next_invoice_number || 1,
           services: (data.services || []).map(s => ({
             ...s,
             name_nl: s.name_nl || s.name || "",
@@ -873,7 +958,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: s.service_extras || []
           })),
-          appointments: appts || []
+          appointments: appts || [],
+          reviews: reviews || []
         }));
       }
     };
@@ -1133,6 +1219,106 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             </div>
           )}
 
+          {/* ANALYTICS */}
+          {view === "analytics" && (
+            <div className="fade-up">
+              <PTitle sub={lang === "nl" ? "Inzicht in je salon" : "Insight into your salon"}>{t.analytics}</PTitle>
+
+              {/* Key metrics */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {(() => {
+                  const now = new Date();
+                  const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+                  const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
+                  const weekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                  const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                  const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
+                  return <>
+                    <div className="stat-card">
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)" }}>{t.weeklyRevenue}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>€{weekRevenue.toFixed(0)}</div>
+                    </div>
+                    <div className="stat-card">
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)" }}>{t.monthlyRevenue}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>€{monthRevenue.toFixed(0)}</div>
+                    </div>
+                    <div className="stat-card">
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)" }}>{t.totalAppts}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: "#ede8e0", marginTop: 4 }}>{appts.length}</div>
+                      <div style={{ fontSize: 10, color: "rgba(237,232,224,0.2)", marginTop: 2 }}>{completedAppts.length} {t.treatments}</div>
+                    </div>
+                    <div className="stat-card">
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)" }}>{t.avgRating}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>{avgRating} ★</div>
+                      <div style={{ fontSize: 10, color: "rgba(237,232,224,0.2)", marginTop: 2 }}>{salonData.reviews?.length || 0} {t.reviews.toLowerCase()}</div>
+                    </div>
+                  </>;
+                })()}
+              </div>
+
+              {/* Popular services */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.popularServices}</SL>
+                {(() => {
+                  const svcCount = {};
+                  appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
+                  const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                  if (sorted.length === 0) return <div style={{ fontSize: 11, color: "rgba(237,232,224,0.2)", textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
+                  const max = sorted[0][1];
+                  return sorted.map(([name, count]) => (
+                    <div key={name} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
+                        <span style={{ fontSize: 11, color: "rgba(237,232,224,0.4)" }}>{count} {t.bookings}</span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 4, background: "rgba(237,232,224,0.06)" }}>
+                        <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Busiest days */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.busiestDays}</SL>
+                {(() => {
+                  const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+                  const dayCounts = [0,0,0,0,0,0,0];
+                  appts.forEach(a => { const d = new Date(a.date); dayCounts[d.getDay()]++; });
+                  const max = Math.max(...dayCounts, 1);
+                  return dayNames.map((name, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, width: 70, flexShrink: 0, color: "rgba(237,232,224,0.5)" }}>{name.slice(0,3)}</span>
+                      <div style={{ flex: 1, height: 4, borderRadius: 4, background: "rgba(237,232,224,0.06)" }}>
+                        <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(dayCounts[i] / max) * 100}%`, transition: "width 0.4s" }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: "rgba(237,232,224,0.3)", width: 20, textAlign: "right" }}>{dayCounts[i]}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Reviews */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px" }}>
+                <SL>{t.reviews} ({salonData.reviews?.length || 0})</SL>
+                {(!salonData.reviews || salonData.reviews.length === 0)
+                  ? <div style={{ fontSize: 11, color: "rgba(237,232,224,0.2)", textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
+                  : salonData.reviews.map(r => (
+                    <div key={r.id} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid rgba(237,232,224,0.06)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontWeight: 500, fontSize: 13 }}>{r.client_name}</span>
+                        <span style={{ color: accent, fontSize: 13 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                      </div>
+                      {r.comment && <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)", lineHeight: 1.5 }}>{r.comment}</div>}
+                      <div style={{ fontSize: 9, color: "rgba(237,232,224,0.2)", marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString()}</div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
           {/* INSTELLINGEN */}
           {view === "instellingen" && (
             <div className="fade-up">
@@ -1151,6 +1337,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                     {["#c9a96e","#e8a598","#a8c5a0","#9bb5d6","#c4a8d4","#d4756a","#6abfb8","#e8c547"].map(c => (
                       <div key={c} onClick={() => update(d => { d.accent = c; return d; })} style={{ width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer", outline: salonData.accent === c ? "2px solid rgba(237,232,224,0.7)" : "none", outlineOffset: 2, transform: salonData.accent === c ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice details */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.invoiceDetails}</SL>
+                <div style={{ fontSize: 10, color: "rgba(237,232,224,0.2)", marginBottom: 10 }}>{t.invoiceSettings}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                  <input className="input-field" placeholder={t.address} value={salonData.address || ""} onChange={e => update(d => { d.address = e.target.value; return d; })} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+                    <input className="input-field" placeholder={t.kvkNumber} value={salonData.kvk_number || ""} onChange={e => update(d => { d.kvk_number = e.target.value; return d; })} />
+                    <input className="input-field" placeholder={t.btwId} value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} />
+                  </div>
+                  <input className="input-field" placeholder={t.ibanNumber} value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+                    <input className="input-field" placeholder={t.invoicePrefix + " (bijv. INV)"} value={salonData.invoice_prefix || "INV"} onChange={e => update(d => { d.invoice_prefix = e.target.value; return d; })} />
+                    <input className="input-field" placeholder="Volgend nr" type="number" value={salonData.next_invoice_number || 1} onChange={e => update(d => { d.next_invoice_number = parseInt(e.target.value) || 1; return d; })} />
                   </div>
                 </div>
               </div>
@@ -1243,7 +1447,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}>{saved ? t.saved : t.save}</button>
+              <button className="btn-primary" onClick={async () => {
+                await supabase.from("profiles").update({
+                  business_name: salonData.name,
+                  city: salonData.city,
+                  accent_color: salonData.accent,
+                  address: salonData.address || null,
+                  kvk_number: salonData.kvk_number || null,
+                  btw_id: salonData.btw_id || null,
+                  iban: salonData.iban || null,
+                  invoice_prefix: salonData.invoice_prefix || "INV",
+                  next_invoice_number: salonData.next_invoice_number || 1
+                }).eq("id", salonData.owner_id);
+                setSaved(true); setTimeout(() => setSaved(false), 2000);
+              }}>{saved ? t.saved : t.save}</button>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: "rgba(237,232,224,0.3)" }} onClick={onLogout}>{t.logout}</button>
             </div>
           )}
@@ -1251,7 +1468,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
         {/* Bottom Nav */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(13,11,10,0.93)", backdropFilter: "blur(24px)", borderTop: "1px solid rgba(237,232,224,0.06)", display: "flex", padding: "9px 4px 20px" }}>
-          {[["dashboard","◈",t.dashboard],["agenda","◎",t.agenda],["facturen","✦",t.invoices],["instellingen","⊙",t.settings]].map(([k,icon,label]) => (
+          {[["dashboard","◈",t.dashboard],["agenda","◎",t.agenda],["analytics","◇",t.analytics],["facturen","✦",t.invoices],["instellingen","⊙",t.settings]].map(([k,icon,label]) => (
             <div key={k} className="nav-item" onClick={() => setView(k)}>
               <span style={{ fontSize: 17, color: view === k ? accent : "rgba(237,232,224,0.2)", transition: "color 0.2s" }}>{icon}</span>
               <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: view === k ? accent : "rgba(237,232,224,0.2)", transition: "color 0.2s" }}>{label}</span>
@@ -1396,6 +1613,8 @@ function SalonRoute({ lang, setLang }) {
       // Check Supabase
       const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
+      // Load reviews
+      const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -1411,7 +1630,8 @@ function SalonRoute({ lang, setLang }) {
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
           extras: s.service_extras || []
         })),
-        appointments: []
+        appointments: [],
+        reviews: reviews || []
       });
       setLoading(false);
     };
