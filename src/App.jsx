@@ -254,20 +254,27 @@ const makeCSS = (accent) => `
   .salon-pill:hover { background: ${accent}20; border-color: ${accent}66; transform: translateY(-1px); }
 
   .gallery-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; padding: 24px; }
+
+  @media (max-width: 520px) {
+    .service-card { border-radius: 16px; padding: 15px 16px; }
+    .btn-primary { padding: 16px 28px; font-size: 14px; }
+    .btn-ghost { font-size: 12px; }
+    .input-field { padding: 15px 17px; font-size: 14px; }
+    .nav-item { padding: 8px 4px; }
+  }
 `;
 
 // ─── SHARED ───────────────────────────────────────────────────
 function Phone({ children, accent = ACCENT }) {
   return (
-    <div style={{ width: 390, background: "#0d0b0a", borderRadius: 44, overflow: "hidden", boxShadow: "0 40px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.07)", flexShrink: 0 }}>
+    <div style={{ width: "100%", maxWidth: 480, background: "#0d0b0a", borderRadius: window.innerWidth > 520 ? 32 : 0, overflow: "hidden", boxShadow: window.innerWidth > 520 ? "0 40px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.07)" : "none", flexShrink: 0 }}>
       <style>{makeCSS(accent)}</style>
-      <div style={{ height: 44, background: "#0d0b0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 110, height: 30, background: "#000", borderRadius: 20 }} />
-      </div>
       {children}
-      <div style={{ height: 30, background: "#0d0b0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 110, height: 4, background: "rgba(237,232,224,0.18)", borderRadius: 10 }} />
-      </div>
+      {window.innerWidth > 520 && (
+        <div style={{ height: 20, background: "#0d0b0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 110, height: 4, background: "rgba(237,232,224,0.18)", borderRadius: 10 }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -329,8 +336,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   return (
     <Phone>
-      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 80% 40% at 50% -10%, ${ACCENT}12 0%, transparent 60%)`, minHeight: 780, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 28px", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
-        <div style={{ position: "absolute", top: 60, right: 24 }}><LangToggle lang={lang} setLang={setLang} /></div>
+      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 80% 40% at 50% -10%, ${ACCENT}12 0%, transparent 60%)`, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 28px", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
+        <div style={{ position: "absolute", top: 24, right: 24 }}><LangToggle lang={lang} setLang={setLang} /></div>
 
         <div className="fade-up" style={{ width: "100%" }}>
           {/* Logo */}
@@ -412,7 +419,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
   return (
     <Phone>
-      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 80% 40% at 50% -10%, ${ACCENT}10 0%, transparent 60%)`, minHeight: 780, display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 28px", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
+      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 80% 40% at 50% -10%, ${ACCENT}10 0%, transparent 60%)`, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 28px", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
         <div style={{ position: "absolute", top: 60, right: 24 }}><LangToggle lang={lang} setLang={setLang} /></div>
         <div style={{ position: "absolute", top: 60, left: 24 }}>
           <button className="btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }} onClick={onBack}>←</button>
@@ -545,7 +552,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
 
   return (
     <Phone accent={accent}>
-      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, minHeight: 780, display: "flex", flexDirection: "column", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
+      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, minHeight: "100dvh", display: "flex", flexDirection: "column", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
 
         <Header
           title={initialSalon.name}
@@ -1193,17 +1200,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
   return (
     <Phone accent={accent}>
-      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}10 0%, transparent 55%)`, minHeight: 780, display: "flex", flexDirection: "column", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
+      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}10 0%, transparent 55%)`, minHeight: "100dvh", display: "flex", flexDirection: "column", fontFamily: "'Jost',sans-serif", color: "#ede8e0" }}>
 
         <div style={{ padding: "20px 22px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, fontWeight: 400, letterSpacing: "0.06em" }}>{salonData.name}</div>
-            <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.1em", textTransform: "uppercase" }}>eigenaar</span>
+            <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.1em", textTransform: "uppercase" }}>{lang === "nl" ? "eigenaar" : "owner"}</span>
           </div>
           <LangToggle lang={lang} setLang={setLang} />
         </div>
 
-        <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 90px" }}>
+        <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 20px" }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
@@ -1615,11 +1622,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         </div>
 
         {/* Bottom Nav */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(13,11,10,0.93)", backdropFilter: "blur(24px)", borderTop: "1px solid rgba(237,232,224,0.06)", display: "flex", padding: "9px 4px 20px" }}>
+        <div style={{ position: "sticky", bottom: 0, left: 0, right: 0, background: "rgba(13,11,10,0.97)", backdropFilter: "blur(24px)", borderTop: "1px solid rgba(237,232,224,0.08)", display: "flex", padding: "10px 4px", paddingBottom: "max(10px, env(safe-area-inset-bottom))" }}>
           {[["dashboard","◈",t.dashboard],["agenda","◎",t.agenda],["analytics","◇",t.analytics],["facturen","✦",t.invoices],["instellingen","⊙",t.settings]].map(([k,icon,label]) => (
-            <div key={k} className="nav-item" onClick={() => setView(k)}>
-              <span style={{ fontSize: 17, color: view === k ? accent : "rgba(237,232,224,0.2)", transition: "color 0.2s" }}>{icon}</span>
-              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: view === k ? accent : "rgba(237,232,224,0.2)", transition: "color 0.2s" }}>{label}</span>
+            <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
+              <span style={{ fontSize: 18, color: view === k ? accent : "rgba(237,232,224,0.25)", transition: "color 0.2s" }}>{icon}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : "rgba(237,232,224,0.25)", transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
             </div>
           ))}
         </div>
@@ -1713,26 +1720,53 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 function OwnerEntryPage({ lang, setLang }) {
   const navigate = useNavigate();
   const [owner, setOwner] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+        if (profile) {
+          setOwner({
+            name: profile.business_name || "Mijn Salon",
+            email: session.user.email,
+            slug: profile.slug || session.user.email.split("@")[0],
+            city: profile.city || "Nederland",
+            id: session.user.id,
+            accent: profile.accent_color
+          });
+        }
+      }
+      setLoading(false);
+    };
+    checkSession();
+  }, []);
 
   const handleLogin = (u) => setOwner(u);
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(`vellu.cc/${owner.slug}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setOwner(null);
   };
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#0d0b0a", color: "rgba(237,232,224,0.3)", fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
+      vellu...
+    </div>
+  );
 
   if (owner) {
     return (
-      <div style={{ background: "#111", minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px" }}>
-        <OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={() => setOwner(null)} />
+      <div style={{ background: "#0d0b0a", minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: window.innerWidth > 520 ? "32px 16px" : "0" }}>
+        <OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} />
       </div>
     );
   }
 
   return (
-    <div style={{ background: "#0d0b0a", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 16px" }}>
+    <div style={{ background: "#0d0b0a", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: window.innerWidth > 520 ? "32px 16px" : "0" }}>
       <OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} />
     </div>
   );
@@ -1818,7 +1852,7 @@ function AppInner() {
   const handleSelectSalon = (s) => { setSalon(salons[s.id] || s); setScreen("client"); };
 
   return (
-    <div style={{ background: "#111", minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px" }}>
+    <div style={{ background: "#0d0b0a", minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: window.innerWidth > 520 ? "32px 16px" : "0" }}>
       {screen === "landing" && <LandingScreen lang={lang} setLang={setLang} salons={salons} onSelectSalon={handleSelectSalon} onOwnerEnter={() => setScreen("ownerAuth")} />}
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
