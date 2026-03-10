@@ -935,6 +935,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const exportCalendar = (apptList) => {
+    const events = apptList.map(a => {
+      const start = new Date(a.date + "T" + a.time + ":00");
+      const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
+      const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      return [
+        "BEGIN:VEVENT",
+        `DTSTART:${fmt2(start)}`,
+        `DTEND:${fmt2(end)}`,
+        `SUMMARY:${a.client_name} — ${a.service_name}`,
+        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
+        `LOCATION:${salonData.name}, ${salonData.city}`,
+        `STATUS:${a.status === "confirmed" ? "CONFIRMED" : "COMPLETED"}`,
+        `UID:${a.id}@vellu.cc`,
+        "END:VEVENT"
+      ].join("\r\n");
+    });
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Vellu//Beauty Booking//EN",
+      "X-WR-CALNAME:Vellu - " + salonData.name,
+      ...events,
+      "END:VCALENDAR"
+    ].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `vellu-${salonData.id}-agenda.ics`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
   const ApptCard = ({ a }) => (
     <div className="appt-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -998,9 +1030,37 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Preview button */}
-              <button className="btn-ghost" style={{ width: "100%", marginBottom: 22, borderColor: `${accent}33`, color: accent, fontSize: 11 }} onClick={() => setShowPreview(true)}>
+              <button className="btn-ghost" style={{ width: "100%", marginBottom: 10, borderColor: `${accent}33`, color: accent, fontSize: 11 }} onClick={() => setShowPreview(true)}>
                 👁 {lang === "nl" ? "Bekijk klanten pagina" : "Preview client page"}
               </button>
+
+              {/* Calendar export */}
+              {appts.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "10px 12px", borderColor: `${accent}22`, color: accent }} onClick={() => {
+                    const upcoming = appts.filter(a => a.status === "confirmed");
+                    if (upcoming.length === 0) return;
+                    exportCalendar(upcoming);
+                  }}>
+                    📅 {lang === "nl" ? "Exporteer naar agenda" : "Export to calendar"}
+                  </button>
+                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "10px 12px" }} onClick={() => {
+                    const upcoming = appts.filter(a => a.status === "confirmed");
+                    if (upcoming.length === 0) return;
+                    const a = upcoming[0];
+                    const start = new Date(a.date + "T" + a.time + ":00");
+                    const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
+                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                    const title = encodeURIComponent(a.client_name + " — " + a.service_name);
+                    const details = encodeURIComponent(`${a.client_name}\n${a.client_email}\n€${a.service_price}`);
+                    const loc = encodeURIComponent(salonData.name + ", " + salonData.city);
+                    // Export all to Google Calendar (opens for first, rest via .ics)
+                    exportCalendar(upcoming);
+                  }}>
+                    🗓 {lang === "nl" ? "Sync met telefoon" : "Sync with phone"}
+                  </button>
+                </div>
+              )}
 
               <SL>{t.todayAppts}</SL>
               {todayAppts.length === 0
@@ -1031,6 +1091,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(237,232,224,0.18)", fontSize: 12 }}>{t.noTodayAppts}</div>
                 : calAppts.map(a => <ApptCard key={a.id} a={a} />)
               }
+              {calAppts.length > 0 && (
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 12, fontSize: 10, borderColor: `${accent}22`, color: accent }} onClick={() => exportCalendar(calAppts)}>
+                  📅 {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en) naar agenda` : `Export ${calAppts.length} appointment(s) to calendar`}
+                </button>
+              )}
             </div>
           )}
 
