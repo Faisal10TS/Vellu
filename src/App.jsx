@@ -641,11 +641,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   </div>
                 </div>
                 <button className="btn-primary" onClick={async () => {
+                  // Save appointment to Supabase
+                  const apptData = {
+                    owner_id: initialSalon.owner_id,
+                    service_id: sel?.id || null,
+                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : ""),
+                    service_price: getPrice(),
+                    service_duration: getDuration(),
+                    date, time,
+                    client_name: `${form.firstName} ${form.lastName}`,
+                    client_email: form.email,
+                    client_phone: form.phone || null,
+                    payment_method: form.payment,
+                    status: "confirmed",
+                    invoice_sent: false
+                  };
+                  await supabase.from("appointments").insert(apptData);
                   setDone(true);
                   await sendEmails("booking_confirmation", {
                     client_name: `${form.firstName} ${form.lastName}`,
                     client_email: form.email,
-                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => e.name_nl).join(", ") : ""),
+                    service_name: apptData.service_name,
                     date, time,
                     payment: form.payment,
                     price: getPrice(),
@@ -656,7 +672,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     await sendEmails("invoice", {
                       client_name: `${form.firstName} ${form.lastName}`,
                       client_email: form.email,
-                      service_name: getServiceLabel(),
+                      service_name: apptData.service_name,
                       date, price: getPrice(),
                       salon_name: initialSalon.name
                     });
@@ -795,8 +811,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     const load = async () => {
       const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", user.slug).single();
       if (data) {
+        // Load appointments
+        const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
         setSalonData(prev => ({
           ...prev,
+          owner_id: data.id,
           name: data.business_name || prev.name,
           city: data.city || prev.city,
           accent: data.accent_color || prev.accent,
@@ -807,7 +826,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             photos: [],
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: s.service_extras || []
-          }))
+          })),
+          appointments: appts || []
         }));
       }
     };
@@ -827,8 +847,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     if (onSalonUpdate) onSalonUpdate(updated);
     return updated;
   });
-  const markComplete = (id) => update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
-  const sendInvoice = (id) => update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+  const markComplete = async (id) => {
+    await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
+  };
+  const sendInvoice = async (id) => {
+    const a = salonData.appointments.find(x => x.id === id);
+    if (a) {
+      await sendEmails("invoice", {
+        client_name: a.client_name,
+        client_email: a.client_email,
+        service_name: a.service_name,
+        date: a.date,
+        price: a.service_price,
+        salon_name: salonData.name
+      });
+      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+    }
+    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+  };
 
   const addService = () => {
     if (!newSvc.name_nl || !newSvc.price) { setSvcError(t.fillRequired); return; }
@@ -1250,6 +1287,7 @@ function SalonRoute({ lang, setLang }) {
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       setSalon({
         id: data.slug,
+        owner_id: data.id,
         name: data.business_name || data.owner_name || "Salon",
         city: data.city || "Nederland",
         accent: data.accent_color || "#c9a96e",
