@@ -999,14 +999,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
   };
 
-  const addService = () => {
+  const addService = async () => {
     if (!newSvc.name_nl || !newSvc.price) { setSvcError(t.fillRequired); return; }
     setSvcError("");
-    update(d => { d.services = [...d.services, { id: Date.now().toString(), ...newSvc, price: parseFloat(newSvc.price), duration: parseInt(newSvc.duration), photos: [] }]; return d; });
+    const { data, error } = await supabase.from("services").insert({
+      owner_id: salonData.owner_id,
+      name: newSvc.name_nl,
+      name_nl: newSvc.name_nl,
+      name_en: newSvc.name_en || null,
+      price: parseFloat(newSvc.price),
+      duration: parseInt(newSvc.duration)
+    }).select().single();
+    if (!error && data) {
+      update(d => { d.services = [...d.services, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || data.name, photos: [], variants: [], extras: [] }]; return d; });
+    }
     setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" });
   };
 
-  const deleteService = (id) => update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
+  const deleteService = async (id) => {
+    await supabase.from("services").delete().eq("id", id);
+    update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
+  };
 
   const addPhoto = (serviceId, file) => {
     const url = URL.createObjectURL(file);
