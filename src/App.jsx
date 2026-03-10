@@ -81,6 +81,9 @@ const T = {
     totalRevenue:"Totale omzet", totalAppts:"Totaal afspraken", avgRating:"Gem. beoordeling",
     popularServices:"Populairste behandelingen", busiestDays:"Drukste dagen",
     revenueOverTime:"Omzet verloop", bookings:"boekingen",
+    staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker",
+    staffRole:"Functie (bijv. Nagelstyliste)", selectStaff:"Kies een medewerker",
+    anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -134,6 +137,9 @@ const T = {
     totalRevenue:"Total revenue", totalAppts:"Total appointments", avgRating:"Avg. rating",
     popularServices:"Most popular services", busiestDays:"Busiest days",
     revenueOverTime:"Revenue over time", bookings:"bookings",
+    staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name",
+    staffRole:"Role (e.g. Nail technician)", selectStaff:"Choose a staff member",
+    anyStaff:"No preference", noStaff:"No staff members yet",
   }
 };
 
@@ -505,6 +511,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [sel, setSel] = useState(null);
   const [selVariant, setSelVariant] = useState(null);
   const [selExtras, setSelExtras] = useState([]);
+  const [selStaff, setSelStaff] = useState(null);
   const [date, setDate] = useState(fmt(today));
   const [time, setTime] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
@@ -512,6 +519,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [gallery, setGallery] = useState(null);
   const days = getDays();
   const canConfirm = form.firstName && form.lastName && form.email;
+
+  // Filter staff members who can do the selected service
+  const availableStaff = (initialSalon.staff || []).filter(m =>
+    m.service_ids?.length === 0 || m.service_ids?.includes(sel?.id)
+  );
 
   const getPrice = () => {
     const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
@@ -529,7 +541,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     setSelExtras(prev => prev.find(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra]);
   };
 
-  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
+  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
 
   return (
     <Phone accent={accent}>
@@ -628,6 +640,33 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     )}
                   </div>
                 ))}
+
+                {/* Staff selection */}
+                {sel && availableStaff.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <SL>{t.selectStaff}</SL>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                      <div className={`service-card ${selStaff === null ? "sel" : ""}`}
+                        onClick={() => setSelStaff(null)}
+                        style={{ padding: "10px 14px", minWidth: "fit-content", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(237,232,224,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>👤</div>
+                        <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                      </div>
+                      {availableStaff.map(m => (
+                        <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`}
+                          onClick={() => setSelStaff(selStaff?.id === m.id ? null : m)}
+                          style={{ padding: "10px 14px", minWidth: "fit-content", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: accent }}>{m.name[0]}</div>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
+                            {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginTop: 14 }}>
                   <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
                 </div>
@@ -683,7 +722,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {step === 4 && <>
                 <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
                 <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
-                  {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],[t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                  {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],
+                    ...(selStaff ? [[t.staff, selStaff.name]] : []),
+                    [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -714,7 +755,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     client_phone: form.phone || null,
                     payment_method: form.payment,
                     status: "confirmed",
-                    invoice_sent: false
+                    invoice_sent: false,
+                    staff_id: selStaff?.id || null,
+                    staff_name: selStaff?.name || null
                   };
                   await supabase.from("appointments").insert(apptData);
                   setDone(true);
@@ -911,6 +954,66 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
   );
 }
 
+// ─── STAFF ADDER ────────────────────────────────────────────
+function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", role: "" });
+  const [selServices, setSelServices] = useState([]);
+
+  const add = async () => {
+    if (!form.name) return;
+    const { data, error } = await supabase.from("staff_members").insert({
+      owner_id: ownerId, name: form.name, role: form.role || null
+    }).select().single();
+    if (!error && data) {
+      // Link selected services
+      if (selServices.length > 0) {
+        await supabase.from("staff_services").insert(
+          selServices.map(sid => ({ staff_id: data.id, service_id: sid }))
+        );
+      }
+      onAdd({ ...data, service_ids: selServices });
+      setForm({ name: "", role: "" });
+      setSelServices([]);
+      setOpen(false);
+    }
+  };
+
+  if (!open) return (
+    <button className="btn-ghost" style={{ width: "100%", fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+      onClick={() => setOpen(true)}>{t.addStaff}</button>
+  );
+
+  return (
+    <div style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 12, padding: 12, marginTop: 4 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+        <input className="input-field" placeholder={t.staffName + " *"} value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+        <input className="input-field" placeholder={t.staffRole} value={form.role} onChange={e => setForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+      </div>
+      {services.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 6 }}>{t.services}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {services.map(s => {
+              const isOn = selServices.includes(s.id);
+              return (
+                <div key={s.id} onClick={() => setSelServices(prev => isOn ? prev.filter(x => x !== s.id) : [...prev, s.id])}
+                  style={{ fontSize: 10, padding: "5px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : "rgba(237,232,224,0.12)"}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : "rgba(237,232,224,0.5)", transition: "all 0.2s" }}>
+                  {s.name_nl || s.name}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalonUpdate }) {
   const t = T[lang];
@@ -938,6 +1041,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
         // Load reviews
         const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
+        // Load staff
+        const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position");
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -959,7 +1064,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             extras: s.service_extras || []
           })),
           appointments: appts || [],
-          reviews: reviews || []
+          reviews: reviews || [],
+          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) }))
         }));
       }
     };
@@ -1072,7 +1178,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         <div>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
           <div style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", marginTop: 3 }}>{a.time} · {a.service_name}</div>
-          <div style={{ fontSize: 10, color: "rgba(237,232,224,0.22)", marginTop: 2 }}>{a.client_email}</div>
+          <div style={{ fontSize: 10, color: "rgba(237,232,224,0.22)", marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : (lang === "nl" ? "Voltooid" : "Completed")}</span>
@@ -1460,6 +1566,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               </div>
 
+              {/* Staff / Team */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.staff}</SL>
+                {(salonData.staff || []).length === 0 && (
+                  <div style={{ fontSize: 11, color: "rgba(237,232,224,0.2)", textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
+                )}
+                {(salonData.staff || []).map(m => (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid rgba(237,232,224,0.06)" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: accent }}>{m.name[0]}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{m.name}</div>
+                          {m.role && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
+                        </div>
+                      </div>
+                    </div>
+                    <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                      onClick={async () => {
+                        await supabase.from("staff_members").delete().eq("id", m.id);
+                        update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
+                      }}>×</button>
+                  </div>
+                ))}
+                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
+                  update(d => { d.staff = [...(d.staff || []), member]; return d; });
+                }} />
+              </div>
+
               <button className="btn-primary" onClick={async () => {
                 await supabase.from("profiles").update({
                   business_name: salonData.name,
@@ -1628,6 +1763,8 @@ function SalonRoute({ lang, setLang }) {
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load reviews
       const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
+      // Load staff
+      const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position");
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -1644,7 +1781,8 @@ function SalonRoute({ lang, setLang }) {
           extras: s.service_extras || []
         })),
         appointments: [],
-        reviews: reviews || []
+        reviews: reviews || [],
+        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) }))
       });
       setLoading(false);
     };
