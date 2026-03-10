@@ -804,7 +804,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {initialSalon.reviews.slice(0, 3).map(r => (
                 <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid rgba(237,232,224,0.04)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                    <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name}</span>
+                    <span style={{ fontWeight: 500, fontSize: 12 }}>{(() => { const parts = r.client_name.split(" "); return parts[0] + (parts[1] ? " " + parts[1][0] + "." : ""); })()}</span>
                     <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                   </div>
                   {r.comment && <div style={{ fontSize: 11, color: "rgba(237,232,224,0.45)", lineHeight: 1.5 }}>{r.comment}</div>}
