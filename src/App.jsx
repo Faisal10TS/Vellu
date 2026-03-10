@@ -719,16 +719,17 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   return (
     <div style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 12, padding: 10, marginTop: 4 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-        <input className="input-field" placeholder={t.variantName} value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.variantNameEn} value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.variantDesc} value={form.description_nl} onChange={e => setForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.variantDescEn} value={form.description_en} onChange={e => setForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.price} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.duration} type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Omschrijving (NL)" value={form.description_nl} onChange={e => setForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Description (EN)" value={form.description_en} onChange={e => setForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Duur (min)" type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
       </div>
+      {(!form.name_nl || !form.price) && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.2)", marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"}</div>}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>✓</button>
-        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px" }} onClick={() => setOpen(false)}>✕</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}>✕</button>
       </div>
     </div>
   );
@@ -759,13 +760,13 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
   return (
     <div style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 12, padding: 10, marginTop: 4 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
-        <input className="input-field" placeholder={t.extraName} value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.extraNameEn} value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder={t.price} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>✓</button>
-        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px" }} onClick={() => setOpen(false)}>✕</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}>✕</button>
       </div>
     </div>
   );
