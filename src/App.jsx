@@ -67,6 +67,11 @@ const T = {
     salonNotFound:"Salon niet gevonden. Probeer een andere naam.",
     orEnterSlug:"Of voer een salon-link in:",
     availableSalons:"Beschikbare salons (demo)",
+    variants:"Varianten", extras:"Extra's", addVariant:"+ Variant toevoegen", addExtra:"+ Extra toevoegen",
+    variantName:"Variant naam (NL)", variantNameEn:"Variant naam (EN)", variantDesc:"Omschrijving (NL)", variantDescEn:"Omschrijving (EN)",
+    extraName:"Extra naam (NL)", extraNameEn:"Extra naam (EN)",
+    selectVariant:"Kies een variant", selectExtras:"Extra's toevoegen",
+    noVariants:"Geen varianten", noExtras:"Geen extra's",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -106,6 +111,11 @@ const T = {
     salonNotFound:"Salon not found. Try a different name.",
     orEnterSlug:"Or enter a salon link:",
     availableSalons:"Available salons (demo)",
+    variants:"Variants", extras:"Extras", addVariant:"+ Add variant", addExtra:"+ Add extra",
+    variantName:"Variant name (NL)", variantNameEn:"Variant name (EN)", variantDesc:"Description (NL)", variantDescEn:"Description (EN)",
+    extraName:"Extra name (NL)", extraNameEn:"Extra name (EN)",
+    selectVariant:"Choose a variant", selectExtras:"Add extras",
+    noVariants:"No variants", noExtras:"No extras",
   }
 };
 
@@ -433,6 +443,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
 
   const [step, setStep] = useState(1);
   const [sel, setSel] = useState(null);
+  const [selVariant, setSelVariant] = useState(null);
+  const [selExtras, setSelExtras] = useState([]);
   const [date, setDate] = useState(fmt(today));
   const [time, setTime] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
@@ -441,7 +453,23 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const days = getDays();
   const canConfirm = form.firstName && form.lastName && form.email;
 
-  const reset = () => { setStep(1); setSel(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
+  const getPrice = () => {
+    const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
+    const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+    return base + extrasTotal;
+  };
+  const getDuration = () => selVariant ? selVariant.duration : (sel?.duration || 0);
+  const getServiceLabel = () => {
+    let label = svcName(sel);
+    if (selVariant) label += " — " + (lang === "nl" ? selVariant.name_nl : (selVariant.name_en || selVariant.name_nl));
+    return label;
+  };
+
+  const toggleExtra = (extra) => {
+    setSelExtras(prev => prev.find(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra]);
+  };
+
+  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
 
   return (
     <Phone accent={accent}>
@@ -450,7 +478,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
         <Header
           title={initialSalon.name}
           subtitle={initialSalon.city}
-          onBack={done ? reset : (step > 1 ? () => setStep(s => s-1) : onBack)}
+          onBack={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)}
           right={<LangToggle lang={lang} setLang={setLang} />}
           accent={accent}
         />
@@ -463,23 +491,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                 {[1,2,3,4].map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : "rgba(237,232,224,0.08)", transition:"background 0.4s" }} />)}
               </div>
 
-              {/* Step 1 — Service + photos */}
+              {/* Step 1 — Service selection */}
               {step === 1 && <>
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                 {initialSalon.services.map(s => (
                   <div key={s.id}>
-                    <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => setSel(s)}>
+                    <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => { setSel(s); setSelVariant(null); setSelExtras([]); }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
                           <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
                           <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
                             {s.duration} {t.min}
                             {s.photos.length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                            {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
                           </div>
                         </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{s.price}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
+                          {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                        </div>
                       </div>
-                      {/* Photo row */}
                       {s.photos.length > 0 && (
                         <div className="photo-grid">
                           {s.photos.map((p, i) => (
@@ -488,10 +518,58 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         </div>
                       )}
                     </div>
+
+                    {/* Variants inline when selected */}
+                    {sel?.id === s.id && s.variants?.length > 0 && (
+                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        <SL>{t.selectVariant}</SL>
+                        {s.variants.map(v => (
+                          <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`}
+                            onClick={() => setSelVariant(selVariant?.id === v.id ? null : v)}
+                            style={{ padding: "12px 15px", marginBottom: 7 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
+                                {(v.description_nl || v.description_en) && (
+                                  <div style={{ fontSize: 10, color: "rgba(237,232,224,0.3)", marginTop: 2 }}>
+                                    {lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}
+                                  </div>
+                                )}
+                                <div style={{ fontSize: 10, color: "rgba(237,232,224,0.25)", marginTop: 2 }}>{v.duration} {t.min}</div>
+                              </div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: accent }}>€{v.price}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Extras inline when selected */}
+                    {sel?.id === s.id && s.extras?.length > 0 && (
+                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        <SL>{t.selectExtras}</SL>
+                        {s.extras.map(e => {
+                          const isOn = selExtras.find(x => x.id === e.id);
+                          return (
+                            <div key={e.id} className={`service-card ${isOn ? "sel" : ""}`}
+                              onClick={() => toggleExtra(e)}
+                              style={{ padding: "11px 15px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <div style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${isOn ? accent : "rgba(237,232,224,0.18)"}`, background: isOn ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#0d0b0a", transition: "all 0.2s" }}>
+                                  {isOn && "✓"}
+                                </div>
+                                <span style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
+                              </div>
+                              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent }}>+€{e.price}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div style={{ marginTop: 14 }}>
-                  <button className="btn-primary" disabled={!sel} onClick={() => setStep(2)}>{t.next}</button>
+                  <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
                 </div>
               </>}
 
@@ -545,37 +623,41 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {step === 4 && <>
                 <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
                 <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
-                  {[[t.treatment, svcName(sel)],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],[t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                  {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],[t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
                     </div>
                   ))}
+                  {selExtras.length > 0 && (
+                    <div className="confirm-row">
+                      <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.extras}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500 }}>{selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
-                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{sel?.price}.00</span>
+                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
                   </div>
                 </div>
                 <button className="btn-primary" onClick={async () => {
                   setDone(true);
-                  // Send confirmation emails
                   await sendEmails("booking_confirmation", {
                     client_name: `${form.firstName} ${form.lastName}`,
                     client_email: form.email,
-                    service_name: svcName(sel),
+                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => e.name_nl).join(", ") : ""),
                     date, time,
                     payment: form.payment,
-                    price: sel?.price,
+                    price: getPrice(),
                     salon_name: initialSalon.name,
                     owner_email: initialSalon.owner_email || "info@vellu.cc"
                   });
-                  // Send invoice if paid online
                   if (form.payment === "online") {
                     await sendEmails("invoice", {
                       client_name: `${form.firstName} ${form.lastName}`,
                       client_email: form.email,
-                      service_name: svcName(sel),
-                      date, price: sel?.price,
+                      service_name: getServiceLabel(),
+                      date, price: getPrice(),
                       salon_name: initialSalon.name
                     });
                   }
@@ -610,6 +692,85 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   );
 }
 
+// ─── VARIANT & EXTRA ADDERS ─────────────────────────────────
+function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
+
+  const add = async () => {
+    if (!form.name_nl || !form.price) return;
+    const { data, error } = await supabase.from("service_variants").insert({
+      service_id: serviceId, name_nl: form.name_nl, name_en: form.name_en || null,
+      description_nl: form.description_nl || null, description_en: form.description_en || null,
+      price: parseFloat(form.price), duration: parseInt(form.duration)
+    }).select().single();
+    if (!error && data) {
+      onAdd(data);
+      setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
+      setOpen(false);
+    }
+  };
+
+  if (!open) return (
+    <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+      onClick={() => setOpen(true)}>{t.addVariant}</button>
+  );
+
+  return (
+    <div style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 12, padding: 10, marginTop: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+        <input className="input-field" placeholder={t.variantName} value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.variantNameEn} value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.variantDesc} value={form.description_nl} onChange={e => setForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.variantDescEn} value={form.description_en} onChange={e => setForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.price} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.duration} type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>✓</button>
+        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px" }} onClick={() => setOpen(false)}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name_nl: "", name_en: "", price: "" });
+
+  const add = async () => {
+    if (!form.name_nl || !form.price) return;
+    const { data, error } = await supabase.from("service_extras").insert({
+      service_id: serviceId, name_nl: form.name_nl, name_en: form.name_en || null,
+      price: parseFloat(form.price)
+    }).select().single();
+    if (!error && data) {
+      onAdd(data);
+      setForm({ name_nl: "", name_en: "", price: "" });
+      setOpen(false);
+    }
+  };
+
+  if (!open) return (
+    <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+      onClick={() => setOpen(true)}>{t.addExtra}</button>
+  );
+
+  return (
+    <div style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 12, padding: 10, marginTop: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+        <input className="input-field" placeholder={t.extraName} value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.extraNameEn} value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <input className="input-field" placeholder={t.price} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>✓</button>
+        <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px" }} onClick={() => setOpen(false)}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalonUpdate }) {
   const t = T[lang];
@@ -618,8 +779,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(today));
   const [salonData, setSalonData] = useState(() => {
-    const existing = DEMO_SALONS[user.slug];
-    if (existing) return { ...existing, accent: existing.accent || ACCENT };
     return { id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, services: [], appointments: [] };
   });
   const [saved, setSaved] = useState(false);
@@ -629,6 +788,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const fileRefs = useRef({});
+
+  // Load salon data from Supabase
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", user.slug).single();
+      if (data) {
+        setSalonData(prev => ({
+          ...prev,
+          name: data.business_name || prev.name,
+          city: data.city || prev.city,
+          accent: data.accent_color || prev.accent,
+          services: (data.services || []).map(s => ({
+            ...s,
+            name_nl: s.name_nl || s.name || "",
+            name_en: s.name_en || s.name || "",
+            photos: [],
+            variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+            extras: s.service_extras || []
+          }))
+        }));
+      }
+    };
+    load();
+  }, [user.slug]);
 
   const accent = salonData.accent;
   const appts = salonData.appointments;
@@ -839,6 +1022,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", flexShrink: 0 }} onClick={() => deleteService(s.id)}>{t.deleteService}</button>
                     </div>
 
+                    {/* Variants */}
+                    <div style={{ marginTop: 10, marginLeft: 8, paddingLeft: 10, borderLeft: `2px solid ${accent}22` }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 6 }}>{t.variants}</div>
+                      {(s.variants || []).map(v => (
+                        <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, padding: "6px 0" }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 500 }}>{v.name_nl}</div>
+                            {v.description_nl && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.25)" }}>{v.description_nl}</div>}
+                            <div style={{ fontSize: 10, color: "rgba(237,232,224,0.3)" }}>€{v.price} · {v.duration} {t.min}</div>
+                          </div>
+                          <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                            onClick={async () => {
+                              await supabase.from("service_variants").delete().eq("id", v.id);
+                              update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
+                            }}>×</button>
+                        </div>
+                      ))}
+                      <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                        update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: [...(svc.variants||[]), variant]} : svc); return d; });
+                      }} />
+                    </div>
+
+                    {/* Extras */}
+                    <div style={{ marginTop: 8, marginLeft: 8, paddingLeft: 10, borderLeft: `2px solid ${accent}22` }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 6 }}>{t.extras}</div>
+                      {(s.extras || []).map(e => (
+                        <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, padding: "4px 0" }}>
+                          <div style={{ fontSize: 11, fontWeight: 500 }}>{e.name_nl} <span style={{ color: "rgba(237,232,224,0.3)" }}>+€{e.price}</span></div>
+                          <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                            onClick={async () => {
+                              await supabase.from("service_extras").delete().eq("id", e.id);
+                              update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: (svc.extras||[]).filter(x => x.id !== e.id)} : svc); return d; });
+                            }}>×</button>
+                        </div>
+                      ))}
+                      <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                        update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: [...(svc.extras||[]), extra]} : svc); return d; });
+                      }} />
+                    </div>
+
                     {/* Photo management */}
                     <div className="photo-grid">
                       {s.photos.map((p, i) => (
@@ -1022,14 +1245,22 @@ function SalonRoute({ lang, setLang }) {
   useEffect(() => {
     const load = async () => {
       // Check Supabase
-      const { data, error } = await supabase.from("profiles").select("*, services(*)").eq("slug", slug).single();
+      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       setSalon({
         id: data.slug,
         name: data.business_name || data.owner_name || "Salon",
         city: data.city || "Nederland",
         accent: data.accent_color || "#c9a96e",
-        services: (data.services || []).map(s => ({ ...s, photos: [] })),
+        owner_email: data.email,
+        services: (data.services || []).map(s => ({
+          ...s,
+          name_nl: s.name_nl || s.name || "",
+          name_en: s.name_en || s.name || "",
+          photos: [],
+          variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+          extras: s.service_extras || []
+        })),
         appointments: []
       });
       setLoading(false);
