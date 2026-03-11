@@ -799,6 +799,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
 
   // Get active discount codes
   const activeCodes = (initialSalon.discount_codes || []).filter(c => c.active);
+  console.log("ClientApp discount codes:", { raw: initialSalon.discount_codes, active: activeCodes });
   
   // Apply discount code - called on input change for instant feedback
   const applyDiscountCode = (code = discountCode) => {
@@ -1909,7 +1910,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   // Load salon data from Supabase
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
+      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
+      console.log("OwnerApp loaded data:", { discount_codes: data?.discount_codes, error });
       if (data) {
         // Load appointments
         const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
@@ -1917,6 +1919,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
         // Load staff
         const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position");
+        
+        // Parse discount_codes - handle both string and array formats
+        let parsedDiscountCodes = [];
+        if (data.discount_codes) {
+          if (typeof data.discount_codes === "string") {
+            try { parsedDiscountCodes = JSON.parse(data.discount_codes); } catch (e) { parsedDiscountCodes = []; }
+          } else if (Array.isArray(data.discount_codes)) {
+            parsedDiscountCodes = data.discount_codes;
+          }
+        }
+        
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -1934,7 +1947,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           phone_required: data.phone_required || false,
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
-          discount_codes: data.discount_codes || [],
+          discount_codes: parsedDiscountCodes,
           services: (data.services || []).map(s => ({
             ...s,
             name_nl: s.name_nl || s.name || "",
@@ -2008,6 +2021,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   };
 
   const addPhoto = async (serviceId, file) => {
+    console.log("addPhoto called:", { serviceId, fileName: file.name, ownerId: salonData.owner_id });
+    
     // Upload to Supabase Storage
     const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${file.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -2016,13 +2031,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
+      alert("Foto upload mislukt: " + uploadError.message);
       return;
     }
+    console.log("Upload success:", uploadData);
     
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from("service-photos")
       .getPublicUrl(fileName);
+    console.log("Public URL:", publicUrl);
     
     // Save to database
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
@@ -2033,8 +2051,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     
     if (dbError) {
       console.error("DB error:", dbError);
+      alert("Database fout: " + dbError.message);
       return;
     }
+    console.log("Photo saved to DB:", photoData);
     
     // Update local state
     update(d => { 
@@ -3131,11 +3151,24 @@ function SalonRoute({ lang, setLang }) {
     const load = async () => {
       // Check Supabase
       const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", slug).single();
+      console.log("SalonRoute loaded data:", { discount_codes: data?.discount_codes, booking_policy: data?.booking_policy, error });
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load reviews
       const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
       // Load staff
       const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position");
+      
+      // Parse discount_codes - handle both string and array formats
+      let parsedDiscountCodes = [];
+      if (data.discount_codes) {
+        if (typeof data.discount_codes === "string") {
+          try { parsedDiscountCodes = JSON.parse(data.discount_codes); } catch (e) { parsedDiscountCodes = []; }
+        } else if (Array.isArray(data.discount_codes)) {
+          parsedDiscountCodes = data.discount_codes;
+        }
+      }
+      console.log("Parsed discount codes:", parsedDiscountCodes);
+      
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -3148,7 +3181,7 @@ function SalonRoute({ lang, setLang }) {
         phone_required: data.phone_required || false,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
-        discount_codes: data.discount_codes || [],
+        discount_codes: parsedDiscountCodes,
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
