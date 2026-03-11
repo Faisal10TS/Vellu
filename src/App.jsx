@@ -60,11 +60,11 @@ const T = {
     noTodayAppts:"Geen afspraken vandaag", markComplete:"✓ Markeer Voltooid",
     sendInvoice:"📄 Factuur Sturen", invoiceSent:"✓ Factuur verstuurd",
     completedTreatments:"Voltooide behandelingen", totalEarnings:"Totale inkomsten",
-    noCompleted:"Nog geen voltooide afspraken", manageSalon:"Beheer je salon",
+    noCompleted:"Nog geen voltooide afspraken", manageSalon:"Beheer je bedrijf",
     profile:"Profiel", brandColor:"Merkkleur", services:"Diensten", save:"Opslaan",
     saved:"Opgeslagen ✓", logout:"Uitloggen", businessName:"Bedrijfsnaam", city:"Stad",
     addService:"+ Dienst Toevoegen", deleteService:"Verwijder",
-    ownerLogin:"Eigenaar Login", ownerSub:"Inloggen als salon eigenaar",
+    ownerLogin:"Eigenaar Login", ownerSub:"Inloggen als ondernemer",
     emailField:"E-mailadres", passwordField:"Wachtwoord", login:"Inloggen",
     signUp:"Registreren", signUpTitle:"Account Aanmaken",
     businessNameField:"Bedrijfsnaam (bijv. Studio Rosa)",
@@ -73,13 +73,13 @@ const T = {
     manageAppts:"Beheer je afspraken", today:"Vandaag", earnings:"Inkomsten",
     appts:"afspraken", treatments:"behandelingen", sent:"Verstuurd", send:"Sturen",
     min:"min", photos:"Foto's", addPhoto:"Foto toevoegen", noPhotos:"Nog geen foto's",
-    deletePhoto:"Verwijder", salonLink:"Jouw salon link", copyLink:"Kopieer",
+    deletePhoto:"Verwijder", salonLink:"Jouw link", copyLink:"Kopieer",
     copied:"Gekopieerd!", serviceName:"Dienst naam (NL)", serviceNameEn:"Dienst naam (EN)",
     price:"Prijs (€)", duration:"Duur (min)", fillRequired:"Vul naam en prijs in",
-    bookAt:"Boek bij", enterSalon:"Voer salon-link in", goToSalon:"Ga naar salon",
-    salonNotFound:"Salon niet gevonden. Probeer een andere naam.",
-    orEnterSlug:"Of voer een salon-link in:",
-    availableSalons:"Beschikbare salons (demo)",
+    bookAt:"Boek bij", enterSalon:"Voer link in", goToSalon:"Naar pagina",
+    salonNotFound:"Niet gevonden. Probeer een andere naam.",
+    orEnterSlug:"Of voer een link in:",
+    availableSalons:"Beschikbare studios (demo)",
     variants:"Varianten", extras:"Extra's", addVariant:"+ Variant toevoegen", addExtra:"+ Extra toevoegen",
     variantName:"Variant naam (NL)", variantNameEn:"Variant naam (EN)", variantDesc:"Omschrijving (NL)", variantDescEn:"Omschrijving (EN)",
     extraName:"Extra naam (NL)", extraNameEn:"Extra naam (EN)",
@@ -99,6 +99,22 @@ const T = {
     anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
     businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit", closed:"Gesloten",
     businessHoursDesc:"Stel je werkdagen en -uren in", closedOnDay:"Gesloten op deze dag",
+    // New customization translations
+    bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
+    bookingPolicyPlaceholder:"Bijv. Annuleren kan tot 24 uur van tevoren...",
+    agreeToPolicy:"Ik ga akkoord met de voorwaarden",
+    phoneRequired:"Telefoonnummer verplicht", phoneRequiredDesc:"Maak telefoonnummer verplicht voor klanten",
+    appearance:"Uiterlijk", logo:"Logo", coverImage:"Cover afbeelding",
+    uploadLogo:"Logo uploaden", uploadCover:"Cover uploaden", removeLogo:"Verwijder logo", removeCover:"Verwijder cover",
+    logoDesc:"Wordt getoond in de header (aanbevolen: vierkant, max 500x500px)",
+    coverDesc:"Wordt getoond bovenaan je pagina (aanbevolen: 1200x400px)",
+    discountCodes:"Kortingscodes", addDiscountCode:"+ Kortingscode toevoegen",
+    discountCode:"Code", discountAmount:"Korting", discountType:"Type",
+    discountPercent:"Percentage (%)", discountFixed:"Vast bedrag (€)",
+    discountActive:"Actief", deleteCode:"Verwijder", applyCode:"Toepassen",
+    invalidCode:"Ongeldige kortingscode", codeApplied:"Kortingscode toegepast!",
+    discount:"Korting", enterDiscountCode:"Kortingscode invoeren",
+    required:"verplicht",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -118,11 +134,11 @@ const T = {
     noTodayAppts:"No appointments today", markComplete:"✓ Mark Complete",
     sendInvoice:"📄 Send Invoice", invoiceSent:"✓ Invoice sent",
     completedTreatments:"Completed treatments", totalEarnings:"Total earnings",
-    noCompleted:"No completed appointments yet", manageSalon:"Manage your salon",
+    noCompleted:"No completed appointments yet", manageSalon:"Manage your business",
     profile:"Profile", brandColor:"Brand color", services:"Services", save:"Save",
     saved:"Saved ✓", logout:"Log out", businessName:"Business name", city:"City",
     addService:"+ Add Service", deleteService:"Delete",
-    ownerLogin:"Owner Login", ownerSub:"Sign in as salon owner",
+    ownerLogin:"Owner Login", ownerSub:"Sign in as business owner",
     emailField:"Email address", passwordField:"Password", login:"Sign In",
     signUp:"Sign Up", signUpTitle:"Create Account",
     businessNameField:"Business name (e.g. Studio Rosa)",
@@ -131,13 +147,13 @@ const T = {
     manageAppts:"Manage your appointments", today:"Today", earnings:"Earnings",
     appts:"appointments", treatments:"treatments", sent:"Sent", send:"Send",
     min:"min", photos:"Photos", addPhoto:"Add photo", noPhotos:"No photos yet",
-    deletePhoto:"Delete", salonLink:"Your salon link", copyLink:"Copy",
+    deletePhoto:"Delete", salonLink:"Your link", copyLink:"Copy",
     copied:"Copied!", serviceName:"Service name (NL)", serviceNameEn:"Service name (EN)",
     price:"Price (€)", duration:"Duration (min)", fillRequired:"Fill in name and price",
-    bookAt:"Book at", enterSalon:"Enter salon link", goToSalon:"Go to salon",
-    salonNotFound:"Salon not found. Try a different name.",
-    orEnterSlug:"Or enter a salon link:",
-    availableSalons:"Available salons (demo)",
+    bookAt:"Book at", enterSalon:"Enter link", goToSalon:"Go to page",
+    salonNotFound:"Not found. Try a different name.",
+    orEnterSlug:"Or enter a link:",
+    availableSalons:"Available studios (demo)",
     variants:"Variants", extras:"Extras", addVariant:"+ Add variant", addExtra:"+ Add extra",
     variantName:"Variant name (NL)", variantNameEn:"Variant name (EN)", variantDesc:"Description (NL)", variantDescEn:"Description (EN)",
     extraName:"Extra name (NL)", extraNameEn:"Extra name (EN)",
@@ -157,6 +173,22 @@ const T = {
     anyStaff:"No preference", noStaff:"No staff members yet",
     businessHours:"Business Hours", openTime:"Open", closeTime:"Close", closed:"Closed",
     businessHoursDesc:"Set your working days and hours", closedOnDay:"Closed on this day",
+    // New customization translations
+    bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
+    bookingPolicyPlaceholder:"E.g. Cancellations must be made 24 hours in advance...",
+    agreeToPolicy:"I agree to the booking policy",
+    phoneRequired:"Phone number required", phoneRequiredDesc:"Make phone number mandatory for clients",
+    appearance:"Appearance", logo:"Logo", coverImage:"Cover image",
+    uploadLogo:"Upload logo", uploadCover:"Upload cover", removeLogo:"Remove logo", removeCover:"Remove cover",
+    logoDesc:"Shown in the header (recommended: square, max 500x500px)",
+    coverDesc:"Shown at the top of your page (recommended: 1200x400px)",
+    discountCodes:"Discount Codes", addDiscountCode:"+ Add discount code",
+    discountCode:"Code", discountAmount:"Discount", discountType:"Type",
+    discountPercent:"Percentage (%)", discountFixed:"Fixed amount (€)",
+    discountActive:"Active", deleteCode:"Delete", applyCode:"Apply",
+    invalidCode:"Invalid discount code", codeApplied:"Discount code applied!",
+    discount:"Discount", enterDiscountCode:"Enter discount code",
+    required:"required",
   }
 };
 
@@ -469,8 +501,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               margin: "0 auto 48px"
             }}>
               {lang === "nl" 
-                ? "Het premium platform voor saloneigenaren. Jouw eigen boekingspagina in minuten." 
-                : "The premium platform for salon owners. Your own booking page in minutes."}
+                ? "Het premium platform voor beauty ondernemers. Jouw eigen boekingspagina in minuten." 
+                : "The premium platform for beauty entrepreneurs. Your own booking page in minutes."}
             </p>
 
             {/* Decorative line */}
@@ -490,7 +522,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               maxWidth: 420,
               margin: "0 auto"
             }}>
-              <SL style={{ textAlign: "left" }}>{lang === "nl" ? "Naar een salon" : "Go to salon"}</SL>
+              <SL style={{ textAlign: "left" }}>{lang === "nl" ? "Naar een studio" : "Go to studio"}</SL>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ flex: 1, position: "relative" }}>
                   <div style={{ 
@@ -504,7 +536,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   }}>vellu.cc/</div>
                   <input 
                     className="input-field" 
-                    placeholder={lang === "nl" ? "salon-naam" : "salon-name"} 
+                    placeholder={lang === "nl" ? "studio-naam" : "studio-name"} 
                     value={slugInput} 
                     onChange={e => setSlugInput(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)}
@@ -557,7 +589,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     setError("");
 
     if (mode === "signup") {
-      const slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-salon";
+      const slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -586,7 +618,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       // Load profile
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
       const slug = profile?.slug || data.user.email.split("@")[0];
-      onLogin({ name: profile?.business_name || "Mijn Salon", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color });
+      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color });
     }
     setLoading(false);
   };
@@ -749,15 +781,51 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
   const [done, setDone] = useState(false);
   const [gallery, setGallery] = useState(null);
+  const [policyAgreed, setPolicyAgreed] = useState(false);
+  const [discountCode, setDiscountCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const [discountError, setDiscountError] = useState("");
   const days = getDays();
-  const canConfirm = form.firstName && form.lastName && form.email;
+  
+  // Check if form is complete
+  const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
+  const policyValid = !initialSalon.booking_policy || policyAgreed;
+  const canConfirm = form.firstName && form.lastName && form.email && phoneValid && policyValid;
 
   // Filter staff members who can do the selected service
   const availableStaff = (initialSalon.staff || []).filter(m =>
     m.service_ids?.length === 0 || m.service_ids?.includes(sel?.id)
   );
 
+  // Apply discount code
+  const applyDiscountCode = () => {
+    setDiscountError("");
+    const codes = initialSalon.discount_codes || [];
+    const found = codes.find(c => c.code.toUpperCase() === discountCode.toUpperCase() && c.active);
+    if (found) {
+      setAppliedDiscount(found);
+      setDiscountCode("");
+    } else {
+      setDiscountError(t.invalidCode);
+    }
+  };
+
   const getPrice = () => {
+    const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
+    const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+    let total = base + extrasTotal;
+    
+    // Apply discount
+    if (appliedDiscount) {
+      if (appliedDiscount.type === "percent") {
+        total = total * (1 - appliedDiscount.amount / 100);
+      } else {
+        total = Math.max(0, total - appliedDiscount.amount);
+      }
+    }
+    return total;
+  };
+  const getOriginalPrice = () => {
     const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
     const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
     return base + extrasTotal;
@@ -773,27 +841,186 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     setSelExtras(prev => prev.find(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra]);
   };
 
-  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
+  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
+
+  // Responsive hook
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Step titles
+  const stepTitles = [t.selectService, t.selectDate, t.yourDetails, t.confirmBooking];
+
+  // Summary component
+  const Summary = () => (
+    <div style={{ 
+      background: "rgba(237,232,224,0.03)", 
+      border: "1px solid rgba(237,232,224,0.08)", 
+      borderRadius: 16, 
+      padding: 20,
+      marginTop: isMobile ? 0 : 20
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.35)", marginBottom: 12 }}>
+        {lang === "nl" ? "Jouw boeking" : "Your booking"}
+      </div>
+      {sel && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "#ede8e0" }}>{getServiceLabel()}</div>
+          <div style={{ fontSize: 12, color: "rgba(237,232,224,0.4)", marginTop: 4 }}>{getDuration()} {t.min}</div>
+          {selExtras.length > 0 && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
+              {selExtras.map(e => (
+                <div key={e.id} style={{ fontSize: 11, color: "rgba(237,232,224,0.5)", display: "flex", justifyContent: "space-between" }}>
+                  <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
+                  <span>€{e.price}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {date && time && (
+        <div style={{ marginBottom: 16, paddingTop: sel ? 16 : 0, borderTop: sel ? "1px solid rgba(237,232,224,0.06)" : "none" }}>
+          <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>
+            {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
+        </div>
+      )}
+      {sel && (
+        <div style={{ paddingTop: 16, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
+          {appliedDiscount && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: "#4ade80" }}>
+                🏷️ {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})
+              </span>
+              <span style={{ fontSize: 12, color: "rgba(237,232,224,0.4)", textDecoration: "line-through" }}>€{getOriginalPrice().toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>{t.total}</span>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent }}>€{getPrice().toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <BookingLayout accent={accent}>
-      <div style={{ background: "#0d0b0a", backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, minHeight: "100dvh", display: "flex", flexDirection: "column", fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative" }}>
+    <Layout>
+      <style>{makeCSS(accent)}</style>
+      <div style={{ 
+        minHeight: "100dvh", 
+        background: "#0d0b0a",
+        backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -10%, ${accent}08 0%, transparent 60%)`,
+        fontFamily: "'Jost',sans-serif", 
+        color: "#ede8e0"
+      }}>
+        
+        {/* Desktop Layout */}
+        {!isMobile ? (
+          <div style={{ display: "flex", minHeight: "100vh" }}>
+            {/* Left Sidebar */}
+            <div style={{ 
+              width: 340, 
+              background: "rgba(237,232,224,0.02)", 
+              borderRight: "1px solid rgba(237,232,224,0.06)",
+              padding: "0",
+              display: "flex",
+              flexDirection: "column",
+              position: "sticky",
+              top: 0,
+              height: "100vh",
+              overflow: "hidden"
+            }}>
+              {/* Cover Image */}
+              {initialSalon.cover_image_url && (
+                <div style={{ 
+                  width: "100%", 
+                  height: 120, 
+                  backgroundImage: `url(${initialSalon.cover_image_url})`, 
+                  backgroundSize: "cover", 
+                  backgroundPosition: "center",
+                  flexShrink: 0
+                }} />
+              )}
+              
+              <div style={{ padding: "24px 30px", flex: 1, overflow: "auto" }}>
+                {/* Salon Info */}
+                <div style={{ marginBottom: 30 }}>
+                  {onBack && (
+                    <button onClick={done ? reset : onBack} className="btn-ghost" style={{ marginBottom: 20, padding: "8px 14px", fontSize: 11 }}>
+                      ← {lang === "nl" ? "Terug" : "Back"}
+                    </button>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {initialSalon.logo_url && (
+                      <img src={initialSalon.logo_url} style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", border: "1px solid rgba(237,232,224,0.1)" }} />
+                    )}
+                    <div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: initialSalon.logo_url ? 22 : 28, fontWeight: 300, color: "#ede8e0", lineHeight: 1.2 }}>
+                        {initialSalon.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: "rgba(237,232,224,0.35)", marginTop: 4, letterSpacing: "0.04em" }}>
+                        {initialSalon.city}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-        <Header
-          title={initialSalon.name}
-          subtitle={initialSalon.city}
-          onBack={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)}
-          right={<LangToggle lang={lang} setLang={setLang} />}
-          accent={accent}
-        />
+              {/* Progress Steps */}
+              {!done && (
+                <div style={{ marginBottom: 30 }}>
+                  {[1,2,3,4].map(s => (
+                    <div key={s} style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 12, 
+                      padding: "12px 0",
+                      opacity: step >= s ? 1 : 0.3,
+                      transition: "opacity 0.3s"
+                    }}>
+                      <div style={{ 
+                        width: 28, 
+                        height: 28, 
+                        borderRadius: "50%", 
+                        background: step >= s ? accent : "transparent",
+                        border: `2px solid ${step >= s ? accent : "rgba(237,232,224,0.2)"}`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: step >= s ? "#0d0b0a" : "rgba(237,232,224,0.3)",
+                        transition: "all 0.3s"
+                      }}>
+                        {step > s ? "✓" : s}
+                      </div>
+                      <span style={{ fontSize: 13, color: step >= s ? "#ede8e0" : "rgba(237,232,224,0.3)" }}>
+                        {stepTitles[s-1]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-        <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 40px" }}>
-          {!done ? (
-            <div key={step} className="fade-up">
-              {/* Progress */}
-              <div style={{ display: "flex", gap: 5, margin: "12px 0 22px" }}>
-                {[1,2,3,4].map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : "rgba(237,232,224,0.08)", transition:"background 0.4s" }} />)}
+              {/* Summary */}
+              <Summary />
+
+              {/* Lang Toggle */}
+              <div style={{ marginTop: "auto", paddingTop: 20 }}>
+                <LangToggle lang={lang} setLang={setLang} />
               </div>
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700 }}>
+              {!done ? (
+                <div key={step} className="fade-up">
 
               {/* Step 1 — Service selection */}
               {step === 1 && <>
@@ -806,7 +1033,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
                           <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
                             {s.duration} {t.min}
-                            {s.photos.length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                            {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
                             {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
                           </div>
                         </div>
@@ -814,94 +1041,87 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
                         </div>
                       </div>
-                      {s.photos.length > 0 && (
+                      {(s.photos || []).length > 0 && (
                         <div className="photo-grid">
                           {s.photos.map((p, i) => (
-                            <img key={i} src={p} className="photo-thumb" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
+                            <img key={p.id || i} src={p.url || p} className="photo-thumb" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
                           ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Variants inline when selected */}
+                    {/* Variants */}
                     {sel?.id === s.id && s.variants?.length > 0 && (
                       <div style={{ marginLeft: 12, marginBottom: 10 }}>
                         <SL>{t.selectVariant}</SL>
                         {s.variants.map(v => (
-                          <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`}
-                            onClick={() => setSelVariant(selVariant?.id === v.id ? null : v)}
-                            style={{ padding: "12px 15px", marginBottom: 7 }}>
+                          <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => setSelVariant(v)}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <div>
                                 <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
-                                {(v.description_nl || v.description_en) && (
-                                  <div style={{ fontSize: 10, color: "rgba(237,232,224,0.3)", marginTop: 2 }}>
-                                    {lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}
-                                  </div>
-                                )}
-                                <div style={{ fontSize: 10, color: "rgba(237,232,224,0.25)", marginTop: 2 }}>{v.duration} {t.min}</div>
+                                {v.description_nl && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)", marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)", marginTop: 2 }}>{v.duration} {t.min}</div>
                               </div>
-                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: accent }}>€{v.price}</div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Extras inline when selected */}
+                    {/* Extras */}
                     {sel?.id === s.id && s.extras?.length > 0 && (
                       <div style={{ marginLeft: 12, marginBottom: 10 }}>
                         <SL>{t.selectExtras}</SL>
-                        {s.extras.map(e => {
-                          const isOn = selExtras.find(x => x.id === e.id);
-                          return (
-                            <div key={e.id} className={`service-card ${isOn ? "sel" : ""}`}
-                              onClick={() => toggleExtra(e)}
-                              style={{ padding: "11px 15px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <div style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${isOn ? accent : "rgba(237,232,224,0.18)"}`, background: isOn ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#0d0b0a", transition: "all 0.2s" }}>
-                                  {isOn && "✓"}
-                                </div>
-                                <span style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                              </div>
-                              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent }}>+€{e.price}</span>
+                        {s.extras.map(e => (
+                          <div key={e.id} className={`service-card ${selExtras.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtra(e)}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
                             </div>
-                          );
-                        })}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Staff selection */}
+                    {sel?.id === s.id && availableStaff.length > 0 && (
+                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        <SL>{t.selectStaff}</SL>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <div className={`service-card ${!selStaff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(null)}>
+                            <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                          </div>
+                          {availableStaff.map(m => (
+                            <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(m)}>
+                              <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
+                              {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
-
-                {/* Staff selection */}
-                {sel && availableStaff.length > 0 && (
-                  <div style={{ marginTop: 14 }}>
-                    <SL>{t.selectStaff}</SL>
-                    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                      <div className={`service-card ${selStaff === null ? "sel" : ""}`}
-                        onClick={() => setSelStaff(null)}
-                        style={{ padding: "10px 14px", minWidth: "fit-content", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(237,232,224,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>👤</div>
-                        <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
-                      </div>
-                      {availableStaff.map(m => (
-                        <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`}
-                          onClick={() => setSelStaff(selStaff?.id === m.id ? null : m)}
-                          style={{ padding: "10px 14px", minWidth: "fit-content", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: accent }}>{m.name[0]}</div>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
-                            {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div style={{ marginTop: 14 }}>
                   <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
                 </div>
+                
+                {/* Reviews */}
+                {initialSalon.reviews?.length > 0 && (
+                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
+                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                    {initialSalon.reviews.slice(0, 3).map(r => (
+                      <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid rgba(237,232,224,0.04)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name.split(" ")[0]}</span>
+                          <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                        </div>
+                        {r.comment && <div style={{ fontSize: 11, color: "rgba(237,232,224,0.45)", lineHeight: 1.5 }}>{r.comment}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>}
 
               {/* Step 2 — Date & Time */}
@@ -915,12 +1135,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
                     const isClosed = dayHours.closed;
                     return (
-                      <div 
-                        key={i} 
-                        className={`day-chip ${isSel ? "sel" : ""}`} 
-                        onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
-                        style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}
-                      >
+                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
                         <span style={{ fontSize: 10, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.35)" }}>{DAY[d.getDay()]}</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? "#0d0b0a" : "#ede8e0", marginTop: 2 }}>{d.getDate()}</span>
                         <span style={{ fontSize: 9, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.25)" }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
@@ -933,10 +1148,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   const selectedDate = new Date(date);
                   const dayOfWeek = selectedDate.getDay();
                   const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
-                  const availableTimes = TIMES.filter(tt => {
-                    if (dayHours.closed) return false;
-                    return tt >= dayHours.open && tt < dayHours.close;
-                  });
+                  const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
                   return availableTimes.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                       {availableTimes.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
@@ -959,7 +1171,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
                   <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                  <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+                  <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                 </div>
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
@@ -971,6 +1183,42 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     </div>
                   ))}
                 </div>
+
+                {/* Discount Code Input */}
+                {(initialSalon.discount_codes || []).length > 0 && !appliedDiscount && (
+                  <div style={{ marginBottom: 20 }}>
+                    <SL>{t.enterDiscountCode}</SL>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => setDiscountCode(e.target.value.toUpperCase())} style={{ flex: 1, fontFamily: "monospace" }} />
+                      <button className="btn-ghost" style={{ padding: "0 20px" }} onClick={applyDiscountCode}>{t.applyCode}</button>
+                    </div>
+                    {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
+                  </div>
+                )}
+                {appliedDiscount && (
+                  <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}>🏷️ {t.codeApplied}</div>
+                      <div style={{ fontSize: 11, color: "rgba(237,232,224,0.5)" }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                    </div>
+                    <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: "rgba(237,232,224,0.4)" }}>✕</div>
+                  </div>
+                )}
+
+                {/* Booking Policy */}
+                {initialSalon.booking_policy && (
+                  <div style={{ marginBottom: 20, padding: "16px", background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.08)", borderRadius: 14 }}>
+                    <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
+                    <div style={{ fontSize: 12, color: "rgba(237,232,224,0.6)", lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                      <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : "rgba(237,232,224,0.2)"}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                        {policyAgreed && <span style={{ color: "#0d0b0a", fontSize: 14, fontWeight: 700 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 13, color: policyAgreed ? "#ede8e0" : "rgba(237,232,224,0.5)" }}>{t.agreeToPolicy}</span>
+                    </label>
+                  </div>
+                )}
+
                 <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
               </>}
 
@@ -992,49 +1240,38 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       <span style={{ fontSize: 12, fontWeight: 500 }}>{selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</span>
                     </div>
                   )}
+                  {appliedDiscount && (
+                    <div className="confirm-row">
+                      <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}>🏷️ {t.discount}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
-                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                    <div>
+                      {appliedDiscount && <span style={{ fontSize: 14, color: "rgba(237,232,224,0.4)", textDecoration: "line-through", marginRight: 10 }}>€{getOriginalPrice().toFixed(2)}</span>}
+                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
                 <button className="btn-primary" onClick={async () => {
-                  // Save appointment to Supabase
                   const apptData = {
-                    owner_id: initialSalon.owner_id,
-                    service_id: sel?.id || null,
-                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : ""),
-                    service_price: getPrice(),
-                    service_duration: getDuration(),
-                    date, time,
-                    client_name: `${form.firstName} ${form.lastName}`,
-                    client_email: form.email,
-                    client_phone: form.phone || null,
-                    payment_method: form.payment,
-                    status: "confirmed",
-                    invoice_sent: false,
-                    staff_id: selStaff?.id || null,
-                    staff_name: selStaff?.name || null
+                    owner_id: initialSalon.owner_id, service_id: sel?.id || null,
+                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : "") + (appliedDiscount ? ` [${appliedDiscount.code}]` : ""),
+                    service_price: getPrice(), service_duration: getDuration(), date, time,
+                    client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, client_phone: form.phone || null,
+                    payment_method: form.payment, status: "confirmed", invoice_sent: false,
+                    staff_id: selStaff?.id || null, staff_name: selStaff?.name || null
                   };
                   await supabase.from("appointments").insert(apptData);
                   setDone(true);
                   await sendEmails("booking_confirmation", {
-                    client_name: `${form.firstName} ${form.lastName}`,
-                    client_email: form.email,
-                    service_name: apptData.service_name,
-                    date, time,
-                    payment: form.payment,
-                    price: getPrice(),
-                    salon_name: initialSalon.name,
-                    owner_email: initialSalon.owner_email || "info@vellu.cc"
+                    client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+                    date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc"
                   });
                   if (form.payment === "online") {
-                    await sendEmails("invoice", {
-                      client_name: `${form.firstName} ${form.lastName}`,
-                      client_email: form.email,
-                      service_name: apptData.service_name,
-                      date, price: getPrice(),
-                      salon_name: initialSalon.name
-                    });
+                    await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+                      date, time, price: getPrice(), salon_name: initialSalon.name });
                   }
                 }}>{t.confirm}</button>
               </>}
@@ -1111,22 +1348,432 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               ))}
             </div>
           )}
-        </div>
+                </div>
+              ) : (
+                /* Done screen for desktop */
+                <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
+                  <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+                  <p style={{ color: "rgba(237,232,224,0.5)", fontSize: 14, marginBottom: 30 }}>
+                    {t.confirmedSub} {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                  </p>
+                  <p style={{ fontSize: 12, color: "rgba(237,232,224,0.35)", marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
+
+                  {/* Calendar sync buttons */}
+                  <div style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 10 }}>{t.addToCalendar}</div>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration();
+                        const start = new Date(date + "T" + time + ":00");
+                        const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
+                        const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: €${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
+                        const loc = encodeURIComponent(initialSalon.name + ", " + initialSalon.city);
+                        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}&details=${details}&location=${loc}`, "_blank");
+                      }}>📅 {t.googleCalendar}</button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration();
+                        const start = new Date(date + "T" + time + ":00");
+                        const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const ics = [
+                          "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vellu//Beauty Booking//EN", "BEGIN:VEVENT",
+                          `DTSTART:${fmt2(start)}`, `DTEND:${fmt2(end)}`,
+                          `SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,
+                          `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: €${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
+                          `LOCATION:${initialSalon.name}, ${initialSalon.city}`, "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"
+                        ].join("\r\n");
+                        const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a"); a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
+                        a.click(); URL.revokeObjectURL(url);
+                      }}>🗓 {t.appleCalendar}</button>
+                    </div>
+                  </div>
+
+                  <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+                  <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Mobile Layout */
+          <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+            {/* Mobile Cover Image */}
+            {initialSalon.cover_image_url && (
+              <div style={{ 
+                width: "100%", 
+                height: 140, 
+                backgroundImage: `url(${initialSalon.cover_image_url})`, 
+                backgroundSize: "cover", 
+                backgroundPosition: "center",
+                position: "relative"
+              }}>
+                {/* Back button on cover */}
+                {onBack && (
+                  <button onClick={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)} style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, padding: "8px 14px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+                    ←
+                  </button>
+                )}
+                <div style={{ position: "absolute", top: 12, right: 12 }}>
+                  <LangToggle lang={lang} setLang={setLang} />
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Header with Logo */}
+            {!initialSalon.cover_image_url ? (
+              <Header
+                title={initialSalon.name}
+                subtitle={initialSalon.city}
+                onBack={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)}
+                right={<LangToggle lang={lang} setLang={setLang} />}
+                accent={accent}
+              />
+            ) : (
+              <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(237,232,224,0.06)" }}>
+                {initialSalon.logo_url && (
+                  <img src={initialSalon.logo_url} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid rgba(237,232,224,0.1)" }} />
+                )}
+                <div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: "#ede8e0" }}>{initialSalon.name}</div>
+                  <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)" }}>{initialSalon.city}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Content */}
+            <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 120px" }}>
+              {!done ? (
+                <div key={step} className="fade-up">
+                  {/* Progress bar */}
+                  <div style={{ display: "flex", gap: 5, margin: "12px 0 22px" }}>
+                    {[1,2,3,4].map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : "rgba(237,232,224,0.08)", transition:"background 0.4s" }} />)}
+                  </div>
+
+                  {/* Step 1 — Service selection */}
+                  {step === 1 && <>
+                    <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
+                    {initialSalon.services.map(s => (
+                      <div key={s.id}>
+                        <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => { setSel(s); setSelVariant(null); setSelExtras([]); }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
+                              <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
+                                {s.duration} {t.min}
+                                {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                                {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                              </div>
+                            </div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
+                              {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                            </div>
+                          </div>
+                          {(s.photos || []).length > 0 && (
+                            <div className="photo-grid">
+                              {s.photos.map((p, i) => (
+                                <img key={p.id || i} src={p.url || p} className="photo-thumb" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Variants */}
+                        {sel?.id === s.id && s.variants?.length > 0 && (
+                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                            <SL>{t.selectVariant}</SL>
+                            {s.variants.map(v => (
+                              <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => setSelVariant(v)}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div>
+                                    <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
+                                    {v.description_nl && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)", marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                    <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)", marginTop: 2 }}>{v.duration} {t.min}</div>
+                                  </div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Extras */}
+                        {sel?.id === s.id && s.extras?.length > 0 && (
+                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                            <SL>{t.selectExtras}</SL>
+                            {s.extras.map(e => (
+                              <div key={e.id} className={`service-card ${selExtras.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtra(e)}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Staff selection */}
+                        {sel?.id === s.id && availableStaff.length > 0 && (
+                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                            <SL>{t.selectStaff}</SL>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <div className={`service-card ${!selStaff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(null)}>
+                                <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                              </div>
+                              {availableStaff.map(m => (
+                                <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(m)}>
+                                  <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
+                                  {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 14 }}>
+                      <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
+                    </div>
+                  </>}
+
+                  {/* Step 2 — Date & Time (mobile) */}
+                  {step === 2 && <>
+                    <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                      {days.slice(0,10).map((d, i) => {
+                        const ds = fmt(d); 
+                        const isSel = date === ds;
+                        const dayOfWeek = d.getDay();
+                        const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                        const isClosed = dayHours.closed;
+                        return (
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                            <span style={{ fontSize: 10, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.35)" }}>{DAY[d.getDay()]}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? "#0d0b0a" : "#ede8e0", marginTop: 2 }}>{d.getDate()}</span>
+                            <span style={{ fontSize: 9, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.25)" }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <SL>{t.selectTime}</SL>
+                    {(() => {
+                      const selectedDate = new Date(date);
+                      const dayOfWeek = selectedDate.getDay();
+                      const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                      const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
+                      return availableTimes.length > 0 ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
+                          {availableTimes.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: "center", padding: "30px 20px", color: "rgba(237,232,224,0.35)", fontSize: 13, marginBottom: 20 }}>
+                          {lang === "nl" ? "Geen beschikbare tijden op deze dag" : "No available times on this day"}
+                        </div>
+                      );
+                    })()}
+                    <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                  </>}
+
+                  {/* Step 3 — Details (mobile) */}
+                  {step === 3 && <>
+                    <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                        <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                      </div>
+                      <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                      <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                    </div>
+                    <SL>{t.payMethod}</SL>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                      {[["on-arrival","🏠",t.payArrival],["online","💳",t.payOnline]].map(([v,icon,label]) => (
+                        <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} onClick={() => setForm(f => ({...f, payment: v}))}>
+                          <div className={`radio ${form.payment === v ? "on" : ""}`} />
+                          <span style={{ fontSize: 15 }}>{icon}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Discount Code Input (mobile) */}
+                    {(initialSalon.discount_codes || []).length > 0 && !appliedDiscount && (
+                      <div style={{ marginBottom: 20 }}>
+                        <SL>{t.enterDiscountCode}</SL>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => setDiscountCode(e.target.value.toUpperCase())} style={{ flex: 1, fontFamily: "monospace" }} />
+                          <button className="btn-ghost" style={{ padding: "0 16px" }} onClick={applyDiscountCode}>{t.applyCode}</button>
+                        </div>
+                        {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
+                      </div>
+                    )}
+                    {appliedDiscount && (
+                      <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}>🏷️ {t.codeApplied}</div>
+                          <div style={{ fontSize: 10, color: "rgba(237,232,224,0.5)" }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                        </div>
+                        <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: "rgba(237,232,224,0.4)" }}>✕</div>
+                      </div>
+                    )}
+
+                    {/* Booking Policy (mobile) */}
+                    {initialSalon.booking_policy && (
+                      <div style={{ marginBottom: 20, padding: "14px", background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.08)", borderRadius: 14 }}>
+                        <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)", marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
+                        <div style={{ fontSize: 11, color: "rgba(237,232,224,0.6)", lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                          <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : "rgba(237,232,224,0.2)"}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            {policyAgreed && <span style={{ color: "#0d0b0a", fontSize: 12, fontWeight: 700 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 12, color: policyAgreed ? "#ede8e0" : "rgba(237,232,224,0.5)" }}>{t.agreeToPolicy}</span>
+                        </label>
+                      </div>
+                    )}
+
+                    <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                  </>}
+
+                  {/* Step 4 — Confirm (mobile) */}
+                  {step === 4 && <>
+                    <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
+                    <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
+                      {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],
+                        ...(selStaff ? [[t.staff, selStaff.name]] : []),
+                        [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                        <div key={l} className="confirm-row">
+                          <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
+                        </div>
+                      ))}
+                      {selExtras.length > 0 && (
+                        <div className="confirm-row">
+                          <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.extras}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>{selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</span>
+                        </div>
+                      )}
+                      {appliedDiscount && (
+                        <div className="confirm-row">
+                          <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}>🏷️ {t.discount}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
+                        <div>
+                          {appliedDiscount && <span style={{ fontSize: 14, color: "rgba(237,232,224,0.4)", textDecoration: "line-through", marginRight: 8 }}>€{getOriginalPrice().toFixed(2)}</span>}
+                          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button className="btn-primary" onClick={async () => {
+                      const apptData = {
+                        owner_id: initialSalon.owner_id, service_id: sel?.id || null,
+                        service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : "") + (appliedDiscount ? ` [${appliedDiscount.code}]` : ""),
+                        service_price: getPrice(), service_duration: getDuration(), date, time,
+                        client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, client_phone: form.phone || null,
+                        payment_method: form.payment, status: "confirmed", invoice_sent: false,
+                        staff_id: selStaff?.id || null, staff_name: selStaff?.name || null
+                      };
+                      await supabase.from("appointments").insert(apptData);
+                      setDone(true);
+                      await sendEmails("booking_confirmation", {
+                        client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+                        date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc"
+                      });
+                      if (form.payment === "online") {
+                        await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+                          date, time, price: getPrice(), salon_name: initialSalon.name });
+                      }
+                    }}>{t.confirm}</button>
+                  </>}
+
+                  {/* Reviews on mobile step 1 */}
+                  {step === 1 && initialSalon.reviews?.length > 0 && (
+                    <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
+                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                      {initialSalon.reviews.slice(0, 3).map(r => (
+                        <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid rgba(237,232,224,0.04)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name.split(" ")[0]}</span>
+                            <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                          </div>
+                          {r.comment && <div style={{ fontSize: 11, color: "rgba(237,232,224,0.45)", lineHeight: 1.5 }}>{r.comment}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Done screen mobile */
+                <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
+                  <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+                  <p style={{ color: "rgba(237,232,224,0.5)", fontSize: 14, marginBottom: 30 }}>
+                    {t.confirmedSub} {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                  </p>
+                  <p style={{ fontSize: 12, color: "rgba(237,232,224,0.35)", marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
+                  <div style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 10 }}>{t.addToCalendar}</div>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
+                        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}`, "_blank");
+                      }}>📅 {t.googleCalendar}</button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const ics = ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT",`DTSTART:${fmt2(start)}`,`DTEND:${fmt2(end)}`,`SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,"END:VEVENT","END:VCALENDAR"].join("\r\n");
+                        const blob = new Blob([ics], { type: "text/calendar" }); const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a"); a.href = url; a.download = `booking.ics`; a.click();
+                      }}>🗓 {t.appleCalendar}</button>
+                    </div>
+                  </div>
+                  <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+                  <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+                </div>
+              )}
+            </div>
+
+            {/* Mobile bottom summary bar */}
+            {!done && sel && (
+              <div style={{ 
+                position: "fixed", bottom: 0, left: 0, right: 0, 
+                background: "rgba(13,11,10,0.97)", backdropFilter: "blur(24px)", 
+                borderTop: "1px solid rgba(237,232,224,0.08)", padding: "12px 22px",
+                paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+                display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100
+              }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>{svcName(sel)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice()}</div>
+                </div>
+                {time && <div style={{ fontSize: 14, fontWeight: 600, color: accent }}>{time}</div>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Gallery overlay */}
         {gallery && (
           <div className="gallery-overlay" onClick={() => setGallery(null)}>
-            <img src={gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               {gallery.photos.map((p, i) => (
-                <img key={i} src={p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
                   style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s" }} />
               ))}
             </div>
           </div>
         )}
       </div>
-    </BookingLayout>
+    </Layout>
   );
 }
 
@@ -1278,7 +1925,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(today));
   const [salonData, setSalonData] = useState(() => {
-    return { id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, services: [], appointments: [], business_hours: DEFAULT_HOURS };
+    return { 
+      id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
+      services: [], appointments: [], business_hours: DEFAULT_HOURS,
+      booking_policy: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: []
+    };
   });
   const [saved, setSaved] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -1286,12 +1937,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
   const fileRefs = useRef({});
 
   // Load salon data from Supabase
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", user.slug).single();
+      const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
       if (data) {
         // Load appointments
         const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
@@ -1312,11 +1964,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
           business_hours: data.business_hours || DEFAULT_HOURS,
+          booking_policy: data.booking_policy || "",
+          phone_required: data.phone_required || false,
+          logo_url: data.logo_url || "",
+          cover_image_url: data.cover_image_url || "",
+          discount_codes: data.discount_codes || [],
           services: (data.services || []).map(s => ({
             ...s,
             name_nl: s.name_nl || s.name || "",
             name_en: s.name_en || s.name || "",
-            photos: [],
+            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.photo_url })),
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: s.service_extras || []
           })),
@@ -1384,12 +2041,62 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
   };
 
-  const addPhoto = (serviceId, file) => {
-    const url = URL.createObjectURL(file);
-    update(d => { d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...s.photos, url]} : s); return d; });
+  const addPhoto = async (serviceId, file) => {
+    // Upload to Supabase Storage
+    const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${file.name}`;
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("service-photos")
+      .upload(fileName, file, { cacheControl: "3600", upsert: false });
+    
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      return;
+    }
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from("service-photos")
+      .getPublicUrl(fileName);
+    
+    // Save to database
+    const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
+      service_id: serviceId,
+      photo_url: publicUrl,
+      position: 0
+    }).select().single();
+    
+    if (dbError) {
+      console.error("DB error:", dbError);
+      return;
+    }
+    
+    // Update local state
+    update(d => { 
+      d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s); 
+      return d; 
+    });
   };
 
-  const deletePhoto = (serviceId, idx) => update(d => { d.services = d.services.map(s => s.id === serviceId ? {...s, photos: s.photos.filter((_,i) => i !== idx)} : s); return d; });
+  const deletePhoto = async (serviceId, photoId, photoUrl) => {
+    // Delete from database
+    await supabase.from("service_photos").delete().eq("id", photoId);
+    
+    // Extract file path from URL and delete from storage
+    try {
+      const urlParts = photoUrl.split("/service-photos/");
+      if (urlParts[1]) {
+        await supabase.storage.from("service-photos").remove([urlParts[1]]);
+      }
+    } catch (e) {
+      console.error("Storage delete error:", e);
+    }
+    
+    // Update local state
+    update(d => { 
+      d.services = d.services.map(s => s.id === serviceId ? {...s, photos: (s.photos || []).filter(p => p.id !== photoId)} : s); 
+      return d; 
+    });
+  };
 
   const copyLink = () => {
     navigator.clipboard.writeText(`vellu.cc/${salonData.id}`).catch(() => {});
@@ -1951,10 +2658,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
                     {/* Photo management */}
                     <div className="photo-grid">
-                      {s.photos.map((p, i) => (
-                        <div key={i} style={{ position: "relative", flexShrink: 0 }}>
-                          <img src={p} className="photo-thumb" onClick={() => setGallery({ photos: s.photos, idx: i })} />
-                          <div onClick={() => deletePhoto(s.id, i)} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontWeight: 700, lineHeight: 1 }}>×</div>
+                      {(s.photos || []).map((p, i) => (
+                        <div key={p.id || i} style={{ position: "relative", flexShrink: 0 }}>
+                          <img src={p.url || p} className="photo-thumb" onClick={() => setGallery({ photos: s.photos, idx: i })} />
+                          <div onClick={() => deletePhoto(s.id, p.id, p.url || p)} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontWeight: 700, lineHeight: 1 }}>×</div>
                         </div>
                       ))}
                       <label className="photo-add" style={{ flexShrink: 0 }}>
@@ -2115,6 +2822,144 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 })}
               </div>
 
+              {/* Appearance Section */}
+              <div style={{ marginTop: 28 }}>
+                <SL>{t.appearance}</SL>
+                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", marginBottom: 12 }}>{t.logoDesc}</div>
+                
+                {/* Logo upload */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                  {salonData.logo_url ? (
+                    <div style={{ position: "relative" }}>
+                      <img src={salonData.logo_url} style={{ width: 60, height: 60, borderRadius: 12, objectFit: "cover", border: "1px solid rgba(237,232,224,0.1)" }} />
+                      <div onClick={() => update(d => { d.logo_url = ""; return d; })} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</div>
+                    </div>
+                  ) : (
+                    <label style={{ width: 60, height: 60, borderRadius: 12, border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4 }}>
+                      <span style={{ fontSize: 18, color: `${accent}88` }}>📷</span>
+                      <span style={{ fontSize: 8, color: `${accent}66`, textTransform: "uppercase" }}>{t.logo}</span>
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
+                        const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                        if (!error) {
+                          const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                          update(d => { d.logo_url = publicUrl; return d; });
+                        }
+                      }} />
+                    </label>
+                  )}
+                  <span style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>{t.logo}</span>
+                </div>
+
+                {/* Cover image upload */}
+                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", marginBottom: 8 }}>{t.coverDesc}</div>
+                {salonData.cover_image_url ? (
+                  <div style={{ position: "relative", marginBottom: 16 }}>
+                    <img src={salonData.cover_image_url} style={{ width: "100%", height: 80, borderRadius: 12, objectFit: "cover", border: "1px solid rgba(237,232,224,0.1)" }} />
+                    <div onClick={() => update(d => { d.cover_image_url = ""; return d; })} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</div>
+                  </div>
+                ) : (
+                  <label style={{ width: "100%", height: 80, borderRadius: 12, border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4, marginBottom: 16 }}>
+                    <span style={{ fontSize: 18, color: `${accent}88` }}>🖼️</span>
+                    <span style={{ fontSize: 9, color: `${accent}66`, textTransform: "uppercase" }}>{t.uploadCover}</span>
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
+                      const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                      if (!error) {
+                        const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                        update(d => { d.cover_image_url = publicUrl; return d; });
+                      }
+                    }} />
+                  </label>
+                )}
+              </div>
+
+              {/* Booking Policy Section */}
+              <div style={{ marginTop: 28 }}>
+                <SL>{t.bookingPolicy}</SL>
+                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", marginBottom: 8 }}>{t.bookingPolicyDesc}</div>
+                <textarea 
+                  className="input-field" 
+                  placeholder={t.bookingPolicyPlaceholder}
+                  value={salonData.booking_policy || ""}
+                  onChange={e => update(d => { d.booking_policy = e.target.value; return d; })}
+                  style={{ minHeight: 80, resize: "vertical", fontSize: 12 }}
+                />
+              </div>
+
+              {/* Phone Required Toggle */}
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#ede8e0" }}>{t.phoneRequired}</div>
+                    <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)" }}>{t.phoneRequiredDesc}</div>
+                  </div>
+                  <div 
+                    onClick={() => update(d => { d.phone_required = !d.phone_required; return d; })}
+                    style={{ 
+                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                      background: salonData.phone_required ? accent : "rgba(237,232,224,0.15)",
+                      position: "relative", transition: "background 0.2s"
+                    }}
+                  >
+                    <div style={{ 
+                      position: "absolute", top: 2, left: salonData.phone_required ? 18 : 2,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Discount Codes Section */}
+              <div style={{ marginTop: 28 }}>
+                <SL>{t.discountCodes}</SL>
+                
+                {/* Existing codes */}
+                {(salonData.discount_codes || []).map((code, idx) => (
+                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "10px 12px", background: "rgba(237,232,224,0.03)", borderRadius: 10, border: "1px solid rgba(237,232,224,0.08)" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: accent, fontFamily: "monospace" }}>{code.code}</div>
+                      <div style={{ fontSize: 11, color: "rgba(237,232,224,0.5)" }}>
+                        {code.type === "percent" ? `${code.amount}%` : `€${code.amount}`} {t.discount.toLowerCase()}
+                      </div>
+                    </div>
+                    <div 
+                      onClick={() => update(d => { d.discount_codes[idx].active = !d.discount_codes[idx].active; return d; })}
+                      style={{ 
+                        width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                        background: code.active ? "#4ade80" : "rgba(237,232,224,0.15)",
+                        position: "relative", transition: "background 0.2s"
+                      }}
+                    >
+                      <div style={{ position: "absolute", top: 2, left: code.active ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                    </div>
+                    <div onClick={() => update(d => { d.discount_codes = d.discount_codes.filter((_, i) => i !== idx); return d; })} style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,71,87,0.1)", color: "#ff4757", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14 }}>×</div>
+                  </div>
+                ))}
+
+                {/* Add new code form */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <input className="input-field" placeholder={t.discountCode} value={newDiscount.code} onChange={e => setNewDiscount(d => ({...d, code: e.target.value.toUpperCase()}))} style={{ flex: 1, minWidth: 100, fontSize: 12 }} />
+                  <input className="input-field" placeholder={t.discountAmount} type="number" value={newDiscount.amount} onChange={e => setNewDiscount(d => ({...d, amount: e.target.value}))} style={{ width: 70, fontSize: 12 }} />
+                  <select value={newDiscount.type} onChange={e => setNewDiscount(d => ({...d, type: e.target.value}))} style={{ background: "rgba(237,232,224,0.06)", border: "1px solid rgba(237,232,224,0.12)", borderRadius: 10, padding: "8px 12px", color: "#ede8e0", fontSize: 12, fontFamily: "'Jost',sans-serif" }}>
+                    <option value="percent" style={{ background: "#1a1a1a" }}>%</option>
+                    <option value="fixed" style={{ background: "#1a1a1a" }}>€</option>
+                  </select>
+                </div>
+                <button className="btn-ghost" style={{ marginTop: 10, width: "100%", fontSize: 12 }} onClick={() => {
+                  if (!newDiscount.code || !newDiscount.amount) return;
+                  update(d => { 
+                    d.discount_codes = [...(d.discount_codes || []), { ...newDiscount, amount: parseFloat(newDiscount.amount) }]; 
+                    return d; 
+                  });
+                  setNewDiscount({ code: "", amount: "", type: "percent", active: true });
+                }}>{t.addDiscountCode}</button>
+              </div>
+
               <button className="btn-primary" onClick={async () => {
                 await supabase.from("profiles").update({
                   business_name: salonData.name,
@@ -2126,7 +2971,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   iban: salonData.iban || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
                   next_invoice_number: salonData.next_invoice_number || 1,
-                  business_hours: salonData.business_hours || DEFAULT_HOURS
+                  business_hours: salonData.business_hours || DEFAULT_HOURS,
+                  booking_policy: salonData.booking_policy || null,
+                  phone_required: salonData.phone_required || false,
+                  logo_url: salonData.logo_url || null,
+                  cover_image_url: salonData.cover_image_url || null,
+                  discount_codes: salonData.discount_codes || []
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
@@ -2163,10 +3013,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         {/* Photo gallery overlay */}
         {gallery && (
           <div className="gallery-overlay" onClick={() => setGallery(null)}>
-            <img src={gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               {gallery.photos.map((p, i) => (
-                <img key={i} src={p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
                   style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s" }} />
               ))}
             </div>
@@ -2216,15 +3066,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         <div style={{ fontWeight: 500, fontSize: 14, color: "#ede8e0" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
                         <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
                           {s.duration} min
-                          {s.photos.length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} foto's</span>}
+                          {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} foto's</span>}
                         </div>
                       </div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{s.price}</div>
                     </div>
-                    {s.photos.length > 0 && (
+                    {(s.photos || []).length > 0 && (
                       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginTop: 12 }}>
                         {s.photos.map((p, i) => (
-                          <img key={i} src={p} style={{ width: 68, height: 68, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: "1px solid rgba(237,232,224,0.08)" }} />
+                          <img key={p.id || i} src={p.url || p} style={{ width: 68, height: 68, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: "1px solid rgba(237,232,224,0.08)" }} />
                         ))}
                       </div>
                     )}
@@ -2314,7 +3164,7 @@ function SalonRoute({ lang, setLang }) {
   useEffect(() => {
     const load = async () => {
       // Check Supabase
-      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*))").eq("slug", slug).single();
+      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load reviews
       const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
@@ -2323,16 +3173,21 @@ function SalonRoute({ lang, setLang }) {
       setSalon({
         id: data.slug,
         owner_id: data.id,
-        name: data.business_name || data.owner_name || "Salon",
+        name: data.business_name || data.owner_name || "Studio",
         city: data.city || "Nederland",
         accent: data.accent_color || "#c9a96e",
         owner_email: data.email,
         business_hours: data.business_hours || DEFAULT_HOURS,
+        booking_policy: data.booking_policy || "",
+        phone_required: data.phone_required || false,
+        logo_url: data.logo_url || "",
+        cover_image_url: data.cover_image_url || "",
+        discount_codes: data.discount_codes || [],
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
           name_en: s.name_en || s.name || "",
-          photos: [],
+          photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.photo_url })),
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
           extras: s.service_extras || []
         })),
