@@ -5,14 +5,12 @@ import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-rout
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
   try {
-    await fetch("https://pqvovkwqkapmpibktpwb.supabase.co/functions/v1/send-emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer sb_publishable_9a56u0YAwjJFjeQ6AGpJeg_qrzPnl0k"
-      },
-      body: JSON.stringify({ type, booking })
+    // Use supabase.functions.invoke which handles auth automatically
+    const { data, error } = await supabase.functions.invoke("send-emails", {
+      body: { type, booking }
     });
+    if (error) console.error("Email error:", error);
+    return data;
   } catch (e) {
     console.error("Email error:", e);
   }
