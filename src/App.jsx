@@ -22,11 +22,24 @@ const ACCENT = "#c9a96e";
 const today = new Date();
 const fmt = (d) => d.toISOString().split("T")[0];
 const getDays = (n = 14) => Array.from({ length: n }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
-const TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
+const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];
 const DAY_EN = ["su","mo","tu","we","th","fr","sa"];
+const DAY_FULL_NL = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+const DAY_FULL_EN = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MON_NL = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
 const MON_EN = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+
+// Default business hours - all days 09:00-17:30, Sunday closed
+const DEFAULT_HOURS = {
+  0: { open: "09:00", close: "17:30", closed: true },  // Sunday
+  1: { open: "09:00", close: "17:30", closed: false }, // Monday
+  2: { open: "09:00", close: "17:30", closed: false }, // Tuesday
+  3: { open: "09:00", close: "17:30", closed: false }, // Wednesday
+  4: { open: "09:00", close: "17:30", closed: false }, // Thursday
+  5: { open: "09:00", close: "17:30", closed: false }, // Friday
+  6: { open: "09:00", close: "17:30", closed: true },  // Saturday
+};
 
 const T = {
   nl: {
@@ -84,6 +97,8 @@ const T = {
     staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker",
     staffRole:"Functie (bijv. Nagelstyliste)", selectStaff:"Kies een medewerker",
     anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
+    businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit", closed:"Gesloten",
+    businessHoursDesc:"Stel je werkdagen en -uren in", closedOnDay:"Gesloten op deze dag",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -140,6 +155,8 @@ const T = {
     staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name",
     staffRole:"Role (e.g. Nail technician)", selectStaff:"Choose a staff member",
     anyStaff:"No preference", noStaff:"No staff members yet",
+    businessHours:"Business Hours", openTime:"Open", closeTime:"Close", closed:"Closed",
+    businessHoursDesc:"Set your working days and hours", closedOnDay:"Closed on this day",
   }
 };
 
@@ -712,7 +729,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [selVariant, setSelVariant] = useState(null);
   const [selExtras, setSelExtras] = useState([]);
   const [selStaff, setSelStaff] = useState(null);
-  const [date, setDate] = useState(fmt(today));
+  
+  // Find first available (non-closed) day
+  const getFirstAvailableDate = () => {
+    const businessHours = initialSalon.business_hours || DEFAULT_HOURS;
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const dayOfWeek = d.getDay();
+      if (!businessHours[dayOfWeek]?.closed) {
+        return fmt(d);
+      }
+    }
+    return fmt(today); // Fallback
+  };
+  
+  const [date, setDate] = useState(getFirstAvailableDate);
   const [time, setTime] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
   const [done, setDone] = useState(false);
@@ -877,20 +909,44 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                 <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
                   {days.slice(0,10).map((d, i) => {
-                    const ds = fmt(d); const isSel = date === ds;
+                    const ds = fmt(d); 
+                    const isSel = date === ds;
+                    const dayOfWeek = d.getDay();
+                    const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                    const isClosed = dayHours.closed;
                     return (
-                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { setDate(ds); setTime(null); }}>
+                      <div 
+                        key={i} 
+                        className={`day-chip ${isSel ? "sel" : ""}`} 
+                        onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
+                        style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}
+                      >
                         <span style={{ fontSize: 10, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.35)" }}>{DAY[d.getDay()]}</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? "#0d0b0a" : "#ede8e0", marginTop: 2 }}>{d.getDate()}</span>
-                        <span style={{ fontSize: 9, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.25)" }}>{MON[d.getMonth()]}</span>
+                        <span style={{ fontSize: 9, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.25)" }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
                       </div>
                     );
                   })}
                 </div>
                 <SL>{t.selectTime}</SL>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
-                  {TIMES.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
-                </div>
+                {(() => {
+                  const selectedDate = new Date(date);
+                  const dayOfWeek = selectedDate.getDay();
+                  const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                  const availableTimes = TIMES.filter(tt => {
+                    if (dayHours.closed) return false;
+                    return tt >= dayHours.open && tt < dayHours.close;
+                  });
+                  return availableTimes.length > 0 ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
+                      {availableTimes.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: "center", padding: "30px 20px", color: "rgba(237,232,224,0.35)", fontSize: 13, marginBottom: 20 }}>
+                      {lang === "nl" ? "Geen beschikbare tijden op deze dag" : "No available times on this day"}
+                    </div>
+                  );
+                })()}
                 <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
               </>}
 
@@ -1222,7 +1278,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(today));
   const [salonData, setSalonData] = useState(() => {
-    return { id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, services: [], appointments: [] };
+    return { id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, services: [], appointments: [], business_hours: DEFAULT_HOURS };
   });
   const [saved, setSaved] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -1255,6 +1311,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           iban: data.iban || "",
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
+          business_hours: data.business_hours || DEFAULT_HOURS,
           services: (data.services || []).map(s => ({
             ...s,
             name_nl: s.name_nl || s.name || "",
@@ -1953,6 +2010,111 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 }} />
               </div>
 
+              {/* Business Hours */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.businessHours}</SL>
+                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginBottom: 14 }}>{t.businessHoursDesc}</div>
+                {[0,1,2,3,4,5,6].map(day => {
+                  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                  const hours = salonData.business_hours?.[day] || DEFAULT_HOURS[day];
+                  const isClosed = hours.closed;
+                  return (
+                    <div key={day} style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 10, 
+                      marginBottom: 10, 
+                      padding: "10px 12px",
+                      background: isClosed ? "rgba(237,232,224,0.02)" : `${accent}08`,
+                      border: `1px solid ${isClosed ? "rgba(237,232,224,0.06)" : `${accent}22`}`,
+                      borderRadius: 12,
+                      opacity: isClosed ? 0.6 : 1,
+                      transition: "all 0.2s"
+                    }}>
+                      <div style={{ width: 85, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
+                      
+                      {/* Closed toggle */}
+                      <div 
+                        onClick={() => update(d => {
+                          if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
+                          d.business_hours[day] = { ...d.business_hours[day], closed: !isClosed };
+                          return d;
+                        })}
+                        style={{ 
+                          width: 36, 
+                          height: 20, 
+                          borderRadius: 10, 
+                          background: isClosed ? "rgba(237,232,224,0.1)" : accent,
+                          cursor: "pointer",
+                          position: "relative",
+                          transition: "all 0.2s",
+                          flexShrink: 0
+                        }}
+                      >
+                        <div style={{ 
+                          position: "absolute",
+                          top: 2,
+                          left: isClosed ? 2 : 18,
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: "#fff",
+                          transition: "left 0.2s"
+                        }} />
+                      </div>
+                      
+                      {!isClosed ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                          <select 
+                            value={hours.open}
+                            onChange={e => update(d => {
+                              if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
+                              d.business_hours[day] = { ...d.business_hours[day], open: e.target.value };
+                              return d;
+                            })}
+                            style={{ 
+                              background: "rgba(237,232,224,0.06)", 
+                              border: "1px solid rgba(237,232,224,0.12)", 
+                              borderRadius: 8, 
+                              padding: "6px 8px", 
+                              color: "#ede8e0", 
+                              fontSize: 11,
+                              fontFamily: "'Jost',sans-serif",
+                              cursor: "pointer"
+                            }}
+                          >
+                            {TIMES.map(t => <option key={t} value={t} style={{ background: "#1a1a1a" }}>{t}</option>)}
+                          </select>
+                          <span style={{ fontSize: 11, color: "rgba(237,232,224,0.3)" }}>—</span>
+                          <select 
+                            value={hours.close}
+                            onChange={e => update(d => {
+                              if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
+                              d.business_hours[day] = { ...d.business_hours[day], close: e.target.value };
+                              return d;
+                            })}
+                            style={{ 
+                              background: "rgba(237,232,224,0.06)", 
+                              border: "1px solid rgba(237,232,224,0.12)", 
+                              borderRadius: 8, 
+                              padding: "6px 8px", 
+                              color: "#ede8e0", 
+                              fontSize: 11,
+                              fontFamily: "'Jost',sans-serif",
+                              cursor: "pointer"
+                            }}
+                          >
+                            {TIMES.map(t => <option key={t} value={t} style={{ background: "#1a1a1a" }}>{t}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", fontStyle: "italic" }}>{t.closed}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <button className="btn-primary" onClick={async () => {
                 await supabase.from("profiles").update({
                   business_name: salonData.name,
@@ -1963,7 +2125,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   btw_id: salonData.btw_id || null,
                   iban: salonData.iban || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
-                  next_invoice_number: salonData.next_invoice_number || 1
+                  next_invoice_number: salonData.next_invoice_number || 1,
+                  business_hours: salonData.business_hours || DEFAULT_HOURS
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
@@ -2164,6 +2327,7 @@ function SalonRoute({ lang, setLang }) {
         city: data.city || "Nederland",
         accent: data.accent_color || "#c9a96e",
         owner_email: data.email,
+        business_hours: data.business_hours || DEFAULT_HOURS,
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
