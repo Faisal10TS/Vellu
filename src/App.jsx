@@ -1348,58 +1348,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               ))}
             </div>
           )}
-                </div>
-              ) : (
-                /* Done screen for desktop */
-                <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
-                  <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
-                  <p style={{ color: "rgba(237,232,224,0.5)", fontSize: 14, marginBottom: 30 }}>
-                    {t.confirmedSub} {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
-                  </p>
-                  <p style={{ fontSize: 12, color: "rgba(237,232,224,0.35)", marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
-
-                  {/* Calendar sync buttons */}
-                  <div style={{ marginBottom: 32 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.25)", marginBottom: 10 }}>{t.addToCalendar}</div>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                        const dur = getDuration();
-                        const start = new Date(date + "T" + time + ":00");
-                        const end = new Date(start.getTime() + dur * 60000);
-                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                        const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
-                        const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: €${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
-                        const loc = encodeURIComponent(initialSalon.name + ", " + initialSalon.city);
-                        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}&details=${details}&location=${loc}`, "_blank");
-                      }}>📅 {t.googleCalendar}</button>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                        const dur = getDuration();
-                        const start = new Date(date + "T" + time + ":00");
-                        const end = new Date(start.getTime() + dur * 60000);
-                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                        const ics = [
-                          "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vellu//Beauty Booking//EN", "BEGIN:VEVENT",
-                          `DTSTART:${fmt2(start)}`, `DTEND:${fmt2(end)}`,
-                          `SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,
-                          `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: €${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
-                          `LOCATION:${initialSalon.name}, ${initialSalon.city}`, "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"
-                        ].join("\r\n");
-                        const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a"); a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
-                        a.click(); URL.revokeObjectURL(url);
-                      }}>🗓 {t.appleCalendar}</button>
-                    </div>
-                  </div>
-
-                  <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
-                  <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
-                </div>
-              )}
-            </div>
           </div>
-        ) : (
+        </div>
+      ) : (
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
