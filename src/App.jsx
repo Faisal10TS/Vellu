@@ -797,16 +797,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     m.service_ids?.length === 0 || m.service_ids?.includes(sel?.id)
   );
 
-  // Apply discount code
-  const applyDiscountCode = () => {
+  // Get active discount codes
+  const activeCodes = (initialSalon.discount_codes || []).filter(c => c.active);
+  
+  // Apply discount code - called on input change for instant feedback
+  const applyDiscountCode = (code = discountCode) => {
     setDiscountError("");
-    const codes = initialSalon.discount_codes || [];
-    const found = codes.find(c => c.code.toUpperCase() === discountCode.toUpperCase() && c.active);
+    if (!code.trim()) return;
+    const found = activeCodes.find(c => c.code.toUpperCase() === code.toUpperCase());
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");
     } else {
       setDiscountError(t.invalidCode);
+    }
+  };
+  
+  // Auto-apply discount when code matches
+  const handleDiscountInput = (value) => {
+    const upperVal = value.toUpperCase();
+    setDiscountCode(upperVal);
+    setDiscountError("");
+    // Auto-apply if exact match found
+    const found = activeCodes.find(c => c.code === upperVal);
+    if (found) {
+      setAppliedDiscount(found);
+      setDiscountCode("");
     }
   };
 
@@ -1185,12 +1201,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                 </div>
 
                 {/* Discount Code Input */}
-                {(initialSalon.discount_codes || []).length > 0 && !appliedDiscount && (
+                {activeCodes.length > 0 && !appliedDiscount && (
                   <div style={{ marginBottom: 20 }}>
                     <SL>{t.enterDiscountCode}</SL>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => setDiscountCode(e.target.value.toUpperCase())} style={{ flex: 1, fontFamily: "monospace" }} />
-                      <button className="btn-ghost" style={{ padding: "0 20px" }} onClick={applyDiscountCode}>{t.applyCode}</button>
+                      <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
+                      <button className="btn-ghost" style={{ padding: "0 20px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
                     </div>
                     {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
                   </div>
@@ -1551,12 +1567,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     </div>
 
                     {/* Discount Code Input (mobile) */}
-                    {(initialSalon.discount_codes || []).length > 0 && !appliedDiscount && (
+                    {activeCodes.length > 0 && !appliedDiscount && (
                       <div style={{ marginBottom: 20 }}>
                         <SL>{t.enterDiscountCode}</SL>
                         <div style={{ display: "flex", gap: 8 }}>
-                          <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => setDiscountCode(e.target.value.toUpperCase())} style={{ flex: 1, fontFamily: "monospace" }} />
-                          <button className="btn-ghost" style={{ padding: "0 16px" }} onClick={applyDiscountCode}>{t.applyCode}</button>
+                          <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
+                          <button className="btn-ghost" style={{ padding: "0 16px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
                         </div>
                         {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
                       </div>
