@@ -87,24 +87,6 @@ const T = {
     todaySchedule:"Schema vandaag", nextUp:"Volgende", inProgress:"Nu bezig", upcoming:"Straks",
     noMoreToday:"Geen afspraken meer vandaag", freeDay:"Vrije dag! Geen afspraken gepland.",
     startsIn:"Start over", minutesShort:"min", hoursShort:"u",
-    // Categories
-    categories:"Categorieën", addCategory:"+ Categorie toevoegen", categoryName:"Categorienaam (NL)",
-    categoryNameEn:"Categorienaam (EN)", noCategory:"Geen categorie", allCategories:"Alle behandelingen",
-    manageCategories:"Categorieën beheren",
-    // Client accounts
-    welcomeBackClient:"Welkom terug", foundYourDetails:"We hebben je gegevens gevonden!",
-    // Cancellation
-    cancelBooking:"Afspraak annuleren", cancelBookingDesc:"Weet je zeker dat je wilt annuleren?",
-    cancellationReason:"Reden voor annulering (optioneel)", confirmCancel:"Ja, annuleren",
-    bookingCancelled:"Je afspraak is geannuleerd", cannotCancel:"Annuleren niet meer mogelijk",
-    cancelBeforeTime:"Annuleren kan tot 24 uur van tevoren",
-    // Pagination
-    showMore:"Meer laden", showing:"Getoond", of:"van",
-    // Discount codes
-    discountCode:"Kortingscode", applyCode:"Toepassen", invalidCode:"Ongeldige code",
-    codeApplied:"Kortingscode toegepast!", discount:"Korting", enterDiscountCode:"Kortingscode invoeren",
-    // Booking policy
-    required:"verplicht", agreeToPolicy:"Ik ga akkoord met het annuleringsbeleid",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -164,24 +146,6 @@ const T = {
     todaySchedule:"Today's schedule", nextUp:"Next up", inProgress:"In progress", upcoming:"Upcoming",
     noMoreToday:"No more appointments today", freeDay:"Day off! No appointments scheduled.",
     startsIn:"Starts in", minutesShort:"min", hoursShort:"h",
-    // Categories
-    categories:"Categories", addCategory:"+ Add category", categoryName:"Category name (NL)",
-    categoryNameEn:"Category name (EN)", noCategory:"No category", allCategories:"All treatments",
-    manageCategories:"Manage categories",
-    // Client accounts
-    welcomeBackClient:"Welcome back", foundYourDetails:"We found your details!",
-    // Cancellation
-    cancelBooking:"Cancel booking", cancelBookingDesc:"Are you sure you want to cancel?",
-    cancellationReason:"Reason for cancellation (optional)", confirmCancel:"Yes, cancel",
-    bookingCancelled:"Your booking has been cancelled", cannotCancel:"Cancellation no longer possible",
-    cancelBeforeTime:"Cancellations must be made 24 hours in advance",
-    // Pagination
-    showMore:"Load more", showing:"Showing", of:"of",
-    // Discount codes
-    discountCode:"Discount code", applyCode:"Apply", invalidCode:"Invalid code",
-    codeApplied:"Discount applied!", discount:"Discount", enterDiscountCode:"Enter discount code",
-    // Booking policy
-    required:"required", agreeToPolicy:"I agree to the cancellation policy",
   }
 };
 
@@ -196,7 +160,6 @@ const makeCSS = (accent) => `
   input { outline: none; font-family: 'Jost', sans-serif; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes scaleIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
-  @keyframes pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
   @keyframes pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
   .fade-up { animation: fadeUp 0.38s cubic-bezier(0.16,1,0.3,1) both; }
   .scale-in { animation: scaleIn 0.3s cubic-bezier(0.16,1,0.3,1) both; }
@@ -557,78 +520,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const MON = lang === "nl" ? MON_NL : MON_EN;
   const svcName = (s) => lang === "nl" ? s.name_nl : s.name_en;
-  const catName = (c) => lang === "nl" ? c.name_nl : (c.name_en || c.name_nl);
 
   const [step, setStep] = useState(1);
   const [sel, setSel] = useState(null);
   const [selVariant, setSelVariant] = useState(null);
   const [selExtras, setSelExtras] = useState([]);
   const [selStaff, setSelStaff] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [date, setDate] = useState(fmt(today));
   const [time, setTime] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
   const [done, setDone] = useState(false);
   const [gallery, setGallery] = useState(null);
-  const [clientFound, setClientFound] = useState(false);
-  const [policyAgreed, setPolicyAgreed] = useState(false);
-  const [discountCode, setDiscountCode] = useState("");
-  const [appliedDiscount, setAppliedDiscount] = useState(null);
-  const [bookingId, setBookingId] = useState(null);
   const days = getDays();
-
-  // Get categories
-  const categories = initialSalon.categories || [];
-  const servicesWithCategory = (initialSalon.services || []).map(s => ({
-    ...s,
-    category: categories.find(c => c.id === s.category_id)
-  }));
-  
-  // Filter services by selected category
-  const filteredServices = selectedCategory 
-    ? servicesWithCategory.filter(s => s.category_id === selectedCategory)
-    : servicesWithCategory;
-
-  // Form validation
-  const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
-  const policyValid = !initialSalon.booking_policy || policyAgreed;
-  const canConfirm = form.firstName && form.lastName && form.email && phoneValid && policyValid;
+  const canConfirm = form.firstName && form.lastName && form.email;
 
   // Filter staff members who can do the selected service
   const availableStaff = (initialSalon.staff || []).filter(m =>
     m.service_ids?.length === 0 || m.service_ids?.includes(sel?.id)
   );
 
-  // Client lookup (debounced)
-  useEffect(() => {
-    if (!form.email || form.email.length < 5 || !form.email.includes("@")) {
-      setClientFound(false);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).single();
-      if (data) {
-        setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone }));
-        setClientFound(true);
-      } else {
-        setClientFound(false);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [form.email]);
-
   const getPrice = () => {
     const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
     const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
-    let total = base + extrasTotal;
-    if (appliedDiscount) {
-      if (appliedDiscount.discount_type === "percentage") {
-        total = total * (1 - appliedDiscount.discount_value / 100);
-      } else {
-        total = Math.max(0, total - appliedDiscount.discount_value);
-      }
-    }
-    return total;
+    return base + extrasTotal;
   };
   const getDuration = () => selVariant ? selVariant.duration : (sel?.duration || 0);
   const getServiceLabel = () => {
@@ -641,93 +555,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     setSelExtras(prev => prev.find(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra]);
   };
 
-  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); setBookingId(null); setSelectedCategory(null); };
-
-  // Generate random cancellation token
-  const generateToken = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-  };
-
-  // Apply discount code
-  const applyDiscount = async () => {
-    if (!discountCode.trim()) return;
-    const codes = initialSalon.discount_codes || [];
-    const found = codes.find(c => c.code.toLowerCase() === discountCode.toLowerCase() && c.active);
-    if (found) {
-      setAppliedDiscount(found);
-    } else {
-      alert(t.invalidCode);
-    }
-  };
-
-  // Confirm booking - handles client save, appointment insert, cancellation token
-  const confirmBooking = async () => {
-    // 1. Save or update client
-    const clientEmail = form.email.toLowerCase();
-    let clientId = null;
-    const { data: existingClient } = await supabase.from("clients").select("id").eq("email", clientEmail).single();
-    
-    if (existingClient) {
-      clientId = existingClient.id;
-      await supabase.from("clients").update({
-        first_name: form.firstName,
-        last_name: form.lastName,
-        phone: form.phone || null,
-        last_visit: new Date().toISOString()
-      }).eq("id", clientId);
-    } else {
-      const { data: newClient } = await supabase.from("clients").insert({
-        email: clientEmail,
-        first_name: form.firstName,
-        last_name: form.lastName,
-        phone: form.phone || null,
-        last_visit: new Date().toISOString()
-      }).select("id").single();
-      if (newClient) clientId = newClient.id;
-    }
-
-    // 2. Create appointment
-    const apptData = {
-      owner_id: initialSalon.owner_id, service_id: sel?.id || null, client_id: clientId,
-      service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : "") + (appliedDiscount ? ` [${appliedDiscount.code}]` : ""),
-      service_price: getPrice(), service_duration: getDuration(), date, time,
-      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, client_phone: form.phone || null,
-      payment_method: form.payment, status: "confirmed", invoice_sent: false,
-      staff_id: selStaff?.id || null, staff_name: selStaff?.name || null
-    };
-    const { data: appt } = await supabase.from("appointments").insert(apptData).select("id").single();
-    
-    // 3. Generate cancellation token (expires 24h before appointment)
-    let cancelToken = null;
-    if (appt) {
-      setBookingId(appt.id);
-      const token = generateToken();
-      const appointmentDate = new Date(date + "T" + time + ":00");
-      const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
-      
-      await supabase.from("cancellation_tokens").insert({
-        appointment_id: appt.id,
-        token: token,
-        expires_at: expiresAt.toISOString()
-      });
-      cancelToken = token;
-    }
-
-    setDone(true);
-    
-    // 4. Send confirmation email with cancellation link
-    await sendEmails("booking_confirmation", {
-      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
-      date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
-      cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
-    });
-    
-    if (form.payment === "online") {
-      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
-        date, time, price: getPrice(), salon_name: initialSalon.name });
-    }
-  };
+  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); };
 
   return (
     <Phone accent={accent}>
@@ -752,45 +580,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {/* Step 1 — Service selection */}
               {step === 1 && <>
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
-                
-                {/* Category tabs */}
-                {categories.length > 0 && (
-                  <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 16 }}>
-                    <button
-                      className={`btn-ghost ${selectedCategory === null ? "active" : ""}`}
-                      style={{ 
-                        padding: "8px 16px", 
-                        fontSize: 11, 
-                        whiteSpace: "nowrap",
-                        background: selectedCategory === null ? `${accent}15` : "transparent",
-                        borderColor: selectedCategory === null ? accent : "rgba(237,232,224,0.12)",
-                        color: selectedCategory === null ? accent : "rgba(237,232,224,0.6)"
-                      }}
-                      onClick={() => setSelectedCategory(null)}
-                    >
-                      {t.allCategories}
-                    </button>
-                    {categories.map(cat => (
-                      <button
-                        key={cat.id}
-                        className={`btn-ghost ${selectedCategory === cat.id ? "active" : ""}`}
-                        style={{ 
-                          padding: "8px 16px", 
-                          fontSize: 11, 
-                          whiteSpace: "nowrap",
-                          background: selectedCategory === cat.id ? `${accent}15` : "transparent",
-                          borderColor: selectedCategory === cat.id ? accent : "rgba(237,232,224,0.12)",
-                          color: selectedCategory === cat.id ? accent : "rgba(237,232,224,0.6)"
-                        }}
-                        onClick={() => setSelectedCategory(cat.id)}
-                      >
-                        {catName(cat)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {filteredServices.map(s => (
+                {initialSalon.services.map(s => (
                   <div key={s.id}>
                     <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => { setSel(s); setSelVariant(null); setSelExtras([]); }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -798,8 +588,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
                           <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
                             {s.duration} {t.min}
-                            {s.category && <span style={{ color: accent, marginLeft: 8 }}>· {catName(s.category)}</span>}
-                            {s.photos?.length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                            {s.photos.length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
                             {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
                           </div>
                         </div>
@@ -923,52 +712,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {step === 3 && <>
                 <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                  {/* Email first for client lookup */}
-                  <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                  
-                  {/* Client found indicator */}
-                  {clientFound && (
-                    <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 18 }}>👋</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
-                        <div style={{ fontSize: 10, color: "rgba(237,232,224,0.5)" }}>{t.foundYourDetails}</div>
-                      </div>
-                    </div>
-                  )}
-                  
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
                     <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
-                  <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+                  <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                  <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
                 </div>
-                
-                {/* Discount code */}
-                {initialSalon.discount_codes?.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <SL>{t.discountCode}</SL>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input 
-                        className="input-field" 
-                        placeholder={t.enterDiscountCode}
-                        value={discountCode}
-                        onChange={e => setDiscountCode(e.target.value)}
-                        disabled={!!appliedDiscount}
-                        style={{ flex: 1 }}
-                      />
-                      {!appliedDiscount ? (
-                        <button className="btn-ghost" style={{ padding: "12px 20px", color: accent, borderColor: `${accent}40` }} onClick={applyDiscount}>{t.applyCode}</button>
-                      ) : (
-                        <div style={{ padding: "12px 16px", background: `${accent}15`, borderRadius: 12, color: accent, fontSize: 11, display: "flex", alignItems: "center" }}>✓</div>
-                      )}
-                    </div>
-                    {appliedDiscount && (
-                      <div style={{ fontSize: 11, color: "#86efac", marginTop: 6 }}>{t.codeApplied} -{appliedDiscount.discount_type === "percentage" ? `${appliedDiscount.discount_value}%` : `€${appliedDiscount.discount_value}`}</div>
-                    )}
-                  </div>
-                )}
-                
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                   {[["on-arrival","🏠",t.payArrival],["online","💳",t.payOnline]].map(([v,icon,label]) => (
@@ -979,24 +729,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     </div>
                   ))}
                 </div>
-                
-                {/* Booking policy checkbox */}
-                {initialSalon.booking_policy && (
-                  <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
-                      <input 
-                        type="checkbox" 
-                        checked={policyAgreed} 
-                        onChange={e => setPolicyAgreed(e.target.checked)}
-                        style={{ marginTop: 2, accentColor: accent }}
-                      />
-                      <span style={{ fontSize: 11, color: "rgba(237,232,224,0.6)", lineHeight: 1.5 }}>
-                        {t.agreeToPolicy}
-                      </span>
-                    </label>
-                  </div>
-                )}
-                
                 <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
               </>}
 
@@ -1022,11 +754,47 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                     <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
                   </div>
-                  {appliedDiscount && (
-                    <div style={{ fontSize: 10, color: "#86efac", textAlign: "right", marginTop: -4 }}>{t.discount}: -{appliedDiscount.discount_type === "percentage" ? `${appliedDiscount.discount_value}%` : `€${appliedDiscount.discount_value}`}</div>
-                  )}
                 </div>
-                <button className="btn-primary" onClick={confirmBooking}>{t.confirm}</button>
+                <button className="btn-primary" onClick={async () => {
+                  // Save appointment to Supabase
+                  const apptData = {
+                    owner_id: initialSalon.owner_id,
+                    service_id: sel?.id || null,
+                    service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : ""),
+                    service_price: getPrice(),
+                    service_duration: getDuration(),
+                    date, time,
+                    client_name: `${form.firstName} ${form.lastName}`,
+                    client_email: form.email,
+                    client_phone: form.phone || null,
+                    payment_method: form.payment,
+                    status: "confirmed",
+                    invoice_sent: false,
+                    staff_id: selStaff?.id || null,
+                    staff_name: selStaff?.name || null
+                  };
+                  await supabase.from("appointments").insert(apptData);
+                  setDone(true);
+                  await sendEmails("booking_confirmation", {
+                    client_name: `${form.firstName} ${form.lastName}`,
+                    client_email: form.email,
+                    service_name: apptData.service_name,
+                    date, time,
+                    payment: form.payment,
+                    price: getPrice(),
+                    salon_name: initialSalon.name,
+                    owner_email: initialSalon.owner_email || "info@vellu.cc"
+                  });
+                  if (form.payment === "online") {
+                    await sendEmails("invoice", {
+                      client_name: `${form.firstName} ${form.lastName}`,
+                      client_email: form.email,
+                      service_name: apptData.service_name,
+                      date, price: getPrice(),
+                      salon_name: initialSalon.name
+                    });
+                  }
+                }}>{t.confirm}</button>
               </>}
             </div>
           ) : (
@@ -2157,8 +1925,6 @@ function SalonRoute({ lang, setLang }) {
       const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
       // Load staff
       const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position");
-      // Load categories
-      const { data: categoriesData } = await supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position");
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -2166,9 +1932,6 @@ function SalonRoute({ lang, setLang }) {
         city: data.city || "Nederland",
         accent: data.accent_color || "#c9a96e",
         owner_email: data.email,
-        booking_policy: data.booking_policy || null,
-        phone_required: data.phone_required || false,
-        discount_codes: data.discount_codes || [],
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
@@ -2179,8 +1942,7 @@ function SalonRoute({ lang, setLang }) {
         })),
         appointments: [],
         reviews: reviews || [],
-        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) })),
-        categories: categoriesData || []
+        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) }))
       });
       setLoading(false);
     };
@@ -2225,164 +1987,6 @@ function AppInner() {
   );
 }
 
-// ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────
-function CancelRoute({ lang }) {
-  const { token } = useParams();
-  const t = T[lang];
-  const [status, setStatus] = useState("loading");
-  const [appointment, setAppointment] = useState(null);
-  const [reason, setReason] = useState("");
-
-  useEffect(() => {
-    const checkToken = async () => {
-      const { data: tokenData, error } = await supabase
-        .from("cancellation_tokens")
-        .select("*, appointments(*)")
-        .eq("token", token)
-        .single();
-      
-      if (error || !tokenData) {
-        setStatus("error");
-        return;
-      }
-      
-      if (tokenData.used) {
-        setStatus("cancelled");
-        return;
-      }
-      
-      if (new Date(tokenData.expires_at) < new Date()) {
-        setStatus("expired");
-        return;
-      }
-      
-      if (tokenData.appointments?.status === "cancelled") {
-        setStatus("cancelled");
-        return;
-      }
-      
-      setAppointment(tokenData.appointments);
-      setStatus("confirm");
-    };
-    checkToken();
-  }, [token]);
-
-  const handleCancel = async () => {
-    await supabase.from("appointments").update({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      cancellation_reason: reason || null
-    }).eq("id", appointment.id);
-    
-    await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
-    
-    await sendEmails("booking_cancelled", {
-      client_name: appointment.client_name,
-      client_email: appointment.client_email,
-      service_name: appointment.service_name,
-      date: appointment.date,
-      time: appointment.time
-    });
-    
-    setStatus("cancelled");
-  };
-
-  return (
-    <div style={{ minHeight: "100dvh", background: "#0d0b0a", fontFamily: "'Jost',sans-serif", color: "#ede8e0", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <style>{makeCSS(ACCENT)}</style>
-      <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
-        {status === "loading" && (
-          <div style={{ color: "rgba(237,232,224,0.4)" }}>laden...</div>
-        )}
-        
-        {status === "confirm" && appointment && (
-          <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>📅</div>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
-              {t.cancelBooking}
-            </h1>
-            <p style={{ color: "rgba(237,232,224,0.5)", marginBottom: 30 }}>{t.cancelBookingDesc}</p>
-            
-            <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.08)", borderRadius: 16, padding: 20, marginBottom: 24, textAlign: "left" }}>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.35)" }}>{t.treatment}</div>
-                <div style={{ fontWeight: 500 }}>{appointment.service_name}</div>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.35)" }}>{t.date}</div>
-                <div style={{ fontWeight: 500 }}>{appointment.date} {lang === "nl" ? "om" : "at"} {appointment.time}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(237,232,224,0.35)" }}>{t.total}</div>
-                <div style={{ fontWeight: 500, color: ACCENT }}>€{parseFloat(appointment.service_price).toFixed(2)}</div>
-              </div>
-            </div>
-            
-            <textarea 
-              className="input-field" 
-              placeholder={t.cancellationReason}
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              style={{ minHeight: 80, marginBottom: 16, resize: "none" }}
-            />
-            
-            <button className="btn-primary" style={{ background: "#ef4444", width: "100%" }} onClick={handleCancel}>
-              {t.confirmCancel}
-            </button>
-            
-            <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => window.location.href = "/"}>
-              {lang === "nl" ? "Terug" : "Back"}
-            </button>
-          </div>
-        )}
-        
-        {status === "cancelled" && (
-          <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>✓</div>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
-              {t.bookingCancelled}
-            </h1>
-            <p style={{ color: "rgba(237,232,224,0.5)", marginBottom: 30 }}>
-              {lang === "nl" ? "Je ontvangt een bevestiging per e-mail." : "You will receive a confirmation email."}
-            </p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
-            </button>
-          </div>
-        )}
-        
-        {status === "expired" && (
-          <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>⏰</div>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
-              {t.cannotCancel}
-            </h1>
-            <p style={{ color: "rgba(237,232,224,0.5)", marginBottom: 30 }}>{t.cancelBeforeTime}</p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
-            </button>
-          </div>
-        )}
-        
-        {status === "error" && (
-          <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>❌</div>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
-              {lang === "nl" ? "Link ongeldig" : "Invalid link"}
-            </h1>
-            <p style={{ color: "rgba(237,232,224,0.5)", marginBottom: 30 }}>
-              {lang === "nl" ? "Deze annuleringslink is niet geldig." : "This cancellation link is not valid."}
-            </p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function VelluApp() {
   const [lang, setLang] = useState("nl");
   return (
@@ -2390,7 +1994,6 @@ export default function VelluApp() {
       <Routes>
         <Route path="/" element={<AppInner />} />
         <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
-        <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
         <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
       </Routes>
     </BrowserRouter>
