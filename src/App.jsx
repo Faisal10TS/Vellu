@@ -1400,7 +1400,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
             </div>
           </div>
         ) : (
-          /* Mobile Layout */
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
