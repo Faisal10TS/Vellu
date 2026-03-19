@@ -920,7 +920,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [discountError, setDiscountError] = useState("");
   const [clientFound, setClientFound] = useState(false);
-  const [bookingId, setBookingId] = useState(null);
   const [bookedSlots, setBookedSlots] = useState([]);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
   const days = getDays();
@@ -1171,7 +1170,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     // 3. Generate cancellation token (expires 24h before appointment)
     let cancelToken = null;
     if (appt) {
-      setBookingId(appt.id);
       const token = generateToken();
       const appointmentDate = new Date(date + "T" + time + ":00");
       const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
@@ -1576,7 +1574,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   const selectedDate = new Date(date);
                   const dayOfWeek = selectedDate.getDay();
                   const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
-                  const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
+                  const availableTimes = TIMES.filter(tt => {
+                    if (dayHours.closed) return false;
+                    if (tt < dayHours.open || tt >= dayHours.close) return false;
+                    // Filter out past times if selected date is today
+                    if (date === fmt(getToday())) {
+                      const now = getToday();
+                      const [h, m] = tt.split(":").map(Number);
+                      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+                    }
+                    return true;
+                  });
                   return availableTimes.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                       {availableTimes.map(tt => {
@@ -1703,6 +1711,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     ))}
                   </div>
                   {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                    ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
@@ -2031,7 +2040,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       const selectedDate = new Date(date);
                       const dayOfWeek = selectedDate.getDay();
                       const dayHours = initialSalon.business_hours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
-                      const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
+                      const availableTimes = TIMES.filter(tt => {
+                        if (dayHours.closed) return false;
+                        if (tt < dayHours.open || tt >= dayHours.close) return false;
+                        if (date === fmt(getToday())) {
+                          const now = getToday();
+                          const [h, m] = tt.split(":").map(Number);
+                          if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+                        }
+                        return true;
+                      });
                       return availableTimes.length > 0 ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                           {availableTimes.map(tt => {
@@ -2158,6 +2176,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         ))}
                       </div>
                       {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                        ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
