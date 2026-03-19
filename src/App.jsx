@@ -240,7 +240,7 @@ const makeCSS = (accent) => `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Jost:wght@300;400;500;600&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::-webkit-scrollbar { width: 0; height: 0; }
-  input { outline: none; font-family: 'Jost', sans-serif; }
+  input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes scaleIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
   .fade-up { animation: fadeUp 0.38s cubic-bezier(0.16,1,0.3,1) both; }
@@ -276,9 +276,8 @@ const makeCSS = (accent) => `
     border-radius: 20px; padding: 17px 19px; cursor: pointer; margin-bottom: 10px;
     transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
   }
-  .service-card.sel { box-shadow: 0 0 0 1px ${accent}33, 0 4px 20px ${accent}12; }
   .service-card:hover { border-color: ${accent}44; background: ${accent}08; transform: translateY(-1px); }
-  .service-card.sel { border-color: ${accent}99; background: ${accent}14; }
+  .service-card.sel { border-color: ${accent}99; background: ${accent}14; box-shadow: 0 0 0 1px ${accent}33, 0 4px 20px ${accent}12; }
 
   .time-chip {
     background: rgba(237,232,224,0.03); border: 1px solid rgba(237,232,224,0.1);
@@ -1170,13 +1169,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     
     // 4. Send confirmation email with cancellation link
     await sendEmails("booking_confirmation", {
-      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: combinedServiceName,
+      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
       date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
       cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
     });
     
     if (form.payment === "online") {
-      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: combinedServiceName,
+      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
         date, time, price: getPrice(), salon_name: initialSalon.name });
     }
     } catch (err) {
@@ -1407,6 +1406,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   </div>
                 )}
 
+                {filteredServices.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(237,232,224,0.25)" }}>
+                    <div style={{ fontSize: 36, marginBottom: 12 }}>💇</div>
+                    <div style={{ fontSize: 13 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                  </div>
+                )}
                 {filteredServices.map(s => {
                   const isSel = isServiceSelected(s.id);
                   const item = getServiceItem(s.id);
@@ -1859,6 +1864,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       </div>
                     )}
 
+                    {filteredServices.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "30px 16px", color: "rgba(237,232,224,0.25)" }}>
+                        <div style={{ fontSize: 32, marginBottom: 10 }}>💇</div>
+                        <div style={{ fontSize: 12 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                      </div>
+                    )}
                     {filteredServices.map(s => {
                       const isSel = isServiceSelected(s.id);
                       const item = getServiceItem(s.id);
@@ -2091,11 +2102,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
                         {selectedServices.map((item) => (
                           <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
                               {item.staff && <span style={{ fontSize: 11, color: "rgba(237,232,224,0.4)", marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)" }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
                             </div>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -2441,10 +2453,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
   const accent = salonData.accent;
   const appts = salonData.appointments;
+  const activeAppts = appts.filter(a => a.status !== "cancelled");
   const completedAppts = appts.filter(a => a.status === "completed");
-  const todayAppts = appts.filter(a => a.date === fmt(getToday()));
-  const calAppts = appts.filter(a => a.date === calDate);
-  const totalEarnings = completedAppts.reduce((s, a) => s + a.service_price, 0);
+  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
+  const calAppts = activeAppts.filter(a => a.date === calDate);
+  const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
   const days = getDays();
 
   const update = (fn) => setSalonData(d => {
@@ -2792,7 +2805,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
                 <div className="stat-card">
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)", marginBottom: 8 }}>{t.earnings}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: accent }}>€{totalEarnings}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
                   <div style={{ fontSize: 11, color: "rgba(237,232,224,0.28)", marginTop: 2 }}>{t.total.toLowerCase()}</div>
                 </div>
               </div>
@@ -2824,20 +2837,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   }}>
                     📅 {lang === "nl" ? "Exporteer naar agenda" : "Export to calendar"}
                   </button>
-                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "10px 12px" }} onClick={() => {
-                    const upcoming = appts.filter(a => a.status === "confirmed");
-                    if (upcoming.length === 0) return;
-                    const a = upcoming[0];
-                    const start = new Date(a.date + "T" + a.time + ":00");
-                    const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
-                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                    const title = encodeURIComponent(a.client_name + " — " + a.service_name);
-                    const details = encodeURIComponent(`${a.client_name}\n${a.client_email}\n€${a.service_price}`);
-                    const loc = encodeURIComponent(salonData.name + ", " + salonData.city);
-                    // Export all to Google Calendar (opens for first, rest via .ics)
-                    exportCalendar(upcoming);
-                  }}>
-                    🗓 {lang === "nl" ? "Sync met telefoon" : "Sync with phone"}
+                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "10px 12px" }} onClick={copyLink}>
+                    🔗 {copied ? (lang === "nl" ? "Gekopieerd!" : "Copied!") : (lang === "nl" ? "Kopieer link" : "Copy link")}
                   </button>
                 </div>
               )}
@@ -2857,7 +2858,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
                 {days.slice(0,10).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
-                  const has = appts.filter(a => a.date === ds).length > 0;
+                  const has = activeAppts.filter(a => a.date === ds).length > 0;
                   return (
                     <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)}>
                       <span style={{ fontSize: 10, color: isSel ? "#0d0b0a" : "rgba(237,232,224,0.35)" }}>{DAY[d.getDay()]}</span>
@@ -2906,7 +2907,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {completedAppts.length > 0 && (
                 <div style={{ marginTop: 14, background: `${accent}08`, border: `1px solid ${accent}1a`, borderRadius: 20, padding: "18px 22px" }}>
                   <SL>{t.totalEarnings}</SL>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 38, fontWeight: 300, color: accent }}>€{totalEarnings}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 38, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
                   <div style={{ fontSize: 11, color: "rgba(237,232,224,0.25)", marginTop: 4 }}>{completedAppts.length} {t.treatments}</div>
                 </div>
               )}
