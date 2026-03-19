@@ -129,6 +129,11 @@ const T = {
     todaySchedule:"Schema vandaag", nextUp:"Volgende", inProgress:"Nu bezig", upcoming:"Straks",
     noMoreToday:"Geen afspraken meer vandaag", freeDay:"Vrije dag!",
     startsIn:"Start over", minutesShort:"min", hoursShort:"u",
+    // Multi-service booking
+    addService:"+ Behandeling toevoegen", removeService:"Verwijder", selectedServices:"Geselecteerde behandelingen",
+    servicesSelected:"behandelingen geselecteerd", serviceSelected:"behandeling geselecteerd",
+    yourServices:"Jouw behandelingen", noServicesSelected:"Kies minimaal 1 behandeling",
+    totalDuration:"Totale duur",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -219,6 +224,11 @@ const T = {
     todaySchedule:"Today's schedule", nextUp:"Next up", inProgress:"In progress", upcoming:"Upcoming",
     noMoreToday:"No more appointments today", freeDay:"Day off!",
     startsIn:"Starts in", minutesShort:"min", hoursShort:"h",
+    // Multi-service booking
+    addService:"+ Add treatment", removeService:"Remove", selectedServices:"Selected treatments",
+    servicesSelected:"treatments selected", serviceSelected:"treatment selected",
+    yourServices:"Your treatments", noServicesSelected:"Select at least 1 treatment",
+    totalDuration:"Total duration",
   }
 };
 
@@ -787,10 +797,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const svcName = (s) => lang === "nl" ? s.name_nl : s.name_en;
 
   const [step, setStep] = useState(1);
-  const [sel, setSel] = useState(null);
-  const [selVariant, setSelVariant] = useState(null);
-  const [selExtras, setSelExtras] = useState([]);
-  const [selStaff, setSelStaff] = useState(null);
+  // Multi-service state: array of { service, variant, extras: [], staff: null }
+  const [selectedServices, setSelectedServices] = useState([]);
   
   // Find first available (non-closed) day
   const getFirstAvailableDate = () => {
@@ -824,9 +832,42 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const policyValid = !initialSalon.booking_policy || policyAgreed;
   const canConfirm = form.firstName && form.lastName && form.email && phoneValid && policyValid;
 
-  // Filter staff members who can do the selected service
-  const availableStaff = (initialSalon.staff || []).filter(m =>
-    m.service_ids?.length === 0 || m.service_ids?.includes(sel?.id)
+  // Multi-service helpers
+  const getStaffForService = (serviceId) => {
+    return (initialSalon.staff || []).filter(m =>
+      m.service_ids?.length === 0 || m.service_ids?.includes(serviceId)
+    );
+  };
+
+  const isServiceSelected = (serviceId) => selectedServices.some(item => item.service.id === serviceId);
+  
+  const getServiceItem = (serviceId) => selectedServices.find(item => item.service.id === serviceId);
+
+  const toggleServiceSelection = (s) => {
+    setSelectedServices(prev => {
+      if (prev.find(item => item.service.id === s.id)) {
+        return prev.filter(item => item.service.id !== s.id);
+      }
+      return [...prev, { service: s, variant: null, extras: [], staff: null }];
+    });
+  };
+
+  const updateServiceItem = (serviceId, updates) => {
+    setSelectedServices(prev => prev.map(item =>
+      item.service.id === serviceId ? { ...item, ...updates } : item
+    ));
+  };
+
+  const toggleExtraForService = (serviceId, extra) => {
+    setSelectedServices(prev => prev.map(item => {
+      if (item.service.id !== serviceId) return item;
+      const has = item.extras.find(e => e.id === extra.id);
+      return { ...item, extras: has ? item.extras.filter(e => e.id !== extra.id) : [...item.extras, extra] };
+    }));
+  };
+
+  const canProceedStep1 = selectedServices.length > 0 && selectedServices.every(item =>
+    !item.service.variants?.length || item.variant
   );
 
   // Get active discount codes
@@ -859,11 +900,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   };
 
   const getPrice = () => {
-    const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
-    const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
-    let total = base + extrasTotal;
-    
-    // Apply discount
+    let total = selectedServices.reduce((sum, item) => {
+      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
+      const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+      return sum + base + extrasTotal;
+    }, 0);
     if (appliedDiscount) {
       if (appliedDiscount.type === "percent") {
         total = total * (1 - appliedDiscount.amount / 100);
@@ -874,22 +915,37 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     return total;
   };
   const getOriginalPrice = () => {
-    const base = selVariant ? parseFloat(selVariant.price) : parseFloat(sel?.price || 0);
-    const extrasTotal = selExtras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
-    return base + extrasTotal;
+    return selectedServices.reduce((sum, item) => {
+      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
+      const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+      return sum + base + extrasTotal;
+    }, 0);
   };
-  const getDuration = () => selVariant ? selVariant.duration : (sel?.duration || 0);
+  const getDuration = () => {
+    return selectedServices.reduce((sum, item) => {
+      return sum + (item.variant ? item.variant.duration : (item.service.duration || 0));
+    }, 0);
+  };
   const getServiceLabel = () => {
-    let label = svcName(sel);
-    if (selVariant) label += " — " + (lang === "nl" ? selVariant.name_nl : (selVariant.name_en || selVariant.name_nl));
-    return label;
+    return selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      if (item.staff) label += ` (${item.staff.name})`;
+      return label;
+    }).join(" + ");
+  };
+  const getServiceLabelsArray = () => {
+    return selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      return label;
+    });
+  };
+  const getAllExtrasFlat = () => {
+    return selectedServices.flatMap(item => item.extras);
   };
 
-  const toggleExtra = (extra) => {
-    setSelExtras(prev => prev.find(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra]);
-  };
-
-  const reset = () => { setStep(1); setSel(null); setSelVariant(null); setSelExtras([]); setSelStaff(null); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
+  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
 
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
@@ -949,14 +1005,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
       if (newClient) clientId = newClient.id;
     }
 
-    // 2. Create appointment
+    // 2. Build combined service name with per-service staff and extras
+    const allExtras = getAllExtrasFlat();
+    const combinedServiceName = selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      if (item.staff) label += ` (${item.staff.name})`;
+      if (item.extras.length > 0) label += " + " + item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
+      return label;
+    }).join(" · ") + (appliedDiscount ? ` [${appliedDiscount.code}]` : "");
+
+    // Use first service's staff as primary (for staff_id column)
+    const primaryStaff = selectedServices[0]?.staff;
+    const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
+
     const apptData = {
-      owner_id: initialSalon.owner_id, service_id: sel?.id || null, client_id: clientId,
-      service_name: getServiceLabel() + (selExtras.length > 0 ? " + " + selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ") : "") + (appliedDiscount ? ` [${appliedDiscount.code}]` : ""),
+      owner_id: initialSalon.owner_id, service_id: selectedServices[0]?.service?.id || null, client_id: clientId,
+      service_name: combinedServiceName,
       service_price: getPrice(), service_duration: getDuration(), date, time,
       client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, client_phone: form.phone || null,
       payment_method: form.payment, status: "confirmed", invoice_sent: false,
-      staff_id: selStaff?.id || null, staff_name: selStaff?.name || null
+      staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null
     };
     const { data: appt } = await supabase.from("appointments").insert(apptData).select("id").single();
     
@@ -980,13 +1049,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     
     // 4. Send confirmation email with cancellation link
     await sendEmails("booking_confirmation", {
-      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: combinedServiceName,
       date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
       cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
     });
     
     if (form.payment === "online") {
-      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: apptData.service_name,
+      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: combinedServiceName,
         date, time, price: getPrice(), salon_name: initialSalon.name });
     }
   };
@@ -1005,32 +1074,40 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.35)", marginBottom: 12 }}>
         {lang === "nl" ? "Jouw boeking" : "Your booking"}
+        {selectedServices.length > 0 && <span style={{ color: accent, marginLeft: 6 }}>({selectedServices.length})</span>}
       </div>
-      {sel && (
+      {selectedServices.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "#ede8e0" }}>{getServiceLabel()}</div>
-          <div style={{ fontSize: 12, color: "rgba(237,232,224,0.4)", marginTop: 4 }}>{getDuration()} {t.min}</div>
-          {selExtras.length > 0 && (
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
-              {selExtras.map(e => (
-                <div key={e.id} style={{ fontSize: 11, color: "rgba(237,232,224,0.5)", display: "flex", justifyContent: "space-between" }}>
+          {selectedServices.map((item, idx) => (
+            <div key={item.service.id} style={{ marginBottom: idx < selectedServices.length - 1 ? 10 : 0, paddingBottom: idx < selectedServices.length - 1 ? 10 : 0, borderBottom: idx < selectedServices.length - 1 ? "1px solid rgba(237,232,224,0.06)" : "none" }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#ede8e0" }}>
+                {svcName(item.service)}
+                {item.variant && <span style={{ fontWeight: 400, color: "rgba(237,232,224,0.6)" }}> — {lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}</span>}
+              </div>
+              <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 2, display: "flex", justifyContent: "space-between" }}>
+                <span>{item.variant ? item.variant.duration : item.service.duration} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
+                <span style={{ color: accent }}>€{(item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)).toFixed(2)}</span>
+              </div>
+              {item.extras.length > 0 && item.extras.map(e => (
+                <div key={e.id} style={{ fontSize: 10, color: "rgba(237,232,224,0.4)", display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                   <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                  <span>€{e.price}</span>
+                  <span>+€{e.price}</span>
                 </div>
               ))}
             </div>
-          )}
+          ))}
         </div>
       )}
       {date && time && (
-        <div style={{ marginBottom: 16, paddingTop: sel ? 16 : 0, borderTop: sel ? "1px solid rgba(237,232,224,0.06)" : "none" }}>
+        <div style={{ marginBottom: 16, paddingTop: selectedServices.length > 0 ? 16 : 0, borderTop: selectedServices.length > 0 ? "1px solid rgba(237,232,224,0.06)" : "none" }}>
           <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>
             {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
           </div>
           <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
+          {selectedServices.length > 0 && <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
         </div>
       )}
-      {sel && (
+      {selectedServices.length > 0 && (
         <div style={{ paddingTop: 16, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
           {appliedDiscount && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1162,19 +1239,40 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {!done ? (
                 <div key={step} className="fade-up">
 
-              {/* Step 1 — Service selection */}
+              {/* Step 1 — Service selection (multi-select) */}
               {step === 1 && <>
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
-                {initialSalon.services.map(s => (
+                
+                {/* Selected services counter */}
+                {selectedServices.length > 0 && (
+                  <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
+                      ✓ {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                    </span>
+                    <span style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>{getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</span>
+                  </div>
+                )}
+
+                {initialSalon.services.map(s => {
+                  const isSel = isServiceSelected(s.id);
+                  const item = getServiceItem(s.id);
+                  const staffForService = getStaffForService(s.id);
+                  return (
                   <div key={s.id}>
-                    <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => { setSel(s); setSelVariant(null); setSelExtras([]); }}>
+                    <div className={`service-card ${isSel ? "sel" : ""}`} onClick={() => toggleServiceSelection(s)}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
-                          <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
-                            {s.duration} {t.min}
-                            {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
-                            {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {/* Checkbox */}
+                          <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${isSel ? accent : "rgba(237,232,224,0.2)"}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                            {isSel && <span style={{ color: "#0d0b0a", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
+                            <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
+                              {s.duration} {t.min}
+                              {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                              {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                            </div>
                           </div>
                         </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
@@ -1182,7 +1280,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         </div>
                       </div>
                       {(s.photos || []).length > 0 && (
-                        <div className="photo-grid">
+                        <div className="photo-grid" style={{ marginLeft: 34 }}>
                           {s.photos.map((p, i) => (
                             <img key={p.id || i} src={p.url || p} className="photo-thumb" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
                           ))}
@@ -1190,12 +1288,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       )}
                     </div>
 
-                    {/* Variants */}
-                    {sel?.id === s.id && s.variants?.length > 0 && (
-                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                    {/* Variants — per selected service */}
+                    {isSel && s.variants?.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
                         <SL>{t.selectVariant}</SL>
                         {s.variants.map(v => (
-                          <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => setSelVariant(v)}>
+                          <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <div>
                                 <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
@@ -1209,12 +1307,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       </div>
                     )}
 
-                    {/* Extras */}
-                    {sel?.id === s.id && s.extras?.length > 0 && (
-                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                    {/* Extras — per selected service */}
+                    {isSel && s.extras?.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
                         <SL>{t.selectExtras}</SL>
                         {s.extras.map(e => (
-                          <div key={e.id} className={`service-card ${selExtras.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtra(e)}>
+                          <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
@@ -1224,16 +1322,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       </div>
                     )}
 
-                    {/* Staff selection */}
-                    {sel?.id === s.id && availableStaff.length > 0 && (
-                      <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                    {/* Staff selection — per selected service, filtered */}
+                    {isSel && staffForService.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
                         <SL>{t.selectStaff}</SL>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <div className={`service-card ${!selStaff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(null)}>
+                          <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
                             <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
                           </div>
-                          {availableStaff.map(m => (
-                            <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(m)}>
+                          {staffForService.map(m => (
+                            <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                               <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                               {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
                             </div>
@@ -1242,9 +1340,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 <div style={{ marginTop: 14 }}>
-                  <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
+                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => setStep(2)}>{t.next}</button>
                 </div>
                 
                 {/* Reviews */}
@@ -1379,20 +1478,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {step === 4 && <>
                 <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
                 <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
-                  {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],
-                    ...(selStaff ? [[t.staff, selStaff.name]] : []),
+                  {/* Services list */}
+                  <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
+                    {selectedServices.map((item, idx) => (
+                      <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                          {item.staff && <span style={{ fontSize: 11, color: "rgba(237,232,224,0.4)", marginLeft: 6 }}>({item.staff.name})</span>}
+                          {item.extras.length > 0 && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)" }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
+                        </div>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>€{(item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {[[t.date, date],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
                     </div>
                   ))}
-                  {selExtras.length > 0 && (
-                    <div className="confirm-row">
-                      <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.extras}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500 }}>{selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</span>
-                    </div>
-                  )}
                   {appliedDiscount && (
                     <div className="confirm-row">
                       <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}>🏷️ {t.discount}</span>
@@ -1467,7 +1573,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
             </div>
           )}
 
-          {/* Reviews section - always visible at bottom when not in booking flow */}
+          {/* Reviews section - visible on step 1 */}
           {!done && step === 1 && initialSalon.reviews?.length > 0 && (
             <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(237,232,224,0.06)" }}>
               <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
@@ -1498,7 +1604,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               }}>
                 {/* Back button on cover */}
                 {onBack && (
-                  <button onClick={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)} style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, padding: "8px 14px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+                  <button onClick={done ? reset : (step > 1 ? () => setStep(s => s-1) : onBack)} style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, padding: "8px 14px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
                     ←
                   </button>
                 )}
@@ -1513,7 +1619,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               <Header
                 title={initialSalon.name}
                 subtitle={initialSalon.city}
-                onBack={done ? reset : (step > 1 ? () => { if (step === 2 && sel?.variants?.length > 0) { setSelVariant(null); setSelExtras([]); } setStep(s => s-1); } : onBack)}
+                onBack={done ? reset : (step > 1 ? () => setStep(s => s-1) : onBack)}
                 right={<LangToggle lang={lang} setLang={setLang} />}
                 accent={accent}
               />
@@ -1538,19 +1644,40 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     {[1,2,3,4].map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : "rgba(237,232,224,0.08)", transition:"background 0.4s" }} />)}
                   </div>
 
-                  {/* Step 1 — Service selection */}
+                  {/* Step 1 — Service selection (multi-select) */}
                   {step === 1 && <>
                     <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
-                    {initialSalon.services.map(s => (
+                    
+                    {/* Selected services counter */}
+                    {selectedServices.length > 0 && (
+                      <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 11, color: accent, fontWeight: 500 }}>
+                          ✓ {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                        </span>
+                        <span style={{ fontSize: 11, color: "rgba(237,232,224,0.5)" }}>{getDuration()} {t.min}</span>
+                      </div>
+                    )}
+
+                    {initialSalon.services.map(s => {
+                      const isSel = isServiceSelected(s.id);
+                      const item = getServiceItem(s.id);
+                      const staffForService = getStaffForService(s.id);
+                      return (
                       <div key={s.id}>
-                        <div className={`service-card ${sel?.id === s.id ? "sel" : ""}`} onClick={() => { setSel(s); setSelVariant(null); setSelExtras([]); }}>
+                        <div className={`service-card ${isSel ? "sel" : ""}`} onClick={() => toggleServiceSelection(s)}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div>
-                              <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
-                              <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
-                                {s.duration} {t.min}
-                                {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
-                                {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              {/* Checkbox */}
+                              <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${isSel ? accent : "rgba(237,232,224,0.2)"}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                                {isSel && <span style={{ color: "#0d0b0a", fontSize: 12, fontWeight: 700 }}>✓</span>}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
+                                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>
+                                  {s.duration} {t.min}
+                                  {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                                  {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                                </div>
                               </div>
                             </div>
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
@@ -1558,7 +1685,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (
-                            <div className="photo-grid">
+                            <div className="photo-grid" style={{ marginLeft: 30 }}>
                               {s.photos.map((p, i) => (
                                 <img key={p.id || i} src={p.url || p} className="photo-thumb" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
                               ))}
@@ -1566,12 +1693,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           )}
                         </div>
 
-                        {/* Variants */}
-                        {sel?.id === s.id && s.variants?.length > 0 && (
-                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        {/* Variants — per selected service */}
+                        {isSel && s.variants?.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectVariant}</SL>
                             {s.variants.map(v => (
-                              <div key={v.id} className={`service-card ${selVariant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => setSelVariant(v)}>
+                              <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
@@ -1585,12 +1712,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           </div>
                         )}
 
-                        {/* Extras */}
-                        {sel?.id === s.id && s.extras?.length > 0 && (
-                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        {/* Extras — per selected service */}
+                        {isSel && s.extras?.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectExtras}</SL>
                             {s.extras.map(e => (
-                              <div key={e.id} className={`service-card ${selExtras.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtra(e)}>
+                              <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
                                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
@@ -1600,16 +1727,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           </div>
                         )}
 
-                        {/* Staff selection */}
-                        {sel?.id === s.id && availableStaff.length > 0 && (
-                          <div style={{ marginLeft: 12, marginBottom: 10 }}>
+                        {/* Staff selection — per selected service, filtered */}
+                        {isSel && staffForService.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectStaff}</SL>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <div className={`service-card ${!selStaff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(null)}>
+                              <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
                                 <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
                               </div>
-                              {availableStaff.map(m => (
-                                <div key={m.id} className={`service-card ${selStaff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => setSelStaff(m)}>
+                              {staffForService.map(m => (
+                                <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 9, color: "rgba(237,232,224,0.3)" }}>{m.role}</div>}
                                 </div>
@@ -1618,9 +1745,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                     <div style={{ marginTop: 14 }}>
-                      <button className="btn-primary" disabled={!sel || (sel.variants?.length > 0 && !selVariant)} onClick={() => setStep(2)}>{t.next}</button>
+                      <button className="btn-primary" disabled={!canProceedStep1} onClick={() => setStep(2)}>{t.next}</button>
                     </div>
                   </>}
 
@@ -1739,20 +1867,26 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   {step === 4 && <>
                     <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
                     <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
-                      {[[t.treatment, getServiceLabel()],[t.date, date],[t.time, time],[t.name, `${form.firstName} ${form.lastName}`],
-                        ...(selStaff ? [[t.staff, selStaff.name]] : []),
+                      {/* Services list */}
+                      <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
+                        {selectedServices.map((item) => (
+                          <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                              {item.staff && <span style={{ fontSize: 11, color: "rgba(237,232,224,0.4)", marginLeft: 6 }}>({item.staff.name})</span>}
+                              {item.extras.length > 0 && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)" }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {[[t.date, date],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
                         </div>
                       ))}
-                      {selExtras.length > 0 && (
-                        <div className="confirm-row">
-                          <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{t.extras}</span>
-                          <span style={{ fontSize: 12, fontWeight: 500 }}>{selExtras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</span>
-                        </div>
-                      )}
                       {appliedDiscount && (
                         <div className="confirm-row">
                           <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}>🏷️ {t.discount}</span>
@@ -1820,7 +1954,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
             </div>
 
             {/* Mobile bottom summary bar */}
-            {!done && sel && (
+            {!done && selectedServices.length > 0 && (
               <div style={{ 
                 position: "fixed", bottom: 0, left: 0, right: 0, 
                 background: "rgba(13,11,10,0.97)", backdropFilter: "blur(24px)", 
@@ -1829,8 +1963,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                 display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100
               }}>
                 <div>
-                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>{svcName(sel)}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice()}</div>
+                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>
+                    {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
+                  </div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</div>
                 </div>
                 {time && <div style={{ fontSize: 14, fontWeight: 600, color: accent }}>{time}</div>}
               </div>
