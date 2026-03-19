@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
 
@@ -364,34 +364,6 @@ function Layout({ children, accent = ACCENT, maxWidth = "100%" }) {
     </div>
   );
 }
-
-// For client booking flow - centered card on desktop, full screen on mobile
-function BookingLayout({ children, accent = ACCENT }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-  
-  return (
-    <div style={{ 
-      width: "100%", 
-      maxWidth: isMobile ? "100%" : 520, 
-      margin: isMobile ? 0 : "40px auto",
-      background: "#0d0b0a", 
-      borderRadius: isMobile ? 0 : 32,
-      boxShadow: isMobile ? "none" : "0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)",
-      minHeight: isMobile ? "100dvh" : "auto",
-      overflow: "hidden"
-    }}>
-      <style>{makeCSS(accent)}</style>
-      {children}
-    </div>
-  );
-}
-
-const SLabel = ({ c }) => (s) => <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(237,232,224,0.32)", marginBottom: 12 }}>{s}</div>;
 
 function PTitle({ children, sub }) {
   return (
@@ -2400,7 +2372,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
-  const fileRefs = useRef({});
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -2612,7 +2583,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : (lang === "nl" ? "Voltooid" : "Completed")}</span>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{a.service_price}</span>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</span>
         </div>
       </div>
       {a.status === "confirmed" && <button className="btn-ghost" style={{ width:"100%", fontSize:10 }} onClick={() => markComplete(a.id)}>{t.markComplete}</button>}
@@ -2893,7 +2864,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 3 }}>{a.date} · {a.service_name}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{a.service_price}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
                       <div style={{ marginTop: 5 }}>
                         {a.invoice_sent
                           ? <span style={{ fontSize: 10, color: "#86efac" }}>✓ {t.sent}</span>
