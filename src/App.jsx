@@ -17,9 +17,9 @@ async function sendEmails(type, booking) {
 }
 
 const ACCENT = "#c9a96e";
-const today = new Date();
+const getToday = () => new Date();
 const fmt = (d) => d.toISOString().split("T")[0];
-const getDays = (n = 14) => Array.from({ length: n }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() + i); return d; });
+const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
 const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];
 const DAY_EN = ["su","mo","tu","we","th","fr","sa"];
@@ -797,22 +797,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const svcName = (s) => lang === "nl" ? s.name_nl : s.name_en;
 
   const [step, setStep] = useState(1);
+  const goToStep = (s) => {
+    if (s === 2) setSlotsRefreshKey(k => k + 1); // Refresh booked slots when entering date step
+    setStep(s);
+  };
   // Multi-service state: array of { service, variant, extras: [], staff: null }
   const [selectedServices, setSelectedServices] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
   
   // Find first available (non-closed) day
   const getFirstAvailableDate = () => {
+    const now = getToday();
     const businessHours = initialSalon.business_hours || DEFAULT_HOURS;
     for (let i = 0; i < 14; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
       const dayOfWeek = d.getDay();
       if (!businessHours[dayOfWeek]?.closed) {
         return fmt(d);
       }
     }
-    return fmt(today); // Fallback
+    return fmt(getToday()); // Fallback
   };
   
   const [date, setDate] = useState(getFirstAvailableDate);
@@ -828,6 +833,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [clientFound, setClientFound] = useState(false);
   const [bookingId, setBookingId] = useState(null);
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
   const days = getDays();
   
   // Check if form is complete
@@ -872,6 +878,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const canProceedStep1 = selectedServices.length > 0 && selectedServices.every(item =>
     !item.service.variants?.length || item.variant
   );
+  const missingVariants = selectedServices.filter(item => item.service.variants?.length > 0 && !item.variant);
 
   // Category filtering
   const categories = initialSalon.categories || [];
@@ -954,7 +961,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
+  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
 
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
@@ -995,17 +1002,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
       setBookedSlots(data || []);
     };
     loadSlots();
-  }, [date, initialSalon.owner_id]);
+  }, [date, initialSalon.owner_id, slotsRefreshKey]);
 
   // Check if a time slot overlaps with existing bookings
   const isTimeSlotBooked = (slotTime) => {
     const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
-    const myDuration = getDuration() || 30;
+    const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
     for (const booked of bookedSlots) {
+      if (!booked.time) continue;
       const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
-      const bookedDuration = booked.service_duration || 60;
-      // Check if my slot overlaps with booked slot
-      if (slotMinutes < bookedMinutes + bookedDuration && slotMinutes + myDuration > bookedMinutes) {
+      const bookedDuration = Math.max(booked.service_duration || 30, 30);
+      // Check overlap: two ranges [slotStart, slotEnd) and [bookedStart, bookedEnd)
+      const slotEnd = slotMinutes + myDuration;
+      const bookedEnd = bookedMinutes + bookedDuration;
+      if (slotMinutes < bookedEnd && slotEnd > bookedMinutes) {
         return true;
       }
     }
@@ -1088,6 +1098,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     }
 
     setDone(true);
+    setSlotsRefreshKey(k => k + 1);
     
     // 4. Send confirmation email with cancellation link
     await sendEmails("booking_confirmation", {
@@ -1418,7 +1429,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   );
                 })}
                 <div style={{ marginTop: 14 }}>
-                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => setStep(2)}>{t.next}</button>
+                  {selectedServices.length > 0 && missingVariants.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
+                      ⚠️ {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                    </div>
+                  )}
+                  {selectedServices.length === 0 && (
+                    <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", marginBottom: 10, textAlign: "center" }}>
+                      {t.noServicesSelected}
+                    </div>
+                  )}
+                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
                 </div>
                 
                 {/* Reviews */}
@@ -1860,7 +1881,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       );
                     })}
                     <div style={{ marginTop: 14 }}>
-                      <button className="btn-primary" disabled={!canProceedStep1} onClick={() => setStep(2)}>{t.next}</button>
+                      {selectedServices.length > 0 && missingVariants.length > 0 && (
+                        <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
+                          ⚠️ {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                        </div>
+                      )}
+                      {selectedServices.length === 0 && (
+                        <div style={{ fontSize: 11, color: "rgba(237,232,224,0.3)", marginBottom: 10, textAlign: "center" }}>
+                          {t.noServicesSelected}
+                        </div>
+                      )}
+                      <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
                     </div>
                   </>}
 
@@ -2257,7 +2288,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
 
   const [view, setView] = useState("dashboard");
-  const [calDate, setCalDate] = useState(fmt(today));
+  const [calDate, setCalDate] = useState(fmt(getToday()));
   const [salonData, setSalonData] = useState(() => {
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
@@ -2326,7 +2357,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const accent = salonData.accent;
   const appts = salonData.appointments;
   const completedAppts = appts.filter(a => a.status === "completed");
-  const todayAppts = appts.filter(a => a.date === fmt(today));
+  const todayAppts = appts.filter(a => a.date === fmt(getToday()));
   const calAppts = appts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + a.service_price, 0);
   const days = getDays();
