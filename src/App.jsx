@@ -501,10 +501,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           zIndex: 10
         }}>
           <div style={{ 
-            fontFamily: "'Cormorant Garamond',serif", 
-            fontSize: 28, 
+            fontFamily: "'Jost',sans-serif", 
+            fontSize: 26, 
             fontWeight: 300, 
-            letterSpacing: "0.1em" 
+            letterSpacing: "0.18em" 
           }}>vellu</div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <LangToggle lang={lang} setLang={setLang} />
@@ -2480,7 +2480,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         
         {/* Header */}
         <div style={{ position: "absolute", top: 24, left: 24, right: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.1em" }}>vellu</div>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <LangToggle lang={lang} setLang={setLang} />
             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={onLogout}>{t.logout}</button>
@@ -2839,7 +2839,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           }}>
             {/* Sidebar Header */}
             <div style={{ padding: "28px 24px", borderBottom: "1px solid rgba(237,232,224,0.06)" }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, letterSpacing: "0.1em", marginBottom: 4 }}>vellu</div>
+              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
               <div style={{ fontSize: 10, color: "rgba(237,232,224,0.3)", letterSpacing: "0.08em" }}>OWNER DASHBOARD</div>
             </div>
 
@@ -2942,7 +2942,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 4 }}>
                   {navItems.find(([k]) => k === view)?.[2] || t.dashboard}
                 </h1>
-                <div style={{ fontSize: 12, color: "rgba(237,232,224,0.35)" }}>{t.welcomeBack}</div>
+                <div style={{ fontSize: 12, color: "rgba(237,232,224,0.35)" }}>
+                  {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (lang === "nl" ? "Inzicht in je salon" : "Insight into your salon") : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
+                </div>
               </div>
               <div style={{ display: "flex", gap: 12 }}>
                 <button 
@@ -2974,7 +2976,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* DASHBOARD */}
           {view === "dashboard" && (
             <div className="fade-up">
-              <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>
+              {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
               <div style={{ display: "flex", gap: 10, marginBottom: 22 }}>
                 <div className="stat-card">
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(237,232,224,0.3)", marginBottom: 8 }}>{t.today}</div>
@@ -3032,7 +3034,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* AGENDA */}
           {view === "agenda" && (
             <div className="fade-up">
-              <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>
+              {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
                 {days.slice(0,10).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
@@ -3061,7 +3063,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* FACTUREN */}
           {view === "facturen" && (
             <div className="fade-up">
-              <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>
+              {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
               {completedAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(237,232,224,0.18)", fontSize: 12 }}>{t.noCompleted}</div>
                 : completedAppts.map(a => (
@@ -3095,7 +3097,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* ANALYTICS */}
           {view === "analytics" && (
             <div className="fade-up">
-              <PTitle sub={lang === "nl" ? "Inzicht in je salon" : "Insight into your salon"}>{t.analytics}</PTitle>
+              {isMobile && <PTitle sub={lang === "nl" ? "Inzicht in je salon" : "Insight into your salon"}>{t.analytics}</PTitle>}
 
               {/* Key metrics */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
@@ -3258,7 +3260,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* INSTELLINGEN */}
           {view === "instellingen" && (
             <div className="fade-up">
-              <PTitle sub={t.manageSalon}>{t.settings}</PTitle>
+              {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
               {/* Billing / Subscription */}
               <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
