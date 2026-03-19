@@ -276,8 +276,9 @@ const makeCSS = (accent) => `
     border-radius: 20px; padding: 17px 19px; cursor: pointer; margin-bottom: 10px;
     transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
   }
+  .service-card.sel { box-shadow: 0 0 0 1px ${accent}33, 0 4px 20px ${accent}12; }
   .service-card:hover { border-color: ${accent}44; background: ${accent}08; transform: translateY(-1px); }
-  .service-card.sel { border-color: ${accent}99; background: ${accent}14; box-shadow: 0 0 0 1px ${accent}33; }
+  .service-card.sel { border-color: ${accent}99; background: ${accent}14; }
 
   .time-chip {
     background: rgba(237,232,224,0.03); border: 1px solid rgba(237,232,224,0.1);
@@ -592,6 +593,80 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               {error && <div style={{ fontSize: 12, color: "#f87171", marginTop: 12 }}>{error}</div>}
             </div>
           </div>
+        </div>
+
+        {/* How it works */}
+        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 800, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "Hoe het werkt" : "How it works"}
+              </div>
+              <div style={{ width: 40, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20 }}>
+              {[
+                { icon: "✦", nl: ["Maak je pagina", "Registreer in 2 minuten. Voeg je behandelingen, prijzen en team toe."], en: ["Create your page", "Register in 2 minutes. Add your treatments, prices and team."] },
+                { icon: "◎", nl: ["Deel je link", "Stuur vellu.cc/jouw-naam naar klanten via Instagram, WhatsApp of je website."], en: ["Share your link", "Send vellu.cc/your-name to clients via Instagram, WhatsApp or your website."] },
+                { icon: "◈", nl: ["Ontvang boekingen", "Klanten boeken 24/7. Jij ontvangt bevestigingen en beheert alles vanuit je dashboard."], en: ["Receive bookings", "Clients book 24/7. You receive confirmations and manage everything from your dashboard."] }
+              ].map((item, i) => (
+                <div key={i} style={{ background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 20, padding: "28px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 28, marginBottom: 16, color: ACCENT }}>{item.icon}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: ACCENT, marginBottom: 8 }}>
+                    {lang === "nl" ? `STAP ${i + 1}` : `STEP ${i + 1}`}
+                  </div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, marginBottom: 8 }}>
+                    {lang === "nl" ? item.nl[0] : item.en[0]}
+                  </div>
+                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.4)", lineHeight: 1.6 }}>
+                    {lang === "nl" ? item.nl[1] : item.en[1]}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div style={{ padding: "40px 24px 60px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 800, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "Alles wat je nodig hebt" : "Everything you need"}
+              </div>
+              <div style={{ width: 40, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+              {[
+                { icon: "📅", nl: "Online boekingen", en: "Online bookings" },
+                { icon: "👥", nl: "Team beheer", en: "Team management" },
+                { icon: "📊", nl: "Analytics dashboard", en: "Analytics dashboard" },
+                { icon: "📧", nl: "Automatische emails", en: "Automatic emails" },
+                { icon: "⏰", nl: "24u herinneringen", en: "24h reminders" },
+                { icon: "🏷️", nl: "Kortingscodes", en: "Discount codes" },
+                { icon: "⭐", nl: "Reviews systeem", en: "Reviews system" },
+                { icon: "🎨", nl: "Eigen branding", en: "Custom branding" },
+              ].map((f, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(237,232,224,0.02)", border: "1px solid rgba(237,232,224,0.06)", borderRadius: 14 }}>
+                  <span style={{ fontSize: 20 }}>{f.icon}</span>
+                  <span style={{ fontSize: 12, color: "rgba(237,232,224,0.6)", fontWeight: 500 }}>{lang === "nl" ? f.nl : f.en}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div style={{ padding: "40px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: 300, marginBottom: 16 }}>
+            {lang === "nl" ? "Klaar om te starten?" : "Ready to get started?"}
+          </div>
+          <p style={{ fontSize: 14, color: "rgba(237,232,224,0.4)", marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+            {lang === "nl" ? "Gratis je boekingspagina opzetten. Geen creditcard nodig." : "Set up your booking page for free. No credit card required."}
+          </p>
+          <button className="btn-primary" style={{ width: "auto", padding: "16px 40px" }} onClick={() => window.location.href = "/owner"}>
+            {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
+          </button>
         </div>
 
         {/* Footer */}
@@ -2104,22 +2179,39 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               )}
             </div>
 
-            {/* Mobile bottom summary bar */}
+            {/* Mobile bottom bar with action button */}
             {!done && selectedServices.length > 0 && (
               <div style={{ 
                 position: "fixed", bottom: 0, left: 0, right: 0, 
                 background: "rgba(13,11,10,0.97)", backdropFilter: "blur(24px)", 
                 borderTop: "1px solid rgba(237,232,224,0.08)", padding: "12px 22px",
                 paddingBottom: "max(12px, env(safe-area-inset-bottom))",
-                display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100
+                display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100,
+                gap: 12
               }}>
-                <div>
-                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.5)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: "rgba(237,232,224,0.5)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
+                    {time && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{getPrice().toFixed(2)}</div>
                 </div>
-                {time && <div style={{ fontSize: 14, fontWeight: 600, color: accent }}>{time}</div>}
+                {step === 1 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
+                )}
+                {step === 2 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                )}
+                {step === 3 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                )}
+                {step === 4 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={submitting} onClick={confirmBooking}>{submitting ? "..." : t.confirm}</button>
+                )}
               </div>
             )}
           </div>
@@ -2862,6 +2954,69 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       <div style={{ fontSize: 10, color: "rgba(237,232,224,0.2)", marginTop: 2 }}>{salonData.reviews?.length || 0} {t.reviews.toLowerCase()}</div>
                     </div>
                   </>;
+                })()}
+              </div>
+
+              {/* Revenue chart */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
+                </div>
+                {(() => {
+                  // Build last 8 weeks of revenue data
+                  const weeks = [];
+                  const now = new Date();
+                  for (let w = 7; w >= 0; w--) {
+                    const weekStart = new Date(now);
+                    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+                    weekStart.setHours(0,0,0,0);
+                    const weekEnd = new Date(weekStart);
+                    weekEnd.setDate(weekStart.getDate() + 7);
+                    const rev = appts
+                      .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                      .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                    const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                    weeks.push({ label, revenue: rev });
+                  }
+                  const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
+                  const chartH = 120;
+                  const barW = 100 / weeks.length;
+                  
+                  return (
+                    <div>
+                      {/* SVG Bar Chart */}
+                      <div style={{ position: "relative", height: chartH + 30 }}>
+                        <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                          {weeks.map((w, i) => {
+                            const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
+                            const x = i * barW + barW * 0.15;
+                            const bw = barW * 0.7;
+                            return (
+                              <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" 
+                                fill={i === weeks.length - 1 ? accent : `${accent}66`}
+                              />
+                            );
+                          })}
+                        </svg>
+                        {/* Labels */}
+                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
+                          {weeks.map((w, i) => (
+                            <div key={i} style={{ fontSize: 9, color: "rgba(237,232,224,0.25)", textAlign: "center", flex: 1 }}>
+                              {w.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Revenue labels on hover area */}
+                      <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
+                        {weeks.map((w, i) => (
+                          <div key={i} style={{ fontSize: 9, color: i === weeks.length - 1 ? accent : "rgba(237,232,224,0.35)", textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>
+                            {w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
                 })()}
               </div>
 
