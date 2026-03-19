@@ -2948,7 +2948,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           <div style={{ 
             flex: 1, 
             overflow: "auto", 
-            padding: isMobile ? "14px 22px 100px" : "32px 40px",
+            padding: isMobile ? "14px 22px 140px" : "32px 40px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -3720,10 +3720,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             right: 0, 
             background: "rgba(13,11,10,0.97)", 
             backdropFilter: "blur(24px)", 
+            WebkitBackdropFilter: "blur(24px)",
             borderTop: "1px solid rgba(237,232,224,0.08)", 
             display: "flex", 
-            padding: "10px 4px", 
-            paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+            padding: "12px 4px 8px", 
+            paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
             zIndex: 100
           }}>
             {navItems.map(([k, icon, label]) => (
