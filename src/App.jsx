@@ -799,6 +799,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [step, setStep] = useState(1);
   // Multi-service state: array of { service, variant, extras: [], staff: null }
   const [selectedServices, setSelectedServices] = useState([]);
+  const [activeCategory, setActiveCategory] = useState("all");
   
   // Find first available (non-closed) day
   const getFirstAvailableDate = () => {
@@ -818,6 +819,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [time, setTime] = useState(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [gallery, setGallery] = useState(null);
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
@@ -825,6 +827,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const [discountError, setDiscountError] = useState("");
   const [clientFound, setClientFound] = useState(false);
   const [bookingId, setBookingId] = useState(null);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const days = getDays();
   
   // Check if form is complete
@@ -869,6 +872,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const canProceedStep1 = selectedServices.length > 0 && selectedServices.every(item =>
     !item.service.variants?.length || item.variant
   );
+
+  // Category filtering
+  const categories = initialSalon.categories || [];
+  const filteredServices = activeCategory === "all"
+    ? initialSalon.services
+    : initialSalon.services.filter(s => s.category_id === activeCategory);
 
   // Get active discount codes
   const activeCodes = (initialSalon.discount_codes || []).filter(c => c.active);
@@ -945,7 +954,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
+  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
 
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
@@ -973,6 +982,36 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     return () => clearTimeout(timer);
   }, [form.email]);
 
+  // Load booked time slots for selected date
+  useEffect(() => {
+    if (!date || !initialSalon.owner_id) return;
+    const loadSlots = async () => {
+      const { data } = await supabase
+        .from("appointments")
+        .select("time, service_duration")
+        .eq("owner_id", initialSalon.owner_id)
+        .eq("date", date)
+        .in("status", ["confirmed", "completed"]);
+      setBookedSlots(data || []);
+    };
+    loadSlots();
+  }, [date, initialSalon.owner_id]);
+
+  // Check if a time slot overlaps with existing bookings
+  const isTimeSlotBooked = (slotTime) => {
+    const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
+    const myDuration = getDuration() || 30;
+    for (const booked of bookedSlots) {
+      const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
+      const bookedDuration = booked.service_duration || 60;
+      // Check if my slot overlaps with booked slot
+      if (slotMinutes < bookedMinutes + bookedDuration && slotMinutes + myDuration > bookedMinutes) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // Generate random cancellation token
   const generateToken = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -981,6 +1020,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
 
   // Confirm booking - handles client save, appointment insert, cancellation token
   const confirmBooking = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
     // 1. Save or update client
     const clientEmail = form.email.toLowerCase();
     let clientId = null;
@@ -1057,6 +1099,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     if (form.payment === "online") {
       await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, service_name: combinedServiceName,
         date, time, price: getPrice(), salon_name: initialSalon.name });
+    }
+    } catch (err) {
+      console.error("Booking error:", err);
+      setSubmitting(false);
     }
   };
 
@@ -1243,6 +1289,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               {step === 1 && <>
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                 
+                {/* Category tabs */}
+                {categories.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 8 }}>
+                    <div 
+                      onClick={() => setActiveCategory("all")}
+                      style={{ 
+                        padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                        background: activeCategory === "all" ? accent : "rgba(237,232,224,0.04)",
+                        border: `1px solid ${activeCategory === "all" ? accent : "rgba(237,232,224,0.1)"}`,
+                        color: activeCategory === "all" ? "#0d0b0a" : "rgba(237,232,224,0.5)",
+                        fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                      }}
+                    >{t.allCategories}</div>
+                    {categories.map(c => (
+                      <div 
+                        key={c.id}
+                        onClick={() => setActiveCategory(c.id)}
+                        style={{ 
+                          padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                          background: activeCategory === c.id ? accent : "rgba(237,232,224,0.04)",
+                          border: `1px solid ${activeCategory === c.id ? accent : "rgba(237,232,224,0.1)"}`,
+                          color: activeCategory === c.id ? "#0d0b0a" : "rgba(237,232,224,0.5)",
+                          fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                        }}
+                      >{lang === "nl" ? (c.name_nl || c.name) : (c.name_en || c.name_nl || c.name)}</div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Selected services counter */}
                 {selectedServices.length > 0 && (
                   <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1253,7 +1328,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   </div>
                 )}
 
-                {initialSalon.services.map(s => {
+                {filteredServices.map(s => {
                   const isSel = isServiceSelected(s.id);
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
@@ -1390,7 +1465,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
                   return availableTimes.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
-                      {availableTimes.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
+                      {availableTimes.map(tt => {
+                        const booked = isTimeSlotBooked(tt);
+                        return (
+                          <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} 
+                            onClick={() => { if (!booked) setTime(tt); }}
+                            style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
+                          >{tt}</div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div style={{ textAlign: "center", padding: "30px 20px", color: "rgba(237,232,224,0.35)", fontSize: 13, marginBottom: 20 }}>
@@ -1513,7 +1596,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     </div>
                   </div>
                 </div>
-                <button className="btn-primary" onClick={confirmBooking}>{t.confirm}</button>
+                <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
               </>}
             </div>
           ) : (
@@ -1648,6 +1731,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                   {step === 1 && <>
                     <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                     
+                    {/* Category tabs */}
+                    {categories.length > 0 && (
+                      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6 }}>
+                        <div 
+                          onClick={() => setActiveCategory("all")}
+                          style={{ 
+                            padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                            background: activeCategory === "all" ? accent : "rgba(237,232,224,0.04)",
+                            border: `1px solid ${activeCategory === "all" ? accent : "rgba(237,232,224,0.1)"}`,
+                            color: activeCategory === "all" ? "#0d0b0a" : "rgba(237,232,224,0.5)",
+                            fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                          }}
+                        >{t.allCategories}</div>
+                        {categories.map(c => (
+                          <div 
+                            key={c.id}
+                            onClick={() => setActiveCategory(c.id)}
+                            style={{ 
+                              padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                              background: activeCategory === c.id ? accent : "rgba(237,232,224,0.04)",
+                              border: `1px solid ${activeCategory === c.id ? accent : "rgba(237,232,224,0.1)"}`,
+                              color: activeCategory === c.id ? "#0d0b0a" : "rgba(237,232,224,0.5)",
+                              fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                            }}
+                          >{lang === "nl" ? (c.name_nl || c.name) : (c.name_en || c.name_nl || c.name)}</div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Selected services counter */}
                     {selectedServices.length > 0 && (
                       <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1658,7 +1770,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       </div>
                     )}
 
-                    {initialSalon.services.map(s => {
+                    {filteredServices.map(s => {
                       const isSel = isServiceSelected(s.id);
                       const item = getServiceItem(s.id);
                       const staffForService = getStaffForService(s.id);
@@ -1779,7 +1891,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                       const availableTimes = TIMES.filter(tt => !dayHours.closed && tt >= dayHours.open && tt < dayHours.close);
                       return availableTimes.length > 0 ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
-                          {availableTimes.map(tt => <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} onClick={() => setTime(tt)}>{tt}</div>)}
+                          {availableTimes.map(tt => {
+                            const booked = isTimeSlotBooked(tt);
+                            return (
+                              <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} 
+                                onClick={() => { if (!booked) setTime(tt); }}
+                                style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
+                              >{tt}</div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div style={{ textAlign: "center", padding: "30px 20px", color: "rgba(237,232,224,0.35)", fontSize: 13, marginBottom: 20 }}>
@@ -1901,7 +2021,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         </div>
                       </div>
                     </div>
-                    <button className="btn-primary" onClick={confirmBooking}>{t.confirm}</button>
+                    <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
                   </>}
 
                   {/* Reviews on mobile step 1 */}
@@ -2165,6 +2285,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
         // Load staff
         const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position");
+        // Load categories
+        const { data: catData } = await supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position");
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -2193,7 +2315,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           })),
           appointments: appts || [],
           reviews: reviews || [],
-          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) }))
+          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) })),
+          categories: catData || []
         }));
       }
     };
@@ -2351,11 +2474,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   };
 
   const ApptCard = ({ a }) => (
-    <div className="appt-card">
+    <div className="appt-card" title={a.service_name}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
         <div>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
-          <div style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", marginTop: 3 }}>{a.time} · {a.service_name}</div>
+          <div style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "calc(100% - 20px)" }}>{a.time} · {a.service_name}</div>
           <div style={{ fontSize: 10, color: "rgba(237,232,224,0.22)", marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
@@ -3384,6 +3507,8 @@ function SalonRoute({ lang, setLang }) {
       const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
       // Load staff
       const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position");
+      // Load categories
+      const { data: categories } = await supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position");
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -3407,7 +3532,8 @@ function SalonRoute({ lang, setLang }) {
         })),
         appointments: [],
         reviews: reviews || [],
-        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) }))
+        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) })),
+        categories: (categories || []).map(c => ({ ...c, name: lang === 'nl' ? (c.name_nl || c.name) : (c.name_en || c.name_nl || c.name) }))
       });
       setLoading(false);
     };
