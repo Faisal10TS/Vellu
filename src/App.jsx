@@ -142,6 +142,13 @@ const T = {
     billing:"Abonnement", billingDesc:"Beheer je abonnement", noPlan:"Geen actief abonnement",
     contactSupport:"Neem contact op om je plan te wijzigen", paymentComingSoon:"Betaling via iDEAL komt binnenkort beschikbaar",
     planActive:"Je abonnement is actief", upgradePlan:"Upgraden",
+    // Break times & no-show & allergies
+    breakMinutes:"Pauzetijd tussen afspraken", breakMinutesDesc:"Buffer na elke afspraak",
+    breakNone:"Geen pauze", breakMin:"min pauze",
+    noShow:"Niet verschenen", markNoShow:"✗ No-show", noShowWarning:"Let op: deze klant is eerder niet verschenen",
+    noShowCount:"keer niet verschenen",
+    allergies:"Allergieën / bijzonderheden", allergiesPlaceholder:"Bijv. latex allergie, gevoelige huid...",
+    allergiesOptional:"optioneel", clientAllergies:"Allergie-info",
     // Multi-service booking
     addService:"+ Behandeling toevoegen", removeService:"Verwijder", selectedServices:"Geselecteerde behandelingen",
     servicesSelected:"behandelingen geselecteerd", serviceSelected:"behandeling geselecteerd",
@@ -250,6 +257,13 @@ const T = {
     billing:"Subscription", billingDesc:"Manage your subscription", noPlan:"No active subscription",
     contactSupport:"Contact us to change your plan", paymentComingSoon:"iDEAL payment coming soon",
     planActive:"Your subscription is active", upgradePlan:"Upgrade",
+    // Break times & no-show & allergies
+    breakMinutes:"Break time between appointments", breakMinutesDesc:"Buffer after each appointment",
+    breakNone:"No break", breakMin:"min break",
+    noShow:"No-show", markNoShow:"✗ No-show", noShowWarning:"Note: this client has missed appointments before",
+    noShowCount:"times no-show",
+    allergies:"Allergies / notes", allergiesPlaceholder:"E.g. latex allergy, sensitive skin...",
+    allergiesOptional:"optional", clientAllergies:"Allergy info",
     // Multi-service booking
     addService:"+ Add treatment", removeService:"Remove", selectedServices:"Selected treatments",
     servicesSelected:"treatments selected", serviceSelected:"treatment selected",
@@ -349,6 +363,7 @@ const makeCSS = (accent) => `
   .badge-confirmed { background: rgba(147,197,253,0.1); color: #93c5fd; border: 1px solid rgba(147,197,253,0.2); }
   .badge-completed { background: rgba(134,239,172,0.1); color: #86efac; border: 1px solid rgba(134,239,172,0.2); }
   .badge-cancelled { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
+  .badge-no_show { background: rgba(251,146,60,0.1); color: #fb923c; border: 1px solid rgba(251,146,60,0.2); }
 
   .confirm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(237,232,224,0.06); }
   .confirm-row:last-child { border-bottom: none; }
@@ -895,7 +910,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   
   const [date, setDate] = useState(getFirstAvailableDate);
   const [time, setTime] = useState(null);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" });
+  const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gallery, setGallery] = useState(null);
@@ -1027,7 +1043,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
+  const reset = () => { setStep(1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); };
 
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
@@ -1046,10 +1062,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     const timer = setTimeout(async () => {
       const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).single();
       if (data) {
-        setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone }));
+        setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone, allergies: data.allergies || f.allergies }));
+        setClientNoShows(data.no_show_count || 0);
         setClientFound(true);
       } else {
         setClientFound(false);
+        setClientNoShows(0);
       }
     }, 500);
     return () => clearTimeout(timer);
@@ -1070,16 +1088,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     loadSlots();
   }, [date, initialSalon.owner_id, slotsRefreshKey]);
 
-  // Check if a time slot overlaps with existing bookings
+  // Check if a time slot overlaps with existing bookings (including break time)
+  const breakBuffer = initialSalon.break_minutes || 0;
   const isTimeSlotBooked = (slotTime) => {
     const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
     const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
     for (const booked of bookedSlots) {
       if (!booked.time) continue;
       const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
-      const bookedDuration = Math.max(booked.service_duration || 30, 30);
-      // Check overlap: two ranges [slotStart, slotEnd) and [bookedStart, bookedEnd)
-      const slotEnd = slotMinutes + myDuration;
+      const bookedDuration = Math.max(booked.service_duration || 30, 30) + breakBuffer;
+      // Check overlap: two ranges [slotStart, slotEnd+break) and [bookedStart, bookedEnd+break)
+      const slotEnd = slotMinutes + myDuration + breakBuffer;
       const bookedEnd = bookedMinutes + bookedDuration;
       if (slotMinutes < bookedEnd && slotEnd > bookedMinutes) {
         return true;
@@ -1110,6 +1129,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
         first_name: form.firstName,
         last_name: form.lastName,
         phone: form.phone || null,
+        allergies: form.allergies || null,
         last_visit: new Date().toISOString()
       }).eq("id", clientId);
     } else {
@@ -1118,6 +1138,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
         first_name: form.firstName,
         last_name: form.lastName,
         phone: form.phone || null,
+        allergies: form.allergies || null,
         last_visit: new Date().toISOString()
       }).select("id").single();
       if (newClient) clientId = newClient.id;
@@ -1142,7 +1163,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
       service_price: getPrice(), service_duration: getDuration(), date, time,
       client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, client_phone: form.phone || null,
       payment_method: form.payment, status: "confirmed", invoice_sent: false,
-      staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null
+      staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
+      client_allergies: form.allergies || null
     };
     const { data: appt } = await supabase.from("appointments").insert(apptData).select("id").single();
     
@@ -1599,7 +1621,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                     <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
                   <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                  <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                 </div>
+                
+                {/* No-show warning */}
+                {clientNoShows > 0 && (
+                  <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 16 }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: "#f87171" }}>{t.noShowWarning}</div>
+                      <div style={{ fontSize: 10, color: "rgba(248,113,113,0.6)" }}>{clientNoShows}x {t.noShowCount}</div>
+                    </div>
+                  </div>
+                )}
+
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                   {[["on-arrival","🏠",t.payArrival],["online","💳",t.payOnline]].map(([v,icon,label]) => (
@@ -2041,7 +2076,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                         <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
                       <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                      <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                     </div>
+                    
+                    {/* No-show warning */}
+                    {clientNoShows > 0 && (
+                      <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>⚠️</span>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "#f87171" }}>{t.noShowWarning}</div>
+                          <div style={{ fontSize: 10, color: "rgba(248,113,113,0.6)" }}>{clientNoShows}x {t.noShowCount}</div>
+                        </div>
+                      </div>
+                    )}
+
                     <SL>{t.payMethod}</SL>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                       {[["on-arrival","🏠",t.payArrival],["online","💳",t.payOnline]].map(([v,icon,label]) => (
@@ -2526,6 +2574,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           business_hours: data.business_hours || DEFAULT_HOURS,
           booking_policy: data.booking_policy || "",
           phone_required: data.phone_required || false,
+          break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           discount_codes: data.discount_codes || [],
@@ -2551,10 +2600,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
   const accent = salonData.accent;
   const appts = salonData.appointments;
-  const activeAppts = appts.filter(a => a.status !== "cancelled");
+  const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
+  const allVisibleAppts = appts.filter(a => a.status !== "cancelled");
   const completedAppts = appts.filter(a => a.status === "completed");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
-  const calAppts = activeAppts.filter(a => a.date === calDate);
+  const calAppts = allVisibleAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
   const days = getDays();
 
@@ -2709,13 +2759,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           <div style={{ fontSize: 10, color: "rgba(237,232,224,0.22)", marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : (lang === "nl" ? "Voltooid" : "Completed")}</span>
+          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : (lang === "nl" ? "Voltooid" : "Completed")}</span>
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</span>
         </div>
       </div>
-      {a.status === "confirmed" && <button className="btn-ghost" style={{ width:"100%", fontSize:10 }} onClick={() => markComplete(a.id)}>{t.markComplete}</button>}
+      {a.client_allergies && (
+        <div style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+          ⚠️ {t.clientAllergies}: {a.client_allergies}
+        </div>
+      )}
+      {a.status === "confirmed" && (
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn-ghost" style={{ flex: 1, fontSize:10 }} onClick={() => markComplete(a.id)}>{t.markComplete}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}>{t.markNoShow}</button>
+        </div>
+      )}
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4 }} onClick={() => sendInvoice(a.id)}>{t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color:"#86efac", marginTop:6 }}>{t.invoiceSent}</div>}
+      {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}>✗ {t.noShow}</div>}
     </div>
   );
 
@@ -3467,6 +3528,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 })}
               </div>
 
+              {/* Break time between appointments */}
+              <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.breakMinutes}</SL>
+                <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginBottom: 14 }}>{t.breakMinutesDesc}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[0, 5, 10, 15, 20, 30].map(mins => (
+                    <div key={mins} onClick={() => update(d => { d.break_minutes = mins; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.break_minutes || 0) === mins ? `${accent}18` : "rgba(237,232,224,0.04)",
+                        border: `1px solid ${(salonData.break_minutes || 0) === mins ? accent : "rgba(237,232,224,0.1)"}`,
+                        color: (salonData.break_minutes || 0) === mins ? accent : "rgba(237,232,224,0.5)",
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{mins === 0 ? t.breakNone : `${mins} ${t.breakMin}`}</div>
+                  ))}
+                </div>
+              </div>
+
               {/* Appearance Section */}
               <div style={{ marginTop: 28 }}>
                 <SL>{t.appearance}</SL>
@@ -3619,6 +3699,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   business_hours: salonData.business_hours || DEFAULT_HOURS,
                   booking_policy: salonData.booking_policy || null,
                   phone_required: salonData.phone_required || false,
+                  break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
                   discount_codes: salonData.discount_codes || []
@@ -3836,6 +3917,7 @@ function SalonRoute({ lang, setLang }) {
         business_hours: data.business_hours || DEFAULT_HOURS,
         booking_policy: data.booking_policy || "",
         phone_required: data.phone_required || false,
+        break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
         discount_codes: data.discount_codes || [],
