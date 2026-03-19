@@ -323,6 +323,7 @@ const makeCSS = (accent) => `
   .badge { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.08em; text-transform: uppercase; }
   .badge-confirmed { background: rgba(147,197,253,0.1); color: #93c5fd; border: 1px solid rgba(147,197,253,0.2); }
   .badge-completed { background: rgba(134,239,172,0.1); color: #86efac; border: 1px solid rgba(134,239,172,0.2); }
+  .badge-cancelled { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
 
   .confirm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(237,232,224,0.06); }
   .confirm-row:last-child { border-bottom: none; }
@@ -869,7 +870,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const MON = lang === "nl" ? MON_NL : MON_EN;
-  const svcName = (s) => lang === "nl" ? s.name_nl : s.name_en;
+  const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
 
   const [step, setStep] = useState(1);
   const goToStep = (s) => {
@@ -1025,13 +1026,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
       return label;
     }).join(" + ");
   };
-  const getServiceLabelsArray = () => {
-    return selectedServices.map(item => {
-      let label = svcName(item.service);
-      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
-      return label;
-    });
-  };
   const getAllExtrasFlat = () => {
     return selectedServices.flatMap(item => item.extras);
   };
@@ -1133,7 +1127,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
     }
 
     // 2. Build combined service name with per-service staff and extras
-    const allExtras = getAllExtrasFlat();
     const combinedServiceName = selectedServices.map(item => {
       let label = svcName(item.service);
       if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
@@ -1150,7 +1143,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
       owner_id: initialSalon.owner_id, service_id: selectedServices[0]?.service?.id || null, client_id: clientId,
       service_name: combinedServiceName,
       service_price: getPrice(), service_duration: getDuration(), date, time,
-      client_name: `${form.firstName} ${form.lastName}`, client_email: form.email, client_phone: form.phone || null,
+      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, client_phone: form.phone || null,
       payment_method: form.payment, status: "confirmed", invoice_sent: false,
       staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null
     };
@@ -1218,7 +1211,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
               </div>
               <div style={{ fontSize: 11, color: "rgba(237,232,224,0.35)", marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{item.variant ? item.variant.duration : item.service.duration} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>€{(item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)).toFixed(2)}</span>
+                <span style={{ color: accent }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: "rgba(237,232,224,0.4)", display: "flex", justifyContent: "space-between", marginTop: 3 }}>
@@ -1667,11 +1660,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           {item.staff && <span style={{ fontSize: 11, color: "rgba(237,232,224,0.4)", marginLeft: 6 }}>({item.staff.name})</span>}
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: "rgba(237,232,224,0.35)" }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
                         </div>
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>€{(item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
-                  {[[t.date, date],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                  {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
@@ -2106,7 +2099,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang }) {
                           </div>
                         ))}
                       </div>
-                      {[[t.date, date],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                      {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: "rgba(237,232,224,0.38)", letterSpacing: "0.04em" }}>{l}</span>
@@ -2605,7 +2598,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           <div style={{ fontSize: 10, color: "rgba(237,232,224,0.22)", marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : (lang === "nl" ? "Voltooid" : "Completed")}</span>
+          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : (lang === "nl" ? "Voltooid" : "Completed")}</span>
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{a.service_price}</span>
         </div>
       </div>
