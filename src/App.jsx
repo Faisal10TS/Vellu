@@ -129,6 +129,19 @@ const T = {
     todaySchedule:"Schema vandaag", nextUp:"Volgende", inProgress:"Nu bezig", upcoming:"Straks",
     noMoreToday:"Geen afspraken meer vandaag", freeDay:"Vrije dag!",
     startsIn:"Start over", minutesShort:"min", hoursShort:"u",
+    // Subscriptions
+    choosePlan:"Kies een abonnement", choosePlanSub:"Selecteer het plan dat bij jou past",
+    planStarter:"Starter", planProfessional:"Professional",
+    planStarterPrice:"19", planProfessionalPrice:"39",
+    perMonth:"/maand", planStarterDesc:"Perfect om te beginnen", planProfessionalDesc:"Voor de groeiende salon",
+    planFeatureBookings:"Online boekingen", planFeatureStaff:"Team beheer", planFeatureAnalytics:"Analytics dashboard",
+    planFeatureReviews:"Reviews systeem", planFeatureEmail:"Email bevestigingen", planFeatureReminders:"24u herinneringen",
+    planFeatureCustomBranding:"Eigen branding", planFeatureDiscounts:"Kortingscodes", planFeaturePriority:"Prioriteit support",
+    planFeatureUnlimited:"Onbeperkt medewerkers", planFeatureCategories:"Categorieën",
+    selectPlan:"Plan kiezen", currentPlan:"Huidig plan", activePlan:"Actief", planExpires:"Verloopt op",
+    billing:"Abonnement", billingDesc:"Beheer je abonnement", noPlan:"Geen actief abonnement",
+    contactSupport:"Neem contact op om je plan te wijzigen", paymentComingSoon:"Betaling via iDEAL komt binnenkort beschikbaar",
+    planActive:"Je abonnement is actief", upgradePlan:"Upgraden",
     // Multi-service booking
     addService:"+ Behandeling toevoegen", removeService:"Verwijder", selectedServices:"Geselecteerde behandelingen",
     servicesSelected:"behandelingen geselecteerd", serviceSelected:"behandeling geselecteerd",
@@ -224,6 +237,19 @@ const T = {
     todaySchedule:"Today's schedule", nextUp:"Next up", inProgress:"In progress", upcoming:"Upcoming",
     noMoreToday:"No more appointments today", freeDay:"Day off!",
     startsIn:"Starts in", minutesShort:"min", hoursShort:"h",
+    // Subscriptions
+    choosePlan:"Choose a plan", choosePlanSub:"Select the plan that fits you",
+    planStarter:"Starter", planProfessional:"Professional",
+    planStarterPrice:"19", planProfessionalPrice:"39",
+    perMonth:"/month", planStarterDesc:"Perfect to get started", planProfessionalDesc:"For the growing salon",
+    planFeatureBookings:"Online bookings", planFeatureStaff:"Team management", planFeatureAnalytics:"Analytics dashboard",
+    planFeatureReviews:"Reviews system", planFeatureEmail:"Email confirmations", planFeatureReminders:"24h reminders",
+    planFeatureCustomBranding:"Custom branding", planFeatureDiscounts:"Discount codes", planFeaturePriority:"Priority support",
+    planFeatureUnlimited:"Unlimited staff", planFeatureCategories:"Categories",
+    selectPlan:"Choose plan", currentPlan:"Current plan", activePlan:"Active", planExpires:"Expires on",
+    billing:"Subscription", billingDesc:"Manage your subscription", noPlan:"No active subscription",
+    contactSupport:"Contact us to change your plan", paymentComingSoon:"iDEAL payment coming soon",
+    planActive:"Your subscription is active", upgradePlan:"Upgrade",
     // Multi-service booking
     addService:"+ Add treatment", removeService:"Remove", selectedServices:"Selected treatments",
     servicesSelected:"treatments selected", serviceSelected:"treatment selected",
@@ -698,14 +724,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         city: form.city || "Nederland",
         accent_color: "#c9a96e"
       });
-      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id });
+      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(lang === "nl" ? "Verkeerd e-mail of wachtwoord" : "Incorrect email or password"); setLoading(false); return; }
       // Load profile
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
       const slug = profile?.slug || data.user.email.split("@")[0];
-      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color });
+      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null });
     }
     setLoading(false);
   };
@@ -2351,6 +2377,105 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
   );
 }
 
+// ─── PLAN SELECTION (PAYWALL) ────────────────────────────────
+function PlanSelection({ user, lang, setLang, onLogout }) {
+  const t = T[lang];
+  const accent = ACCENT;
+
+  const plans = [
+    {
+      id: "starter",
+      name: t.planStarter,
+      price: t.planStarterPrice,
+      desc: t.planStarterDesc,
+      features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureStaff + " (max 3)"],
+      popular: false
+    },
+    {
+      id: "professional",
+      name: t.planProfessional,
+      price: t.planProfessionalPrice,
+      desc: t.planProfessionalDesc,
+      features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureUnlimited, t.planFeatureAnalytics, t.planFeatureCustomBranding, t.planFeatureDiscounts, t.planFeatureCategories, t.planFeaturePriority],
+      popular: true
+    }
+  ];
+
+  return (
+    <Layout>
+      <div style={{ 
+        background: "#0d0b0a", minHeight: "100dvh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", padding: "40px 24px",
+        fontFamily: "'Jost',sans-serif", color: "#ede8e0", position: "relative"
+      }}>
+        <style>{makeCSS(accent)}</style>
+        <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)", width: "80%", maxWidth: 600, height: "50%", background: `radial-gradient(ellipse at center, ${accent}08 0%, transparent 70%)`, pointerEvents: "none" }} />
+        
+        {/* Header */}
+        <div style={{ position: "absolute", top: 24, left: 24, right: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.1em" }}>vellu</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <LangToggle lang={lang} setLang={setLang} />
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={onLogout}>{t.logout}</button>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 720, width: "100%", position: "relative", zIndex: 10 }} className="fade-up">
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <div style={{ fontSize: 36, marginBottom: 16 }}>👑</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{t.choosePlan}</div>
+            <div style={{ fontSize: 13, color: "rgba(237,232,224,0.4)" }}>{t.choosePlanSub}</div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 32 }}>
+            {plans.map(plan => (
+              <div key={plan.id} style={{
+                background: plan.popular ? `${accent}08` : "rgba(237,232,224,0.02)",
+                border: `1px solid ${plan.popular ? `${accent}44` : "rgba(237,232,224,0.08)"}`,
+                borderRadius: 24, padding: "28px 24px", position: "relative", transition: "all 0.3s"
+              }}>
+                {plan.popular && (
+                  <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: "#0d0b0a", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 100 }}>
+                    {lang === "nl" ? "POPULAIR" : "POPULAR"}
+                  </div>
+                )}
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.06em", marginBottom: 4 }}>{plan.name}</div>
+                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.4)", marginBottom: 12 }}>{plan.desc}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: accent }}>
+                    €{plan.price}<span style={{ fontSize: 16, color: "rgba(237,232,224,0.4)" }}>{t.perMonth}</span>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  {plan.features.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 12, color: "rgba(237,232,224,0.6)" }}>
+                      <span style={{ color: accent, fontSize: 14 }}>✓</span>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+                <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
+                  onClick={() => {
+                    // TODO: Replace with Mollie checkout when ready
+                    alert(lang === "nl" 
+                      ? `iDEAL betaling voor ${plan.name} (€${plan.price}/maand) komt binnenkort. Neem contact op via info@vellu.cc om je account te activeren.`
+                      : `iDEAL payment for ${plan.name} (€${plan.price}/month) coming soon. Contact info@vellu.cc to activate your account.`
+                    );
+                  }}
+                >{t.selectPlan}</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: "center", color: "rgba(237,232,224,0.25)", fontSize: 11 }}>
+            {t.paymentComingSoon}
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalonUpdate }) {
   const t = T[lang];
@@ -2404,6 +2529,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           discount_codes: data.discount_codes || [],
+          plan: data.plan || null,
+          plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
             ...s,
             name_nl: s.name_nl || s.name || "",
@@ -3053,6 +3180,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             <div className="fade-up">
               <PTitle sub={t.manageSalon}>{t.settings}</PTitle>
 
+              {/* Billing / Subscription */}
+              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.billing}</SL>
+                {salonData.plan ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, letterSpacing: "0.08em", textTransform: "uppercase", background: `${accent}22`, color: accent, border: `1px solid ${accent}44` }}>
+                        {salonData.plan === "starter" ? t.planStarter : t.planProfessional}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: "rgba(134,239,172,0.1)", color: "#86efac", border: "1px solid rgba(134,239,172,0.2)" }}>
+                        {t.activePlan}
+                      </span>
+                    </div>
+                    {salonData.plan_expires_at && (
+                      <div style={{ fontSize: 11, color: "rgba(237,232,224,0.4)" }}>
+                        {t.planExpires}: {new Date(salonData.plan_expires_at).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { day: "numeric", month: "long", year: "numeric" })}
+                      </div>
+                    )}
+                    {salonData.plan === "starter" && (
+                      <button className="btn-ghost" style={{ marginTop: 12, fontSize: 10, color: accent, borderColor: `${accent}44` }}
+                        onClick={() => alert(lang === "nl" ? "Neem contact op via info@vellu.cc om te upgraden." : "Contact info@vellu.cc to upgrade.")}>
+                        {t.upgradePlan} → {t.planProfessional}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: "rgba(237,232,224,0.4)" }}>{t.noPlan}</div>
+                )}
+              </div>
+
               {/* Profile */}
               <div style={{ background: "rgba(237,232,224,0.03)", border: "1px solid rgba(237,232,224,0.07)", borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.profile}</SL>
@@ -3602,7 +3759,9 @@ function OwnerEntryPage({ lang, setLang }) {
             slug: profile.slug || session.user.email.split("@")[0],
             city: profile.city || "Nederland",
             id: session.user.id,
-            accent: profile.accent_color
+            accent: profile.accent_color,
+            plan: profile.plan || null,
+            plan_expires_at: profile.plan_expires_at || null
           });
         }
       }
@@ -3623,6 +3782,13 @@ function OwnerEntryPage({ lang, setLang }) {
       vellu...
     </div>
   );
+
+  // Check if plan is active
+  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
+
+  if (owner && !hasPlan) {
+    return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
+  }
 
   if (owner) {
     return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} />;
@@ -3882,7 +4048,11 @@ function AppInner() {
       {screen === "landing" && <LandingScreen lang={lang} setLang={setLang} salons={salons} onSelectSalon={handleSelectSalon} onOwnerEnter={() => setScreen("ownerAuth")} />}
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
-      {screen === "owner" && <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={() => { setOwner(null); setScreen("landing"); }} />}
+      {screen === "owner" && (() => {
+        const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
+        if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={() => { setOwner(null); setScreen("landing"); }} />;
+        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={() => { setOwner(null); setScreen("landing"); }} />;
+      })()}
     </>
   );
 }
