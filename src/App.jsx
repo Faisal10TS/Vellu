@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { supabase } from "./supabase.js";
-import { BrowserRouter, Routes, Route, useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
 
 // ─── THEME SYSTEM ─────────────────────────────────────────────
 const THEMES = {
@@ -11,11 +11,11 @@ const THEMES = {
     border: "rgba(237,232,224,0.08)",
     borderHover: "rgba(237,232,224,0.15)",
     text: "#ede8e0",
-    textSub: c.textSub,
+    textSub: "rgba(237,232,224,0.5)",
     textMuted: "rgba(237,232,224,0.25)",
     textLabel: "rgba(237,232,224,0.35)",
-    inputBg: c.inputBg,
-    inputBorder: c.inputBorder,
+    inputBg: "rgba(237,232,224,0.04)",
+    inputBorder: "rgba(237,232,224,0.1)",
     overlay: "rgba(0,0,0,0.95)",
     navBg: "rgba(13,11,10,0.97)",
     selectBg: "#1a1a1a",
@@ -2899,6 +2899,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
     update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
   };
+  const markNoShow = async (id) => {
+    await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+    // Increment client no-show count
+    const appt = salonData.appointments.find(a => a.id === id);
+    if (appt?.client_id) {
+      const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
+      if (client) {
+        await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
+      }
+    }
+    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
+  };
   const sendInvoice = async (id) => {
     const a = salonData.appointments.find(x => x.id === id);
     if (a) {
@@ -3572,7 +3584,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <SL>{t.brandColor}</SL>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {["#c9a96e","#e8a598","#a8c5a0","#9bb5d6","#c4a8d4","#d4756a","#6abfb8","#e8c547"].map(clr => (
-                      <div key={c} onClick={() => update(d => { d.accent = clr; return d; })} style={{ width: 26, height: 26, borderRadius: "50%", background: clr, cursor: "pointer", outline: salonData.accent === clr ? "2px solid rgba(237,232,224,0.7)" : "none", outlineOffset: 2, transform: salonData.accent === clr ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
+                      <div key={clr} onClick={() => update(d => { d.accent = clr; return d; })} style={{ width: 26, height: 26, borderRadius: "50%", background: clr, cursor: "pointer", outline: salonData.accent === clr ? "2px solid rgba(237,232,224,0.7)" : "none", outlineOffset: 2, transform: salonData.accent === clr ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
                     ))}
                   </div>
                 </div>
@@ -4196,7 +4208,6 @@ function OwnerEntryPage({ lang, setLang }) {
 
 // ─── SALON ROUTE WRAPPER ─────────────────────────────────────
 function SalonRouteWrapper({ lang, setLang }) {
-  const { colors: c } = useTheme();
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
