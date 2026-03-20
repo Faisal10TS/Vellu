@@ -2940,7 +2940,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             ...s,
             name_nl: s.name_nl || s.name || "",
             name_en: s.name_en || s.name || "",
-            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.photo_url })),
+            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path })),
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: s.service_extras || []
           })),
@@ -3044,7 +3044,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     // Save to database
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
       service_id: serviceId,
-      photo_url: publicUrl,
+      storage_path: publicUrl,
       position: 0
     }).select().single();
     
@@ -4612,7 +4612,7 @@ function SalonRoute({ lang, setLang }) {
           ...s,
           name_nl: s.name_nl || s.name || "",
           name_en: s.name_en || s.name || "",
-          photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.photo_url })),
+          photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path })),
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
           extras: s.service_extras || []
         })),
