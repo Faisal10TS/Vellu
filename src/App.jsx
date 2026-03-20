@@ -629,9 +629,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const t = T[lang];
   const [slugInput, setSlugInput] = useState("");
   const [error, setError] = useState("");
+  const [faqOpen, setFaqOpen] = useState(null);
 
   const goToSlug = (slug) => {
-    // Strip vellu.cc/ or www.vellu.cc/ prefix if user pasted full link
     let clean = slug.toLowerCase().trim()
       .replace(/^https?:\/\//, "")
       .replace(/^(www\.)?vellu\.cc\//, "");
@@ -639,180 +639,130 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     window.location.href = "/" + clean;
   };
 
+  const faqs = lang === "nl" ? [
+    ["Hoeveel kost Vellu?", "Starter is €19/maand (max 3 medewerkers). Professional is €39/maand met onbeperkt medewerkers, analytics, branding en meer."],
+    ["Kan ik het eerst uitproberen?", "Ja, je kan je pagina gratis opzetten en alles instellen. Je betaalt pas als je live wilt gaan."],
+    ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met Team accounts krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en kunnen hun diensten en werktijden aanpassen."],
+    ["Krijgen klanten herinneringen?", "Ja, klanten ontvangen automatisch een bevestigingsmail bij het boeken en een herinnering 24 uur van tevoren."],
+    ["Kunnen klanten online betalen?", "Online betaling via iDEAL/Stripe komt binnenkort. Nu kunnen klanten bij aankomst betalen."],
+    ["Hoe annuleren klanten?", "Klanten krijgen een annuleringslink in hun bevestigingsmail. Jij kiest of ze tot 24u of 48u van tevoren kunnen annuleren."],
+  ] : [
+    ["How much does Vellu cost?", "Starter is €19/month (max 3 staff). Professional is €39/month with unlimited staff, analytics, branding and more."],
+    ["Can I try it first?", "Yes, you can set up your page for free and configure everything. You only pay when you want to go live."],
+    ["Can my staff manage their own agenda?", "Yes! With Team accounts, each staff member gets their own login. They only see their own appointments and can edit their services and hours."],
+    ["Do clients receive reminders?", "Yes, clients automatically receive a confirmation email when booking and a reminder 24 hours in advance."],
+    ["Can clients pay online?", "Online payment via iDEAL/Stripe is coming soon. Currently clients pay at arrival."],
+    ["How do clients cancel?", "Clients receive a cancellation link in their confirmation email. You choose whether they can cancel up to 24h or 48h in advance."],
+  ];
+
   return (
     <Layout>
       <div style={{ 
         background: c.bg, 
         minHeight: "100dvh", 
-        display: "flex", 
-        flexDirection: "column",
         fontFamily: "'Jost',sans-serif", 
         color: c.text,
         position: "relative",
         overflow: "hidden"
       }}>
-        {/* Background decorations */}
-        <div style={{ 
-          position: "absolute", 
-          top: "-30%", 
-          left: "-10%", 
-          width: "70%", 
-          height: "80%", 
-          background: `radial-gradient(ellipse at center, ${ACCENT}08 0%, transparent 70%)`,
-          pointerEvents: "none"
-        }} />
-        <div style={{ 
-          position: "absolute", 
-          bottom: "-20%", 
-          right: "-20%", 
-          width: "60%", 
-          height: "60%", 
-          background: `radial-gradient(ellipse at center, ${ACCENT}06 0%, transparent 60%)`,
-          pointerEvents: "none"
-        }} />
+        {/* Ambient glow */}
+        <div style={{ position: "absolute", top: "-20%", left: "20%", width: "60%", height: "60%", background: `radial-gradient(ellipse at center, ${ACCENT}0a 0%, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: "10%", right: "-10%", width: "40%", height: "40%", background: `radial-gradient(ellipse at center, ${ACCENT}06 0%, transparent 60%)`, pointerEvents: "none" }} />
 
         {/* Navigation */}
-        <nav style={{ 
-          display: "flex", 
-          justifyContent: "space-between", 
-          alignItems: "center", 
-          padding: "24px 32px",
-          position: "relative",
-          zIndex: 10
-        }}>
-          <div style={{ 
-            fontFamily: "'Jost',sans-serif", 
-            fontSize: 26, 
-            fontWeight: 300, 
-            letterSpacing: "0.18em" 
-          }}>vellu</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 32px", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 26, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
-            <button 
-              className="btn-ghost" 
-              style={{ fontSize: 11 }} 
-              onClick={() => window.location.href = "/owner"}
-            >
-              👑 {lang === "nl" ? "Eigenaar" : "Owner"}
+            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => window.location.href = "/owner"}>
+              👑 {lang === "nl" ? "Inloggen" : "Sign in"}
             </button>
           </div>
         </nav>
 
-        {/* Hero Section */}
-        <div style={{ 
-          flex: 1, 
-          display: "flex", 
-          flexDirection: "column", 
-          alignItems: "center", 
-          justifyContent: "center",
-          padding: "40px 24px 60px",
-          textAlign: "center",
-          position: "relative",
-          zIndex: 10
-        }}>
-          <div className="fade-up" style={{ maxWidth: 600 }}>
-            {/* Main heading */}
-            <h1 style={{ 
-              fontFamily: "'Cormorant Garamond',serif", 
-              fontSize: "clamp(48px, 10vw, 80px)", 
-              fontWeight: 300, 
-              letterSpacing: "0.08em", 
-              lineHeight: 1,
-              marginBottom: 20
-            }}>
-              {lang === "nl" ? "Beauty booking" : "Beauty booking"}
+        {/* ─── HERO ─── */}
+        <div style={{ padding: "80px 24px 60px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
+          <div className="fade-up">
+            <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 28 }}>
+              ✦ {lang === "nl" ? "Het #1 boekingsplatform voor beauty" : "The #1 booking platform for beauty"}
+            </div>
+            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(44px, 9vw, 72px)", fontWeight: 300, letterSpacing: "0.06em", lineHeight: 1.05, marginBottom: 24 }}>
+              {lang === "nl" ? "Jouw salon," : "Your salon,"}
               <br />
-              <span style={{ color: ACCENT }}>{lang === "nl" ? "simpel gemaakt" : "made simple"}</span>
+              <span style={{ color: ACCENT }}>{lang === "nl" ? "altijd geboekt" : "always booked"}</span>
             </h1>
-            
-            <p style={{ 
-              fontSize: "clamp(14px, 2vw, 18px)", 
-              color: c.textSub, 
-              marginBottom: 48,
-              letterSpacing: "0.02em",
-              lineHeight: 1.6,
-              maxWidth: 450,
-              margin: "0 auto 48px"
-            }}>
+            <p style={{ fontSize: "clamp(14px, 2vw, 17px)", color: c.textSub, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 40px", letterSpacing: "0.01em" }}>
               {lang === "nl" 
-                ? "Het premium platform voor beauty ondernemers. Jouw eigen boekingspagina in minuten." 
-                : "The premium platform for beauty entrepreneurs. Your own booking page in minutes."}
+                ? "Online boekingen, team management, automatische emails en meer. Alles wat je salon nodig heeft, in één platform." 
+                : "Online bookings, team management, automatic emails and more. Everything your salon needs, in one platform."}
             </p>
-
-            {/* Decorative line */}
-            <div style={{ 
-              width: 60, 
-              height: 1, 
-              background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, 
-              margin: "0 auto 40px" 
-            }} />
-
-            {/* Search box */}
-            <div style={{ 
-              background: c.bgCard, 
-              border: "1px solid " + c.inputBorder,
-              borderRadius: 20,
-              padding: 24,
-              maxWidth: 420,
-              margin: "0 auto"
-            }}>
-              <SL style={{ textAlign: "left" }}>{lang === "nl" ? "Naar een studio" : "Go to studio"}</SL>
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ flex: 1, position: "relative" }}>
-                  <div style={{ 
-                    position: "absolute", 
-                    left: 16, 
-                    top: "50%", 
-                    transform: "translateY(-50%)", 
-                    fontSize: 13, 
-                    color: c.textMuted,
-                    pointerEvents: "none"
-                  }}>vellu.cc/</div>
-                  <input 
-                    className="input-field" 
-                    placeholder={lang === "nl" ? "studio-naam" : "studio-name"} 
-                    value={slugInput} 
-                    onChange={e => setSlugInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)}
-                    style={{ paddingLeft: 85, borderRadius: 12 }} 
-                  />
-                </div>
-                <button 
-                  className="btn-primary" 
-                  style={{ width: "auto", padding: "14px 24px", flexShrink: 0 }} 
-                  onClick={() => goToSlug(slugInput)}
-                >→</button>
-              </div>
-              {error && <div style={{ fontSize: 12, color: "#f87171", marginTop: 12 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => window.location.href = "/owner"}>
+                {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
+              </button>
+              <button className="btn-ghost" style={{ width: "auto", padding: "16px 28px", fontSize: 13, color: c.textSub }} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
+                {lang === "nl" ? "Hoe werkt het?" : "How does it work?"}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* How it works */}
-        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 40 }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Hoe het werkt" : "How it works"}
+        {/* ─── SOCIAL PROOF ─── */}
+        <div style={{ padding: "20px 24px 60px", position: "relative", zIndex: 10 }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 40, flexWrap: "wrap", opacity: 0.6 }}>
+            {[
+              { num: "500+", nl: "Boekingen", en: "Bookings" },
+              { num: "24/7", nl: "Online beschikbaar", en: "Available online" },
+              { num: "< 2 min", nl: "Account opzetten", en: "Setup time" },
+            ].map((s, i) => (
+              <div key={i} style={{ textAlign: "center" }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: ACCENT }}>{s.num}</div>
+                <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{lang === "nl" ? s.nl : s.en}</div>
               </div>
-              <div style={{ width: 40, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            ))}
+          </div>
+        </div>
+
+        {/* ─── SEARCH BOX ─── */}
+        <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
+          <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "28px 28px", maxWidth: 440, margin: "0 auto" }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
+              {lang === "nl" ? "Al een afspraak? Ga naar je salon" : "Have an appointment? Go to your salon"}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20 }}>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1, position: "relative" }}>
+                <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 85, borderRadius: 12 }} />
+              </div>
+              <button className="btn-primary" style={{ width: "auto", padding: "14px 24px", flexShrink: 0 }} onClick={() => goToSlug(slugInput)}>→</button>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── HOW IT WORKS ─── */}
+        <div id="how-it-works" style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "In 3 stappen live" : "Live in 3 steps"}
+              </div>
+              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
               {[
-                { icon: "✦", nl: ["Maak je pagina", "Registreer in 2 minuten. Voeg je behandelingen, prijzen en team toe."], en: ["Create your page", "Register in 2 minutes. Add your treatments, prices and team."] },
-                { icon: "◎", nl: ["Deel je link", "Stuur vellu.cc/jouw-naam naar klanten via Instagram, WhatsApp of je website."], en: ["Share your link", "Send vellu.cc/your-name to clients via Instagram, WhatsApp or your website."] },
-                { icon: "◈", nl: ["Ontvang boekingen", "Klanten boeken 24/7. Jij ontvangt bevestigingen en beheert alles vanuit je dashboard."], en: ["Receive bookings", "Clients book 24/7. You receive confirmations and manage everything from your dashboard."] }
+                { num: "01", icon: "✦", nl: ["Maak je pagina", "Account aanmaken, behandelingen toevoegen, team instellen. Klaar in 2 minuten."], en: ["Create your page", "Create account, add treatments, set up your team. Ready in 2 minutes."] },
+                { num: "02", icon: "◎", nl: ["Deel je link", "Zet vellu.cc/jouw-salon op je Instagram bio, WhatsApp status of visitekaartje."], en: ["Share your link", "Put vellu.cc/your-salon on your Instagram bio, WhatsApp status or business card."] },
+                { num: "03", icon: "◈", nl: ["Ontvang boekingen", "Klanten boeken 24/7. Je krijgt bevestigingen, herinneringen worden automatisch verstuurd."], en: ["Receive bookings", "Clients book 24/7. You get confirmations, reminders are sent automatically."] }
               ].map((item, i) => (
-                <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", textAlign: "center" }}>
+                <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${ACCENT}12` }}>{item.num}</div>
                   <div style={{ fontSize: 28, marginBottom: 16, color: ACCENT }}>{item.icon}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: ACCENT, marginBottom: 8 }}>
-                    {lang === "nl" ? `STAP ${i + 1}` : `STEP ${i + 1}`}
-                  </div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, marginBottom: 8 }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 10 }}>
                     {lang === "nl" ? item.nl[0] : item.en[0]}
                   </div>
-                  <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 13, color: c.textLabel, lineHeight: 1.7 }}>
                     {lang === "nl" ? item.nl[1] : item.en[1]}
                   </div>
                 </div>
@@ -821,62 +771,124 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* Features */}
+        {/* ─── FEATURES ─── */}
         <div style={{ padding: "40px 24px 60px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Alles wat je nodig hebt" : "Everything you need"}
+                {lang === "nl" ? "Alles wat je salon nodig heeft" : "Everything your salon needs"}
               </div>
-              <div style={{ width: 40, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               {[
-                { icon: "📅", nl: "Online boekingen", en: "Online bookings" },
-                { icon: "👥", nl: "Team beheer", en: "Team management" },
-                { icon: "📊", nl: "Analytics dashboard", en: "Analytics dashboard" },
-                { icon: "📧", nl: "Automatische emails", en: "Automatic emails" },
-                { icon: "⏰", nl: "24u herinneringen", en: "24h reminders" },
-                { icon: "🏷️", nl: "Kortingscodes", en: "Discount codes" },
-                { icon: "⭐", nl: "Reviews systeem", en: "Reviews system" },
-                { icon: "🎨", nl: "Eigen branding", en: "Custom branding" },
+                { icon: "📅", nl: "Online boekingen", en: "Online bookings", sub: { nl: "Klanten boeken 24/7 via je eigen link", en: "Clients book 24/7 via your own link" } },
+                { icon: "👥", nl: "Team accounts", en: "Team accounts", sub: { nl: "Elke medewerker een eigen login en agenda", en: "Each staff member gets their own login" } },
+                { icon: "📧", nl: "Automatische emails", en: "Automatic emails", sub: { nl: "Bevestigingen, herinneringen en follow-ups", en: "Confirmations, reminders and follow-ups" } },
+                { icon: "📊", nl: "Analytics", en: "Analytics", sub: { nl: "Inzicht in omzet, boekingen en klanten", en: "Insights on revenue, bookings and clients" } },
+                { icon: "⭐", nl: "Reviews", en: "Reviews", sub: { nl: "Automatisch reviews verzamelen na bezoek", en: "Automatically collect reviews after visits" } },
+                { icon: "🎨", nl: "Eigen branding", en: "Custom branding", sub: { nl: "Jouw logo, kleuren en stijl", en: "Your logo, colors and style" } },
+                { icon: "📸", nl: "Portfolio", en: "Portfolio", sub: { nl: "Foto's per behandeling tonen", en: "Show photos per treatment" } },
+                { icon: "🏷️", nl: "Kortingscodes", en: "Discount codes", sub: { nl: "Maak en deel korting met je klanten", en: "Create and share discounts with clients" } },
               ].map((f, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
-                  <span style={{ fontSize: 20 }}>{f.icon}</span>
-                  <span style={{ fontSize: 12, color: c.textSub, fontWeight: 500 }}>{lang === "nl" ? f.nl : f.en}</span>
+                <div key={i} style={{ padding: "20px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 18 }}>
+                  <span style={{ fontSize: 24 }}>{f.icon}</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? f.nl : f.en}</div>
+                  <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.5 }}>{lang === "nl" ? f.sub.nl : f.sub.en}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* CTA */}
-        <div style={{ padding: "40px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
-          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 5vw, 36px)", fontWeight: 300, marginBottom: 16 }}>
-            {lang === "nl" ? "Klaar om te starten?" : "Ready to get started?"}
+        {/* ─── PRICING ─── */}
+        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 700, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "Transparante prijzen" : "Transparent pricing"}
+              </div>
+              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+              {[
+                { name: "Starter", price: "19", popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Up to 3 staff members"] } },
+                { name: "Professional", price: "39", popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Eigen branding & logo", "Kortingscodes", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Custom branding & logo", "Discount codes", "Priority support"] } },
+              ].map((plan, i) => (
+                <div key={i} style={{
+                  background: plan.popular ? `${ACCENT}08` : c.bgCard,
+                  border: `1.5px solid ${plan.popular ? ACCENT : c.border}`,
+                  borderRadius: 24, padding: "32px 28px", position: "relative"
+                }}>
+                  {plan.popular && (
+                    <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: ACCENT, color: c.btnOnDark, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "5px 16px", borderRadius: 100 }}>
+                      {lang === "nl" ? "Populair" : "Popular"}
+                    </div>
+                  )}
+                  <div style={{ textAlign: "center", marginBottom: 24 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{plan.name}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: ACCENT }}>
+                      €{plan.price}<span style={{ fontSize: 16, color: c.textMuted }}>{lang === "nl" ? "/maand" : "/month"}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+                    {(lang === "nl" ? plan.features.nl : plan.features.en).map((f, j) => (
+                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.textSub }}>
+                        <span style={{ color: ACCENT, fontSize: 14 }}>✓</span>{f}
+                      </div>
+                    ))}
+                  </div>
+                  <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${ACCENT}44`, color: ACCENT }) }}
+                    onClick={() => window.location.href = "/owner"}>
+                    {lang === "nl" ? "Beginnen" : "Get started"}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-          <p style={{ fontSize: 14, color: c.textLabel, marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
-            {lang === "nl" ? "Gratis je boekingspagina opzetten. Geen creditcard nodig." : "Set up your booking page for free. No credit card required."}
-          </p>
-          <button className="btn-primary" style={{ width: "auto", padding: "16px 40px" }} onClick={() => window.location.href = "/owner"}>
-            {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
-          </button>
         </div>
 
-
-                {/* Footer */}
-        <footer style={{ 
-          padding: "24px 32px", 
-          textAlign: "center",
-          borderTop: "1px solid " + c.border
-        }}>
-          <div style={{ 
-            fontSize: 11, 
-            color: c.textMuted, 
-            letterSpacing: "0.1em" 
-          }}>
-            © {new Date().getFullYear()} VELLU · {lang === "nl" ? "BEAUTY BOOKING PLATFORM" : "BEAUTY BOOKING PLATFORM"}
+        {/* ─── FAQ ─── */}
+        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 600, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "Veelgestelde vragen" : "FAQ"}
+              </div>
+              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            {faqs.map(([q, a], i) => (
+              <div key={i} style={{ borderBottom: "1px solid " + c.border, marginBottom: 0 }}>
+                <div onClick={() => setFaqOpen(faqOpen === i ? null : i)} style={{ padding: "18px 0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{q}</div>
+                  <div style={{ fontSize: 18, color: c.textMuted, transition: "transform 0.2s", transform: faqOpen === i ? "rotate(45deg)" : "none" }}>+</div>
+                </div>
+                {faqOpen === i && (
+                  <div style={{ paddingBottom: 18, fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{a}</div>
+                )}
+              </div>
+            ))}
           </div>
+        </div>
+
+        {/* ─── FINAL CTA ─── */}
+        <div style={{ padding: "60px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 500, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
+              {lang === "nl" ? "Klaar om te groeien?" : "Ready to grow?"}
+            </div>
+            <p style={{ fontSize: 14, color: c.textLabel, marginBottom: 28, lineHeight: 1.6 }}>
+              {lang === "nl" ? "Zet je boekingspagina op in 2 minuten. Geen creditcard nodig." : "Set up your booking page in 2 minutes. No credit card needed."}
+            </p>
+            <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => window.location.href = "/owner"}>
+              {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
+          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
         </footer>
       </div>
     </Layout>
