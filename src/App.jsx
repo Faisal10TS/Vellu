@@ -2966,6 +2966,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
+  const [settingsTab, setSettingsTab] = useState("salon");
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -3748,6 +3749,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             <div className="fade-up">
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
+              {/* Settings tabs */}
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 16, borderBottom: "1px solid " + c.border }}>
+                {[
+                  ["salon", "✦", lang === "nl" ? "Salon" : "Salon"],
+                  ["diensten", "◈", lang === "nl" ? "Diensten" : "Services"],
+                  ["team", "👥", lang === "nl" ? "Team" : "Team"],
+                  ["planning", "📅", lang === "nl" ? "Planning" : "Schedule"],
+                  ["facturatie", "⚙️", lang === "nl" ? "Overig" : "Other"],
+                ].map(([key, icon, label]) => (
+                  <div key={key} onClick={() => setSettingsTab(key)} style={{
+                    padding: "8px 16px", borderRadius: 12, cursor: "pointer", whiteSpace: "nowrap",
+                    fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", transition: "all 0.2s",
+                    background: settingsTab === key ? `${accent}15` : "transparent",
+                    color: settingsTab === key ? accent : c.textSub,
+                    border: `1px solid ${settingsTab === key ? `${accent}33` : "transparent"}`
+                  }}>{icon} {label}</div>
+                ))}
+              </div>
+
+              {/* ═══ SALON TAB ═══ */}
+              {settingsTab === "salon" && <>
+
               {/* Billing / Subscription */}
               <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.billing}</SL>
@@ -3812,6 +3835,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   </div>
                 </div>
               </div>
+              </>}
+
+              {/* ═══ DIENSTEN TAB ═══ */}
+              {settingsTab === "diensten" && <>
 
               {/* Services + photos */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
@@ -3977,6 +4004,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <button className="btn-ghost" style={{ width: "100%", borderStyle: "dashed", borderColor: `${accent}33`, color: accent, fontSize: 11 }} onClick={addService}>{t.addService}</button>
                 </div>
               </div>
+              </>}
+
+              {/* ═══ TEAM TAB ═══ */}
+              {settingsTab === "team" && <>
 
               {/* Staff / Team */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
@@ -4134,6 +4165,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
                 }} />
               </div>
+              </>}
+
+              {/* ═══ PLANNING TAB ═══ */}
+              {settingsTab === "planning" && <>
 
               {/* Locations */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
@@ -4377,6 +4412,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                     setNewBlocked({ from: "", to: "", reason: "" });
                   }}>{t.addBlocked}</button>
               </div>
+              </>}
+
+              {/* ═══ FACTURATIE TAB ═══ */}
+              {settingsTab === "facturatie" && <>
 
               {/* Appearance Section */}
               <div style={{ marginTop: 28 }}>
@@ -4516,7 +4555,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 }}>{t.addDiscountCode}</button>
               </div>
 
-              <button className="btn-primary" onClick={async () => {
+              </div>
+              </>}
+
+              {/* Save button (always visible) */}
+              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
                 await supabase.from("profiles").update({
                   business_name: salonData.name,
                   city: salonData.city,
