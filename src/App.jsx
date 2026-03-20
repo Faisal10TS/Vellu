@@ -446,6 +446,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes scaleIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
+  @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
   .fade-up { animation: fadeUp 0.38s cubic-bezier(0.16,1,0.3,1) both; }
   .scale-in { animation: scaleIn 0.3s cubic-bezier(0.16,1,0.3,1) both; }
 
@@ -3075,15 +3076,34 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
   };
 
+  const [photoUploading, setPhotoUploading] = useState(null); // serviceId or null
+
   const addPhoto = async (serviceId, file) => {
+    setPhotoUploading(serviceId);
+    // Compress image if > 1MB
+    let uploadFile = file;
+    if (file.size > 1024 * 1024) {
+      try {
+        const img = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        const maxDim = 1600;
+        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
+        uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+      } catch(e) { /* fallback to original */ }
+    }
     // Upload to Supabase Storage
-    const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${file.name}`;
+    const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("service-photos")
       .upload(fileName, file, { cacheControl: "3600", upsert: false });
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
+      setPhotoUploading(null);
       return;
     }
     
@@ -3101,6 +3121,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     
     if (dbError) {
       console.error("DB error:", dbError);
+      setPhotoUploading(null);
       return;
     }
     
@@ -3109,6 +3130,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s); 
       return d; 
     });
+    setPhotoUploading(null);
   };
 
   const deletePhoto = async (serviceId, photoId, photoUrl) => {
@@ -3800,7 +3822,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       {editingService !== s.id && (
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => deleteService(s.id)}>✕</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => { if (confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>✕</button>
                         </div>
                       )}
                     </div>
@@ -3898,9 +3920,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           <div onClick={() => deletePhoto(s.id, p.id, p.url || p)} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontWeight: 700, lineHeight: 1 }}>×</div>
                         </div>
                       ))}
-                      <label className="photo-add" style={{ flexShrink: 0 }}>
-                        <span style={{ fontSize: 18, color: `${accent}88` }}>+</span>
-                        <span style={{ fontSize: 9, color: `${accent}66`, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.addPhoto}</span>
+                      <label className="photo-add" style={{ flexShrink: 0, opacity: photoUploading === s.id ? 0.5 : 1 }}>
+                        {photoUploading === s.id ? (
+                          <span style={{ fontSize: 12, color: accent, animation: "spin 1s linear infinite" }}>⏳</span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: 18, color: `${accent}88` }}>+</span>
+                            <span style={{ fontSize: 9, color: `${accent}66`, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.addPhoto}</span>
+                          </>
+                        )}
                         <input type="file" accept="image/*" multiple style={{ display: "none" }}
                           onChange={e => Array.from(e.target.files).forEach(f => addPhoto(s.id, f))} />
                       </label>
@@ -3974,6 +4002,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           <>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {} }); }}>✎</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
+                              if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_members").delete().eq("id", m.id);
                               update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
                             }}>×</button>
@@ -4103,6 +4132,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           }}>✎</button>
                         <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
                           onClick={async () => {
+                            if (!confirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
                             await supabase.from("locations").delete().eq("id", loc.id);
                             update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
                           }}>×</button>
@@ -4735,6 +4765,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [editingVar, setEditingVar] = useState(null);
   const [editVarForm, setEditVarForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
   const [gallery, setGallery] = useState(null);
+  const [showAddAppt, setShowAddAppt] = useState(false);
+  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
+  const [addApptLoading, setAddApptLoading] = useState(false);
+  const [addApptDone, setAddApptDone] = useState(false);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   // Load data
@@ -4774,8 +4808,26 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
 
+  const [staffPhotoUploading, setStaffPhotoUploading] = useState(null);
+
   const staffAddPhoto = async (serviceId, file) => {
-    const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${file.name}`;
+    setStaffPhotoUploading(serviceId);
+    // Compress image if > 1MB
+    let uploadFile = file;
+    if (file.size > 1024 * 1024) {
+      try {
+        const img = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        const maxDim = 1600;
+        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
+        uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+      } catch(e) { /* fallback */ }
+    }
+    const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, file, { cacheControl: "3600", upsert: false });
     if (uploadError) { console.error("Upload error:", uploadError); return; }
     const { data: { publicUrl } } = supabase.storage.from("service-photos").getPublicUrl(fileName);
@@ -4784,6 +4836,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     }).select().single();
     if (dbError) { console.error("DB error:", dbError); return; }
     setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s));
+    setStaffPhotoUploading(null);
   };
 
   const staffDeletePhoto = async (serviceId, photoId, photoUrl) => {
@@ -4880,6 +4933,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "totaal" : "total"}</div>
                 </div>
               </div>
+              <button className="btn-ghost" style={{ width: "100%", marginBottom: 16, fontSize: 11, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); }}>
+                {t.addAppointment}
+              </button>
               <SL>{t.todayAppts}</SL>
               {todayAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
@@ -5047,6 +5104,106 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
           )}
         </div>
+
+        {/* Add Appointment Modal */}
+        {showAddAppt && (
+          <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowAddAppt(false)}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+              {!addApptDone ? (<>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📅</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300 }}>{t.addAppointment}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <SL>{t.selectServiceFor}</SL>
+                    <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
+                      <option value="" style={{ background: c.selectBg }}>—</option>
+                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
+                    </select>
+                  </div>
+                  {(() => {
+                    const selSvc = services.find(s => s.id === addApptForm.service_id);
+                    if (!selSvc?.variants?.length) return null;
+                    return (
+                      <div>
+                        <SL>{lang === "nl" ? "Variant" : "Variant"}</SL>
+                        <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
+                          <option value="" style={{ background: c.selectBg }}>—</option>
+                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — €{v.price}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <SL>{t.selectDateFor}</SL>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input type="date" className="input-field" value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
+                      <select className="input-field" value={addApptForm.time} onChange={e => setAddApptForm(f => ({...f, time: e.target.value}))} style={{ fontSize: 12, flex: 1 }}>
+                        <option value="" style={{ background: c.selectBg }}>—</option>
+                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <SL>{t.clientDetails}</SL>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
+                      <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
+                      <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
+                  onClick={async () => {
+                    setAddApptLoading(true);
+                    const svc = services.find(s => s.id === addApptForm.service_id);
+                    const variant = svc?.variants?.find(v => v.id === addApptForm.variant_id);
+                    const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + variant.name_nl : "") + ` (${myStaff.name})` : "";
+                    const price = variant ? variant.price : (svc?.price || 0);
+                    const duration = variant ? variant.duration : (svc?.duration || 60);
+                    const email = addApptForm.client_email.toLowerCase();
+                    let clientId = null;
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).single();
+                    if (existing) clientId = existing.id;
+                    else {
+                      const nameParts = addApptForm.client_name.split(" ");
+                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0], last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      if (nc) clientId = nc.id;
+                    }
+                    const apptData = {
+                      owner_id: salonProfile.id, service_id: svc?.id, client_id: clientId,
+                      service_name: svcLabel, service_price: price, service_duration: duration,
+                      date: addApptForm.date, time: addApptForm.time,
+                      client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
+                      payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
+                      staff_id: staffMember.id, staff_name: myStaff.name
+                    };
+                    const { data: appt } = await supabase.from("appointments").insert(apptData).select("*").single();
+                    if (appt) {
+                      setAppointments(a => [appt, ...a]);
+                      await sendEmails("booking_confirmation", {
+                        client_name: addApptForm.client_name, client_email: email,
+                        service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
+                        payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null
+                      });
+                    }
+                    setAddApptDone(true);
+                    setAddApptLoading(false);
+                  }}>
+                  {addApptLoading ? "..." : t.confirm}
+                </button>
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => setShowAddAppt(false)}>{t.cancelEdit}</button>
+              </>) : (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
+                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{lang === "nl" ? "Sluiten" : "Close"}</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Mobile bottom nav */}
         {isMobile && (
