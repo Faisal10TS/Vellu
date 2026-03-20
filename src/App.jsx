@@ -4418,7 +4418,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "facturatie" && <>
 
               {/* Appearance Section */}
-              <div style={{ marginTop: 28 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.appearance}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.logoDesc}</div>
                 
@@ -4474,7 +4474,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Booking Policy Section */}
-              <div style={{ marginTop: 28 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>{t.bookingPolicyDesc}</div>
                 <textarea 
@@ -4487,7 +4487,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Phone Required Toggle */}
-              <div style={{ marginTop: 20 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
@@ -4510,7 +4510,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Discount Codes Section */}
-              <div style={{ marginTop: 28 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.discountCodes}</SL>
                 
                 {/* Existing codes */}
@@ -4553,8 +4553,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   });
                   setNewDiscount({ code: "", amount: "", type: "percent", active: true });
                 }}>{t.addDiscountCode}</button>
-              </div>
-
               </div>
               </>}
 
@@ -5815,5 +5813,3 @@ export default function VelluApp() {
     </ThemeProvider>
   );
 }
-
-
