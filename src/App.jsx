@@ -3044,8 +3044,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     // Save to database
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
       service_id: serviceId,
-      storage_path: publicUrl,
-      position: 0
+      owner_id: salonData.owner_id,
+      storage_path: publicUrl
     }).select().single();
     
     if (dbError) {
