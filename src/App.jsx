@@ -2870,6 +2870,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
+  const [agendaStaff, setAgendaStaff] = useState(null); // null = all, or staff member id
   const [salonData, setSalonData] = useState(() => {
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
@@ -2965,7 +2966,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const allVisibleAppts = appts.filter(a => a.status !== "cancelled");
   const completedAppts = appts.filter(a => a.status === "completed");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
-  const calAppts = allVisibleAppts.filter(a => a.date === calDate);
+  const filteredAgendaAppts = agendaStaff ? allVisibleAppts.filter(a => a.staff_id === agendaStaff) : allVisibleAppts;
+  const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
   const days = getDays();
 
@@ -3411,10 +3413,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {view === "agenda" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
+              
+              {/* Staff filter */}
+              {(salonData.staff || []).length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  <div onClick={() => setAgendaStaff(null)} style={{
+                    padding: "5px 12px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    letterSpacing: "0.04em", transition: "all 0.2s",
+                    background: !agendaStaff ? accent : "transparent",
+                    color: !agendaStaff ? c.btnOnDark : c.textSub,
+                    border: `1px solid ${!agendaStaff ? accent : c.inputBorder}`
+                  }}>{lang === "nl" ? "Iedereen" : "Everyone"}</div>
+                  {(salonData.staff || []).map(m => (
+                    <div key={m.id} onClick={() => setAgendaStaff(agendaStaff === m.id ? null : m.id)} style={{
+                      padding: "5px 12px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.04em", transition: "all 0.2s",
+                      background: agendaStaff === m.id ? accent : "transparent",
+                      color: agendaStaff === m.id ? c.btnOnDark : c.textSub,
+                      border: `1px solid ${agendaStaff === m.id ? accent : c.inputBorder}`
+                    }}>{m.name}</div>
+                  ))}
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
                 {days.slice(0,10).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
-                  const has = activeAppts.filter(a => a.date === ds).length > 0;
+                  const has = filteredAgendaAppts.filter(a => a.date === ds).length > 0;
                   return (
                     <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)}>
                       <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
