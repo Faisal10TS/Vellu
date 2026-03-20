@@ -640,19 +640,23 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   };
 
   const faqs = lang === "nl" ? [
-    ["Hoeveel kost Vellu?", "Starter is €19/maand (max 3 medewerkers). Professional is €39/maand met onbeperkt medewerkers, analytics, branding en meer."],
+    ["Wat is Vellu precies?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij. Jij beheert alles vanuit je dashboard."],
+    ["Voor wie is Vellu?", "Voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers, en beautysalons. Of je nu solo werkt of een team hebt."],
+    ["Hoeveel kost het?", "Starter is €19/maand, Professional €39/maand. Vast tarief, 0% commissie per boeking. Geen verborgen kosten."],
+    ["Waarom geen commissie?", "Wij geloven dat jouw omzet van jou is. Je betaalt een vast bedrag per maand en houdt 100% van elke boeking."],
     ["Kan ik het eerst uitproberen?", "Ja, je kan je pagina gratis opzetten en alles instellen. Je betaalt pas als je live wilt gaan."],
-    ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met Team accounts krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en kunnen hun diensten en werktijden aanpassen."],
-    ["Krijgen klanten herinneringen?", "Ja, klanten ontvangen automatisch een bevestigingsmail bij het boeken en een herinnering 24 uur van tevoren."],
-    ["Kunnen klanten online betalen?", "Online betaling via iDEAL/Stripe komt binnenkort. Nu kunnen klanten bij aankomst betalen."],
-    ["Hoe annuleren klanten?", "Klanten krijgen een annuleringslink in hun bevestigingsmail. Jij kiest of ze tot 24u of 48u van tevoren kunnen annuleren."],
+    ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met het Professional plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
+    ["Krijgen klanten herinneringen?", "Ja, automatisch. Bevestiging bij het boeken, herinnering 24 uur van tevoren, en een follow-up na het bezoek voor een review."],
+    ["Hoe annuleren klanten?", "Via de annuleringslink in hun bevestigingsmail. Jij bepaalt tot wanneer ze kunnen annuleren."],
   ] : [
-    ["How much does Vellu cost?", "Starter is €19/month (max 3 staff). Professional is €39/month with unlimited staff, analytics, branding and more."],
+    ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
+    ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
+    ["How much does it cost?", "Starter is €19/month, Professional €39/month. Fixed price, 0% commission per booking. No hidden fees."],
+    ["Why no commission?", "We believe your revenue is yours. You pay a fixed monthly fee and keep 100% of every booking."],
     ["Can I try it first?", "Yes, you can set up your page for free and configure everything. You only pay when you want to go live."],
-    ["Can my staff manage their own agenda?", "Yes! With Team accounts, each staff member gets their own login. They only see their own appointments and can edit their services and hours."],
-    ["Do clients receive reminders?", "Yes, clients automatically receive a confirmation email when booking and a reminder 24 hours in advance."],
-    ["Can clients pay online?", "Online payment via iDEAL/Stripe is coming soon. Currently clients pay at arrival."],
-    ["How do clients cancel?", "Clients receive a cancellation link in their confirmation email. You choose whether they can cancel up to 24h or 48h in advance."],
+    ["Can my staff manage their own agenda?", "Yes! With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
+    ["Do clients receive reminders?", "Yes, automatically. Confirmation when booking, reminder 24 hours before, and a follow-up after the visit for a review."],
+    ["How do clients cancel?", "Via the cancellation link in their confirmation email. You decide the cancellation deadline."],
   ];
 
   return (
@@ -685,17 +689,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "80px 24px 60px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
           <div className="fade-up">
             <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 28 }}>
-              ✦ {lang === "nl" ? "Het #1 boekingsplatform voor beauty" : "The #1 booking platform for beauty"}
+              ✦ {lang === "nl" ? "Voor nail techs, lash artists, kappers & meer" : "For nail techs, lash artists, hairdressers & more"}
             </div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(44px, 9vw, 72px)", fontWeight: 300, letterSpacing: "0.06em", lineHeight: 1.05, marginBottom: 24 }}>
-              {lang === "nl" ? "Jouw salon," : "Your salon,"}
+              {lang === "nl" ? "Jouw salon." : "Your salon."}
               <br />
-              <span style={{ color: ACCENT }}>{lang === "nl" ? "altijd geboekt" : "always booked"}</span>
+              <span style={{ color: ACCENT }}>{lang === "nl" ? "Jouw merk. Jouw klanten." : "Your brand. Your clients."}</span>
             </h1>
             <p style={{ fontSize: "clamp(14px, 2vw, 17px)", color: c.textSub, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 40px", letterSpacing: "0.01em" }}>
               {lang === "nl" 
-                ? "Online boekingen, team management, automatische emails en meer. Alles wat je salon nodig heeft, in één platform." 
-                : "Online bookings, team management, automatic emails and more. Everything your salon needs, in one platform."}
+                ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie. Klaar in 2 minuten." 
+                : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes."}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => window.location.href = "/owner"}>
@@ -712,9 +716,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "20px 24px 60px", position: "relative", zIndex: 10 }}>
           <div style={{ display: "flex", justifyContent: "center", gap: 40, flexWrap: "wrap", opacity: 0.6 }}>
             {[
-              { num: "500+", nl: "Boekingen", en: "Bookings" },
+              { num: "0%", nl: "Commissie", en: "Commission" },
               { num: "24/7", nl: "Online beschikbaar", en: "Available online" },
-              { num: "< 2 min", nl: "Account opzetten", en: "Setup time" },
+              { num: "€19", nl: "Vast per maand", en: "Fixed per month" },
             ].map((s, i) => (
               <div key={i} style={{ textAlign: "center" }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: ACCENT }}>{s.num}</div>
@@ -752,9 +756,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
               {[
-                { num: "01", icon: "✦", nl: ["Maak je pagina", "Account aanmaken, behandelingen toevoegen, team instellen. Klaar in 2 minuten."], en: ["Create your page", "Create account, add treatments, set up your team. Ready in 2 minutes."] },
-                { num: "02", icon: "◎", nl: ["Deel je link", "Zet vellu.cc/jouw-salon op je Instagram bio, WhatsApp status of visitekaartje."], en: ["Share your link", "Put vellu.cc/your-salon on your Instagram bio, WhatsApp status or business card."] },
-                { num: "03", icon: "◈", nl: ["Ontvang boekingen", "Klanten boeken 24/7. Je krijgt bevestigingen, herinneringen worden automatisch verstuurd."], en: ["Receive bookings", "Clients book 24/7. You get confirmations, reminders are sent automatically."] }
+                { num: "01", icon: "✦", nl: ["Maak je pagina", "Voeg je behandelingen toe, stel je team in, kies je kleuren. Je eigen link: vellu.cc/jouw-naam."], en: ["Create your page", "Add your treatments, set up your team, choose your colors. Your own link: vellu.cc/your-name."] },
+                { num: "02", icon: "◎", nl: ["Deel je link", "Zet je link in je Instagram bio, WhatsApp status of visitekaartje. Klanten boeken direct, zonder tussenpartij."], en: ["Share your link", "Put your link in your Instagram bio, WhatsApp status or business card. Clients book directly, no middleman."] },
+                { num: "03", icon: "◈", nl: ["Ontvang boekingen", "Automatische bevestigingen, 24u herinneringen en follow-up emails. Jij focust op je vak, Vellu regelt de rest."], en: ["Receive bookings", "Automatic confirmations, 24h reminders and follow-up emails. You focus on your craft, Vellu handles the rest."] }
               ].map((item, i) => (
                 <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${ACCENT}12` }}>{item.num}</div>
@@ -782,10 +786,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               {[
-                { icon: "📅", nl: "Online boekingen", en: "Online bookings", sub: { nl: "Klanten boeken 24/7 via je eigen link", en: "Clients book 24/7 via your own link" } },
-                { icon: "👥", nl: "Team accounts", en: "Team accounts", sub: { nl: "Elke medewerker een eigen login en agenda", en: "Each staff member gets their own login" } },
+                { icon: "📅", nl: "Eigen boekingspagina", en: "Your own booking page", sub: { nl: "vellu.cc/jouw-naam — jouw merk, jouw link", en: "vellu.cc/your-name — your brand, your link" } },
+                { icon: "👥", nl: "Team accounts", en: "Team accounts", sub: { nl: "Elke medewerker een eigen login, agenda en diensten", en: "Each staff member gets their own login, schedule and services" } },
                 { icon: "📧", nl: "Automatische emails", en: "Automatic emails", sub: { nl: "Bevestigingen, herinneringen en follow-ups", en: "Confirmations, reminders and follow-ups" } },
-                { icon: "📊", nl: "Analytics", en: "Analytics", sub: { nl: "Inzicht in omzet, boekingen en klanten", en: "Insights on revenue, bookings and clients" } },
+                { icon: "📊", nl: "0% commissie", en: "0% commission", sub: { nl: "Vast maandtarief. Geen verborgen kosten, geen commissie per boeking", en: "Fixed monthly price. No hidden fees, no commission per booking" } },
                 { icon: "⭐", nl: "Reviews", en: "Reviews", sub: { nl: "Automatisch reviews verzamelen na bezoek", en: "Automatically collect reviews after visits" } },
                 { icon: "🎨", nl: "Eigen branding", en: "Custom branding", sub: { nl: "Jouw logo, kleuren en stijl", en: "Your logo, colors and style" } },
                 { icon: "📸", nl: "Portfolio", en: "Portfolio", sub: { nl: "Foto's per behandeling tonen", en: "Show photos per treatment" } },
@@ -806,7 +810,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Transparante prijzen" : "Transparent pricing"}
+                {lang === "nl" ? "Simpele, eerlijke prijzen" : "Simple, honest pricing"}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
@@ -875,10 +879,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "60px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: 500, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
-              {lang === "nl" ? "Klaar om te groeien?" : "Ready to grow?"}
+              {lang === "nl" ? "Begin vandaag met je eigen boekingspagina" : "Start your own booking page today"}
             </div>
             <p style={{ fontSize: 14, color: c.textLabel, marginBottom: 28, lineHeight: 1.6 }}>
-              {lang === "nl" ? "Zet je boekingspagina op in 2 minuten. Geen creditcard nodig." : "Set up your booking page in 2 minutes. No credit card needed."}
+              {lang === "nl" ? "Klaar in 2 minuten. Geen commissie. Geen gedoe." : "Ready in 2 minutes. No commission. No hassle."}
             </p>
             <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => window.location.href = "/owner"}>
               {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
