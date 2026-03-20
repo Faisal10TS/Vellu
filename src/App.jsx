@@ -258,6 +258,14 @@ const T = {
     // Staff availability
     staffAvailability:"Beschikbaarheid", staffDays:"Werkdagen",
     staffAvailabilityDesc:"Stel per medewerker in op welke dagen ze werken",
+    // Team accounts
+    accountType:"Account type", jointAccount:"Gedeeld account", teamAccount:"Team account",
+    jointDesc:"Eén login voor de hele salon", teamDesc:"Elke medewerker heeft een eigen login",
+    inviteStaff:"Uitnodigen", inviteStaffDesc:"Maak een login aan voor deze medewerker",
+    staffEmail:"E-mail medewerker", staffPassword:"Wachtwoord", inviteSent:"Login aangemaakt!",
+    emailTaken:"Dit e-mailadres is al in gebruik", staffLoginInfo:"Logt in op vellu.cc/owner",
+    myAgenda:"Mijn agenda", mySettings:"Mijn instellingen", myWorkingHours:"Mijn werktijden",
+    myServices:"Mijn diensten", staffWelcome:"Welkom", noAccessPage:"Je hebt geen toegang tot deze pagina",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -416,6 +424,14 @@ const T = {
     // Staff availability
     staffAvailability:"Availability", staffDays:"Working days",
     staffAvailabilityDesc:"Set working days per staff member",
+    // Team accounts
+    accountType:"Account type", jointAccount:"Joint account", teamAccount:"Team account",
+    jointDesc:"One login for the entire salon", teamDesc:"Each staff member has their own login",
+    inviteStaff:"Invite", inviteStaffDesc:"Create a login for this staff member",
+    staffEmail:"Staff email", staffPassword:"Password", inviteSent:"Login created!",
+    emailTaken:"This email is already in use", staffLoginInfo:"Logs in at vellu.cc/owner",
+    myAgenda:"My agenda", mySettings:"My settings", myWorkingHours:"My working hours",
+    myServices:"My services", staffWelcome:"Welcome", noAccessPage:"You don't have access to this page",
   }
 };
 
@@ -871,7 +887,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const { colors: c } = useTheme();
   const t = T[lang];
   const [mode, setMode] = useState("signin");
-  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "" });
+  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", accountType: "joint" });
   const [error, setError] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -903,16 +919,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         business_name: form.businessName,
         slug: slug,
         city: form.city || "Nederland",
-        accent_color: "#c9a96e"
+        accent_color: "#c9a96e",
+        account_type: form.accountType || "joint"
       });
-      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null });
+      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(lang === "nl" ? "Verkeerd e-mail of wachtwoord" : "Incorrect email or password"); setLoading(false); return; }
       // Load profile
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
       const slug = profile?.slug || data.user.email.split("@")[0];
-      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null });
+      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, account_type: profile?.account_type || "joint" });
     }
     setLoading(false);
   };
@@ -987,6 +1004,23 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 17, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textLabel, fontFamily: "'Jost',sans-serif", pointerEvents: "none" }}>vellu.cc/</div>
                   <input className="input-field" placeholder={lang === "nl" ? "jouw-salon-naam" : "your-salon-name"} value={form.slug} onChange={e => setForm(f => ({...f, slug: e.target.value.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}))} style={{ paddingLeft: 85 }} />
+                </div>
+                {/* Account type */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.accountType}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {[["joint", "👤", t.jointAccount, t.jointDesc], ["team", "👥", t.teamAccount, t.teamDesc]].map(([type, icon, label, desc]) => (
+                      <div key={type} onClick={() => setForm(f => ({...f, accountType: type}))} style={{
+                        flex: 1, padding: "14px 12px", borderRadius: 14, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
+                        background: form.accountType === type ? `${ACCENT}12` : c.inputBg,
+                        border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`
+                      }}>
+                        <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? ACCENT : c.text }}>{label}</div>
+                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 3, lineHeight: 1.3 }}>{desc}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>}
               <input className="input-field" placeholder={t.emailField} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
@@ -2876,7 +2910,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
       booking_policy: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
-      locations: [], day_overrides: {}
+      locations: [], day_overrides: {}, account_type: user.account_type || "joint"
     };
   });
   const [saved, setSaved] = useState(false);
@@ -2939,6 +2973,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           cover_image_url: data.cover_image_url || "",
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
+          account_type: data.account_type || "joint",
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -3890,6 +3925,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {/* Staff / Team */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.staff}</SL>
+                {/* Account type toggle */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                  {[["joint", "👤", t.jointAccount], ["team", "👥", t.teamAccount]].map(([type, icon, label]) => (
+                    <div key={type} onClick={() => update(d => { d.account_type = type; return d; })} style={{
+                      flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
+                      background: salonData.account_type === type ? `${accent}12` : "transparent",
+                      border: `1px solid ${salonData.account_type === type ? accent : c.inputBorder}`
+                    }}>
+                      <span style={{ fontSize: 14 }}>{icon}</span>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: salonData.account_type === type ? accent : c.textSub, marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
                 {(salonData.staff || []).length === 0 && (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
@@ -3987,6 +4035,40 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           );
                         })}
                         <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg/alles aan = volgt salon openingstijden" : "Empty/all on = follows salon hours"}</div>
+                        
+                        {/* Invite staff (team accounts only) */}
+                        {salonData.account_type === "team" && !m.user_id && (
+                          <div style={{ marginTop: 12, padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}>🔑 {t.inviteStaffDesc}</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <input className="input-field" placeholder={t.staffEmail} type="email" id={`staff-email-${m.id}`} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <input className="input-field" placeholder={t.staffPassword} type="text" id={`staff-pass-${m.id}`} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <button className="btn-ghost" style={{ fontSize: 10, color: accent, borderColor: `${accent}44` }}
+                                onClick={async () => {
+                                  const emailEl = document.getElementById(`staff-email-${m.id}`);
+                                  const passEl = document.getElementById(`staff-pass-${m.id}`);
+                                  const staffEmail = emailEl?.value;
+                                  const staffPass = passEl?.value;
+                                  if (!staffEmail || !staffPass || staffPass.length < 6) return;
+                                  const res = await fetch(`https://pqvovkwqkapmpibktpwb.supabase.co/functions/v1/create-staff-account`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ staff_id: m.id, email: staffEmail, password: staffPass, owner_id: salonData.owner_id })
+                                  });
+                                  const result = await res.json();
+                                  if (result.success) {
+                                    update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, user_id: result.user_id, email: staffEmail} : s); return d; });
+                                    alert(t.inviteSent + "\n" + staffEmail + " → " + t.staffLoginInfo);
+                                  } else {
+                                    alert(result.error === "email_taken" ? t.emailTaken : (result.error || "Error"));
+                                  }
+                                }}>{t.inviteStaff}</button>
+                            </div>
+                          </div>
+                        )}
+                        {salonData.account_type === "team" && m.user_id && (
+                          <div style={{ marginTop: 8, fontSize: 10, color: "#86efac" }}>✓ {m.email || t.staffLoginInfo}</div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -4394,7 +4476,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
                   discount_codes: salonData.discount_codes || [],
-                  day_overrides: salonData.day_overrides || {}
+                  day_overrides: salonData.day_overrides || {},
+                  account_type: salonData.account_type || "joint"
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
@@ -4631,11 +4714,267 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   );
 }
 
+// ─── STAFF APP (team member view) ─────────────────────────────
+function StaffApp({ staffUser, lang, setLang, onLogout }) {
+  const { colors: c } = useTheme();
+  const t = T[lang];
+  const DAY = lang === "nl" ? DAY_NL : DAY_EN;
+  const { staffMember, profile: salonProfile } = staffUser;
+  const accent = salonProfile.accent_color || ACCENT;
+
+  const [view, setView] = useState("dashboard");
+  const [calDate, setCalDate] = useState(fmt(getToday()));
+  const [appointments, setAppointments] = useState([]);
+  const [services, setServices] = useState([]);
+  const [myStaff, setMyStaff] = useState(staffMember);
+  const [saved, setSaved] = useState(false);
+  const [editingWH, setEditingWH] = useState(false);
+  const [whForm, setWhForm] = useState(staffMember.working_hours || {});
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
+  // Load data
+  useEffect(() => {
+    const load = async () => {
+      const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).order("date", { ascending: false });
+      setAppointments(appts || []);
+      const { data: svcs } = await supabase.from("services").select("*, service_variants(*), service_extras(*)").eq("owner_id", salonProfile.id);
+      const mySvcIds = staffMember.service_ids || [];
+      const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
+      setServices(filtered.map(s => ({
+        ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
+        variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+        extras: s.service_extras || []
+      })));
+    };
+    load();
+  }, []);
+
+  const activeAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
+  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
+  const calAppts = appointments.filter(a => a.status !== "cancelled" && a.date === calDate);
+  const days = getDays();
+
+  const markComplete = async (id) => {
+    await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+    setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+  };
+  const markNoShow = async (id) => {
+    await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+    setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+  };
+  const saveWorkingHours = async () => {
+    await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
+    setMyStaff(s => ({...s, working_hours: whForm}));
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  const ApptCard = ({ a }) => (
+    <div className="appt-card" style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
+          <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.time} · {a.service_name}</div>
+          <div style={{ fontSize: 10, color: c.textMuted }}>{a.client_email}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status}</span>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+        </div>
+      </div>
+      {a.status === "confirmed" && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px" }} onClick={() => markComplete(a.id)}>✓ {lang === "nl" ? "Voltooid" : "Complete"}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}>✕ No-show</button>
+        </div>
+      )}
+    </div>
+  );
+
+  const navItems = [
+    ["dashboard", "◆", t.dashboard],
+    ["agenda", "◎", t.agenda],
+    ["instellingen", "◯", t.settings]
+  ];
+
+  return (
+    <Layout>
+      <style>{makeCSS(accent, c)}</style>
+      <div style={{ display: "flex", minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+        {/* Desktop sidebar */}
+        {!isMobile && (
+          <div style={{ width: 220, padding: "30px 20px", borderRight: "1px solid " + c.border, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, background: c.bg, zIndex: 50 }}>
+            <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 24 }}>{salonProfile.business_name}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: accent, marginBottom: 20 }}>👤 {myStaff.name}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+              {navItems.map(([k, icon, label]) => (
+                <div key={k} className="nav-item" onClick={() => setView(k)} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12,
+                  background: view === k ? `${accent}12` : "transparent",
+                  border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
+                  cursor: "pointer", transition: "all 0.2s"
+                }}>
+                  <span style={{ fontSize: 18, color: view === k ? accent : c.textLabel }}>{icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: view === k ? 600 : 400, color: view === k ? accent : c.textSub }}>{label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8, paddingTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ThemeToggle /><LangToggle lang={lang} setLang={setLang} />
+              </div>
+              <button className="btn-ghost" style={{ width: "100%", fontSize: 11 }} onClick={onLogout}>{t.logout}</button>
+            </div>
+          </div>
+        )}
+
+        {/* Main content */}
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 220, padding: isMobile ? "16px 18px 100px" : "30px 40px", maxWidth: isMobile ? "100%" : 800 }}>
+          {!isMobile && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
+              <div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : t.settings}</div>
+                <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name} 👋</div>
+              </div>
+            </div>
+          )}
+
+          {/* DASHBOARD */}
+          {view === "dashboard" && (
+            <div className="fade-up">
+              {isMobile && <PTitle sub={`${t.staffWelcome}, ${myStaff.name} 👋`}>{t.dashboard}</PTitle>}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.today}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: accent, marginTop: 4 }}>{todayAppts.length}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "afspraken" : "appointments"}</div>
+                </div>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalEarnings}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: accent, marginTop: 4 }}>€{appointments.filter(a => a.status === "completed").reduce((s,a) => s + parseFloat(a.service_price||0), 0).toFixed(0)}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "totaal" : "total"}</div>
+                </div>
+              </div>
+              <SL>{t.todayAppts}</SL>
+              {todayAppts.length === 0
+                ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
+                : todayAppts.map(a => <ApptCard key={a.id} a={a} />)
+              }
+            </div>
+          )}
+
+          {/* AGENDA */}
+          {view === "agenda" && (
+            <div className="fade-up">
+              {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                {days.slice(0,10).map((d, i) => {
+                  const ds = fmt(d); const isSel = calDate === ds;
+                  const has = appointments.filter(a => a.status !== "cancelled" && a.date === ds).length > 0;
+                  return (
+                    <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)}>
+                      <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
+                      {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
+                    </div>
+                  );
+                })}
+              </div>
+              {calAppts.length === 0
+                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
+                : calAppts.map(a => <ApptCard key={a.id} a={a} />)
+              }
+            </div>
+          )}
+
+          {/* SETTINGS */}
+          {view === "instellingen" && (
+            <div className="fade-up">
+              {isMobile && <PTitle sub={t.mySettings}>{t.settings}</PTitle>}
+              
+              {/* Working hours */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
+                <SL>{t.myWorkingHours}</SL>
+                {[0,1,2,3,4,5,6].map(day => {
+                  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                  const staffDay = whForm[day];
+                  const isOn = staffDay ? !staffDay.closed : true;
+                  const openTime = staffDay?.open || "09:00";
+                  const closeTime = staffDay?.close || "17:30";
+                  return (
+                    <div key={day} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "4px 0" }}>
+                      <div style={{ width: 28, fontSize: 10, fontWeight: 500, color: c.textSub, flexShrink: 0 }}>{DAY_FULL[day].slice(0,2)}</div>
+                      <div onClick={() => {
+                        setWhForm(wh => {
+                          const next = {...wh};
+                          if (isOn) next[day] = { closed: true };
+                          else next[day] = { closed: false, open: openTime, close: closeTime };
+                          return next;
+                        });
+                      }} style={{ width: 28, height: 16, borderRadius: 8, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: 2, left: isOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                      </div>
+                      {isOn ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                            {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                          </select>
+                          <span style={{ fontSize: 9, color: c.textMuted }}>—</span>
+                          <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                            {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? "✓" : t.saveChanges}</button>
+              </div>
+
+              {/* My services (read-only info) */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                <SL>{t.myServices}</SL>
+                {services.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noServices}</div>}
+                {services.map(s => (
+                  <div key={s.id} style={{ padding: "8px 0", borderBottom: "1px solid " + c.border }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel }}>€{s.price} · {s.duration} {t.min}</div>
+                    {(s.variants || []).map(v => (
+                      <div key={v.id} style={{ fontSize: 10, color: c.textMuted, marginLeft: 12, marginTop: 2 }}>└ {v.name_nl} — €{v.price} · {v.duration} min</div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 16, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile bottom nav */}
+        {isMobile && (
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.navBg, backdropFilter: "blur(24px)", borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
+            {navItems.map(([k, icon, label]) => (
+              <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
+                <span style={{ fontSize: 18, color: view === k ? accent : c.textMuted, transition: "color 0.2s" }}>{icon}</span>
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
 // ─── OWNER ENTRY PAGE (vellu.cc/owner) ───────────────────────
 function OwnerEntryPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
   const [owner, setOwner] = useState(null);
+  const [staffUser, setStaffUser] = useState(null); // { staffMember, salonData }
   const [loading, setLoading] = useState(true);
 
   // Check for existing session on mount
@@ -4643,6 +4982,7 @@ function OwnerEntryPage({ lang, setLang }) {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        // Check if user is an owner (has a profile)
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
         if (profile) {
           setOwner({
@@ -4653,8 +4993,19 @@ function OwnerEntryPage({ lang, setLang }) {
             id: session.user.id,
             accent: profile.accent_color,
             plan: profile.plan || null,
-            plan_expires_at: profile.plan_expires_at || null
+            plan_expires_at: profile.plan_expires_at || null,
+            account_type: profile.account_type || "joint"
           });
+        } else {
+          // Check if user is a staff member
+          const { data: staffMember } = await supabase.from("staff_members").select("*, profiles(*)").eq("user_id", session.user.id).single();
+          if (staffMember && staffMember.profiles) {
+            setStaffUser({ 
+              staffMember, 
+              profile: staffMember.profiles,
+              email: session.user.email 
+            });
+          }
         }
       }
       setLoading(false);
@@ -4662,11 +5013,26 @@ function OwnerEntryPage({ lang, setLang }) {
     checkSession();
   }, []);
 
-  const handleLogin = (u) => setOwner(u);
+  const handleLogin = async (u) => {
+    // After login, check if this is a staff member
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+      if (!profile) {
+        const { data: staffMember } = await supabase.from("staff_members").select("*, profiles(*)").eq("user_id", session.user.id).single();
+        if (staffMember && staffMember.profiles) {
+          setStaffUser({ staffMember, profile: staffMember.profiles, email: session.user.email });
+          return;
+        }
+      }
+    }
+    setOwner(u);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setOwner(null);
+    setStaffUser(null);
   };
 
   if (loading) return (
@@ -4674,6 +5040,11 @@ function OwnerEntryPage({ lang, setLang }) {
       vellu...
     </div>
   );
+
+  // Staff member view
+  if (staffUser) {
+    return <StaffApp staffUser={staffUser} lang={lang} setLang={setLang} onLogout={handleLogout} />;
+  }
 
   // Check if plan is active
   const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());

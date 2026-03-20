@@ -1,0 +1,90 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  try {
+    const { staff_id, email, password, owner_id } = await req.json();
+
+    if (!staff_id || !email || !password || !owner_id) {
+      return new Response(JSON.stringify({ error: "Missing required fields" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Create admin client with service role key
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Verify the owner exists and has a team account
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("account_type")
+      .eq("id", owner_id)
+      .single();
+
+    if (!profile || profile.account_type !== "team") {
+      return new Response(JSON.stringify({ error: "Not a team account" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check if email is already in use
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    const emailExists = existingUsers?.users?.some(u => u.email === email.toLowerCase());
+    if (emailExists) {
+      return new Response(JSON.stringify({ error: "email_taken" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Create auth user for staff member
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: email.toLowerCase(),
+      password: password,
+      email_confirm: true, // Auto-confirm so they can login immediately
+    });
+
+    if (createError) {
+      return new Response(JSON.stringify({ error: createError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Link the auth user to the staff member
+    const { error: updateError } = await supabaseAdmin
+      .from("staff_members")
+      .update({ user_id: newUser.user.id, email: email.toLowerCase() })
+      .eq("id", staff_id)
+      .eq("owner_id", owner_id);
+
+    if (updateError) {
+      return new Response(JSON.stringify({ error: updateError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
