@@ -4769,6 +4769,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
+  const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
+  const [svcError, setSvcError] = useState("");
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   // Load data
@@ -5015,7 +5017,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? "✓" : t.saveChanges}</button>
               </div>
 
-              {/* My services (editable) */}
+              {/* My services (full editing) */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
                 <SL>{t.myServices}</SL>
                 {services.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noServices}</div>}
@@ -5049,38 +5051,65 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         )}
                       </div>
                       {editingSvc !== s.id && (
-                        <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33`, flexShrink: 0 }}
-                          onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
+                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
+                            onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
+                          <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                            onClick={async () => { if (!confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) return; await supabase.from("services").delete().eq("id", s.id); setServices(svcs => svcs.filter(sv => sv.id !== s.id)); }}>✕</button>
+                        </div>
                       )}
                     </div>
 
                     {/* Variants */}
-                    {(s.variants || []).map(v => (
-                      <div key={v.id} style={{ marginLeft: 12, marginTop: 4, fontSize: 10 }}>
-                        {editingVar === v.id ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
-                              <input className="input-field" value={editVarForm.name_nl} onChange={e => setEditVarForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} />
-                              <input className="input-field" type="number" value={editVarForm.price} onChange={e => setEditVarForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} placeholder="€" />
+                    <div style={{ marginTop: 6, marginLeft: 10, paddingLeft: 8, borderLeft: `2px solid ${accent}22` }}>
+                      {(s.variants || []).map(v => (
+                        <div key={v.id} style={{ marginBottom: 3, fontSize: 10 }}>
+                          {editingVar === v.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
+                                <input className="input-field" value={editVarForm.name_nl} onChange={e => setEditVarForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} />
+                                <input className="input-field" type="number" value={editVarForm.price} onChange={e => setEditVarForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} placeholder="€" />
+                              </div>
+                              <div style={{ display: "flex", gap: 3 }}>
+                                <button className="btn-ghost" style={{ flex: 1, fontSize: 8, padding: "3px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                                  await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration) }).eq("id", v.id);
+                                  setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, ...editVarForm, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration)} : vr)} : sv));
+                                  setEditingVar(null);
+                                }}>✓</button>
+                                <button className="btn-ghost" style={{ fontSize: 8, padding: "3px 6px" }} onClick={() => setEditingVar(null)}>✕</button>
+                              </div>
                             </div>
-                            <div style={{ display: "flex", gap: 3 }}>
-                              <button className="btn-ghost" style={{ flex: 1, fontSize: 8, padding: "3px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
-                                await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration) }).eq("id", v.id);
-                                setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, ...editVarForm, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration)} : vr)} : sv));
-                                setEditingVar(null);
-                              }}>✓</button>
-                              <button className="btn-ghost" style={{ fontSize: 8, padding: "3px 6px" }} onClick={() => setEditingVar(null)}>✕</button>
+                          ) : (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ color: c.textMuted }}>{v.name_nl} — €{v.price} · {v.duration} min</span>
+                              <div style={{ display: "flex", gap: 3 }}>
+                                <button className="btn-ghost" style={{ fontSize: 8, padding: "2px 6px", color: accent, borderColor: `${accent}33` }}
+                                  onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}>✎</button>
+                                <button className="btn-ghost" style={{ fontSize: 8, padding: "2px 6px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                                  onClick={async () => { await supabase.from("service_variants").delete().eq("id", v.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}>×</button>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ color: c.textMuted }}>└ {v.name_nl} — €{v.price} · {v.duration} min</span>
-                            <button className="btn-ghost" style={{ fontSize: 8, padding: "2px 6px", color: accent, borderColor: `${accent}33` }}
-                              onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}>✎</button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      ))}
+                      <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                        setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: [...(sv.variants||[]), variant]} : sv));
+                      }} />
+                    </div>
+
+                    {/* Extras */}
+                    <div style={{ marginTop: 4, marginLeft: 10, paddingLeft: 8, borderLeft: `2px solid ${accent}22` }}>
+                      {(s.extras || []).map(e => (
+                        <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2, fontSize: 10 }}>
+                          <span style={{ color: c.textMuted }}>{e.name_nl} +€{e.price}</span>
+                          <button className="btn-ghost" style={{ fontSize: 8, padding: "2px 6px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                            onClick={async () => { await supabase.from("service_extras").delete().eq("id", e.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}>×</button>
+                        </div>
+                      ))}
+                      <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                        setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: [...(sv.extras||[]), extra]} : sv));
+                      }} />
+                    </div>
 
                     {/* Photos */}
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
@@ -5098,6 +5127,31 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </div>
                 ))}
+
+                {/* Add new service */}
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>{lang === "nl" ? "Nieuwe dienst" : "New service"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <input className="input-field" placeholder={lang === "nl" ? "Dienst naam (NL)" : "Service name (NL)"} value={newSvc.name_nl} onChange={e => setNewSvc(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                    <input className="input-field" placeholder={lang === "nl" ? "Dienst naam (EN)" : "Service name (EN)"} value={newSvc.name_en} onChange={e => setNewSvc(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                    <input className="input-field" placeholder={`${lang === "nl" ? "Prijs" : "Price"} (€)`} type="number" value={newSvc.price} onChange={e => setNewSvc(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                    <input className="input-field" placeholder={`${lang === "nl" ? "Duur" : "Duration"} (min)`} type="number" value={newSvc.duration} onChange={e => setNewSvc(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                  </div>
+                  {svcError && <div style={{ fontSize: 10, color: "#f87171", marginTop: 4 }}>{svcError}</div>}
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                    onClick={async () => {
+                      if (!newSvc.name_nl || !newSvc.price) { setSvcError(lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"); return; }
+                      setSvcError("");
+                      const { data, error } = await supabase.from("services").insert({
+                        owner_id: salonProfile.id, name: newSvc.name_nl, name_nl: newSvc.name_nl,
+                        name_en: newSvc.name_en || null, price: parseFloat(newSvc.price), duration: parseInt(newSvc.duration)
+                      }).select().single();
+                      if (!error && data) {
+                        setServices(svcs => [...svcs, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || "", variants: [], extras: [], photos: [] }]);
+                        setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" });
+                      }
+                    }}>+ {lang === "nl" ? "Behandeling toevoegen" : "Add service"}</button>
+                </div>
               </div>
 
               <button className="btn-ghost" style={{ width: "100%", marginTop: 16, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
