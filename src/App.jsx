@@ -242,6 +242,22 @@ const T = {
     selectLocation:"Kies een locatie", selectLocationSub:"Bij welke vestiging wil je boeken?",
     mainLocation:"Hoofdvestiging", noLocations:"Nog geen locaties",
     allLocations:"Alle locaties", filterByLocation:"Filter op locatie",
+    // Edit & manual appointments
+    edit:"Bewerken", editService:"Dienst bewerken", editStaff:"Medewerker bewerken", editLocation:"Locatie bewerken",
+    saveChanges:"Wijzigingen opslaan", cancelEdit:"Annuleren",
+    addAppointment:"+ Afspraak toevoegen", addAppointmentDesc:"Voeg handmatig een afspraak toe",
+    selectServiceFor:"Kies een dienst", selectDateFor:"Kies datum en tijd", clientDetails:"Klantgegevens",
+    appointmentAdded:"Afspraak toegevoegd! Bevestiging verstuurd.",
+    // Exception days & vacation
+    exceptionDays:"Uitzonderingsdagen", addException:"+ Uitzonderingsdag",
+    exceptionDesc:"Eenmalig open op een dag die normaal dicht is",
+    blockedDays:"Geblokkeerde dagen", addBlocked:"+ Dag blokkeren",
+    blockedDesc:"Blokkeer dagen (bijv. vakantie) zonder je vaste dagen te wijzigen",
+    blockedReason:"Reden (optioneel)", vacation:"Vakantie", blocked:"Geblokkeerd",
+    dateFrom:"Van", dateTo:"Tot",
+    // Staff availability
+    staffAvailability:"Beschikbaarheid", staffDays:"Werkdagen",
+    staffAvailabilityDesc:"Stel per medewerker in op welke dagen ze werken",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -384,6 +400,22 @@ const T = {
     selectLocation:"Choose a location", selectLocationSub:"Which location would you like to visit?",
     mainLocation:"Main location", noLocations:"No locations yet",
     allLocations:"All locations", filterByLocation:"Filter by location",
+    // Edit & manual appointments
+    edit:"Edit", editService:"Edit service", editStaff:"Edit staff member", editLocation:"Edit location",
+    saveChanges:"Save changes", cancelEdit:"Cancel",
+    addAppointment:"+ Add appointment", addAppointmentDesc:"Manually add an appointment",
+    selectServiceFor:"Choose a service", selectDateFor:"Choose date and time", clientDetails:"Client details",
+    appointmentAdded:"Appointment added! Confirmation sent.",
+    // Exception days & vacation
+    exceptionDays:"Exception days", addException:"+ Exception day",
+    exceptionDesc:"One-time open on a day that is normally closed",
+    blockedDays:"Blocked days", addBlocked:"+ Block day",
+    blockedDesc:"Block days (e.g. vacation) without changing your regular hours",
+    blockedReason:"Reason (optional)", vacation:"Vacation", blocked:"Blocked",
+    dateFrom:"From", dateTo:"To",
+    // Staff availability
+    staffAvailability:"Availability", staffDays:"Working days",
+    staffAvailabilityDesc:"Set working days per staff member",
   }
 };
 
@@ -1049,16 +1081,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const activeHours = (selectedLocation?.business_hours) || initialSalon.business_hours || DEFAULT_HOURS;
   const activeBreakMinutes = selectedLocation?.break_minutes ?? initialSalon.break_minutes ?? 0;
   
+  // Day override helpers (blocked/exception days)
+  const dayOverrides = initialSalon.day_overrides || {};
+  const isDayBlocked = (dateStr) => dayOverrides[dateStr]?.type === "blocked";
+  const isDayException = (dateStr) => dayOverrides[dateStr]?.type === "exception";
+  const getEffectiveHours = (dateStr) => {
+    if (isDayBlocked(dateStr)) return { closed: true };
+    if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
+    const dayOfWeek = new Date(dateStr).getDay();
+    return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+  };
+  
+  // Check if a staff member works on a given day
+  const isStaffAvailable = (staffMember, dateStr) => {
+    if (!staffMember?.working_hours) return true;
+    const dayOfWeek = new Date(dateStr).getDay();
+    const staffDay = staffMember.working_hours[dayOfWeek];
+    if (!staffDay) return true;
+    return !staffDay.closed;
+  };
+  
   // Find first available (non-closed) day
   const getFirstAvailableDate = () => {
     const now = getToday();
     for (let i = 0; i < 14; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
-      const dayOfWeek = d.getDay();
-      if (!activeHours[dayOfWeek]?.closed) {
-        return fmt(d);
-      }
+      const dateStr = fmt(d);
+      const hours = getEffectiveHours(dateStr);
+      if (!hours.closed) return dateStr;
     }
     return fmt(getToday()); // Fallback
   };
@@ -1088,7 +1139,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Multi-service helpers
   const getStaffForService = (serviceId) => {
     return (initialSalon.staff || []).filter(m =>
-      m.service_ids?.length === 0 || m.service_ids?.includes(serviceId)
+      (m.service_ids?.length === 0 || m.service_ids?.includes(serviceId)) &&
+      isStaffAvailable(m, date)
     );
   };
 
@@ -1245,6 +1297,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   // Check if a time slot overlaps with existing bookings (including break time)
   const breakBuffer = activeBreakMinutes;
+  
   const isTimeSlotBooked = (slotTime) => {
     const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
     const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
@@ -1738,8 +1791,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {days.slice(0,10).map((d, i) => {
                     const ds = fmt(d); 
                     const isSel = date === ds;
-                    const dayOfWeek = d.getDay();
-                    const dayHours = activeHours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                    const dayHours = getEffectiveHours(ds);
                     const isClosed = dayHours.closed;
                     return (
                       <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
@@ -1752,9 +1804,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
                 <SL>{t.selectTime}</SL>
                 {(() => {
-                  const selectedDate = new Date(date);
-                  const dayOfWeek = selectedDate.getDay();
-                  const dayHours = activeHours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                  const dayHours = getEffectiveHours(date);
                   const availableTimes = TIMES.filter(tt => {
                     if (dayHours.closed) return false;
                     if (tt < dayHours.open || tt >= dayHours.close) return false;
@@ -2225,8 +2275,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {days.slice(0,10).map((d, i) => {
                         const ds = fmt(d); 
                         const isSel = date === ds;
-                        const dayOfWeek = d.getDay();
-                        const dayHours = activeHours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                        const dayHours = getEffectiveHours(ds);
                         const isClosed = dayHours.closed;
                         return (
                           <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
@@ -2239,9 +2288,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <SL>{t.selectTime}</SL>
                     {(() => {
-                      const selectedDate = new Date(date);
-                      const dayOfWeek = selectedDate.getDay();
-                      const dayHours = activeHours?.[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+                      const dayHours = getEffectiveHours(date);
                       const availableTimes = TIMES.filter(tt => {
                         if (dayHours.closed) return false;
                         if (tt < dayHours.open || tt >= dayHours.close) return false;
@@ -2828,7 +2875,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
       booking_policy: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
-      locations: []
+      locations: [], day_overrides: {}
     };
   });
   const [saved, setSaved] = useState(false);
@@ -2838,6 +2885,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
+  // Edit states
+  const [editingService, setEditingService] = useState(null);
+  const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", working_hours: {} });
+  // Manual appointment
+  const [showAddAppt, setShowAddAppt] = useState(false);
+  const [addApptForm, setAddApptForm] = useState({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
+  const [addApptLoading, setAddApptLoading] = useState(false);
+  const [addApptDone, setAddApptDone] = useState(false);
+  // Exception/blocked days
+  const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30" });
+  const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "" });
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -2873,6 +2933,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           discount_codes: data.discount_codes || [],
+          day_overrides: data.day_overrides || {},
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -2885,7 +2946,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           })),
           appointments: appts || [],
           reviews: reviews || [],
-          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) })),
+          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
           categories: catData || [],
           locations: locData || []
         }));
@@ -3318,6 +3379,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               )}
 
+              {/* Add appointment manually */}
+              <button className="btn-ghost" style={{ width: "100%", marginBottom: 16, fontSize: 11, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); }}>
+                {t.addAppointment}
+              </button>
+
               <SL>{t.todayAppts}</SL>
               {todayAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
@@ -3631,11 +3698,37 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 {salonData.services.map(s => (
                   <div key={s.id} style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid " + c.border }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
-                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>€{s.price} · {s.duration} {t.min}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {editingService === s.id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                              <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="Naam (NL)" />
+                              <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="Name (EN)" />
+                              <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="€" />
+                              <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="min" />
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                                await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                                update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv); return d; });
+                                setEditingService(null);
+                              }}>✓ {t.saveChanges}</button>
+                              <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }} onClick={() => setEditingService(null)}>✕</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
+                            <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>€{s.price} · {s.duration} {t.min}</div>
+                          </>
+                        )}
                       </div>
-                      <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", flexShrink: 0 }} onClick={() => deleteService(s.id)}>{t.deleteService}</button>
+                      {editingService !== s.id && (
+                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => deleteService(s.id)}>✕</button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Variants */}
@@ -3717,21 +3810,74 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
                 {(salonData.staff || []).map(m => (
-                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
-                    <div>
+                  <div key={m.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: accent }}>{m.name[0]}</div>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{m.name}</div>
-                          {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                          {editingStaff === m.id ? (
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 100 }} />
+                              <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 120 }} placeholder={t.staffRole} />
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 13, fontWeight: 500 }}>{m.name}</div>
+                              {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                            </>
+                          )}
                         </div>
                       </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {editingStaff === m.id ? (
+                          <>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
+                              await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
+                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, working_hours: editStaffForm.working_hours} : s); return d; });
+                              setEditingStaff(null);
+                            }}>✓</button>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => setEditingStaff(null)}>✕</button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {} }); }}>✎</button>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
+                              await supabase.from("staff_members").delete().eq("id", m.id);
+                              update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
+                            }}>×</button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                      onClick={async () => {
-                        await supabase.from("staff_members").delete().eq("id", m.id);
-                        update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
-                      }}>×</button>
+                    {/* Per-staff working days */}
+                    {editingStaff === m.id && (
+                      <div style={{ marginTop: 8, marginLeft: 36 }}>
+                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.staffDays}</div>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {[0,1,2,3,4,5,6].map(day => {
+                            const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                            const isOn = !editStaffForm.working_hours?.[day]?.closed;
+                            const hasCustom = editStaffForm.working_hours && editStaffForm.working_hours[day] !== undefined;
+                            return (
+                              <div key={day} onClick={() => {
+                                setEditStaffForm(f => {
+                                  const wh = {...(f.working_hours || {})};
+                                  if (!hasCustom || isOn) wh[day] = { closed: true };
+                                  else wh[day] = { closed: false, open: "09:00", close: "17:30" };
+                                  return {...f, working_hours: wh};
+                                });
+                              }} style={{
+                                padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 500,
+                                background: isOn ? `${accent}18` : c.inputBg,
+                                border: `1px solid ${isOn ? accent : c.inputBorder}`,
+                                color: isOn ? accent : c.textMuted, transition: "all 0.2s"
+                              }}>{DAY_FULL[day].slice(0,2)}</div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Klik om dagen aan/uit te zetten. Leeg = volgt salon openingstijden" : "Click to toggle days. Empty = follows salon hours"}</div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
@@ -3746,16 +3892,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noLocations}</div>
                 )}
                 {(salonData.locations || []).map(loc => (
-                  <div key={loc.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{loc.name}</div>
-                      {loc.address && <div style={{ fontSize: 10, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                  <div key={loc.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{loc.name}</div>
+                        {loc.address && <div style={{ fontSize: 10, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
+                          onClick={() => {
+                            const newName = prompt(lang === "nl" ? "Locatienaam:" : "Location name:", loc.name);
+                            if (newName && newName !== loc.name) {
+                              const newAddr = prompt(lang === "nl" ? "Adres:" : "Address:", loc.address || "");
+                              supabase.from("locations").update({ name: newName, address: newAddr || null }).eq("id", loc.id);
+                              update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, name: newName, address: newAddr} : l); return d; });
+                            }
+                          }}>✎</button>
+                        <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                          onClick={async () => {
+                            await supabase.from("locations").delete().eq("id", loc.id);
+                            update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
+                          }}>×</button>
+                      </div>
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                      onClick={async () => {
-                        await supabase.from("locations").delete().eq("id", loc.id);
-                        update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
-                      }}>×</button>
                   </div>
                 ))}
                 <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
@@ -3885,6 +4044,87 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                     >{mins === 0 ? t.breakNone : `${mins} ${t.breakMin}`}</div>
                   ))}
                 </div>
+              </div>
+
+              {/* Exception Days */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.exceptionDays}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
+                {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "exception").map(([date, v]) => (
+                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 10, marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</div>
+                      <div style={{ fontSize: 10, color: c.textLabel }}>{v.open} — {v.close}</div>
+                    </div>
+                    <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                      onClick={() => update(d => { const o = {...(d.day_overrides || {})}; delete o[date]; d.day_overrides = o; return d; })}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
+                  <select value={newException.open} onChange={e => setNewException(f => ({...f, open: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
+                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                  </select>
+                  <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
+                  <select value={newException.close} onChange={e => setNewException(f => ({...f, close: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
+                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                  </select>
+                </div>
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                  onClick={() => {
+                    if (!newException.date) return;
+                    update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: { type: "exception", open: newException.open, close: newException.close }}; return d; });
+                    setNewException({ date: "", open: "09:00", close: "17:30" });
+                  }}>{t.addException}</button>
+              </div>
+
+              {/* Blocked Days */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.blockedDays}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
+                {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "blocked").map(([date, v]) => (
+                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 10, marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</div>
+                      {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
+                    </div>
+                    <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                      onClick={() => {
+                        update(d => {
+                          const o = {...(d.day_overrides || {})};
+                          // Remove all dates in range
+                          if (v.to) {
+                            let cur = new Date(date);
+                            const end = new Date(v.to);
+                            while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
+                          } else { delete o[date]; }
+                          d.day_overrides = o; return d;
+                        });
+                      }}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
+                  <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
+                  <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", flex: 2, minWidth: 120 }} />
+                </div>
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: "rgba(248,113,113,0.2)", color: "#f87171" }}
+                  onClick={() => {
+                    if (!newBlocked.from) return;
+                    const endDate = newBlocked.to || newBlocked.from;
+                    update(d => {
+                      const o = {...(d.day_overrides || {})};
+                      let cur = new Date(newBlocked.from);
+                      const end = new Date(endDate);
+                      const first = fmt(cur);
+                      while (cur <= end) {
+                        o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
+                        cur.setDate(cur.getDate() + 1);
+                      }
+                      d.day_overrides = o; return d;
+                    });
+                    setNewBlocked({ from: "", to: "", reason: "" });
+                  }}>{t.addBlocked}</button>
               </div>
 
               {/* Appearance Section */}
@@ -4042,7 +4282,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
-                  discount_codes: salonData.discount_codes || []
+                  discount_codes: salonData.discount_codes || [],
+                  day_overrides: salonData.day_overrides || {}
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
@@ -4076,6 +4317,105 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           </div>
         )}
         </main>
+
+        {/* Add Appointment Modal */}
+        {showAddAppt && (
+          <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowAddAppt(false)}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+              {!addApptDone ? (<>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📅</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300 }}>{t.addAppointment}</div>
+                  <div style={{ fontSize: 11, color: c.textSub, marginTop: 4 }}>{t.addAppointmentDesc}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <SL>{t.selectServiceFor}</SL>
+                    <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value}))} style={{ fontSize: 12 }}>
+                      <option value="" style={{ background: c.selectBg }}>—</option>
+                      {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
+                    </select>
+                  </div>
+                  {(salonData.staff || []).length > 0 && (
+                    <div>
+                      <SL>{t.selectStaff}</SL>
+                      <select className="input-field" value={addApptForm.staff_id} onChange={e => setAddApptForm(f => ({...f, staff_id: e.target.value}))} style={{ fontSize: 12 }}>
+                        <option value="" style={{ background: c.selectBg }}>{t.anyStaff}</option>
+                        {(salonData.staff || []).map(m => <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <SL>{t.selectDateFor}</SL>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input type="date" className="input-field" value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
+                      <select className="input-field" value={addApptForm.time} onChange={e => setAddApptForm(f => ({...f, time: e.target.value}))} style={{ fontSize: 12, flex: 1 }}>
+                        <option value="" style={{ background: c.selectBg }}>—</option>
+                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <SL>{t.clientDetails}</SL>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
+                      <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
+                      <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
+                  onClick={async () => {
+                    setAddApptLoading(true);
+                    const svc = salonData.services.find(s => s.id === addApptForm.service_id);
+                    const staffMember = (salonData.staff || []).find(m => m.id === addApptForm.staff_id);
+                    // Save client
+                    const email = addApptForm.client_email.toLowerCase();
+                    let clientId = null;
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).single();
+                    if (existing) { clientId = existing.id; }
+                    else {
+                      const nameParts = addApptForm.client_name.split(" ");
+                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0], last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      if (nc) clientId = nc.id;
+                    }
+                    // Insert appointment
+                    const apptData = {
+                      owner_id: salonData.owner_id, service_id: svc?.id, client_id: clientId,
+                      service_name: svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (staffMember ? ` (${staffMember.name})` : "") : addApptForm.client_name,
+                      service_price: svc?.price || 0, service_duration: svc?.duration || 60,
+                      date: addApptForm.date, time: addApptForm.time,
+                      client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
+                      payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
+                      staff_id: staffMember?.id || null, staff_name: staffMember?.name || null
+                    };
+                    const { data: appt } = await supabase.from("appointments").insert(apptData).select("*").single();
+                    if (appt) {
+                      update(d => { d.appointments = [appt, ...d.appointments]; return d; });
+                      // Send confirmation email
+                      await sendEmails("booking_confirmation", {
+                        client_name: addApptForm.client_name, client_email: email,
+                        service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
+                        payment: "on-arrival", price: svc?.price || 0,
+                        salon_name: salonData.name, owner_email: null
+                      });
+                    }
+                    setAddApptDone(true);
+                    setAddApptLoading(false);
+                  }}>
+                  {addApptLoading ? "..." : t.confirm}
+                </button>
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => setShowAddAppt(false)}>{t.cancelEdit}</button>
+              </>) : (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
+                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{lang === "nl" ? "Sluiten" : "Close"}</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Photo gallery overlay */}
         {gallery && (
@@ -4267,6 +4607,7 @@ function SalonRoute({ lang, setLang }) {
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
         discount_codes: data.discount_codes || [],
+        day_overrides: data.day_overrides || {},
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
@@ -4277,7 +4618,7 @@ function SalonRoute({ lang, setLang }) {
         })),
         appointments: [],
         reviews: reviews || [],
-        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id) })),
+        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
         categories: (categories || []).map(cat => ({ ...cat, name: lang === 'nl' ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name) })),
         locations: locData || []
       });

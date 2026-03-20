@@ -27,6 +27,14 @@ serve(async (req) => {
     const { type, booking } = await req.json();
 
     if (type === "booking_confirmation") {
+      // Cancel section (only if cancel_url provided)
+      const cancelSection = booking.cancel_url ? `
+        <div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;">
+          <p style="color:#666;font-size:13px;margin:0 0 12px;">Kun je niet komen? Annuleer tot 24 uur van tevoren:</p>
+          <a href="${booking.cancel_url}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">Afspraak annuleren</a>
+        </div>
+      ` : '';
+
       // 1. Email to client
       await sendEmail(
         booking.client_email,
@@ -48,33 +56,60 @@ serve(async (req) => {
               <tr style="border-top: 1px solid #e8e0d5;"><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e;">Totaal</td><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e; text-align: right;">€${booking.price}</td></tr>
             </table>
           </div>
+          ${cancelSection}
           <p style="color: #888; font-size: 13px; text-align: center;">Tot dan, ${booking.client_name}! 💅</p>
         </div>
         `
       );
 
       // 2. Notification to owner
+      if (booking.owner_email) {
+        await sendEmail(
+          booking.owner_email,
+          `Nieuwe boeking: ${booking.client_name}`,
+          `
+          <div style="font-family: Georgia, serif; max-width: 500px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a;">
+            <div style="text-align: center; margin-bottom: 32px;">
+              <h1 style="font-size: 32px; font-weight: 300; letter-spacing: 0.1em; margin: 0;">vellu</h1>
+              <div style="width: 40px; height: 1px; background: #c9a96e; margin: 12px auto;"></div>
+            </div>
+            <h2 style="font-weight: 400; font-size: 22px; margin-bottom: 8px;">Nieuwe boeking! 🎉</h2>
+            <p style="color: #666; margin-bottom: 28px;">Er is een nieuwe afspraak gemaakt bij <strong>${booking.salon_name}</strong></p>
+            <div style="background: #f9f7f4; border-radius: 12px; padding: 24px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Klant</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.client_name}</td></tr>
+                <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Email</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.client_email}</td></tr>
+                <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Behandeling</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.service_name}</td></tr>
+                <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Datum</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.date}</td></tr>
+                <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Tijd</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.time}</td></tr>
+                <tr style="border-top: 1px solid #e8e0d5;"><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e;">Totaal</td><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e; text-align: right;">€${booking.price}</td></tr>
+              </table>
+            </div>
+          </div>
+          `
+        );
+      }
+    }
+
+    if (type === "booking_cancelled") {
       await sendEmail(
-        booking.owner_email,
-        `Nieuwe boeking: ${booking.client_name}`,
+        booking.client_email,
+        `Afspraak geannuleerd`,
         `
         <div style="font-family: Georgia, serif; max-width: 500px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a;">
           <div style="text-align: center; margin-bottom: 32px;">
             <h1 style="font-size: 32px; font-weight: 300; letter-spacing: 0.1em; margin: 0;">vellu</h1>
             <div style="width: 40px; height: 1px; background: #c9a96e; margin: 12px auto;"></div>
           </div>
-          <h2 style="font-weight: 400; font-size: 22px; margin-bottom: 8px;">Nieuwe boeking! 🎉</h2>
-          <p style="color: #666; margin-bottom: 28px;">Er is een nieuwe afspraak gemaakt bij <strong>${booking.salon_name}</strong></p>
-          <div style="background: #f9f7f4; border-radius: 12px; padding: 24px;">
+          <h2 style="font-weight: 400; font-size: 22px; margin-bottom: 8px;">Afspraak geannuleerd</h2>
+          <p style="color: #666; margin-bottom: 28px;">Je afspraak is succesvol geannuleerd.</p>
+          <div style="background: #f9f7f4; border-radius: 12px; padding: 24px; margin-bottom: 28px;">
             <table style="width: 100%; border-collapse: collapse;">
-              <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Klant</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.client_name}</td></tr>
-              <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Email</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.client_email}</td></tr>
               <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Behandeling</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.service_name}</td></tr>
-              <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Datum</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.date}</td></tr>
-              <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Tijd</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.time}</td></tr>
-              <tr style="border-top: 1px solid #e8e0d5;"><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e;">Totaal</td><td style="padding: 12px 0 4px; font-weight: 600; color: #c9a96e; text-align: right;">€${booking.price}</td></tr>
+              <tr><td style="padding: 8px 0; color: #888; font-size: 13px;">Was gepland op</td><td style="padding: 8px 0; font-weight: 500; text-align: right;">${booking.date} om ${booking.time}</td></tr>
             </table>
           </div>
+          <p style="color: #888; font-size: 13px; text-align: center;">Wil je opnieuw boeken? Ga naar vellu.cc</p>
         </div>
         `
       );
