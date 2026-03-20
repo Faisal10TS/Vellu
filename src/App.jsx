@@ -540,16 +540,11 @@ function SL({ children }) {
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
-    <button 
-      onClick={toggle}
-      style={{ 
-        background: "transparent", border: "none", cursor: "pointer", 
-        fontSize: 18, padding: "4px 6px", lineHeight: 1, transition: "transform 0.2s"
-      }}
-      title={theme === "dark" ? "Light mode" : "Dark mode"}
-    >
-      {theme === "dark" ? "☀️" : "🌙"}
-    </button>
+    <div className="lang-toggle">
+      {[["light","☀"], ["dark","☾"]].map(([m, icon]) => (
+        <button key={m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ fontSize: 12, padding: "5px 9px" }}>{icon}</button>
+      ))}
+    </div>
   );
 }
 
