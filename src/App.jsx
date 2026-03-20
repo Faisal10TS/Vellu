@@ -2993,15 +2993,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const sendInvoice = async (id) => {
     const a = salonData.appointments.find(x => x.id === id);
     if (a) {
+      const invoiceNumber = `${salonData.invoice_prefix || "INV"}-${String(salonData.next_invoice_number || 1).padStart(4, "0")}`;
       await sendEmails("invoice", {
         client_name: a.client_name,
         client_email: a.client_email,
         service_name: a.service_name,
         date: a.date,
         price: a.service_price,
-        salon_name: salonData.name
+        salon_name: salonData.name,
+        invoice_number: invoiceNumber,
+        salon_address: salonData.address || "",
+        salon_kvk: salonData.kvk_number || "",
+        salon_btw: salonData.btw_id || "",
+        salon_iban: salonData.iban || ""
       });
       await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+      // Auto-increment invoice number
+      const nextNum = (salonData.next_invoice_number || 1) + 1;
+      await supabase.from("profiles").update({ next_invoice_number: nextNum }).eq("id", salonData.owner_id);
+      update(d => { d.next_invoice_number = nextNum; return d; });
     }
     update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
   };
@@ -3898,33 +3908,60 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         )}
                       </div>
                     </div>
-                    {/* Per-staff working days */}
+                    {/* Per-staff working days + times */}
                     {editingStaff === m.id && (
                       <div style={{ marginTop: 8, marginLeft: 36 }}>
                         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.staffDays}</div>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {[0,1,2,3,4,5,6].map(day => {
-                            const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
-                            const isOn = !editStaffForm.working_hours?.[day]?.closed;
-                            const hasCustom = editStaffForm.working_hours && editStaffForm.working_hours[day] !== undefined;
-                            return (
-                              <div key={day} onClick={() => {
-                                setEditStaffForm(f => {
-                                  const wh = {...(f.working_hours || {})};
-                                  if (!hasCustom || isOn) wh[day] = { closed: true };
-                                  else wh[day] = { closed: false, open: "09:00", close: "17:30" };
-                                  return {...f, working_hours: wh};
-                                });
-                              }} style={{
-                                padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 500,
-                                background: isOn ? `${accent}18` : c.inputBg,
-                                border: `1px solid ${isOn ? accent : c.inputBorder}`,
-                                color: isOn ? accent : c.textMuted, transition: "all 0.2s"
-                              }}>{DAY_FULL[day].slice(0,2)}</div>
-                            );
-                          })}
-                        </div>
-                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Klik om dagen aan/uit te zetten. Leeg = volgt salon openingstijden" : "Click to toggle days. Empty = follows salon hours"}</div>
+                        {[0,1,2,3,4,5,6].map(day => {
+                          const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                          const staffDay = editStaffForm.working_hours?.[day];
+                          const isOn = staffDay ? !staffDay.closed : true;
+                          const openTime = staffDay?.open || "09:00";
+                          const closeTime = staffDay?.close || "17:30";
+                          return (
+                            <div key={day} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "4px 0" }}>
+                              <div style={{ width: 28, fontSize: 10, fontWeight: 500, color: c.textSub, flexShrink: 0 }}>{DAY_FULL[day].slice(0,2)}</div>
+                              <div 
+                                onClick={() => {
+                                  setEditStaffForm(f => {
+                                    const wh = {...(f.working_hours || {})};
+                                    if (isOn) wh[day] = { closed: true };
+                                    else wh[day] = { closed: false, open: openTime, close: closeTime };
+                                    return {...f, working_hours: wh};
+                                  });
+                                }}
+                                style={{ width: 28, height: 16, borderRadius: 8, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                                <div style={{ position: "absolute", top: 2, left: isOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                              </div>
+                              {isOn ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <select value={openTime} onChange={e => {
+                                    setEditStaffForm(f => {
+                                      const wh = {...(f.working_hours || {})};
+                                      wh[day] = { ...wh[day], closed: false, open: e.target.value };
+                                      return {...f, working_hours: wh};
+                                    });
+                                  }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                                  </select>
+                                  <span style={{ fontSize: 9, color: c.textMuted }}>—</span>
+                                  <select value={closeTime} onChange={e => {
+                                    setEditStaffForm(f => {
+                                      const wh = {...(f.working_hours || {})};
+                                      wh[day] = { ...wh[day], closed: false, close: e.target.value };
+                                      return {...f, working_hours: wh};
+                                    });
+                                  }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                                  </select>
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg/alles aan = volgt salon openingstijden" : "Empty/all on = follows salon hours"}</div>
                       </div>
                     )}
                   </div>
