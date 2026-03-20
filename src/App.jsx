@@ -888,7 +888,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Footer */}
         <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
-          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
+          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
         </footer>
       </div>
     </Layout>
@@ -902,8 +902,16 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const [mode, setMode] = useState("signin");
   const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", accountType: "joint" });
   const [error, setError] = useState("");
-
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleReset = async () => {
+    if (!form.email) { setError(lang === "nl" ? "Vul je e-mailadres in" : "Enter your email"); return; }
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo: "https://vellu.cc/owner" });
+    if (error) { setError(error.message); } else { setResetSent(true); }
+    setLoading(false);
+  };
 
   const handle = async () => {
     if (!form.email || !form.password) { setError(lang === "nl" ? "Vul alle velden in" : "Fill in all fields"); return; }
@@ -1040,7 +1048,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               <input className="input-field" placeholder={t.passwordField} type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))} />
             </div>
             {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
+            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{lang === "nl" ? "✓ Reset link verstuurd! Check je inbox." : "✓ Reset link sent! Check your inbox."}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
+            {mode === "signin" && (
+              <button style={{ display: "block", width: "100%", marginTop: 12, background: "none", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}
+                onClick={handleReset}>
+                {lang === "nl" ? "Wachtwoord vergeten?" : "Forgot password?"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1167,6 +1182,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorToast, setErrorToast] = useState("");
   const [gallery, setGallery] = useState(null);
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
@@ -1455,6 +1471,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     } catch (err) {
       console.error("Booking error:", err);
+      setErrorToast(lang === "nl" ? "Er ging iets mis bij het boeken. Probeer het opnieuw." : "Something went wrong while booking. Please try again.");
+      setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
     }
   };
@@ -2070,21 +2088,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
           )}
 
-          {/* Reviews section - visible on step 1 */}
-          {!done && step === 1 && initialSalon.reviews?.length > 0 && (
-            <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-              <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
-              {initialSalon.reviews.slice(0, 3).map(r => (
-                <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                    <span style={{ fontWeight: 500, fontSize: 12 }}>{(() => { const parts = r.client_name.split(" "); return parts[0] + (parts[1] ? " " + parts[1][0] + "." : ""); })()}</span>
-                    <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
-                  </div>
-                  {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
-                </div>
-              ))}
-            </div>
-          )}
           </div>
         </div>
       ) : (
@@ -2615,6 +2618,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s" }} />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Error toast */}
+        {errorToast && (
+          <div style={{
+            position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+            background: "#991b1b", color: "#fef2f2", padding: "12px 24px", borderRadius: 14,
+            fontSize: 12, fontWeight: 500, fontFamily: "'Jost',sans-serif",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 9999,
+            animation: "fadeUp 0.3s ease", maxWidth: "90vw", textAlign: "center"
+          }}>
+            {errorToast}
           </div>
         )}
       </div>
@@ -5383,7 +5399,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin") {
+  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -5647,6 +5663,98 @@ function AppInner() {
   );
 }
 
+// ─── PRIVACY POLICY ──────────────────────────────────────────
+function PrivacyPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const content = lang === "nl" ? {
+    title: "Privacybeleid",
+    updated: "Laatst bijgewerkt: maart 2026",
+    sections: [
+      ["Wie zijn wij?", "Vellu is een online boekingsplatform voor beautysalons. Wij verwerken persoonsgegevens namens de salons die ons platform gebruiken."],
+      ["Welke gegevens verzamelen wij?", "Bij het boeken van een afspraak: naam, e-mailadres, telefoonnummer (optioneel). Bij het aanmaken van een salonaccount: bedrijfsnaam, e-mailadres, wachtwoord, vestigingsgegevens."],
+      ["Waarvoor gebruiken wij je gegevens?", "Het verwerken en bevestigen van boekingen, het versturen van herinneringen en follow-up emails, het beheren van je salonaccount en het verbeteren van onze dienstverlening."],
+      ["Hoe lang bewaren wij je gegevens?", "Boekingsgegevens worden bewaard zolang het salonaccount actief is. Je kunt op elk moment verzoeken om verwijdering van je gegevens door contact met ons op te nemen."],
+      ["Delen wij je gegevens?", "Wij delen je gegevens alleen met: Supabase (database hosting), Resend (email verzending), Vercel (website hosting). Wij verkopen nooit je gegevens aan derden."],
+      ["Cookies", "Wij gebruiken alleen functionele cookies die noodzakelijk zijn voor het functioneren van het platform (inlogsessie, taalvoorkeur, thema). Wij gebruiken geen tracking cookies of analytics van derden."],
+      ["Je rechten", "Je hebt het recht op inzage, correctie en verwijdering van je persoonsgegevens. Neem contact op via het e-mailadres van je salon of via ons platform."],
+      ["Contact", "Voor vragen over dit privacybeleid kun je contact opnemen via het platform."]
+    ]
+  } : {
+    title: "Privacy Policy",
+    updated: "Last updated: March 2026",
+    sections: [
+      ["Who are we?", "Vellu is an online booking platform for beauty salons. We process personal data on behalf of the salons that use our platform."],
+      ["What data do we collect?", "When booking an appointment: name, email address, phone number (optional). When creating a salon account: business name, email address, password, location details."],
+      ["What do we use your data for?", "Processing and confirming bookings, sending reminders and follow-up emails, managing your salon account, and improving our services."],
+      ["How long do we store your data?", "Booking data is stored as long as the salon account is active. You can request deletion of your data at any time by contacting us."],
+      ["Do we share your data?", "We only share your data with: Supabase (database hosting), Resend (email delivery), Vercel (website hosting). We never sell your data to third parties."],
+      ["Cookies", "We only use functional cookies necessary for the platform to work (login session, language preference, theme). We do not use tracking cookies or third-party analytics."],
+      ["Your rights", "You have the right to access, correct, and delete your personal data. Contact us via your salon's email address or through our platform."],
+      ["Contact", "For questions about this privacy policy, you can reach us through the platform."]
+    ]
+  };
+
+  return (
+    <Layout>
+      <style>{makeCSS(ACCENT, c)}</style>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+// ─── COOKIE CONSENT ──────────────────────────────────────────
+function CookieConsent({ lang }) {
+  const { colors: c } = useTheme();
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem("vellu_cookies_accepted")) {
+      setTimeout(() => setVisible(true), 1500);
+    }
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 20, left: 20, right: 20, maxWidth: 420, margin: "0 auto",
+      background: c.bg, border: "1px solid " + c.border, borderRadius: 18,
+      padding: "16px 20px", display: "flex", alignItems: "center", gap: 14,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.3)", zIndex: 9999,
+      fontFamily: "'Jost',sans-serif", animation: "fadeUp 0.4s ease"
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 12, color: c.text, fontWeight: 500, marginBottom: 3 }}>🍪 Cookies</div>
+        <div style={{ fontSize: 10, color: c.textSub, lineHeight: 1.5 }}>
+          {lang === "nl" 
+            ? "Wij gebruiken alleen functionele cookies. " 
+            : "We only use functional cookies. "}
+          <a href="/privacy" style={{ color: ACCENT, textDecoration: "none" }}>{lang === "nl" ? "Meer info" : "Learn more"}</a>
+        </div>
+      </div>
+      <button onClick={() => { localStorage.setItem("vellu_cookies_accepted", "true"); setVisible(false); }}
+        style={{ background: ACCENT, color: c.btnOnDark, border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif", flexShrink: 0 }}>
+        OK
+      </button>
+    </div>
+  );
+}
+
 export default function VelluApp() {
   const [lang, setLang] = useState("nl");
   return (
@@ -5656,8 +5764,10 @@ export default function VelluApp() {
             <Route path="/" element={<AppInner />} />
             <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
             <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
+            <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
                 <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
           </Routes>
+          <CookieConsent lang={lang} />
         </BrowserRouter>
     </ThemeProvider>
   );
