@@ -4730,6 +4730,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [saved, setSaved] = useState(false);
   const [editingWH, setEditingWH] = useState(false);
   const [whForm, setWhForm] = useState(staffMember.working_hours || {});
+  const [editingSvc, setEditingSvc] = useState(null);
+  const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
+  const [editingVar, setEditingVar] = useState(null);
+  const [editVarForm, setEditVarForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
+  const [gallery, setGallery] = useState(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   // Load data
@@ -4737,13 +4742,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const load = async () => {
       const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).order("date", { ascending: false });
       setAppointments(appts || []);
-      const { data: svcs } = await supabase.from("services").select("*, service_variants(*), service_extras(*)").eq("owner_id", salonProfile.id);
+      const { data: svcs } = await supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id);
       const mySvcIds = staffMember.service_ids || [];
       const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
       setServices(filtered.map(s => ({
         ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
         variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-        extras: s.service_extras || []
+        extras: s.service_extras || [],
+        photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
       })));
     };
     load();
@@ -4766,6 +4772,25 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
     setMyStaff(s => ({...s, working_hours: whForm}));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  const staffAddPhoto = async (serviceId, file) => {
+    const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${file.name}`;
+    const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, file, { cacheControl: "3600", upsert: false });
+    if (uploadError) { console.error("Upload error:", uploadError); return; }
+    const { data: { publicUrl } } = supabase.storage.from("service-photos").getPublicUrl(fileName);
+    const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
+      service_id: serviceId, owner_id: salonProfile.id, storage_path: publicUrl
+    }).select().single();
+    if (dbError) { console.error("DB error:", dbError); return; }
+    setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s));
+  };
+
+  const staffDeletePhoto = async (serviceId, photoId, photoUrl) => {
+    await supabase.from("service_photos").delete().eq("id", photoId);
+    const urlParts = photoUrl.split("/service-photos/");
+    if (urlParts[1]) await supabase.storage.from("service-photos").remove([urlParts[1]]);
+    setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: (s.photos||[]).filter(p => p.id !== photoId)} : s));
   };
 
   const ApptCard = ({ a }) => (
@@ -4933,17 +4958,87 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? "✓" : t.saveChanges}</button>
               </div>
 
-              {/* My services (read-only info) */}
+              {/* My services (editable) */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
                 <SL>{t.myServices}</SL>
                 {services.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noServices}</div>}
                 {services.map(s => (
-                  <div key={s.id} style={{ padding: "8px 0", borderBottom: "1px solid " + c.border }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
-                    <div style={{ fontSize: 11, color: c.textLabel }}>€{s.price} · {s.duration} {t.min}</div>
+                  <div key={s.id} style={{ padding: "10px 0", borderBottom: "1px solid " + c.border }}>
+                    {/* Service header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {editingSvc === s.id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                              <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Naam (NL)" />
+                              <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Name (EN)" />
+                              <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="€" />
+                              <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="min" />
+                            </div>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button className="btn-ghost" style={{ flex: 1, fontSize: 9, padding: "4px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                                await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                                setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
+                                setEditingSvc(null);
+                              }}>✓</button>
+                              <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 8px" }} onClick={() => setEditingSvc(null)}>✕</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
+                            <div style={{ fontSize: 11, color: c.textLabel }}>€{s.price} · {s.duration} {t.min}</div>
+                          </>
+                        )}
+                      </div>
+                      {editingSvc !== s.id && (
+                        <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33`, flexShrink: 0 }}
+                          onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
+                      )}
+                    </div>
+
+                    {/* Variants */}
                     {(s.variants || []).map(v => (
-                      <div key={v.id} style={{ fontSize: 10, color: c.textMuted, marginLeft: 12, marginTop: 2 }}>└ {v.name_nl} — €{v.price} · {v.duration} min</div>
+                      <div key={v.id} style={{ marginLeft: 12, marginTop: 4, fontSize: 10 }}>
+                        {editingVar === v.id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
+                              <input className="input-field" value={editVarForm.name_nl} onChange={e => setEditVarForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} />
+                              <input className="input-field" type="number" value={editVarForm.price} onChange={e => setEditVarForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 9, padding: "4px 6px" }} placeholder="€" />
+                            </div>
+                            <div style={{ display: "flex", gap: 3 }}>
+                              <button className="btn-ghost" style={{ flex: 1, fontSize: 8, padding: "3px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                                await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration) }).eq("id", v.id);
+                                setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, ...editVarForm, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration)} : vr)} : sv));
+                                setEditingVar(null);
+                              }}>✓</button>
+                              <button className="btn-ghost" style={{ fontSize: 8, padding: "3px 6px" }} onClick={() => setEditingVar(null)}>✕</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ color: c.textMuted }}>└ {v.name_nl} — €{v.price} · {v.duration} min</span>
+                            <button className="btn-ghost" style={{ fontSize: 8, padding: "2px 6px", color: accent, borderColor: `${accent}33` }}
+                              onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}>✎</button>
+                          </div>
+                        )}
+                      </div>
                     ))}
+
+                    {/* Photos */}
+                    <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                      {(s.photos || []).map(p => (
+                        <div key={p.id} style={{ position: "relative", width: 50, height: 50, borderRadius: 8, overflow: "hidden" }}>
+                          <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <button onClick={() => staffDeletePhoto(s.id, p.id, p.url)} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", fontSize: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                        </div>
+                      ))}
+                      <label style={{ width: 50, height: 50, borderRadius: 8, border: `1px dashed ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                        <span style={{ fontSize: 16, color: `${accent}66` }}>+</span>
+                        <input accept="image/*" multiple type="file" style={{ display: "none" }}
+                          onChange={e => Array.from(e.target.files).forEach(f => staffAddPhoto(s.id, f))} />
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4982,7 +5077,17 @@ function OwnerEntryPage({ lang, setLang }) {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Check if user is an owner (has a profile)
+        // FIRST check if user is a staff member (before profile check)
+        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+        if (staffMember) {
+          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+          if (salonProfile) {
+            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
+            setLoading(false);
+            return;
+          }
+        }
+        // Then check if user is an owner
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
         if (profile) {
           setOwner({
@@ -4996,19 +5101,6 @@ function OwnerEntryPage({ lang, setLang }) {
             plan_expires_at: profile.plan_expires_at || null,
             account_type: profile.account_type || "joint"
           });
-        } else {
-          // Check if user is a staff member
-          const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
-          if (staffMember) {
-            const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
-            if (salonProfile) {
-              setStaffUser({ 
-                staffMember, 
-                profile: salonProfile,
-                email: session.user.email 
-              });
-            }
-          }
         }
       }
       setLoading(false);
@@ -5017,18 +5109,15 @@ function OwnerEntryPage({ lang, setLang }) {
   }, []);
 
   const handleLogin = async (u) => {
-    // After login, check if this is a staff member
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
-      if (!profile) {
-        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
-        if (staffMember) {
-          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
-          if (salonProfile) {
-            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
-            return;
-          }
+      // Check staff FIRST
+      const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+      if (staffMember) {
+        const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+        if (salonProfile) {
+          setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
+          return;
         }
       }
     }
