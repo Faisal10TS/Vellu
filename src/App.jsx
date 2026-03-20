@@ -4998,13 +4998,16 @@ function OwnerEntryPage({ lang, setLang }) {
           });
         } else {
           // Check if user is a staff member
-          const { data: staffMember } = await supabase.from("staff_members").select("*, profiles(*)").eq("user_id", session.user.id).single();
-          if (staffMember && staffMember.profiles) {
-            setStaffUser({ 
-              staffMember, 
-              profile: staffMember.profiles,
-              email: session.user.email 
-            });
+          const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+          if (staffMember) {
+            const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+            if (salonProfile) {
+              setStaffUser({ 
+                staffMember, 
+                profile: salonProfile,
+                email: session.user.email 
+              });
+            }
           }
         }
       }
@@ -5019,10 +5022,13 @@ function OwnerEntryPage({ lang, setLang }) {
     if (session?.user) {
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
       if (!profile) {
-        const { data: staffMember } = await supabase.from("staff_members").select("*, profiles(*)").eq("user_id", session.user.id).single();
-        if (staffMember && staffMember.profiles) {
-          setStaffUser({ staffMember, profile: staffMember.profiles, email: session.user.email });
-          return;
+        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+        if (staffMember) {
+          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+          if (salonProfile) {
+            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
+            return;
+          }
         }
       }
     }
