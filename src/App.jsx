@@ -62,6 +62,7 @@ function ThemeProvider({ children }) {
 
 function useTheme() { return useContext(ThemeContext); }
 
+
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
   try {
@@ -227,6 +228,14 @@ const T = {
     allergiesUpdated:"Allergieën bijgewerkt", noUpcoming:"Geen komende afspraken",
     noPast:"Geen eerdere afspraken", loginFailed:"Geen account gevonden met dit e-mailadres",
     wrongCode:"Onjuiste code", backToBooking:"Terug naar boeken",
+    // Client accounts with PIN
+    clientLogin:"Inloggen", clientRegister:"Account aanmaken", enterPin:"Voer je 4-cijferige PIN in",
+    choosePin:"Kies een 4-cijferige PIN", pinPlaceholder:"0000", wrongPin:"Onjuiste PIN",
+    accountExists:"Er bestaat al een account met dit e-mailadres. Log in met je PIN.",
+    createAccountPrompt:"Maak een account aan om je afspraken altijd terug te vinden",
+    createAccountBtn:"Account aanmaken met PIN", skipAccount:"Overslaan",
+    loggedInAs:"Ingelogd als", clientLogout:"Uitloggen", backToBook:"← Terug naar boeken",
+    pinSaved:"Account aangemaakt!", noAccountYet:"Nog geen account?",
     // Locations
     locations:"Locaties", addLocation:"+ Locatie toevoegen", locationName:"Locatienaam",
     locationAddress:"Adres", locationCity:"Stad", locationPhone:"Telefoon",
@@ -361,6 +370,14 @@ const T = {
     allergiesUpdated:"Allergies updated", noUpcoming:"No upcoming appointments",
     noPast:"No past appointments", loginFailed:"No account found with this email",
     wrongCode:"Incorrect code", backToBooking:"Back to booking",
+    // Client accounts with PIN
+    clientLogin:"Sign in", clientRegister:"Create account", enterPin:"Enter your 4-digit PIN",
+    choosePin:"Choose a 4-digit PIN", pinPlaceholder:"0000", wrongPin:"Incorrect PIN",
+    accountExists:"An account with this email already exists. Log in with your PIN.",
+    createAccountPrompt:"Create an account to always find your appointments",
+    createAccountBtn:"Create account with PIN", skipAccount:"Skip",
+    loggedInAs:"Logged in as", clientLogout:"Log out", backToBook:"← Back to booking",
+    pinSaved:"Account created!", noAccountYet:"No account yet?",
     // Locations
     locations:"Locations", addLocation:"+ Add location", locationName:"Location name",
     locationAddress:"Address", locationCity:"City", locationPhone:"Phone",
@@ -802,14 +819,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </button>
         </div>
 
-        {/* Client appointments link */}
-        <div style={{ padding: "0 24px 20px", textAlign: "center", position: "relative", zIndex: 10 }}>
-          <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 20px" }} onClick={() => window.location.href = "/mijn-afspraken"}>
-            📅 {lang === "nl" ? "Mijn afspraken bekijken" : "View my appointments"}
-          </button>
-        </div>
 
-        {/* Footer */}
+                {/* Footer */}
         <footer style={{ 
           padding: "24px 32px", 
           textAlign: "center",
@@ -1014,6 +1025,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const MON = lang === "nl" ? MON_NL : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
+
+
+
+
+
 
   const [step, setStep] = useState(() => {
     // If salon has multiple locations, start at step 0 (location picker)
@@ -1570,7 +1586,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     >{t.allCategories}</div>
                     {categories.map(cat => (
                       <div 
-                        key={c.id}
+                        key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
                         style={{ 
                           padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
@@ -1579,7 +1595,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                           fontSize: 12, fontWeight: 500, transition: "all 0.2s"
                         }}
-                      >{lang === "nl" ? (cat.name_nl || c.name) : (cat.name_en || cat.name_nl || c.name)}</div>
+                      >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                     ))}
                   </div>
                 )}
@@ -2073,7 +2089,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         >{t.allCategories}</div>
                         {categories.map(cat => (
                           <div 
-                            key={c.id}
+                            key={cat.id}
                             onClick={() => setActiveCategory(cat.id)}
                             style={{ 
                               padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
@@ -2082,7 +2098,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                               fontSize: 11, fontWeight: 500, transition: "all 0.2s"
                             }}
-                          >{lang === "nl" ? (cat.name_nl || c.name) : (cat.name_en || cat.name_nl || c.name)}</div>
+                          >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                         ))}
                       </div>
                     )}
@@ -2435,6 +2451,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                   </div>
                   <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+
+                                    
                   <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
                 </div>
               )}
@@ -2478,7 +2496,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           </div>
         )}
 
-        {/* Review mode overlay (from follow-up email link) */}
+
+                {/* Review mode overlay (from follow-up email link) */}
         {showReviewForm && (
           <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowReviewForm(false)}>
             <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
@@ -4211,7 +4230,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "mijn-afspraken" || slug === "my-appointments") {
+  if (slug === "owner" || slug === "login" || slug === "admin") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -4448,224 +4467,6 @@ function CancelRoute({ lang }) {
   );
 }
 
-// ─── CLIENT DASHBOARD (vellu.cc/mijn-afspraken) ─────────────
-function ClientDashboard({ lang, setLang }) {
-  const { colors: c } = useTheme();
-  const t = T[lang];
-  const accent = ACCENT;
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [phase, setPhase] = useState("email"); // email | code | dashboard
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [client, setClient] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [allergies, setAllergies] = useState("");
-  const [allergiesSaved, setAllergiesSaved] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(null);
-
-  const sendLoginCode = async () => {
-    if (!email || !email.includes("@")) return;
-    setLoading(true);
-    setError("");
-    // Check if client exists
-    const { data: clientData } = await supabase.from("clients").select("*").eq("email", email.toLowerCase()).single();
-    if (!clientData) { setError(t.loginFailed); setLoading(false); return; }
-    // Call edge function to send code
-    const { error: fnError } = await supabase.functions.invoke("send-client-login", { body: { email: email.toLowerCase() } });
-    if (fnError) { setError("Error sending code"); setLoading(false); return; }
-    setClient(clientData);
-    setAllergies(clientData.allergies || "");
-    setPhase("code");
-    setLoading(false);
-  };
-
-  const verifyCode = async () => {
-    if (code.length !== 6) return;
-    setLoading(true);
-    setError("");
-    const { data: tokenData } = await supabase
-      .from("client_tokens")
-      .select("*")
-      .eq("email", email.toLowerCase())
-      .eq("token", code)
-      .eq("used", false)
-      .gte("expires_at", new Date().toISOString())
-      .single();
-    if (!tokenData) { setError(t.wrongCode); setLoading(false); return; }
-    // Mark token as used
-    await supabase.from("client_tokens").update({ used: true }).eq("id", tokenData.id);
-    // Load appointments
-    const { data: appts } = await supabase
-      .from("appointments")
-      .select("*, profiles(business_name, slug, city)")
-      .eq("client_id", tokenData.client_id)
-      .order("date", { ascending: false });
-    setAppointments(appts || []);
-    setPhase("dashboard");
-    setLoading(false);
-  };
-
-  const updateAllergies = async () => {
-    if (!client) return;
-    await supabase.from("clients").update({ allergies: allergies || null }).eq("id", client.id);
-    setAllergiesSaved(true);
-    setTimeout(() => setAllergiesSaved(false), 2000);
-  };
-
-  const now = new Date();
-  const upcoming = appointments.filter(a => a.status === "confirmed" && new Date(a.date + "T" + a.time) > now);
-  const past = appointments.filter(a => a.status === "completed" || (a.status === "confirmed" && new Date(a.date + "T" + a.time) <= now));
-
-  return (
-    <Layout>
-      <style>{makeCSS(accent, c)}</style>
-      <div style={{ minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", flexDirection: "column", alignItems: "center", padding: "24px" }}>
-        {/* Header */}
-        <div style={{ width: "100%", maxWidth: 500, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
-          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <ThemeToggle />
-            <LangToggle lang={lang} setLang={setLang} />
-          </div>
-        </div>
-
-        <div style={{ width: "100%", maxWidth: 500 }}>
-          {/* Email phase */}
-          {phase === "email" && (
-            <div className="fade-up" style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 48, marginBottom: 20 }}>📅</div>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 8 }}>{t.myAppointments}</div>
-              <p style={{ color: c.textSub, fontSize: 13, marginBottom: 30 }}>{t.enterEmailToLogin}</p>
-              <input className="input-field" placeholder={t.email} type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendLoginCode()} style={{ marginBottom: 12 }} />
-              {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12 }}>{error}</div>}
-              <button className="btn-primary" onClick={sendLoginCode} disabled={loading || !email.includes("@")}>{loading ? "..." : t.sendCode}</button>
-              <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => window.location.href = "/"}>{lang === "nl" ? "← Terug" : "← Back"}</button>
-            </div>
-          )}
-
-          {/* Code phase */}
-          {phase === "code" && (
-            <div className="fade-up" style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 48, marginBottom: 20 }}>📧</div>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 8 }}>{t.enterCode}</div>
-              <p style={{ color: c.textSub, fontSize: 13, marginBottom: 30 }}>{t.codeSent} {email}</p>
-              <input className="input-field" placeholder="000000" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} onKeyDown={e => e.key === "Enter" && verifyCode()} style={{ textAlign: "center", fontSize: 24, letterSpacing: "0.5em", marginBottom: 12 }} />
-              {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12 }}>{error}</div>}
-              <button className="btn-primary" onClick={verifyCode} disabled={loading || code.length !== 6}>{loading ? "..." : t.verifyCode}</button>
-              <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => { setPhase("email"); setCode(""); setError(""); }}>{lang === "nl" ? "← Ander e-mailadres" : "← Different email"}</button>
-            </div>
-          )}
-
-          {/* Dashboard phase */}
-          {phase === "dashboard" && (
-            <div className="fade-up">
-              <div style={{ marginBottom: 28 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 4 }}>
-                  {t.welcomeBackClient}, {client?.first_name || ""} 👋
-                </div>
-                <div style={{ fontSize: 12, color: c.textSub }}>{email}</div>
-              </div>
-
-              {/* Upcoming */}
-              <SL>{t.upcomingAppointments}</SL>
-              {upcoming.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "24px 0", color: c.textMuted, fontSize: 12 }}>{t.noUpcoming}</div>
-              ) : upcoming.map(a => (
-                <div key={a.id} className="appt-card">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>{a.service_name}</div>
-                      <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{new Date(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} · {a.time}</div>
-                      {a.profiles && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{a.profiles.business_name} · {a.profiles.city}</div>}
-                    </div>
-                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</span>
-                  </div>
-                  {a.profiles?.slug && (
-                    <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }}
-                      onClick={() => window.location.href = `/cancel/${a.id}`}>
-                      {t.cancelBooking}
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              {/* Past */}
-              <div style={{ marginTop: 20 }}>
-                <SL>{t.pastAppointments}</SL>
-                {past.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: c.textMuted, fontSize: 12 }}>{t.noPast}</div>
-                ) : past.map(a => (
-                  <div key={a.id} className="appt-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>{a.service_name}</div>
-                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{new Date(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} · {a.time}</div>
-                        {a.profiles && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{a.profiles.business_name}</div>}
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <span className={`badge badge-${a.status}`}>{a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Completed") : (lang === "nl" ? "Bevestigd" : "Confirmed")}</span>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 4 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      {a.profiles?.slug && (
-                        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: accent, borderColor: `${accent}44` }}
-                          onClick={() => window.location.href = `/${a.profiles.slug}`}>
-                          {t.rebookBtn}
-                        </button>
-                      )}
-                      {a.status === "completed" && (
-                        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }}
-                          onClick={() => setReviewOpen(reviewOpen === a.id ? null : a.id)}>
-                          ⭐ {t.writeReview}
-                        </button>
-                      )}
-                    </div>
-                    {reviewOpen === a.id && a.profiles && (
-                      <div style={{ marginTop: 10 }}>
-                        <ReviewForm salon={{ owner_id: a.owner_id }} clientName={`${client?.first_name} ${client?.last_name}`} clientEmail={email} lang={lang} t={t} accent={accent} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* My Details */}
-              <div style={{ marginTop: 20 }}>
-                <SL>{t.myDetails}</SL>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: c.textLabel, textTransform: "uppercase", letterSpacing: "0.08em" }}>{t.name}</div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{client?.first_name} {client?.last_name}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: c.textLabel, textTransform: "uppercase", letterSpacing: "0.08em" }}>{t.email}</div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{email}</div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 10, color: c.textLabel, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{t.allergies}</div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input className="input-field" placeholder={t.allergiesPlaceholder} value={allergies} onChange={e => setAllergies(e.target.value)} style={{ flex: 1, fontSize: 12 }} />
-                      <button className="btn-ghost" style={{ padding: "0 16px", fontSize: 10, color: allergiesSaved ? "#86efac" : accent, borderColor: allergiesSaved ? "rgba(134,239,172,0.3)" : `${accent}44` }} onClick={updateAllergies}>
-                        {allergiesSaved ? "✓" : t.updateAllergies}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button className="btn-ghost" style={{ width: "100%", marginTop: 24 }} onClick={() => window.location.href = "/"}>{lang === "nl" ? "← Terug naar home" : "← Back to home"}</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </Layout>
-  );
-}
-
 // ─── ROOT ─────────────────────────────────────────────────────
 function AppInner() {
   const { colors: c } = useTheme();
@@ -4697,15 +4498,13 @@ export default function VelluApp() {
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppInner />} />
-          <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
-          <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
-          <Route path="/mijn-afspraken" element={<ClientDashboard lang={lang} setLang={setLang} />} />
-          <Route path="/my-appointments" element={<ClientDashboard lang={lang} setLang={setLang} />} />
-          <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
-        </Routes>
-      </BrowserRouter>
+          <Routes>
+            <Route path="/" element={<AppInner />} />
+            <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
+            <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
+                <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
+          </Routes>
+        </BrowserRouter>
     </ThemeProvider>
   );
 }
