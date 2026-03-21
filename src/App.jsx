@@ -4129,7 +4129,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {} }); }}>✎</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
-                              await supabase.from("staff_services").delete().eq("staff_member_id", m.id);
+                              await supabase.from("staff_services").delete().eq("staff_id", m.id);
+                              await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
                               await supabase.from("staff_members").delete().eq("id", m.id);
                               update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
                             }}>×</button>
