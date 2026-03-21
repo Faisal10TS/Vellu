@@ -1509,6 +1509,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
       cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
     });
+
+    // 5. Notify owner + assigned staff about new booking
+    const staffEmails = selectedServices.filter(item => item.staff?.email).map(item => item.staff.email);
+    await sendEmails("booking_notification", {
+      owner_email: initialSalon.owner_email || null,
+      staff_emails: [...new Set(staffEmails)],
+      client_name: `${form.firstName} ${form.lastName}`, client_phone: form.phone || null,
+      service_name: combinedServiceName, date, time, price: getPrice(),
+      salon_name: initialSalon.name
+    });
     
     if (form.payment === "online") {
       await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
@@ -4820,6 +4830,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         payment: "on-arrival", price: price,
                         salon_name: salonData.name, owner_email: null
                       });
+                      // Notify assigned staff
+                      if (staffMember?.email) {
+                        await sendEmails("booking_notification", {
+                          owner_email: null, staff_emails: [staffMember.email],
+                          client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
+                          service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
+                          price, salon_name: salonData.name
+                        });
+                      }
                     }
                     setAddApptDone(true);
                     setAddApptLoading(false);
@@ -5420,6 +5439,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                         payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null
                       });
+                      // Notify owner about new booking
+                      await sendEmails("booking_notification", {
+                        owner_email: salonProfile.email || null, staff_emails: [],
+                        client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
+                        service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
+                        price, salon_name: salonProfile.business_name
+                      });
                     }
                     setAddApptDone(true);
                     setAddApptLoading(false);
@@ -5690,6 +5716,27 @@ function CancelRoute({ lang }) {
       date: appointment.date,
       time: appointment.time
     });
+
+    // Notify owner + staff about cancellation
+    const notifyEmails = [];
+    if (appointment.owner_id) {
+      const { data: ownerProfile } = await supabase.from("profiles").select("email").eq("id", appointment.owner_id).single();
+      if (ownerProfile?.email) notifyEmails.push(ownerProfile.email);
+    }
+    if (appointment.staff_id) {
+      const { data: staffData } = await supabase.from("staff_members").select("email").eq("id", appointment.staff_id).single();
+      if (staffData?.email) notifyEmails.push(staffData.email);
+    }
+    if (notifyEmails.length > 0) {
+      await sendEmails("booking_notification", {
+        owner_email: notifyEmails[0] || null,
+        staff_emails: notifyEmails.slice(1),
+        client_name: appointment.client_name, client_phone: null,
+        service_name: `❌ GEANNULEERD: ${appointment.service_name}`,
+        date: appointment.date, time: appointment.time,
+        price: appointment.service_price || 0, salon_name: ""
+      });
+    }
     
     setStatus("cancelled");
   };
