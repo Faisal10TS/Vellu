@@ -266,6 +266,9 @@ const T = {
     emailTaken:"Dit e-mailadres is al in gebruik", staffLoginInfo:"Logt in op vellu.cc/owner",
     myAgenda:"Mijn agenda", mySettings:"Mijn instellingen", myWorkingHours:"Mijn werktijden",
     myServices:"Mijn diensten", staffWelcome:"Welkom", noAccessPage:"Je hebt geen toegang tot deze pagina",
+    bookingWindow:"Boekingsvenster", bookingWindowDesc:"Hoe ver van tevoren klanten kunnen boeken",
+    minAdvance:"Minimaal van tevoren", maxAdvance:"Maximaal van tevoren",
+    hours:"uur", days:"dagen",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -432,6 +435,9 @@ const T = {
     emailTaken:"This email is already in use", staffLoginInfo:"Logs in at vellu.cc/owner",
     myAgenda:"My agenda", mySettings:"My settings", myWorkingHours:"My working hours",
     myServices:"My services", staffWelcome:"Welcome", noAccessPage:"You don't have access to this page",
+    bookingWindow:"Booking Window", bookingWindowDesc:"How far in advance clients can book",
+    minAdvance:"Minimum in advance", maxAdvance:"Maximum in advance",
+    hours:"hours", days:"days",
   }
 };
 
@@ -1166,6 +1172,41 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (!staffDay) return true;
     return !staffDay.closed;
   };
+
+  // Get effective time window considering all selected staff members' working hours
+  const getStaffTimeWindow = (dateStr) => {
+    const assignedStaff = selectedServices.filter(item => item.staff).map(item => item.staff);
+    if (assignedStaff.length === 0) return null; // No staff constraint
+    const dayOfWeek = new Date(dateStr).getDay();
+    let latestStart = "00:00";
+    let earliestEnd = "23:59";
+    for (const staff of assignedStaff) {
+      if (!staff.working_hours) continue; // No constraints, follows salon hours
+      const staffDay = staff.working_hours[dayOfWeek];
+      if (!staffDay) continue; // Day not configured = follows salon hours
+      if (staffDay.closed) return { closed: true }; // Staff explicitly closed this day
+      if (staffDay.open && staffDay.open > latestStart) latestStart = staffDay.open;
+      if (staffDay.close && staffDay.close < earliestEnd) earliestEnd = staffDay.close;
+    }
+    if (latestStart >= earliestEnd) return { closed: true }; // No overlapping window
+    return { open: latestStart, close: earliestEnd };
+  };
+
+  // Booking window helpers (min/max advance)
+  const minAdvanceHours = initialSalon.min_advance_hours || 0;
+  const maxAdvanceDays = initialSalon.max_advance_days || 60;
+  
+  const isDayInBookingWindow = (dateStr) => {
+    const now = getToday();
+    const dayDate = new Date(dateStr + "T23:59:59");
+    const minDate = new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000);
+    const maxDate = new Date(now);
+    maxDate.setDate(maxDate.getDate() + maxAdvanceDays);
+    maxDate.setHours(23, 59, 59, 999);
+    if (dayDate < minDate) return false;
+    if (new Date(dateStr + "T00:00:00") > maxDate) return false;
+    return true;
+  };
   
   // Find first available (non-closed) day
   const getFirstAvailableDate = () => {
@@ -1196,7 +1237,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [bookedSlots, setBookedSlots] = useState([]);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
   const [showReviewForm, setShowReviewForm] = useState(reviewMode);
-  const days = getDays();
+  const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
   // Check if form is complete
   const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
@@ -1857,11 +1898,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 2 && <>
                 <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
-                  {days.slice(0,10).map((d, i) => {
+                  {days.map((d, i) => {
                     const ds = fmt(d); 
                     const isSel = date === ds;
                     const dayHours = getEffectiveHours(ds);
-                    const isClosed = dayHours.closed;
+                    const staffWindow = getStaffTimeWindow(ds);
+                    const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
                     return (
                       <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
                         <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
@@ -1874,14 +1916,23 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <SL>{t.selectTime}</SL>
                 {(() => {
                   const dayHours = getEffectiveHours(date);
+                  const staffWindow = getStaffTimeWindow(date);
+                  const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
+                  const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
                   const availableTimes = TIMES.filter(tt => {
-                    if (dayHours.closed) return false;
-                    if (tt < dayHours.open || tt >= dayHours.close) return false;
+                    if (dayHours.closed || staffWindow?.closed) return false;
+                    if (tt < effectiveOpen || tt >= effectiveClose) return false;
                     // Filter out past times if selected date is today
                     if (date === fmt(getToday())) {
                       const now = getToday();
                       const [h, m] = tt.split(":").map(Number);
                       if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+                    }
+                    // Filter out times within min_advance_hours
+                    if (minAdvanceHours > 0 && date === fmt(getToday())) {
+                      const now = getToday();
+                      const slotDate = new Date(date + "T" + tt + ":00");
+                      if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
                     }
                     return true;
                   });
@@ -2326,11 +2377,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {step === 2 && <>
                     <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
                     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
-                      {days.slice(0,10).map((d, i) => {
+                      {days.map((d, i) => {
                         const ds = fmt(d); 
                         const isSel = date === ds;
                         const dayHours = getEffectiveHours(ds);
-                        const isClosed = dayHours.closed;
+                        const staffWindow = getStaffTimeWindow(ds);
+                        const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
                         return (
                           <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
@@ -2343,13 +2395,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <SL>{t.selectTime}</SL>
                     {(() => {
                       const dayHours = getEffectiveHours(date);
+                      const staffWindow = getStaffTimeWindow(date);
+                      const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
+                      const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
                       const availableTimes = TIMES.filter(tt => {
-                        if (dayHours.closed) return false;
-                        if (tt < dayHours.open || tt >= dayHours.close) return false;
+                        if (dayHours.closed || staffWindow?.closed) return false;
+                        if (tt < effectiveOpen || tt >= effectiveClose) return false;
                         if (date === fmt(getToday())) {
                           const now = getToday();
                           const [h, m] = tt.split(":").map(Number);
                           if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+                        }
+                        if (minAdvanceHours > 0 && date === fmt(getToday())) {
+                          const now = getToday();
+                          const slotDate = new Date(date + "T" + tt + ":00");
+                          if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
                         }
                         return true;
                       });
@@ -2943,7 +3003,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
       booking_policy: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
-      locations: [], day_overrides: {}, account_type: user.account_type || "joint"
+      locations: [], day_overrides: {}, account_type: user.account_type || "joint",
+      min_advance_hours: 0, max_advance_days: 60
     };
   });
   const [saved, setSaved] = useState(false);
@@ -3008,6 +3069,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
           account_type: data.account_type || "joint",
+          min_advance_hours: data.min_advance_hours || 0,
+          max_advance_days: data.max_advance_days || 60,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -4066,6 +4129,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {} }); }}>✎</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
+                              await supabase.from("staff_services").delete().eq("staff_member_id", m.id);
                               await supabase.from("staff_members").delete().eq("id", m.id);
                               update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
                             }}>×</button>
@@ -4513,6 +4577,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               </div>
 
+              {/* Booking Window Section */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.bookingWindow}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.bookingWindowDesc}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, fontSize: 12, color: c.text }}>{t.minAdvance}</div>
+                    <select 
+                      value={salonData.min_advance_hours || 0} 
+                      onChange={e => update(d => { d.min_advance_hours = parseInt(e.target.value); return d; })}
+                      style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 10, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", minWidth: 120 }}
+                    >
+                      <option value={0} style={{ background: c.selectBg }}>-</option>
+                      <option value={1} style={{ background: c.selectBg }}>1 {t.hours}</option>
+                      <option value={2} style={{ background: c.selectBg }}>2 {t.hours}</option>
+                      <option value={4} style={{ background: c.selectBg }}>4 {t.hours}</option>
+                      <option value={6} style={{ background: c.selectBg }}>6 {t.hours}</option>
+                      <option value={12} style={{ background: c.selectBg }}>12 {t.hours}</option>
+                      <option value={24} style={{ background: c.selectBg }}>24 {t.hours}</option>
+                      <option value={48} style={{ background: c.selectBg }}>48 {t.hours}</option>
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, fontSize: 12, color: c.text }}>{t.maxAdvance}</div>
+                    <select 
+                      value={salonData.max_advance_days || 60} 
+                      onChange={e => update(d => { d.max_advance_days = parseInt(e.target.value); return d; })}
+                      style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 10, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", minWidth: 120 }}
+                    >
+                      <option value={7} style={{ background: c.selectBg }}>7 {t.days}</option>
+                      <option value={14} style={{ background: c.selectBg }}>14 {t.days}</option>
+                      <option value={30} style={{ background: c.selectBg }}>30 {t.days}</option>
+                      <option value={60} style={{ background: c.selectBg }}>60 {t.days}</option>
+                      <option value={90} style={{ background: c.selectBg }}>90 {t.days}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               {/* Discount Codes Section */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.discountCodes}</SL>
@@ -4580,7 +4683,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   cover_image_url: salonData.cover_image_url || null,
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},
-                  account_type: salonData.account_type || "joint"
+                  account_type: salonData.account_type || "joint",
+                  min_advance_hours: salonData.min_advance_hours || 0,
+                  max_advance_days: salonData.max_advance_days || 60
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
@@ -5487,6 +5592,8 @@ function SalonRoute({ lang, setLang }) {
         cover_image_url: data.cover_image_url || "",
         discount_codes: data.discount_codes || [],
         day_overrides: data.day_overrides || {},
+        min_advance_hours: data.min_advance_hours || 0,
+        max_advance_days: data.max_advance_days || 60,
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
