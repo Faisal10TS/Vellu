@@ -4120,6 +4120,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                             <>
                               <div style={{ fontSize: 13, fontWeight: 500 }}>{m.name}</div>
                               {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                              {(m.service_ids?.length > 0) && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 4 }}>
+                                  {m.service_ids.map(sid => {
+                                    const svc = salonData.services.find(s => s.id === sid);
+                                    return svc ? <span key={sid} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{svc.name_nl || svc.name}</span> : null;
+                                  })}
+                                </div>
+                              )}
+                              {(!m.service_ids || m.service_ids.length === 0) && (
+                                <div style={{ fontSize: 8, color: c.textMuted, marginTop: 3, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : "All services"}</div>
+                              )}
                             </>
                           )}
                         </div>
@@ -4991,6 +5002,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   const activeAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
+  const completedAppts = appointments.filter(a => a.status === "completed");
+  const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
   const calAppts = appointments.filter(a => a.status !== "cancelled" && a.date === calDate);
   const days = getDays();
 
@@ -5046,6 +5059,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: (s.photos||[]).filter(p => p.id !== photoId)} : s));
   };
 
+  const staffSendInvoice = async (id) => {
+    const a = appointments.find(x => x.id === id);
+    if (a) {
+      await sendEmails("invoice", {
+        client_name: a.client_name, client_email: a.client_email,
+        service_name: a.service_name, date: a.date, price: a.service_price,
+        salon_name: salonProfile.business_name,
+        salon_address: salonProfile.address || "",
+        salon_kvk: salonProfile.kvk_number || "",
+        salon_btw: salonProfile.btw_id || "",
+        salon_iban: salonProfile.iban || ""
+      });
+      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+      setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
+    }
+  };
+
   const ApptCard = ({ a }) => (
     <div className="appt-card" style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -5071,6 +5101,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const navItems = [
     ["dashboard", "◆", t.dashboard],
     ["agenda", "◎", t.agenda],
+    ["facturen", "✦", t.invoices],
     ["instellingen", "◯", t.settings]
   ];
 
@@ -5111,7 +5142,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
               <div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : t.settings}</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "facturen" ? t.invoices : t.settings}</div>
                 <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name} 👋</div>
               </div>
             </div>
@@ -5166,6 +5197,40 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
                 : calAppts.map(a => <ApptCard key={a.id} a={a} />)
               }
+            </div>
+          )}
+
+          {/* FACTUREN */}
+          {view === "facturen" && (
+            <div className="fade-up">
+              {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
+              {completedAppts.length === 0
+                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Nog geen voltooide afspraken" : "No completed appointments yet"}</div>
+                : completedAppts.map(a => (
+                  <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
+                      <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.date} · {a.service_name}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                      <div style={{ marginTop: 5 }}>
+                        {a.invoice_sent
+                          ? <span style={{ fontSize: 10, color: "#86efac" }}>✓ {t.sent}</span>
+                          : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => staffSendInvoice(a.id)}>{t.send}</button>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                ))
+              }
+              {completedAppts.length > 0 && (
+                <div style={{ marginTop: 14, background: `${accent}08`, border: `1px solid ${accent}1a`, borderRadius: 20, padding: "18px 22px" }}>
+                  <SL>{t.totalEarnings}</SL>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 38, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{completedAppts.length} {t.treatments}</div>
+                </div>
+              )}
             </div>
           )}
 
