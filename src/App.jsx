@@ -4969,6 +4969,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [saved, setSaved] = useState(false);
   const [editingWH, setEditingWH] = useState(false);
   const [whForm, setWhForm] = useState(staffMember.working_hours || {});
+  const [invoiceForm, setInvoiceForm] = useState({
+    address: staffMember.address || "",
+    kvk_number: staffMember.kvk_number || "",
+    btw_id: staffMember.btw_id || "",
+    iban: staffMember.iban || "",
+    invoice_prefix: staffMember.invoice_prefix || "INV",
+    next_invoice_number: staffMember.next_invoice_number || 1
+  });
+  const [invoiceSaved, setInvoiceSaved] = useState(false);
   const [editingSvc, setEditingSvc] = useState(null);
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
   const [editingVar, setEditingVar] = useState(null);
@@ -5062,16 +5071,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const staffSendInvoice = async (id) => {
     const a = appointments.find(x => x.id === id);
     if (a) {
+      const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}`;
       await sendEmails("invoice", {
         client_name: a.client_name, client_email: a.client_email,
         service_name: a.service_name, date: a.date, price: a.service_price,
-        salon_name: salonProfile.business_name,
-        salon_address: salonProfile.address || "",
-        salon_kvk: salonProfile.kvk_number || "",
-        salon_btw: salonProfile.btw_id || "",
-        salon_iban: salonProfile.iban || ""
+        salon_name: `${salonProfile.business_name} — ${myStaff.name}`,
+        invoice_number: invoiceNumber,
+        salon_address: invoiceForm.address || salonProfile.address || "",
+        salon_kvk: invoiceForm.kvk_number || salonProfile.kvk_number || "",
+        salon_btw: invoiceForm.btw_id || salonProfile.btw_id || "",
+        salon_iban: invoiceForm.iban || salonProfile.iban || ""
       });
       await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+      // Auto-increment invoice number
+      const nextNum = (invoiceForm.next_invoice_number || 1) + 1;
+      await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id);
+      setInvoiceForm(f => ({ ...f, next_invoice_number: nextNum }));
       setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
     }
   };
@@ -5278,6 +5293,37 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   );
                 })}
                 <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? "✓" : t.saveChanges}</button>
+              </div>
+
+              {/* Invoice details */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
+                <SL>{t.invoiceDetails}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.invoiceSettings}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input className="input-field" placeholder={t.address} value={invoiceForm.address} onChange={e => setInvoiceForm(f => ({...f, address: e.target.value}))} style={{ fontSize: 12 }} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input className="input-field" placeholder={t.kvkNumber} value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ fontSize: 12 }} />
+                    <input className="input-field" placeholder={t.btwId} value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ fontSize: 12 }} />
+                  </div>
+                  <input className="input-field" placeholder={t.ibanNumber} value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ fontSize: 12 }} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input className="input-field" placeholder={t.invoicePrefix} value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ fontSize: 12 }} />
+                    <div style={{ fontSize: 11, color: c.textMuted, display: "flex", alignItems: "center" }}>
+                      {lang === "nl" ? "Volgende" : "Next"}: {invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-primary" style={{ marginTop: 12 }} onClick={async () => {
+                  await supabase.from("staff_members").update({
+                    address: invoiceForm.address || null,
+                    kvk_number: invoiceForm.kvk_number || null,
+                    btw_id: invoiceForm.btw_id || null,
+                    iban: invoiceForm.iban || null,
+                    invoice_prefix: invoiceForm.invoice_prefix || "INV",
+                    next_invoice_number: invoiceForm.next_invoice_number || 1
+                  }).eq("id", staffMember.id);
+                  setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
+                }}>{invoiceSaved ? "✓" : t.saveChanges}</button>
               </div>
 
               {/* My services (full editing) */}
