@@ -122,7 +122,7 @@ const T = {
     noCompleted:"Nog geen voltooide afspraken", manageSalon:"Beheer je bedrijf",
     profile:"Profiel", brandColor:"Merkkleur", services:"Diensten", save:"Opslaan",
     saved:"Opgeslagen ✓", logout:"Uitloggen", businessName:"Bedrijfsnaam", city:"Stad",
-    addService:"+ Dienst Toevoegen", deleteService:"Verwijder",
+    deleteService:"Verwijder",
     ownerLogin:"Eigenaar Login", ownerSub:"Inloggen als ondernemer",
     emailField:"E-mailadres", passwordField:"Wachtwoord", login:"Inloggen",
     signUp:"Registreren", signUpTitle:"Account Aanmaken",
@@ -291,7 +291,7 @@ const T = {
     noCompleted:"No completed appointments yet", manageSalon:"Manage your business",
     profile:"Profile", brandColor:"Brand color", services:"Services", save:"Save",
     saved:"Saved ✓", logout:"Log out", businessName:"Business name", city:"City",
-    addService:"+ Add Service", deleteService:"Delete",
+    deleteService:"Delete",
     ownerLogin:"Owner Login", ownerSub:"Sign in as business owner",
     emailField:"Email address", passwordField:"Password", login:"Sign In",
     signUp:"Sign Up", signUpTitle:"Create Account",
@@ -1208,15 +1208,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return true;
   };
   
-  // Find first available (non-closed) day
+  // Find first available (non-closed) day within booking window
   const getFirstAvailableDate = () => {
     const now = getToday();
-    for (let i = 0; i < 14; i++) {
+    const maxDays = Math.min(maxAdvanceDays + 1, 90);
+    for (let i = 0; i < maxDays; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
       const dateStr = fmt(d);
       const hours = getEffectiveHours(dateStr);
-      if (!hours.closed) return dateStr;
+      if (!hours.closed && isDayInBookingWindow(dateStr)) return dateStr;
     }
     return fmt(getToday()); // Fallback
   };
@@ -1522,7 +1523,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     
     if (form.payment === "online") {
       await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
-        date, time, price: getPrice(), salon_name: initialSalon.name });
+        date, time, price: getPrice(), salon_name: initialSalon.name,
+        salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
+        salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "" });
     }
     } catch (err) {
       console.error("Booking error:", err);
@@ -3028,7 +3031,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [editingService, setEditingService] = useState(null);
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
   const [editingStaff, setEditingStaff] = useState(null);
-  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", working_hours: {} });
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", working_hours: {}, service_ids: [] });
   // Manual appointment
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
@@ -4140,14 +4143,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           <>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
                               await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
-                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, working_hours: editStaffForm.working_hours} : s); return d; });
+                              // Update staff_services
+                              await supabase.from("staff_services").delete().eq("staff_id", m.id);
+                              if (editStaffForm.service_ids.length > 0) {
+                                await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
+                              }
+                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
                               setEditingStaff(null);
                             }}>✓</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => setEditingStaff(null)}>✕</button>
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {} }); }}>✎</button>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
@@ -4214,6 +4222,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         })}
                         <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg/alles aan = volgt salon openingstijden" : "Empty/all on = follows salon hours"}</div>
                         
+                        {/* Per-staff services */}
+                        {salonData.services.length > 0 && (
+                          <div style={{ marginTop: 12 }}>
+                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {salonData.services.map(s => {
+                                const isOn = editStaffForm.service_ids.includes(s.id);
+                                return (
+                                  <div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
+                                    style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
+                                    {s.name_nl || s.name}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : "Empty = all services"}</div>
+                          </div>
+                        )}
+
                         {/* Invite staff (team accounts only) */}
                         {salonData.account_type === "team" && !m.user_id && (
                           <div style={{ marginTop: 12, padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
@@ -5732,6 +5759,10 @@ function SalonRoute({ lang, setLang }) {
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,
         max_advance_days: data.max_advance_days || 60,
+        address: data.address || "",
+        kvk_number: data.kvk_number || "",
+        btw_id: data.btw_id || "",
+        iban: data.iban || "",
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
@@ -5830,9 +5861,11 @@ function CancelRoute({ lang }) {
 
     // Notify owner + staff about cancellation
     const notifyEmails = [];
+    let salonName = "";
     if (appointment.owner_id) {
-      const { data: ownerProfile } = await supabase.from("profiles").select("email").eq("id", appointment.owner_id).single();
+      const { data: ownerProfile } = await supabase.from("profiles").select("email, business_name").eq("id", appointment.owner_id).single();
       if (ownerProfile?.email) notifyEmails.push(ownerProfile.email);
+      if (ownerProfile?.business_name) salonName = ownerProfile.business_name;
     }
     if (appointment.staff_id) {
       const { data: staffData } = await supabase.from("staff_members").select("email").eq("id", appointment.staff_id).single();
@@ -5845,7 +5878,7 @@ function CancelRoute({ lang }) {
         client_name: appointment.client_name, client_phone: null,
         service_name: `❌ GEANNULEERD: ${appointment.service_name}`,
         date: appointment.date, time: appointment.time,
-        price: appointment.service_price || 0, salon_name: ""
+        price: appointment.service_price || 0, salon_name: salonName
       });
     }
     
