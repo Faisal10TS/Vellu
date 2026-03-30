@@ -161,7 +161,7 @@ const T = {
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
     salonContact:"Contactgegevens salon", salonContactDesc:"Zichtbaar op je salonpagina voor klanten",
-    salonPhone:"Telefoonnummer salon", salonInstagram:"Instagram (bijv. @jouwnaam)",
+    salonPhone:"Telefoonnummer salon", salonInstagram:"Instagram (bijv. @jouwnaam)", salonEmail:"E-mail salon (zichtbaar voor klanten)",
     bookingPolicyPlaceholder:"Bijv. Annuleren kan tot 24 uur van tevoren...",
     agreeToPolicy:"Ik ga akkoord met de voorwaarden",
     phoneRequired:"Telefoonnummer verplicht", phoneRequiredDesc:"Maak telefoonnummer verplicht voor klanten",
@@ -345,7 +345,7 @@ const T = {
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
     salonContact:"Salon contact details", salonContactDesc:"Visible on your salon page for clients",
-    salonPhone:"Salon phone number", salonInstagram:"Instagram (e.g. @yourname)",
+    salonPhone:"Salon phone number", salonInstagram:"Instagram (e.g. @yourname)", salonEmail:"Salon email (visible to clients)",
     bookingPolicyPlaceholder:"E.g. Cancellations must be made 24 hours in advance...",
     agreeToPolicy:"I agree to the booking policy",
     phoneRequired:"Phone number required", phoneRequiredDesc:"Make phone number mandatory for clients",
@@ -1960,10 +1960,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </button>
             ))}
           </div>
-          {initialSalon.owner_email && (
+          {(initialSalon.salon_email || initialSalon.owner_email) && (
             <div className="profile-header-contact">
               <span>✉️</span>
-              <a href={`mailto:${initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.owner_email}</a>
+              <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
             </div>
           )}
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -2056,13 +2056,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {/* CONTACT INFO (in main col — like Setmore) */}
             <section className="profile-section">
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24 }}>
-                {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{t.contactUs}</h3>
-                    {initialSalon.owner_email && (
+                    {(initialSalon.salon_email || initialSalon.owner_email) && (
                       <div className="profile-contact-row">
                         <span>✉️</span>
-                        <a href={`mailto:${initialSalon.owner_email}`}>{initialSalon.owner_email}</a>
+                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`}>{initialSalon.salon_email || initialSalon.owner_email}</a>
                       </div>
                     )}
                     {initialSalon.salon_phone && (
@@ -2251,7 +2251,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               )}
 
               {/* Contact us */}
-              {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+              {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
                 <div style={{ marginTop: 4 }}>
                   <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
                     {t.contactUs} ↓
@@ -2263,10 +2263,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
                       </div>
                     )}
-                    {initialSalon.owner_email && (
+                    {(initialSalon.salon_email || initialSalon.owner_email) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
                         <span style={{ fontSize: 13 }}>✉️</span>
-                        <a href={`mailto:${initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.owner_email}</a>
+                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
                       </div>
                     )}
                     {initialSalon.salon_instagram && (
@@ -3809,7 +3809,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
-      booking_policy: "", salon_phone: "", salon_instagram: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      booking_policy: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60
     };
@@ -3871,6 +3871,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           booking_policy: data.booking_policy || "",
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
+          salon_email: data.salon_email || "",
 
           phone_required: data.phone_required || false,
           break_minutes: data.break_minutes || 0,
@@ -4713,6 +4714,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.salonPhone} value={salonData.salon_phone || ""} onChange={e => update(d => { d.salon_phone = e.target.value; return d; })} />
                   <input className="input-field" placeholder={t.salonInstagram} value={salonData.salon_instagram || ""} onChange={e => update(d => { d.salon_instagram = e.target.value; return d; })} />
+                  <input className="input-field" placeholder={t.salonEmail} value={salonData.salon_email || ""} onChange={e => update(d => { d.salon_email = e.target.value; return d; })} />
                 </div>
               </div>
 
@@ -5546,6 +5548,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   booking_policy: salonData.booking_policy || null,
                   salon_phone: salonData.salon_phone || null,
                   salon_instagram: salonData.salon_instagram || null,
+                  salon_email: salonData.salon_email || null,
 
                   phone_required: salonData.phone_required || false,
                   break_minutes: salonData.break_minutes || 0,
@@ -6577,6 +6580,7 @@ function SalonRoute({ lang, setLang }) {
         booking_policy: data.booking_policy || "",
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",
+        salon_email: data.salon_email || "",
 
         phone_required: data.phone_required || false,
         break_minutes: data.break_minutes || 0,
