@@ -6808,7 +6808,7 @@ function PrivacyPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -6872,7 +6872,7 @@ function TermsPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
