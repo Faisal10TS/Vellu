@@ -1210,7 +1210,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Footer */}
         <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
-          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
+          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
         </footer>
       </div>
     </Layout>
@@ -1555,6 +1555,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [profileCategory, setProfileCategory] = useState("all");
   const [reviewSort, setReviewSort] = useState("recent");
   const [expandedHours, setExpandedHours] = useState(false);
+  const [expandedPolicy, setExpandedPolicy] = useState(false);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
@@ -2063,10 +2064,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {initialSalon.booking_policy && (
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{lang === "nl" ? "Goed om te weten" : "Good to know"}</h3>
-                    <div className="profile-contact-row">
+                    <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
                       <span>📋</span>
-                      <span>{t.bookingPolicy}</span>
+                      <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+                        style={{ transition: "transform 0.2s", transform: expandedPolicy ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
                     </div>
+                    {expandedPolicy && (
+                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
+                        {initialSalon.booking_policy}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2163,6 +2171,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {/* Powered by */}
             <div className="profile-footer">
               {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span> · {t.noCommission}
+              <div style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}>
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : "Privacy"}</a>
+                {" · "}
+                <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+              </div>
             </div>
           </div>
 
@@ -4312,79 +4325,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: copied ? "#86efac" : undefined, borderColor: copied ? "rgba(134,239,172,0.3)" : undefined }} onClick={copyLink}>
                   <NavIcon name="link" size={14} color={copied ? "#86efac" : c.textSub} /> {copied ? t.copied : t.copyLink}
                 </button>
-              </div>
-
-              {/* Revenue Chart + Popular Services — two column layout */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22 }}>
-                {/* Revenue chart */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                    <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
-                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{lang === "nl" ? "Bekijk meer →" : "View more →"}</span>
-                  </div>
-                  {(() => {
-                    const weeks = [];
-                    const now = new Date();
-                    for (let w = 7; w >= 0; w--) {
-                      const weekStart = new Date(now);
-                      weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
-                      weekStart.setHours(0,0,0,0);
-                      const weekEnd = new Date(weekStart);
-                      weekEnd.setDate(weekStart.getDate() + 7);
-                      const rev = appts
-                        .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
-                        .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                      const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
-                      weeks.push({ label, revenue: rev });
-                    }
-                    const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
-                    const chartH = 100;
-                    const barW = 100 / weeks.length;
-                    return (
-                      <div>
-                        <div style={{ position: "relative", height: chartH + 30 }}>
-                          <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
-                            {weeks.map((w, i) => {
-                              const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
-                              const x = i * barW + barW * 0.15;
-                              const bw = barW * 0.7;
-                              return <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" fill={i === weeks.length - 1 ? accent : `${accent}66`} />;
-                            })}
-                          </svg>
-                          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
-                            {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: c.textMuted, textAlign: "center", flex: 1 }}>{w.label}</div>)}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
-                          {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: i === weeks.length - 1 ? accent : c.textLabel, textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>{w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}</div>)}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Popular services */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px" }}>
-                  <SL>{t.popularServices}</SL>
-                  {(() => {
-                    const svcCount = {};
-                    appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
-                    const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                    if (sorted.length === 0) return <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
-                    const max = sorted[0][1];
-                    return sorted.map(([name, count]) => (
-                      <div key={name} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
-                          <span style={{ fontSize: 11, color: c.textLabel }}>{count} {t.bookings}</span>
-                        </div>
-                        <div style={{ height: 4, borderRadius: 4, background: c.bgCardHover }}>
-                          <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
               </div>
 
               <SL>{t.todayAppts}</SL>
@@ -6538,7 +6478,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy") {
+  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -6885,6 +6825,74 @@ function PrivacyPage({ lang, setLang }) {
   );
 }
 
+// ─── TERMS OF SERVICE ────────────────────────────────────────
+function TermsPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const content = lang === "nl" ? {
+    title: "Algemene Voorwaarden",
+    updated: "Laatst bijgewerkt: maart 2026",
+    sections: [
+      ["1. Aanvaarding van de voorwaarden", "Door gebruik te maken van het Vellu-platform (vellu.cc) ga je akkoord met deze Algemene Voorwaarden. Als je niet akkoord gaat, verzoeken wij je het platform niet te gebruiken. Vellu behoudt zich het recht voor deze voorwaarden op elk moment te wijzigen. Wijzigingen worden via het platform gecommuniceerd."],
+      ["2. Beschrijving van de dienst", "Vellu is een online boekingsplatform voor beautyprofessionals in Nederland, waaronder nagelsalons, wimperspecialisten, kappers en schoonheidsspecialisten. Het platform biedt saloneigenaren een eigen boekingspagina (vellu.cc/jouw-naam), agendabeheer, teamaccounts, e-mailnotificaties en een klantbeheersysteem. Vellu werkt met een vast maandelijks abonnement zonder commissie op boekingen."],
+      ["3. Accountregistratie", "Om het platform te gebruiken als saloneigenaar dien je een account aan te maken met een geldig e-mailadres en wachtwoord. Je bent verantwoordelijk voor het vertrouwelijk houden van je inloggegevens en voor alle activiteiten die onder je account plaatsvinden. Vellu mag accounts opschorten of beëindigen bij vermoeden van misbruik of schending van deze voorwaarden."],
+      ["4. Abonnementen en betaling", "Vellu biedt twee abonnementsvormen: Starter (€19/maand) en Professional (€39/maand). Beide plannen hanteren 0% commissie op boekingen — je betaalt uitsluitend het vaste maandbedrag. Abonnementen worden maandelijks gefactureerd. Je kunt je abonnement op elk moment opzeggen; het blijft actief tot het einde van de betaalde periode. Vellu behoudt zich het recht voor prijzen te wijzigen, met een kennisgeving van minimaal 30 dagen."],
+      ["5. Verplichtingen van de saloneigenaar", "Als saloneigenaar ben je verantwoordelijk voor: het correct en actueel houden van je salongegevens, diensten en prijzen; het nakomen van afspraken die via het platform worden geboekt; het voldoen aan alle toepasselijke wet- en regelgeving met betrekking tot je bedrijfsvoering, waaronder de AVG (GDPR) voor het verwerken van klantgegevens; het correct vermelden van je KVK-nummer, BTW-id en overige bedrijfsgegevens indien van toepassing."],
+      ["6. Klanten en eindgebruikers", "Klanten die een afspraak boeken via Vellu gaan een overeenkomst aan met de betreffende salon, niet met Vellu. Vellu treedt uitsluitend op als bemiddelaar en is geen partij bij de behandelovereenkomst. Klanten ontvangen een bevestigingsmail met de mogelijkheid om de afspraak te annuleren via een unieke link. Het annuleringsbeleid wordt bepaald door de individuele salon."],
+      ["7. Intellectueel eigendom", "Alle rechten op het Vellu-platform, inclusief de software, het ontwerp, de logo's en de content, berusten bij Vellu. Saloneigenaren behouden de rechten op hun eigen content, zoals foto's, beschrijvingen en logo's die zij uploaden. Door content te uploaden verleen je Vellu een beperkte licentie om deze content weer te geven op jouw boekingspagina."],
+      ["8. Privacy en gegevensverwerking", "Vellu verwerkt persoonsgegevens in overeenstemming met de Algemene Verordening Gegevensbescherming (AVG). Zie ons Privacybeleid op vellu.cc/privacy voor volledige informatie over hoe wij gegevens verzamelen, gebruiken en beschermen. Vellu treedt op als verwerker namens de saloneigenaar, die de verwerkingsverantwoordelijke is voor de gegevens van zijn of haar klanten."],
+      ["9. Beschikbaarheid", "Vellu streeft naar een zo hoog mogelijke beschikbaarheid van het platform, maar kan geen 100% uptime garanderen. Vellu is niet aansprakelijk voor schade als gevolg van tijdelijke onbeschikbaarheid, storingen of onderhoud. Gepland onderhoud wordt waar mogelijk vooraf gecommuniceerd."],
+      ["10. Aansprakelijkheid", "Vellu is niet aansprakelijk voor: schade voortvloeiend uit het gebruik van het platform of de onmogelijkheid daarvan; gemiste afspraken, no-shows of geschillen tussen salons en klanten; indirecte schade, gevolgschade of gederfde winst. De totale aansprakelijkheid van Vellu is beperkt tot het bedrag dat je in de afgelopen 3 maanden aan abonnementskosten hebt betaald."],
+      ["11. Beëindiging", "Je kunt je account op elk moment beëindigen door contact op te nemen met Vellu. Na beëindiging wordt je boekingspagina gedeactiveerd en worden je gegevens verwijderd conform ons Privacybeleid. Vellu kan je account beëindigen bij schending van deze voorwaarden, met een kennisgeving per e-mail."],
+      ["12. Toepasselijk recht", "Op deze voorwaarden is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechter in Den Haag, Nederland."],
+      ["13. Contact", "Voor vragen over deze Algemene Voorwaarden kun je contact opnemen via info@vellu.cc."]
+    ]
+  } : {
+    title: "Terms of Service",
+    updated: "Last updated: March 2026",
+    sections: [
+      ["1. Acceptance of terms", "By using the Vellu platform (vellu.cc), you agree to these Terms of Service. If you do not agree, please do not use the platform. Vellu reserves the right to modify these terms at any time. Changes will be communicated through the platform."],
+      ["2. Description of service", "Vellu is an online booking platform for beauty professionals in the Netherlands, including nail technicians, lash artists, hairdressers, and beauticians. The platform offers salon owners their own booking page (vellu.cc/your-name), calendar management, team accounts, email notifications, and a client management system. Vellu operates on a flat monthly subscription with no commission on bookings."],
+      ["3. Account registration", "To use the platform as a salon owner, you must create an account with a valid email address and password. You are responsible for keeping your login credentials confidential and for all activities that occur under your account. Vellu may suspend or terminate accounts if abuse or violation of these terms is suspected."],
+      ["4. Subscriptions and payment", "Vellu offers two subscription plans: Starter (€19/month) and Professional (€39/month). Both plans charge 0% commission on bookings — you only pay the flat monthly fee. Subscriptions are billed monthly. You may cancel your subscription at any time; it remains active until the end of the paid period. Vellu reserves the right to change prices with at least 30 days' notice."],
+      ["5. Salon owner obligations", "As a salon owner, you are responsible for: keeping your salon details, services, and prices accurate and up to date; honoring appointments booked through the platform; complying with all applicable laws and regulations regarding your business operations, including GDPR for processing client data; correctly listing your Chamber of Commerce number, VAT ID, and other business details where applicable."],
+      ["6. Clients and end users", "Clients who book an appointment through Vellu enter into an agreement with the respective salon, not with Vellu. Vellu acts solely as an intermediary and is not a party to the treatment agreement. Clients receive a confirmation email with the option to cancel via a unique link. Cancellation policies are determined by each individual salon."],
+      ["7. Intellectual property", "All rights to the Vellu platform, including the software, design, logos, and content, belong to Vellu. Salon owners retain the rights to their own content, such as photos, descriptions, and logos they upload. By uploading content, you grant Vellu a limited license to display this content on your booking page."],
+      ["8. Privacy and data processing", "Vellu processes personal data in accordance with the General Data Protection Regulation (GDPR). See our Privacy Policy at vellu.cc/privacy for full information on how we collect, use, and protect data. Vellu acts as a processor on behalf of the salon owner, who is the data controller for their clients' data."],
+      ["9. Availability", "Vellu strives for the highest possible platform availability but cannot guarantee 100% uptime. Vellu is not liable for damages resulting from temporary unavailability, outages, or maintenance. Planned maintenance will be communicated in advance where possible."],
+      ["10. Liability", "Vellu is not liable for: damages arising from the use of the platform or the inability to use it; missed appointments, no-shows, or disputes between salons and clients; indirect damages, consequential damages, or lost profits. Vellu's total liability is limited to the amount you have paid in subscription fees over the past 3 months."],
+      ["11. Termination", "You may terminate your account at any time by contacting Vellu. Upon termination, your booking page will be deactivated and your data will be deleted in accordance with our Privacy Policy. Vellu may terminate your account for violation of these terms, with notification by email."],
+      ["12. Governing law", "These terms are governed by Dutch law. Disputes shall be submitted to the competent court in The Hague, the Netherlands."],
+      ["13. Contact", "For questions about these Terms of Service, please contact us at info@vellu.cc."]
+    ]
+  };
+
+  return (
+    <Layout>
+      <style>{makeCSS(ACCENT, c)}</style>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{body}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── COOKIE CONSENT ──────────────────────────────────────────
 function CookieConsent({ lang }) {
   const { colors: c } = useTheme();
@@ -6933,6 +6941,7 @@ export default function VelluApp() {
             <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
             <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
             <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
+            <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
                 <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
           </Routes>
           <CookieConsent lang={lang} />
