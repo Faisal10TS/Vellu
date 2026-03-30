@@ -160,6 +160,8 @@ const T = {
     businessHoursDesc:"Stel je werkdagen en -uren in", closedOnDay:"Gesloten op deze dag",
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
+    salonContact:"Contactgegevens salon", salonContactDesc:"Zichtbaar op je salonpagina voor klanten",
+    salonPhone:"Telefoonnummer salon", salonInstagram:"Instagram (bijv. @jouwnaam)", salonWebsite:"Website (bijv. www.jouwnaam.nl)",
     bookingPolicyPlaceholder:"Bijv. Annuleren kan tot 24 uur van tevoren...",
     agreeToPolicy:"Ik ga akkoord met de voorwaarden",
     phoneRequired:"Telefoonnummer verplicht", phoneRequiredDesc:"Maak telefoonnummer verplicht voor klanten",
@@ -342,6 +344,8 @@ const T = {
     businessHoursDesc:"Set your working days and hours", closedOnDay:"Closed on this day",
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
+    salonContact:"Salon contact details", salonContactDesc:"Visible on your salon page for clients",
+    salonPhone:"Salon phone number", salonInstagram:"Instagram (e.g. @yourname)", salonWebsite:"Website (e.g. www.yourname.com)",
     bookingPolicyPlaceholder:"E.g. Cancellations must be made 24 hours in advance...",
     agreeToPolicy:"I agree to the booking policy",
     phoneRequired:"Phone number required", phoneRequiredDesc:"Make phone number mandatory for clients",
@@ -1210,7 +1214,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Footer */}
         <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
-          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Contact" : "Contact"}</a></div>
+          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
         </footer>
       </div>
     </Layout>
@@ -1558,32 +1562,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [expandedPolicy, setExpandedPolicy] = useState(false);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
-  const isScrollingToTab = useRef(false);
-
-  // Scroll-spy: update active tab based on which section is in view
-  useEffect(() => {
-    const sections = profileSectionRefs.current;
-    const sectionIds = Object.keys(sections).filter(k => sections[k]);
-    if (sectionIds.length === 0) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (isScrollingToTab.current) return;
-      let bestId = null;
-      let bestRatio = 0;
-      entries.forEach(entry => {
-        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
-          bestRatio = entry.intersectionRatio;
-          bestId = entry.target.dataset.sectionId;
-        }
-      });
-      if (bestId) setProfileTab(bestId);
-    }, { threshold: [0.1, 0.3, 0.5], rootMargin: "-80px 0px -40% 0px" });
-    sectionIds.forEach(id => {
-      const el = sections[id];
-      if (el) { el.dataset.sectionId = id; observer.observe(el); }
-    });
-    return () => observer.disconnect();
-  }, [mode]);
-
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
   // Check if form is complete
@@ -1940,10 +1918,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   const scrollToProfileSection = (tabId) => {
     setProfileTab(tabId);
-    isScrollingToTab.current = true;
     const el = profileSectionRefs.current[tabId];
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => { isScrollingToTab.current = false; }, 800);
   };
 
   const StarRow = ({ rating: r, size = 13 }) => (
@@ -2080,13 +2056,37 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {/* CONTACT INFO (in main col — like Setmore) */}
             <section className="profile-section">
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24 }}>
-                {initialSalon.owner_email && (
+                {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram || initialSalon.salon_website) && (
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{t.contactUs}</h3>
-                    <div className="profile-contact-row">
-                      <span>✉️</span>
-                      <a href={`mailto:${initialSalon.owner_email}`}>{initialSalon.owner_email}</a>
-                    </div>
+                    {initialSalon.owner_email && (
+                      <div className="profile-contact-row">
+                        <span>✉️</span>
+                        <a href={`mailto:${initialSalon.owner_email}`}>{initialSalon.owner_email}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_phone && (
+                      <div className="profile-contact-row">
+                        <span>📞</span>
+                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_instagram && (
+                      <div className="profile-contact-row">
+                        <span>📷</span>
+                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
+                        </a>
+                      </div>
+                    )}
+                    {initialSalon.salon_website && (
+                      <div className="profile-contact-row">
+                        <span>🌐</span>
+                        <a href={initialSalon.salon_website.startsWith("http") ? initialSalon.salon_website : "https://" + initialSalon.salon_website} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_website.replace(/^https?:\/\//, "")}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
                 {initialSalon.booking_policy && (
@@ -2203,8 +2203,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : "Privacy"}</a>
                 {" · "}
                 <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
-                {" · "}
-                <a href="/contact" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Contact" : "Contact"}</a>
               </div>
             </div>
           </div>
@@ -3795,7 +3793,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
-      booking_policy: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      booking_policy: "", salon_phone: "", salon_instagram: "", salon_website: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60
     };
@@ -3855,6 +3853,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           next_invoice_number: data.next_invoice_number || 1,
           business_hours: data.business_hours || DEFAULT_HOURS,
           booking_policy: data.booking_policy || "",
+          salon_phone: data.salon_phone || "",
+          salon_instagram: data.salon_instagram || "",
+          salon_website: data.salon_website || "",
           phone_required: data.phone_required || false,
           break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
@@ -4689,6 +4690,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               </div>
 
+              {/* Salon Contact Details */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+                <SL>{t.salonContact}</SL>
+                <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.salonContactDesc}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                  <input className="input-field" placeholder={t.salonPhone} value={salonData.salon_phone || ""} onChange={e => update(d => { d.salon_phone = e.target.value; return d; })} />
+                  <input className="input-field" placeholder={t.salonInstagram} value={salonData.salon_instagram || ""} onChange={e => update(d => { d.salon_instagram = e.target.value; return d; })} />
+                  <input className="input-field" placeholder={t.salonWebsite} value={salonData.salon_website || ""} onChange={e => update(d => { d.salon_website = e.target.value; return d; })} />
+                </div>
+              </div>
+
               {/* Invoice details */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
                 <SL>{t.invoiceDetails}</SL>
@@ -5517,6 +5529,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   next_invoice_number: salonData.next_invoice_number || 1,
                   business_hours: salonData.business_hours || DEFAULT_HOURS,
                   booking_policy: salonData.booking_policy || null,
+                  salon_phone: salonData.salon_phone || null,
+                  salon_instagram: salonData.salon_instagram || null,
+                  salon_website: salonData.salon_website || null,
                   phone_required: salonData.phone_required || false,
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
@@ -6508,7 +6523,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact") {
+  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -6545,6 +6560,9 @@ function SalonRoute({ lang, setLang }) {
         owner_email: data.email,
         business_hours: data.business_hours || DEFAULT_HOURS,
         booking_policy: data.booking_policy || "",
+        salon_phone: data.salon_phone || "",
+        salon_instagram: data.salon_instagram || "",
+        salon_website: data.salon_website || "",
         phone_required: data.phone_required || false,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
@@ -6923,105 +6941,6 @@ function TermsPage({ lang, setLang }) {
   );
 }
 
-// ─── CONTACT / ABOUT PAGE ────────────────────────────────────
-function ContactPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
-  const content = lang === "nl" ? {
-    title: "Over Vellu",
-    subtitle: "Het verhaal achter het platform",
-    mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
-    why: "Waarom Vellu?",
-    whyText: "Te veel nagelsalons, kappers en wimperspecialisten zijn afhankelijk van platforms die een flink percentage van elke boeking pakken. Of ze werken met WhatsApp en DM's — prima, maar niet schaalbaar. Vellu geeft je je eigen professionele boekingspagina met jouw naam, jouw kleuren en jouw diensten. Klanten boeken direct, jij houdt 100% van je omzet.",
-    who: "Wie zit erachter?",
-    whoText: "Vellu is gebouwd door een solo developer uit Nederland met een passie voor technologie en ondernemerschap. Het platform is van de grond af opgebouwd met de focus op wat beauty professionals echt nodig hebben — niet meer, niet minder.",
-    contact: "Contact",
-    contactText: "Heb je vragen, feedback of wil je samenwerken? Neem gerust contact op.",
-    emailLabel: "E-mail",
-    responseTime: "We reageren meestal binnen 24 uur.",
-    cta: "Klaar om te beginnen?",
-    ctaText: "Maak gratis je eigen boekingspagina aan en ontdek wat Vellu voor jouw salon kan doen.",
-    ctaBtn: "Gratis beginnen →"
-  } : {
-    title: "About Vellu",
-    subtitle: "The story behind the platform",
-    mission: "Vellu was built with one mission: give beauty professionals their own online booking platform, without commission and without hassle. No 10% per booking, no expensive subscriptions with hidden costs. Just a flat rate and your brand front and center.",
-    why: "Why Vellu?",
-    whyText: "Too many nail salons, hairdressers, and lash artists depend on platforms that take a significant percentage of every booking. Or they work with WhatsApp and DMs — fine, but not scalable. Vellu gives you your own professional booking page with your name, your colors, and your services. Clients book directly, you keep 100% of your revenue.",
-    who: "Who's behind it?",
-    whoText: "Vellu is built by a solo developer from the Netherlands with a passion for technology and entrepreneurship. The platform is built from the ground up with a focus on what beauty professionals actually need — nothing more, nothing less.",
-    contact: "Contact",
-    contactText: "Got questions, feedback, or want to collaborate? Don't hesitate to reach out.",
-    emailLabel: "Email",
-    responseTime: "We usually respond within 24 hours.",
-    cta: "Ready to get started?",
-    ctaText: "Create your free booking page and discover what Vellu can do for your salon.",
-    ctaBtn: "Get started free →"
-  };
-
-  return (
-    <Layout>
-      <style>{makeCSS(ACCENT, c)}</style>
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
-
-          {/* Header */}
-          <div style={{ marginBottom: 40 }}>
-            <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
-            <div style={{ fontSize: 13, color: c.textSub }}>{content.subtitle}</div>
-          </div>
-
-          {/* Mission */}
-          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.8, marginBottom: 32, padding: "20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>
-            {content.mission}
-          </div>
-
-          {/* Why Vellu */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.why}</div>
-            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whyText}</div>
-          </div>
-
-          {/* Who's behind it */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.who}</div>
-            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whoText}</div>
-          </div>
-
-          {/* Contact */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.contact}</div>
-            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 16 }}>{content.contactText}</div>
-            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: "20px" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{content.emailLabel}</div>
-              <a href="mailto:info@vellu.cc" style={{ fontSize: 15, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>info@vellu.cc</a>
-              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>{content.responseTime}</div>
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div style={{ textAlign: "center", padding: "28px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 20, marginBottom: 32 }}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
-            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
-            <button className="btn-primary" onClick={() => window.location.href = "/owner"}>{content.ctaBtn}</button>
-          </div>
-
-          {/* Footer links */}
-          <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
-            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
-            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
-          </div>
-        </div>
-      </div>
-    </Layout>
-  );
-}
-
 // ─── COOKIE CONSENT ──────────────────────────────────────────
 function CookieConsent({ lang }) {
   const { colors: c } = useTheme();
@@ -7071,7 +6990,6 @@ export default function VelluApp() {
             <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
             <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
             <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
-            <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
                 <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
           </Routes>
           <CookieConsent lang={lang} />
