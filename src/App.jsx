@@ -1417,7 +1417,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   }
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", textAlign: "left" }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, textAlign: "left" }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>{t.writeReview}</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {[1,2,3,4,5].map(s => (
@@ -1563,6 +1563,31 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [expandedTeamMember, setExpandedTeamMember] = useState(null);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
+  const isScrollingToTab = useRef(false);
+
+  // Scroll-spy: update active tab based on which section is in view
+  useEffect(() => {
+    const sections = profileSectionRefs.current;
+    const sectionIds = Object.keys(sections).filter(k => sections[k]);
+    if (sectionIds.length === 0) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (isScrollingToTab.current) return;
+      let bestId = null;
+      let bestRatio = 0;
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+          bestRatio = entry.intersectionRatio;
+          bestId = entry.target.dataset.sectionId;
+        }
+      });
+      if (bestId) setProfileTab(bestId);
+    }, { threshold: [0.1, 0.3, 0.5], rootMargin: "-80px 0px -40% 0px" });
+    sectionIds.forEach(id => {
+      const el = sections[id];
+      if (el) { el.dataset.sectionId = id; observer.observe(el); }
+    });
+    return () => observer.disconnect();
+  }, [mode]);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
   // Check if form is complete
@@ -1919,8 +1944,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   const scrollToProfileSection = (tabId) => {
     setProfileTab(tabId);
+    isScrollingToTab.current = true;
     const el = profileSectionRefs.current[tabId];
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => { isScrollingToTab.current = false; }, 800);
   };
 
   const StarRow = ({ rating: r, size = 13 }) => (
@@ -4406,6 +4433,76 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </button>
               </div>
 
+              {/* Revenue Chart + Popular Services */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
+                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{lang === "nl" ? "Bekijk meer →" : "View more →"}</span>
+                  </div>
+                  {(() => {
+                    const weeks = [];
+                    const now = new Date();
+                    for (let w = 7; w >= 0; w--) {
+                      const weekStart = new Date(now);
+                      weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+                      weekStart.setHours(0,0,0,0);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 7);
+                      const rev = appts
+                        .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                        .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                      const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                      weeks.push({ label, revenue: rev });
+                    }
+                    const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
+                    const chartH = 100;
+                    const barW = 100 / weeks.length;
+                    return (
+                      <div>
+                        <div style={{ position: "relative", height: chartH + 30 }}>
+                          <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                            {weeks.map((w, i) => {
+                              const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
+                              const x = i * barW + barW * 0.15;
+                              const bw = barW * 0.7;
+                              return <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" fill={i === weeks.length - 1 ? accent : `${accent}66`} />;
+                            })}
+                          </svg>
+                          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
+                            {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: c.textMuted, textAlign: "center", flex: 1 }}>{w.label}</div>)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
+                          {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: i === weeks.length - 1 ? accent : c.textLabel, textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>{w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}</div>)}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
+                  <SL>{t.popularServices}</SL>
+                  {(() => {
+                    const svcCount = {};
+                    appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
+                    const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                    if (sorted.length === 0) return <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
+                    const max = sorted[0][1];
+                    return sorted.map(([name, count]) => (
+                      <div key={name} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
+                          <span style={{ fontSize: 11, color: c.textLabel }}>{count} {t.bookings}</span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 4, background: c.bgCardHover }}>
+                          <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
               <SL>{t.todayAppts}</SL>
               {todayAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
@@ -4538,7 +4635,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Revenue chart */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
                 </div>
@@ -4601,7 +4698,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Popular services */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.popularServices}</SL>
                 {(() => {
                   const svcCount = {};
@@ -4624,7 +4721,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Busiest days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.busiestDays}</SL>
                 {(() => {
                   const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -4644,7 +4741,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Reviews */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px" }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
                 <SL>{t.reviews} ({salonData.reviews?.length || 0})</SL>
                 {(!salonData.reviews || salonData.reviews.length === 0)
                   ? <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
@@ -4692,7 +4789,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "salon" && <>
 
               {/* Billing / Subscription */}
-              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.billing}</SL>
                 {salonData.plan ? (
                   <div>
@@ -4722,7 +4819,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Profile */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.profile}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.businessName} value={salonData.name} onChange={e => update(d => { d.name = e.target.value; return d; })} />
@@ -4739,7 +4836,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Salon Contact Details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.salonContact}</SL>
                 <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.salonContactDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -4750,7 +4847,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Invoice details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.invoiceDetails}</SL>
                 <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.invoiceSettings}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -4772,13 +4869,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "diensten" && <>
 
               {/* Services + photos */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.services}</SL>
                 {salonData.services.length === 0 && (
                   <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>{t.noAppts}</div>
                 )}
                 {salonData.services.map(s => (
-                  <div key={s.id} style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid " + c.border }}>
+                  <div key={s.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {editingService === s.id ? (
@@ -4807,8 +4904,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       </div>
                       {editingService !== s.id && (
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎</button>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => { if (confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>✕</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎ {lang === "nl" ? "Bewerk" : "Edit"}</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => { if (confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>×</button>
                         </div>
                       )}
                     </div>
@@ -4941,7 +5038,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "team" && <>
 
               {/* Staff / Team */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.staff}</SL>
                 {/* Account type toggle */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -5143,20 +5240,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "planning" && <>
 
               {/* Locations */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.locations}</SL>
                 {(salonData.locations || []).length === 0 && (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noLocations}</div>
                 )}
                 {(salonData.locations || []).map(loc => (
-                  <div key={loc.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
+                  <div key={loc.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 500 }}>{loc.name}</div>
                         {loc.address && <div style={{ fontSize: 10, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
+                        <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }}
                           onClick={() => {
                             const newName = prompt(lang === "nl" ? "Locatienaam:" : "Location name:", loc.name);
                             if (newName && newName !== loc.name) {
@@ -5181,7 +5278,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Business Hours */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.businessHours}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.businessHoursDesc}</div>
                 {[0,1,2,3,4,5,6].map(day => {
@@ -5286,7 +5383,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Break time between appointments */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.breakMinutes}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.breakMinutesDesc}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -5305,11 +5402,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Exception Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "exception").map(([date, v]) => (
-                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 10, marginBottom: 6 }}>
+                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</div>
                       <div style={{ fontSize: 10, color: c.textLabel }}>{v.open} — {v.close}</div>
@@ -5337,11 +5434,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Blocked Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "blocked").map(([date, v]) => (
-                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 10, marginBottom: 6 }}>
+                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</div>
                       {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
@@ -5390,7 +5487,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {settingsTab === "facturatie" && <>
 
               {/* Appearance Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.appearance}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.logoDesc}</div>
                 
@@ -5446,7 +5543,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Booking Policy Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>{t.bookingPolicyDesc}</div>
                 <textarea 
@@ -5459,7 +5556,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Phone Required Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
@@ -5482,7 +5579,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Booking Window Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingWindow}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.bookingWindowDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -5521,12 +5618,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               </div>
 
               {/* Discount Codes Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.discountCodes}</SL>
                 
                 {/* Existing codes */}
                 {(salonData.discount_codes || []).map((code, idx) => (
-                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "10px 12px", background: c.bgCard, borderRadius: 10, border: "1px solid " + c.border }}>
+                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "10px 12px", background: c.bg, borderRadius: 14, border: "1px solid " + c.border }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: accent, fontFamily: "monospace" }}>{code.code}</div>
                       <div style={{ fontSize: 11, color: c.textSub }}>
@@ -6576,7 +6673,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms") {
+  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -6995,6 +7092,65 @@ function TermsPage({ lang, setLang }) {
   );
 }
 
+// ─── CONTACT / ABOUT PAGE ────────────────────────────────────
+function ContactPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const content = lang === "nl" ? {
+    title: "Over Vellu", subtitle: "Het verhaal achter het platform",
+    mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
+    why: "Waarom Vellu?", whyText: "Te veel nagelsalons, kappers en wimperspecialisten zijn afhankelijk van platforms die een flink percentage van elke boeking pakken. Of ze werken met WhatsApp en DM's — prima, maar niet schaalbaar. Vellu geeft je je eigen professionele boekingspagina met jouw naam, jouw kleuren en jouw diensten. Klanten boeken direct, jij houdt 100% van je omzet.",
+    who: "Wie zit erachter?", whoText: "Vellu is gebouwd door een solo developer uit Nederland met een passie voor technologie en ondernemerschap. Het platform is van de grond af opgebouwd met de focus op wat beauty professionals echt nodig hebben — niet meer, niet minder.",
+    contact: "Contact", contactText: "Heb je vragen, feedback of wil je samenwerken? Neem gerust contact op.",
+    emailLabel: "E-mail", responseTime: "We reageren meestal binnen 24 uur.",
+    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen →"
+  } : {
+    title: "About Vellu", subtitle: "The story behind the platform",
+    mission: "Vellu was built with one mission: give beauty professionals their own online booking platform, without commission and without hassle. No 10% per booking, no expensive subscriptions with hidden costs. Just a flat rate and your brand front and center.",
+    why: "Why Vellu?", whyText: "Too many nail salons, hairdressers, and lash artists depend on platforms that take a significant percentage of every booking. Or they work with WhatsApp and DMs — fine, but not scalable. Vellu gives you your own professional booking page with your name, your colors, and your services. Clients book directly, you keep 100% of your revenue.",
+    who: "Who's behind it?", whoText: "Vellu is built by a solo developer from the Netherlands with a passion for technology and entrepreneurship. The platform is built from the ground up with a focus on what beauty professionals actually need — nothing more, nothing less.",
+    contact: "Contact", contactText: "Got questions, feedback, or want to collaborate? Don't hesitate to reach out.",
+    emailLabel: "Email", responseTime: "We usually respond within 24 hours.",
+    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free →"
+  };
+  return (
+    <Layout>
+      <style>{makeCSS(ACCENT, c)}</style>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 13, color: c.textSub, marginBottom: 40 }}>{content.subtitle}</div>
+          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.8, marginBottom: 32, padding: "20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>{content.mission}</div>
+          <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.why}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whyText}</div></div>
+          <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.who}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whoText}</div></div>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.contact}</div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 16 }}>{content.contactText}</div>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: "20px" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{content.emailLabel}</div>
+              <a href="mailto:info@vellu.cc" style={{ fontSize: 15, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>info@vellu.cc</a>
+              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>{content.responseTime}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "center", padding: "28px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 20, marginBottom: 32 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
+            <button className="btn-primary" onClick={() => window.location.href = "/owner"}>{content.ctaBtn}</button>
+          </div>
+          <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── COOKIE CONSENT ──────────────────────────────────────────
 function CookieConsent({ lang }) {
   const { colors: c } = useTheme();
@@ -7044,6 +7200,7 @@ export default function VelluApp() {
             <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
             <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
             <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
+            <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
                 <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
           </Routes>
           <CookieConsent lang={lang} />
