@@ -153,7 +153,7 @@ const T = {
     totalRevenue:"Totale omzet", totalAppts:"Totaal afspraken", avgRating:"Gem. beoordeling",
     popularServices:"Populairste behandelingen", busiestDays:"Drukste dagen",
     revenueOverTime:"Omzet verloop", bookings:"boekingen",
-    staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker",
+    staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker", staffBio:"Korte bio (zichtbaar voor klanten)",
     staffRole:"Functie (bijv. Nagelstyliste)", selectStaff:"Kies een medewerker",
     anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
     businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit", closed:"Gesloten",
@@ -337,7 +337,7 @@ const T = {
     totalRevenue:"Total revenue", totalAppts:"Total appointments", avgRating:"Avg. rating",
     popularServices:"Most popular services", busiestDays:"Busiest days",
     revenueOverTime:"Revenue over time", bookings:"bookings",
-    staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name",
+    staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name", staffBio:"Short bio (visible to clients)",
     staffRole:"Role (e.g. Nail technician)", selectStaff:"Choose a staff member",
     anyStaff:"No preference", noStaff:"No staff members yet",
     businessHours:"Business Hours", openTime:"Open", closeTime:"Close", closed:"Closed",
@@ -1560,6 +1560,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [reviewSort, setReviewSort] = useState("recent");
   const [expandedHours, setExpandedHours] = useState(false);
   const [expandedPolicy, setExpandedPolicy] = useState(false);
+  const [expandedTeamMember, setExpandedTeamMember] = useState(null);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
@@ -2040,65 +2041,48 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {initialSalon.staff?.length > 0 && (
               <section ref={el => profileSectionRefs.current.team = el} className="profile-section">
                 <h2 className="profile-section-title">{t.profileTeam}</h2>
-                {initialSalon.staff.map(member => (
-                  <div key={member.id} className="profile-team-row">
-                    <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500, fontSize: 14, color: c.text }}>{member.name}</div>
-                      {member.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
+                {initialSalon.staff.map(member => {
+                  const isExpanded = expandedTeamMember === member.id;
+                  const memberServices = member.service_ids?.length > 0
+                    ? initialSalon.services.filter(s => member.service_ids.includes(s.id))
+                    : initialSalon.services;
+                  return (
+                    <div key={member.id}>
+                      <div className="profile-team-row" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)}>
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt="" />
+                        ) : (
+                          <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, fontSize: 14, color: c.text }}>{member.name}</div>
+                          {member.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
+                        </div>
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"
+                          style={{ transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }}><path d="M7 5l5 5-5 5" /></svg>
+                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: "12px 0 16px 52px", animation: "fadeUp 0.2s ease" }}>
+                          {member.bio && <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 12 }}>{member.bio}</div>}
+                          {memberServices.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{lang === "nl" ? "Diensten" : "Services"}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {memberServices.map(s => (
+                                  <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
+                                    {lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"><path d="M7 5l5 5-5 5" /></svg>
-                  </div>
-                ))}
+                  );
+                })}
               </section>
             )}
-
-            {/* CONTACT INFO (in main col — like Setmore) */}
-            <section className="profile-section">
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24 }}>
-                {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
-                  <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{t.contactUs}</h3>
-                    {(initialSalon.salon_email || initialSalon.owner_email) && (
-                      <div className="profile-contact-row">
-                        <span>✉️</span>
-                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`}>{initialSalon.salon_email || initialSalon.owner_email}</a>
-                      </div>
-                    )}
-                    {initialSalon.salon_phone && (
-                      <div className="profile-contact-row">
-                        <span>📞</span>
-                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
-                      </div>
-                    )}
-                    {initialSalon.salon_instagram && (
-                      <div className="profile-contact-row">
-                        <span>📷</span>
-                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
-                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {initialSalon.booking_policy && (
-                  <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{lang === "nl" ? "Goed om te weten" : "Good to know"}</h3>
-                    <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
-                      <span>📋</span>
-                      <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
-                        style={{ transition: "transform 0.2s", transform: expandedPolicy ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
-                    </div>
-                    {expandedPolicy && (
-                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
-                        {initialSalon.booking_policy}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
 
             {/* GALLERY */}
             {allPhotos.length > 0 && (
@@ -2165,9 +2149,58 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </section>
             )}
 
-            {/* ADDRESS */}
+            {/* CONTACT & ADDRESS */}
             <section ref={el => profileSectionRefs.current.contact = el} className="profile-section" style={{ borderBottom: "none" }}>
-              <h2 className="profile-section-title">{lang === "nl" ? "Adres" : "Address"}</h2>
+              <h2 className="profile-section-title">{t.profileContact}</h2>
+              
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 20 }}>
+                {/* Contact details */}
+                {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.contactUs}</h3>
+                    {(initialSalon.salon_email || initialSalon.owner_email) && (
+                      <div className="profile-contact-row">
+                        <span>✉️</span>
+                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_phone && (
+                      <div className="profile-contact-row">
+                        <span>📞</span>
+                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_instagram && (
+                      <div className="profile-contact-row">
+                        <span>📷</span>
+                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Booking policy */}
+                {initialSalon.booking_policy && (
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{lang === "nl" ? "Goed om te weten" : "Good to know"}</h3>
+                    <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
+                      <span>📋</span>
+                      <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+                        style={{ transition: "transform 0.2s", transform: expandedPolicy ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
+                    </div>
+                    {expandedPolicy && (
+                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
+                        {initialSalon.booking_policy}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Address */}
               {hasLocations ? (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
                   {(initialSalon.locations || []).map(loc => (
@@ -2183,9 +2216,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <span style={{ marginRight: 6 }}>📍</span>
                   {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
                 </div>
-              ) : (
-                <div style={{ fontSize: 13, color: c.textMuted }}>{lang === "nl" ? "Geen adres ingesteld" : "No address set"}</div>
-              )}
+              ) : null}
             </section>
 
             {/* Powered by */}
@@ -3825,7 +3856,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [editingService, setEditingService] = useState(null);
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
   const [editingStaff, setEditingStaff] = useState(null);
-  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", working_hours: {}, service_ids: [] });
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [] });
   // Manual appointment
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
@@ -4935,9 +4966,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: accent }}>{m.name[0]}</div>
                         <div>
                           {editingStaff === m.id ? (
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 100 }} />
-                              <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 120 }} placeholder={t.staffRole} />
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 100 }} />
+                                <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 120 }} placeholder={t.staffRole} />
+                              </div>
+                              <textarea className="input-field" value={editStaffForm.bio} onChange={e => setEditStaffForm(f => ({...f, bio: e.target.value}))} placeholder={t.staffBio} rows={2} style={{ fontSize: 11, padding: "6px 8px", resize: "vertical" }} />
                             </div>
                           ) : (
                             <>
@@ -4962,20 +4996,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         {editingStaff === m.id ? (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
-                              await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
+                              await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
                               // Update staff_services
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               if (editStaffForm.service_ids.length > 0) {
                                 await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
                               }
-                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
+                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
                               setEditingStaff(null);
                             }}>✓</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => setEditingStaff(null)}>✕</button>
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎</button>
+                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎</button>
                             <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
