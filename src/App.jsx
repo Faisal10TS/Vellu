@@ -1214,7 +1214,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Footer */}
         <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
-          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacy" : "Privacy"}</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · {lang === "nl" ? "Gemaakt voor beauty professionals" : "Made for beauty professionals"}</div>
+          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Privacy</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Verwerkingsovereenkomst" : "DPA"}</a> · <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a></div>
         </footer>
       </div>
     </Layout>
@@ -6673,7 +6673,7 @@ function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact") {
+  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact" || slug === "dpa") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -7151,6 +7151,81 @@ function ContactPage({ lang, setLang }) {
   );
 }
 
+// ─── DATA PROCESSING AGREEMENT (VERWERKINGSOVEREENKOMST) ─────
+function DpaPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const content = lang === "nl" ? {
+    title: "Verwerkingsovereenkomst",
+    updated: "Laatst bijgewerkt: maart 2026",
+    intro: "Deze verwerkingsovereenkomst (\"Overeenkomst\") is van toepassing op de verwerking van persoonsgegevens door Vellu (\"Verwerker\") namens de saloneigenaar die het Vellu-platform gebruikt (\"Verwerkingsverantwoordelijke\"). Deze overeenkomst maakt integraal onderdeel uit van de Algemene Voorwaarden van Vellu en wordt automatisch geaccepteerd bij het aanmaken van een account.",
+    sections: [
+      ["1. Definities", "Persoonsgegevens: alle gegevens die betrekking hebben op een geïdentificeerde of identificeerbare natuurlijke persoon. Verwerking: elke bewerking of geheel van bewerkingen met betrekking tot persoonsgegevens, waaronder het verzamelen, vastleggen, ordenen, structureren, opslaan, bijwerken, wijzigen, opvragen, raadplegen, gebruiken, verstrekken, verspreiden, wissen of vernietigen van gegevens. AVG: de Algemene Verordening Gegevensbescherming (EU) 2016/679."],
+      ["2. Onderwerp en duur", "De Verwerker verwerkt persoonsgegevens ten behoeve van het aanbieden van het online boekingsplatform Vellu. De verwerking vindt plaats gedurende de looptijd van het abonnement van de Verwerkingsverantwoordelijke. Na beëindiging van het abonnement worden de gegevens verwijderd conform artikel 12 van deze overeenkomst."],
+      ["3. Aard en doel van de verwerking", "De verwerking omvat: het opslaan en beheren van afspraken en boekingen; het versturen van e-mailbevestigingen, herinneringen en follow-ups; het beheren van klantgegevens namens de salon; het genereren van facturen en omzetoverzichten; het faciliteren van reviews en beoordelingen. Het doel is het aanbieden van een volledig boekings- en beheersysteem voor beautyprofessionals."],
+      ["4. Soorten persoonsgegevens", "De volgende categorieën persoonsgegevens worden verwerkt: naam (voor- en achternaam) van klanten; e-mailadres van klanten; telefoonnummer (indien verstrekt); afspraakgegevens (datum, tijd, behandeling, prijs); allergie-informatie (indien verstrekt door de klant); reviewteksten en beoordelingen; bedrijfsgegevens van de saloneigenaar (naam, adres, KVK, BTW-id, IBAN)."],
+      ["5. Categorieën betrokkenen", "De persoonsgegevens hebben betrekking op: klanten die een afspraak boeken via het Vellu-platform; saloneigenaren en hun medewerkers die het platform gebruiken."],
+      ["6. Verplichtingen van de Verwerker", "De Verwerker verbindt zich ertoe: persoonsgegevens uitsluitend te verwerken in opdracht van en volgens de instructies van de Verwerkingsverantwoordelijke, tenzij een wettelijke verplichting anders vereist; te waarborgen dat personen die toegang hebben tot de persoonsgegevens zich tot geheimhouding hebben verbonden; passende technische en organisatorische maatregelen te nemen om een op het risico afgestemd beveiligingsniveau te waarborgen; geen persoonsgegevens te verwerken voor eigen commerciële doeleinden; de Verwerkingsverantwoordelijke onverwijld te informeren indien een instructie naar het oordeel van de Verwerker in strijd is met de AVG."],
+      ["7. Sub-verwerkers", "De Verwerkingsverantwoordelijke geeft de Verwerker algemene toestemming om sub-verwerkers in te schakelen. De huidige sub-verwerkers zijn:\n\n• Supabase Inc. (San Francisco, VS) — database hosting en opslag. Data wordt verwerkt in de EU (Frankfurt). Supabase is SOC2 Type II gecertificeerd.\n• Resend Inc. (San Francisco, VS) — e-mailverzending voor bevestigingen, herinneringen en facturen. Verwerkt via Amazon SES (EU-West-1, Ierland).\n• Vercel Inc. (San Francisco, VS) — website hosting en content delivery. Edge netwerk met nodes in de EU.\n\nDe Verwerker informeert de Verwerkingsverantwoordelijke over wijzigingen in sub-verwerkers. De Verwerkingsverantwoordelijke kan bezwaar maken tegen een nieuwe sub-verwerker."],
+      ["8. Beveiligingsmaatregelen", "De Verwerker heeft de volgende technische en organisatorische maatregelen getroffen: versleuteling van gegevens in transit (TLS/SSL) en at rest; toegangscontrole op basis van Row Level Security (RLS) in de database; authenticatie via Supabase Auth met veilige wachtwoordopslag (bcrypt); geen opslag van betaalgegevens — betalingen worden afgehandeld door derden; regelmatige back-ups van de database; beperkte toegang tot productiedata."],
+      ["9. Meldplicht datalekken", "De Verwerker informeert de Verwerkingsverantwoordelijke zonder onredelijke vertraging, en waar mogelijk binnen 48 uur, nadat hij kennis heeft genomen van een inbreuk in verband met persoonsgegevens (datalek). De melding bevat ten minste: de aard van het datalek; de categorieën en het aantal betrokkenen; de waarschijnlijke gevolgen; de maatregelen die zijn genomen of voorgesteld om het datalek aan te pakken."],
+      ["10. Bijstand", "De Verwerker verleent de Verwerkingsverantwoordelijke bijstand bij: het nakomen van verzoeken van betrokkenen (inzage, correctie, verwijdering); het uitvoeren van een gegevensbeschermingseffectbeoordeling (DPIA) indien nodig; het melden van datalekken aan de Autoriteit Persoonsgegevens."],
+      ["11. Controle en audit", "De Verwerkingsverantwoordelijke heeft het recht om audits uit te voeren of te laten uitvoeren om de naleving van deze overeenkomst te controleren. De Verwerker verleent hieraan medewerking en stelt alle relevante informatie beschikbaar. De kosten van een audit zijn voor rekening van de Verwerkingsverantwoordelijke, tenzij uit de audit blijkt dat de Verwerker zijn verplichtingen niet nakomt."],
+      ["12. Teruggave en verwijdering", "Na beëindiging van het abonnement verwijdert de Verwerker alle persoonsgegevens binnen 30 dagen, tenzij bewaring wettelijk verplicht is. De Verwerkingsverantwoordelijke kan voorafgaand aan de verwijdering een kopie van de gegevens opvragen. Reeds geanonimiseerde of geaggregeerde gegevens (zoals omzetstatistieken) vallen buiten deze verplichting."],
+      ["13. Aansprakelijkheid", "De aansprakelijkheid van de Verwerker is beperkt overeenkomstig de bepalingen in de Algemene Voorwaarden van Vellu. Beide partijen vrijwaren elkaar voor claims van derden die voortvloeien uit het niet nakomen van de verplichtingen uit deze overeenkomst."],
+      ["14. Toepasselijk recht", "Op deze verwerkingsovereenkomst is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechter in Den Haag, Nederland."],
+      ["15. Contact", "Voor vragen over deze verwerkingsovereenkomst kun je contact opnemen via info@vellu.cc."]
+    ]
+  } : {
+    title: "Data Processing Agreement",
+    updated: "Last updated: March 2026",
+    intro: "This Data Processing Agreement (\"Agreement\") applies to the processing of personal data by Vellu (\"Processor\") on behalf of the salon owner using the Vellu platform (\"Controller\"). This agreement is an integral part of the Vellu Terms of Service and is automatically accepted upon account creation.",
+    sections: [
+      ["1. Definitions", "Personal data: any data relating to an identified or identifiable natural person. Processing: any operation or set of operations performed on personal data, including collecting, recording, organizing, structuring, storing, adapting, altering, retrieving, consulting, using, disclosing, disseminating, erasing, or destroying data. GDPR: the General Data Protection Regulation (EU) 2016/679."],
+      ["2. Subject matter and duration", "The Processor processes personal data for the purpose of providing the Vellu online booking platform. Processing takes place for the duration of the Controller's subscription. After termination of the subscription, data will be deleted in accordance with Article 12 of this agreement."],
+      ["3. Nature and purpose of processing", "Processing includes: storing and managing appointments and bookings; sending email confirmations, reminders, and follow-ups; managing client data on behalf of the salon; generating invoices and revenue overviews; facilitating reviews and ratings. The purpose is to provide a complete booking and management system for beauty professionals."],
+      ["4. Types of personal data", "The following categories of personal data are processed: name (first and last name) of clients; email address of clients; phone number (if provided); appointment data (date, time, treatment, price); allergy information (if provided by the client); review texts and ratings; business data of the salon owner (name, address, CoC, VAT ID, IBAN)."],
+      ["5. Categories of data subjects", "The personal data relates to: clients who book an appointment through the Vellu platform; salon owners and their staff who use the platform."],
+      ["6. Obligations of the Processor", "The Processor commits to: processing personal data solely on behalf of and in accordance with the instructions of the Controller, unless required otherwise by law; ensuring that persons authorized to process personal data have committed to confidentiality; implementing appropriate technical and organizational measures to ensure a level of security appropriate to the risk; not processing personal data for its own commercial purposes; informing the Controller without delay if an instruction, in the Processor's opinion, violates the GDPR."],
+      ["7. Sub-processors", "The Controller grants the Processor general authorization to engage sub-processors. The current sub-processors are:\n\n• Supabase Inc. (San Francisco, US) — database hosting and storage. Data is processed in the EU (Frankfurt). Supabase is SOC2 Type II certified.\n• Resend Inc. (San Francisco, US) — email delivery for confirmations, reminders, and invoices. Processed via Amazon SES (EU-West-1, Ireland).\n• Vercel Inc. (San Francisco, US) — website hosting and content delivery. Edge network with nodes in the EU.\n\nThe Processor will inform the Controller of changes to sub-processors. The Controller may object to a new sub-processor."],
+      ["8. Security measures", "The Processor has implemented the following technical and organizational measures: encryption of data in transit (TLS/SSL) and at rest; access control based on Row Level Security (RLS) in the database; authentication via Supabase Auth with secure password storage (bcrypt); no storage of payment data — payments are handled by third parties; regular database backups; limited access to production data."],
+      ["9. Data breach notification", "The Processor will inform the Controller without undue delay, and where possible within 48 hours, after becoming aware of a personal data breach. The notification will include at minimum: the nature of the breach; the categories and number of data subjects affected; the likely consequences; the measures taken or proposed to address the breach."],
+      ["10. Assistance", "The Processor will assist the Controller with: fulfilling data subject requests (access, correction, deletion); conducting a Data Protection Impact Assessment (DPIA) if necessary; reporting data breaches to the Data Protection Authority."],
+      ["11. Audit and inspection", "The Controller has the right to conduct or commission audits to verify compliance with this agreement. The Processor will cooperate and make all relevant information available. Audit costs are borne by the Controller, unless the audit reveals non-compliance by the Processor."],
+      ["12. Return and deletion", "After termination of the subscription, the Processor will delete all personal data within 30 days, unless retention is legally required. The Controller may request a copy of the data prior to deletion. Already anonymized or aggregated data (such as revenue statistics) is excluded from this obligation."],
+      ["13. Liability", "The Processor's liability is limited in accordance with the provisions in the Vellu Terms of Service. Both parties indemnify each other against third-party claims arising from non-compliance with the obligations under this agreement."],
+      ["14. Governing law", "This data processing agreement is governed by Dutch law. Disputes shall be submitted to the competent court in The Hague, the Netherlands."],
+      ["15. Contact", "For questions about this data processing agreement, please contact us at info@vellu.cc."]
+    ]
+  };
+  return (
+    <Layout>
+      <style>{makeCSS(ACCENT, c)}</style>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 20 }}>{content.updated}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 32, padding: "16px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 14 }}>{content.intro}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{body}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── COOKIE CONSENT ──────────────────────────────────────────
 function CookieConsent({ lang }) {
   const { colors: c } = useTheme();
@@ -7201,6 +7276,7 @@ export default function VelluApp() {
             <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
             <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
             <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
+            <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
                 <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
           </Routes>
           <CookieConsent lang={lang} />
