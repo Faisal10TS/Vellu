@@ -161,7 +161,7 @@ const T = {
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
     salonContact:"Contactgegevens salon", salonContactDesc:"Zichtbaar op je salonpagina voor klanten",
-    salonPhone:"Telefoonnummer salon", salonInstagram:"Instagram (bijv. @jouwnaam)", salonWebsite:"Website (bijv. www.jouwnaam.nl)",
+    salonPhone:"Telefoonnummer salon", salonInstagram:"Instagram (bijv. @jouwnaam)",
     bookingPolicyPlaceholder:"Bijv. Annuleren kan tot 24 uur van tevoren...",
     agreeToPolicy:"Ik ga akkoord met de voorwaarden",
     phoneRequired:"Telefoonnummer verplicht", phoneRequiredDesc:"Maak telefoonnummer verplicht voor klanten",
@@ -345,7 +345,7 @@ const T = {
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
     salonContact:"Salon contact details", salonContactDesc:"Visible on your salon page for clients",
-    salonPhone:"Salon phone number", salonInstagram:"Instagram (e.g. @yourname)", salonWebsite:"Website (e.g. www.yourname.com)",
+    salonPhone:"Salon phone number", salonInstagram:"Instagram (e.g. @yourname)",
     bookingPolicyPlaceholder:"E.g. Cancellations must be made 24 hours in advance...",
     agreeToPolicy:"I agree to the booking policy",
     phoneRequired:"Phone number required", phoneRequiredDesc:"Make phone number mandatory for clients",
@@ -2056,7 +2056,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {/* CONTACT INFO (in main col — like Setmore) */}
             <section className="profile-section">
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24 }}>
-                {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram || initialSalon.salon_website) && (
+                {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram) && (
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 12 }}>{t.contactUs}</h3>
                     {initialSalon.owner_email && (
@@ -2076,14 +2076,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <span>📷</span>
                         <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
                           {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
-                        </a>
-                      </div>
-                    )}
-                    {initialSalon.salon_website && (
-                      <div className="profile-contact-row">
-                        <span>🌐</span>
-                        <a href={initialSalon.salon_website.startsWith("http") ? initialSalon.salon_website : "https://" + initialSalon.salon_website} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
-                          {initialSalon.salon_website.replace(/^https?:\/\//, "")}
                         </a>
                       </div>
                     )}
@@ -2258,10 +2250,34 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
               )}
 
-              {/* Contact us toggle */}
-              {initialSalon.owner_email && (
-                <div className="profile-sidebar-contact-toggle">
-                  {t.contactUs} ↓
+              {/* Contact us */}
+              {(initialSalon.owner_email || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                <div style={{ marginTop: 4 }}>
+                  <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
+                    {t.contactUs} ↓
+                  </div>
+                  <div style={{ padding: "0 0 4px", fontSize: 12 }}>
+                    {initialSalon.salon_phone && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <span style={{ fontSize: 13 }}>📞</span>
+                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
+                      </div>
+                    )}
+                    {initialSalon.owner_email && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <span style={{ fontSize: 13 }}>✉️</span>
+                        <a href={`mailto:${initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.owner_email}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_instagram && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <span style={{ fontSize: 13 }}>📷</span>
+                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -3793,7 +3809,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
-      booking_policy: "", salon_phone: "", salon_instagram: "", salon_website: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      booking_policy: "", salon_phone: "", salon_instagram: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60
     };
@@ -3855,7 +3871,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           booking_policy: data.booking_policy || "",
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
-          salon_website: data.salon_website || "",
+
           phone_required: data.phone_required || false,
           break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
@@ -4697,7 +4713,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.salonPhone} value={salonData.salon_phone || ""} onChange={e => update(d => { d.salon_phone = e.target.value; return d; })} />
                   <input className="input-field" placeholder={t.salonInstagram} value={salonData.salon_instagram || ""} onChange={e => update(d => { d.salon_instagram = e.target.value; return d; })} />
-                  <input className="input-field" placeholder={t.salonWebsite} value={salonData.salon_website || ""} onChange={e => update(d => { d.salon_website = e.target.value; return d; })} />
                 </div>
               </div>
 
@@ -5531,7 +5546,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   booking_policy: salonData.booking_policy || null,
                   salon_phone: salonData.salon_phone || null,
                   salon_instagram: salonData.salon_instagram || null,
-                  salon_website: salonData.salon_website || null,
+
                   phone_required: salonData.phone_required || false,
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
@@ -6562,7 +6577,7 @@ function SalonRoute({ lang, setLang }) {
         booking_policy: data.booking_policy || "",
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",
-        salon_website: data.salon_website || "",
+
         phone_required: data.phone_required || false,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
