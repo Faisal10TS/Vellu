@@ -4314,6 +4314,79 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </button>
               </div>
 
+              {/* Revenue Chart + Popular Services — two column layout */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22 }}>
+                {/* Revenue chart */}
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
+                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{lang === "nl" ? "Bekijk meer →" : "View more →"}</span>
+                  </div>
+                  {(() => {
+                    const weeks = [];
+                    const now = new Date();
+                    for (let w = 7; w >= 0; w--) {
+                      const weekStart = new Date(now);
+                      weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+                      weekStart.setHours(0,0,0,0);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 7);
+                      const rev = appts
+                        .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                        .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                      const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                      weeks.push({ label, revenue: rev });
+                    }
+                    const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
+                    const chartH = 100;
+                    const barW = 100 / weeks.length;
+                    return (
+                      <div>
+                        <div style={{ position: "relative", height: chartH + 30 }}>
+                          <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                            {weeks.map((w, i) => {
+                              const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
+                              const x = i * barW + barW * 0.15;
+                              const bw = barW * 0.7;
+                              return <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" fill={i === weeks.length - 1 ? accent : `${accent}66`} />;
+                            })}
+                          </svg>
+                          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
+                            {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: c.textMuted, textAlign: "center", flex: 1 }}>{w.label}</div>)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
+                          {weeks.map((w, i) => <div key={i} style={{ fontSize: 9, color: i === weeks.length - 1 ? accent : c.textLabel, textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>{w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}</div>)}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Popular services */}
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "18px" }}>
+                  <SL>{t.popularServices}</SL>
+                  {(() => {
+                    const svcCount = {};
+                    appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
+                    const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                    if (sorted.length === 0) return <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
+                    const max = sorted[0][1];
+                    return sorted.map(([name, count]) => (
+                      <div key={name} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
+                          <span style={{ fontSize: 11, color: c.textLabel }}>{count} {t.bookings}</span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 4, background: c.bgCardHover }}>
+                          <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
               <SL>{t.todayAppts}</SL>
               {todayAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
