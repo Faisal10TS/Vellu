@@ -4960,57 +4960,90 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
                 {(salonData.staff || []).map(m => (
-                  <div key={m.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid " + c.border }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: accent }}>{m.name[0]}</div>
-                        <div>
-                          {editingStaff === m.id ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 100 }} />
-                                <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 11, padding: "6px 8px", width: 120 }} placeholder={t.staffRole} />
-                              </div>
-                              <textarea className="input-field" value={editStaffForm.bio} onChange={e => setEditStaffForm(f => ({...f, bio: e.target.value}))} placeholder={t.staffBio} rows={2} style={{ fontSize: 11, padding: "6px 8px", resize: "vertical" }} />
-                            </div>
+                  <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 10 }}>
+                    {/* Staff header row */}
+                    <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                      {/* Photo */}
+                      <div style={{ flexShrink: 0 }}>
+                        {m.avatar_url ? (
+                          <div style={{ position: "relative" }}>
+                            <img src={m.avatar_url} style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "1px solid " + c.inputBorder }} />
+                            {editingStaff === m.id && (
+                              <div onClick={async () => {
+                                await supabase.from("staff_members").update({ avatar_url: null }).eq("id", m.id);
+                                update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, avatar_url: null} : s); return d; });
+                              }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>×</div>
+                            )}
+                          </div>
+                        ) : (
+                          editingStaff === m.id ? (
+                            <label style={{ width: 52, height: 52, borderRadius: "50%", border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 2 }}>
+                              <span style={{ fontSize: 16, color: `${accent}88` }}>📷</span>
+                              <span style={{ fontSize: 7, color: `${accent}66` }}>FOTO</span>
+                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                const fileName = `${salonData.owner_id}/staff_${m.id}_${Date.now()}.${file.name.split(".").pop()}`;
+                                const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                                if (!error) {
+                                  const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                                  await supabase.from("staff_members").update({ avatar_url: publicUrl }).eq("id", m.id);
+                                  update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, avatar_url: publicUrl} : s); return d; });
+                                }
+                              }} />
+                            </label>
                           ) : (
-                            <>
-                              <div style={{ fontSize: 13, fontWeight: 500 }}>{m.name}</div>
-                              {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
-                              {(m.service_ids?.length > 0) && (
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 4 }}>
-                                  {m.service_ids.map(sid => {
-                                    const svc = salonData.services.find(s => s.id === sid);
-                                    return svc ? <span key={sid} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{svc.name_nl || svc.name}</span> : null;
-                                  })}
-                                </div>
-                              )}
-                              {(!m.service_ids || m.service_ids.length === 0) && (
-                                <div style={{ fontSize: 8, color: c.textMuted, marginTop: 3, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : "All services"}</div>
-                              )}
-                            </>
-                          )}
-                        </div>
+                            <div style={{ width: 52, height: 52, borderRadius: "50%", background: `${accent}18`, border: `1px solid ${accent}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 600, color: accent }}>{m.name?.[0] || "?"}</div>
+                          )
+                        )}
                       </div>
-                      <div style={{ display: "flex", gap: 4 }}>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {editingStaff === m.id ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "7px 10px", flex: 1 }} placeholder={t.staffName} />
+                              <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "7px 10px", flex: 1 }} placeholder={t.staffRole} />
+                            </div>
+                            <textarea className="input-field" value={editStaffForm.bio} onChange={e => setEditStaffForm(f => ({...f, bio: e.target.value}))} placeholder={t.staffBio} rows={2} style={{ fontSize: 12, padding: "7px 10px", resize: "vertical" }} />
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 14, fontWeight: 500 }}>{m.name}</div>
+                            {m.role && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{m.role}</div>}
+                            {m.bio && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{m.bio}</div>}
+                          </>
+                        )}
+                        {editingStaff !== m.id && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 8 }}>
+                            {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
+                              const svc = salonData.services.find(s => s.id === sid);
+                              return svc ? <span key={sid} style={{ fontSize: 9, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{svc.name_nl || svc.name}</span> : null;
+                            }) : (
+                              <span style={{ fontSize: 9, color: c.textMuted, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : "All services"}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Buttons */}
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                         {editingStaff === m.id ? (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
                               await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
-                              // Update staff_services
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               if (editStaffForm.service_ids.length > 0) {
                                 await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
                               }
                               update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
                               setEditingStaff(null);
-                            }}>✓</button>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px" }} onClick={() => setEditingStaff(null)}>✕</button>
+                            }}>✓ {lang === "nl" ? "Opslaan" : "Save"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px" }} onClick={() => setEditingStaff(null)}>✕</button>
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎</button>
-                            <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎ {lang === "nl" ? "Bewerk" : "Edit"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
@@ -5021,10 +5054,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                         )}
                       </div>
                     </div>
-                    {/* Per-staff working days + times */}
+                    {/* Expanded edit section */}
                     {editingStaff === m.id && (
-                      <div style={{ marginTop: 8, marginLeft: 36 }}>
-                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.staffDays}</div>
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>{t.staffDays}</div>
                         {[0,1,2,3,4,5,6].map(day => {
                           const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
                           const staffDay = editStaffForm.working_hours?.[day];
@@ -5034,70 +5067,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           return (
                             <div key={day} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "4px 0" }}>
                               <div style={{ width: 28, fontSize: 10, fontWeight: 500, color: c.textSub, flexShrink: 0 }}>{DAY_FULL[day].slice(0,2)}</div>
-                              <div 
-                                onClick={() => {
-                                  setEditStaffForm(f => {
-                                    const wh = {...(f.working_hours || {})};
-                                    if (isOn) wh[day] = { closed: true };
-                                    else wh[day] = { closed: false, open: openTime, close: closeTime };
-                                    return {...f, working_hours: wh};
-                                  });
-                                }}
-                                style={{ width: 28, height: 16, borderRadius: 8, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                                <div style={{ position: "absolute", top: 2, left: isOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                              <div onClick={() => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; if (isOn) wh[day] = { closed: true }; else wh[day] = { closed: false, open: openTime, close: closeTime }; return {...f, working_hours: wh}; }); }}
+                                style={{ width: 28, height: 16, borderRadius: 8, background: isOn ? accent : c.bgCardHover, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: isOn ? 14 : 2, transition: "left 0.2s" }} />
                               </div>
                               {isOn ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                  <select value={openTime} onChange={e => {
-                                    setEditStaffForm(f => {
-                                      const wh = {...(f.working_hours || {})};
-                                      wh[day] = { ...wh[day], closed: false, open: e.target.value };
-                                      return {...f, working_hours: wh};
-                                    });
-                                  }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                  <select value={openTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { ...wh[day], closed: false, open: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
                                     {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                                   </select>
-                                  <span style={{ fontSize: 9, color: c.textMuted }}>—</span>
-                                  <select value={closeTime} onChange={e => {
-                                    setEditStaffForm(f => {
-                                      const wh = {...(f.working_hours || {})};
-                                      wh[day] = { ...wh[day], closed: false, close: e.target.value };
-                                      return {...f, working_hours: wh};
-                                    });
-                                  }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                  <span style={{ fontSize: 10, color: c.textMuted }}>–</span>
+                                  <select value={closeTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { ...wh[day], closed: false, close: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
                                     {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                                   </select>
                                 </div>
-                              ) : (
-                                <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>
-                              )}
+                              ) : (<span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>)}
                             </div>
                           );
                         })}
-                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg/alles aan = volgt salon openingstijden" : "Empty/all on = follows salon hours"}</div>
-                        
-                        {/* Per-staff services */}
+                        <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4, marginBottom: 14 }}>{lang === "nl" ? "Leeg/alles aan = volgt salon openingstijden" : "Empty/all on = follows salon hours"}</div>
                         {salonData.services.length > 0 && (
-                          <div style={{ marginTop: 12 }}>
-                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                               {salonData.services.map(s => {
                                 const isOn = editStaffForm.service_ids.includes(s.id);
-                                return (
-                                  <div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
-                                    style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
-                                    {s.name_nl || s.name}
-                                  </div>
-                                );
+                                return (<div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
+                                  style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
+                                  {s.name_nl || s.name}</div>);
                               })}
                             </div>
                             <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : "Empty = all services"}</div>
                           </div>
                         )}
-
-                        {/* Invite staff (team accounts only) */}
                         {salonData.account_type === "team" && !m.user_id && (
-                          <div style={{ marginTop: 12, padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
+                          <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}>🔑 {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               <input className="input-field" placeholder={t.staffEmail} type="email" id={`staff-email-${m.id}`} style={{ fontSize: 11, padding: "8px 10px" }} />
@@ -5118,21 +5122,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                                   if (result.success) {
                                     update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, user_id: result.user_id, email: staffEmail} : s); return d; });
                                     alert(t.inviteSent + "\n" + staffEmail + " → " + t.staffLoginInfo);
-                                  } else {
-                                    alert(result.error === "email_taken" ? t.emailTaken : (result.error || "Error"));
-                                  }
+                                  } else { alert(result.error === "email_taken" ? t.emailTaken : (result.error || "Error")); }
                                 }}>{t.inviteStaff}</button>
                             </div>
                           </div>
                         )}
                         {salonData.account_type === "team" && m.user_id && (
-                          <div style={{ marginTop: 8, fontSize: 10, color: "#86efac" }}>✓ {m.email || t.staffLoginInfo}</div>
+                          <div style={{ fontSize: 10, color: "#86efac" }}>✓ {m.email || t.staffLoginInfo}</div>
                         )}
                       </div>
                     )}
                   </div>
-                ))}
-                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
+                ))}                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
                 }} />
               </div>
