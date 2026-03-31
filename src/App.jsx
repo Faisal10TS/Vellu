@@ -941,7 +941,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   @media (max-width: 900px) {
     .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
     .profile-header-contact { display: none; }
-    .profile-main { border-right: none; padding: 0 18px; }
+    .profile-main { border-right: none; padding: 0 18px 100px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
     .profile-mobile-bar { display: flex; }
@@ -3243,7 +3243,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           </div>
         </div>
       ) : (
-          <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+          <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
               <div style={{ 
