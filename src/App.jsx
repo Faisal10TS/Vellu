@@ -1536,7 +1536,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               <input className="input-field" placeholder={t.passwordField} type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))} />
             </div>
             {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
-            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{lang === "nl" ? "✓ Reset link verstuurd! Check je inbox." : "✓ Reset link sent! Check your inbox."}</div>}
+            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{lang === "nl" ? "Reset link verstuurd! Check je inbox." : "Reset link sent! Check your inbox."}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
             {mode === "signin" && (
               <button style={{ display: "block", width: "100%", marginTop: 12, background: "none", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}
@@ -3084,7 +3084,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
                       <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
                     </div>
-                    <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}>✕</div>
+                    <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                   </div>
                 )}
 
@@ -3095,7 +3095,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
                     <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                       <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                        {policyAgreed && <span style={{ color: c.btnOnDark, fontSize: 14, fontWeight: 700 }}>✓</span>}
+                        {policyAgreed && <NavIcon name="check" size={14} color={c.btnOnDark} />}
                       </div>
                       <span style={{ fontSize: 13, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
                     </label>
@@ -3287,7 +3287,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
                           </div>
                           <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${selectedLocation?.id === loc.id ? accent : c.textMuted}`, background: selectedLocation?.id === loc.id ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                            {selectedLocation?.id === loc.id && <span style={{ color: c.btnOnDark, fontSize: 10, fontWeight: 700 }}>✓</span>}
+                            {selectedLocation?.id === loc.id && <NavIcon name="check" size={10} color={c.btnOnDark} />}
                           </div>
                         </div>
                       </div>
@@ -3355,7 +3355,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               {/* Checkbox */}
                               <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${isSel ? accent : c.textMuted}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
-                                {isSel && <span style={{ color: c.btnOnDark, fontSize: 12, fontWeight: 700 }}>✓</span>}
+                                {isSel && <NavIcon name="check" size={12} color={c.btnOnDark} />}
                               </div>
                               <div>
                                 <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
@@ -3574,7 +3574,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
                           <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
                         </div>
-                        <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}>✕</div>
+                        <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                       </div>
                     )}
 
@@ -3585,7 +3585,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
                         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                           <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                            {policyAgreed && <span style={{ color: c.btnOnDark, fontSize: 12, fontWeight: 700 }}>✓</span>}
+                            {policyAgreed && <NavIcon name="check" size={12} color={c.btnOnDark} />}
                           </div>
                           <span style={{ fontSize: 12, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
                         </label>
@@ -3814,7 +3814,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
       </div>
       {(!form.name_nl || !form.price) && <div style={{ fontSize: 9, color: c.textMuted, marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"}</div>}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -3852,7 +3852,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
         <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -3913,7 +3913,7 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -3956,7 +3956,7 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "✓ Toevoegen" : "✓ Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -4037,7 +4037,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                 <div style={{ marginBottom: 20 }}>
                   {plan.features.map((f, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 12, color: c.textSub }}>
-                      <span style={{ color: accent, fontSize: 14 }}>✓</span>
+                      <NavIcon name="check" size={14} color={accent} />
                       {f}
                     </div>
                   ))}
@@ -4114,7 +4114,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
     setSaving(true);
     await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
     setSaving(false);
-    onFinish();
+    setStep(3);
   };
 
   return (
@@ -4576,7 +4576,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       )}
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4 }} onClick={() => sendInvoice(a.id)}>{t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color:"#86efac", marginTop:6 }}>{t.invoiceSent}</div>}
-      {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}>✗ {t.noShow}</div>}
+      {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}><NavIcon name="xmark" size={11} color="#f87171" /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
@@ -5001,7 +5001,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
                       <div style={{ marginTop: 5 }}>
                         {a.invoice_sent
-                          ? <span style={{ fontSize: 10, color: "#86efac" }}>✓ {t.sent}</span>
+                          ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
                           : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => sendInvoice(a.id)}>{t.send}</button>
                         }
                       </div>
@@ -5317,7 +5317,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                                 await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
                                 update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv); return d; });
                                 setEditingService(null);
-                              }}>✓ {t.saveChanges}</button>
+                              }}><NavIcon name="check" size={11} /> {t.saveChanges}</button>
                               <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }} onClick={() => setEditingService(null)}><NavIcon name="xmark" size={12} /></button>
                             </div>
                           </div>
@@ -5330,7 +5330,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       </div>
                       {editingService !== s.id && (
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}>✎ {lang === "nl" ? "Bewerk" : "Edit"}</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
                           <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => { if (confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>×</button>
                         </div>
                       )}
@@ -5565,7 +5565,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}>✎ {lang === "nl" ? "Bewerk" : "Edit"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
                               if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
@@ -5651,7 +5651,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                           </div>
                         )}
                         {salonData.account_type === "team" && m.user_id && (
-                          <div style={{ fontSize: 10, color: "#86efac" }}>✓ {m.email || t.staffLoginInfo}</div>
+                          <div style={{ fontSize: 10, color: "#86efac", display: "flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {m.email || t.staffLoginInfo}</div>
                         )}
                       </div>
                     )}
@@ -6348,7 +6348,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
                 <div style={{ fontSize: 10, color: c.textLabel, marginTop: 3, letterSpacing: "0.06em" }}>vellu.cc/{salonData.id}</div>
               </div>
-              <button className="btn-ghost" style={{ padding: "7px 14px", fontSize: 12 }} onClick={() => setShowPreview(false)}>✕ {lang === "nl" ? "Sluiten" : "Close"}</button>
+              <button className="btn-ghost" style={{ padding: "7px 14px", fontSize: 12 }} onClick={() => setShowPreview(false)}><NavIcon name="xmark" size={12} /> {lang === "nl" ? "Sluiten" : "Close"}</button>
             </div>
             <div style={{ width: "100%", maxWidth: 390, background: c.bg, borderRadius: 28, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
               <div style={{ background: c.bg, backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, padding: "24px 22px 0", fontFamily: "'Jost',sans-serif", color: c.text }}>
@@ -6564,7 +6564,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px" }} onClick={() => markComplete(a.id)}><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}>✕ No-show</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}><NavIcon name="xmark" size={10} color="#f87171" /> No-show</button>
         </div>
       )}
     </div>
@@ -6691,7 +6691,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
                       <div style={{ marginTop: 5 }}>
                         {a.invoice_sent
-                          ? <span style={{ fontSize: 10, color: "#86efac" }}>✓ {t.sent}</span>
+                          ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
                           : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => staffSendInvoice(a.id)}>{t.send}</button>
                         }
                       </div>
@@ -6752,7 +6752,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   );
                 })}
-                <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? "✓" : t.saveChanges}</button>
+                <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? <NavIcon name="check" size={12} /> : t.saveChanges}</button>
               </div>
 
               {/* Invoice details */}
@@ -6783,7 +6783,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     next_invoice_number: invoiceForm.next_invoice_number || 1
                   }).eq("id", staffMember.id);
                   setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
-                }}>{invoiceSaved ? "✓" : t.saveChanges}</button>
+                }}>{invoiceSaved ? <NavIcon name="check" size={12} /> : t.saveChanges}</button>
               </div>
 
               {/* My services (full editing) */}
@@ -7380,7 +7380,7 @@ function CancelRoute({ lang }) {
         
         {status === "cancelled" && (
           <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>✓</div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="check" size={48} color="#86efac" /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {t.bookingCancelled}
             </h1>
