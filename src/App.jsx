@@ -1563,31 +1563,45 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [expandedTeamMember, setExpandedTeamMember] = useState(null);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
+  const profileTabsBarRef = useRef(null);
   const isScrollingToTab = useRef(false);
 
-  // Scroll-spy: update active tab based on which section is in view
+  // Scroll-spy: update active tab based on which section is closest to top
   useEffect(() => {
-    const sections = profileSectionRefs.current;
-    const sectionIds = Object.keys(sections).filter(k => sections[k]);
-    if (sectionIds.length === 0) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (isScrollingToTab.current) return;
-      let bestId = null;
-      let bestRatio = 0;
-      entries.forEach(entry => {
-        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
-          bestRatio = entry.intersectionRatio;
-          bestId = entry.target.dataset.sectionId;
+    if (mode !== "profile") return;
+    const HEADER_OFFSET = 80;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking || isScrollingToTab.current) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const sections = profileSectionRefs.current;
+        const sectionIds = Object.keys(sections).filter(k => sections[k]);
+        let activeId = sectionIds[0];
+        for (const id of sectionIds) {
+          const el = sections[id];
+          if (!el) continue;
+          const top = el.getBoundingClientRect().top;
+          if (top <= HEADER_OFFSET + 40) activeId = id;
         }
+        if (activeId) setProfileTab(activeId);
+        ticking = false;
       });
-      if (bestId) setProfileTab(bestId);
-    }, { threshold: [0.1, 0.3, 0.5], rootMargin: "-80px 0px -40% 0px" });
-    sectionIds.forEach(id => {
-      const el = sections[id];
-      if (el) { el.dataset.sectionId = id; observer.observe(el); }
-    });
-    return () => observer.disconnect();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
   }, [mode]);
+
+  // Auto-scroll the tab bar so the active tab is visible
+  useEffect(() => {
+    const bar = profileTabsBarRef.current;
+    if (!bar) return;
+    const activeBtn = bar.querySelector(`[data-tab-id="${profileTab}"]`);
+    if (!activeBtn) return;
+    const scrollLeft = activeBtn.offsetLeft - bar.offsetWidth / 2 + activeBtn.offsetWidth / 2;
+    bar.scrollTo({ left: scrollLeft, behavior: "smooth" });
+  }, [profileTab]);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
   // Check if form is complete
@@ -1980,9 +1994,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           ) : (
             <div className="profile-header-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
           )}
-          <div className="profile-tabs">
+          <div className="profile-tabs" ref={profileTabsBarRef}>
             {profileTabs.map(tab => (
-              <button key={tab.id} className={`profile-tab ${profileTab === tab.id ? "active" : ""}`}
+              <button key={tab.id} data-tab-id={tab.id} className={`profile-tab ${profileTab === tab.id ? "active" : ""}`}
                 onClick={() => scrollToProfileSection(tab.id)}>
                 {tab.label}
               </button>
