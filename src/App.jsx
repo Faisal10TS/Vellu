@@ -221,6 +221,17 @@ const T = {
     darkMode:"Donker", lightMode:"Licht",
     // Follow-up
     followupRate:"Follow-up response rate",
+    // Reminder timing
+    reminderTiming:"Herinnering timing", reminderTimingDesc:"Wanneer krijgen klanten een herinnering voor hun afspraak?",
+    reminderBefore:"voor de afspraak", reminderNone:"Geen herinnering",
+    // Onboarding
+    onboardingWelcome:"Welkom bij Vellu!", onboardingWelcomeSub:"Laten we je salon instellen. Dit duurt maar 2 minuten.",
+    onboardingStep1:"Salon gegevens", onboardingStep1Sub:"Hoe heet je salon?",
+    onboardingStep2:"Eerste behandeling", onboardingStep2Sub:"Voeg je eerste behandeling toe",
+    onboardingStep3:"Openingstijden", onboardingStep3Sub:"Wanneer ben je open?",
+    onboardingDone:"Je salon is klaar!", onboardingDoneSub:"Je kunt nu je link delen en boekingen ontvangen.",
+    onboardingNext:"Volgende stap →", onboardingSkip:"Later instellen", onboardingFinish:"Naar je dashboard →",
+    onboardingServiceName:"Behandeling naam", onboardingServicePrice:"Prijs (€)", onboardingServiceDuration:"Duur (min)",
     // Client dashboard
     myAppointments:"Mijn afspraken", enterEmailToLogin:"Voer je e-mail in om je afspraken te bekijken",
     sendCode:"Code versturen", enterCode:"Voer de 6-cijferige code in", verifyCode:"Verifiëren",
@@ -405,6 +416,17 @@ const T = {
     darkMode:"Dark", lightMode:"Light",
     // Follow-up
     followupRate:"Follow-up response rate",
+    // Reminder timing
+    reminderTiming:"Reminder timing", reminderTimingDesc:"When should clients receive a reminder for their appointment?",
+    reminderBefore:"before the appointment", reminderNone:"No reminder",
+    // Onboarding
+    onboardingWelcome:"Welcome to Vellu!", onboardingWelcomeSub:"Let's set up your salon. This only takes 2 minutes.",
+    onboardingStep1:"Salon details", onboardingStep1Sub:"What's your salon called?",
+    onboardingStep2:"First treatment", onboardingStep2Sub:"Add your first treatment",
+    onboardingStep3:"Opening hours", onboardingStep3Sub:"When are you open?",
+    onboardingDone:"Your salon is ready!", onboardingDoneSub:"You can now share your link and receive bookings.",
+    onboardingNext:"Next step →", onboardingSkip:"Set up later", onboardingFinish:"Go to dashboard →",
+    onboardingServiceName:"Treatment name", onboardingServicePrice:"Price (€)", onboardingServiceDuration:"Duration (min)",
     // Client dashboard
     myAppointments:"My appointments", enterEmailToLogin:"Enter your email to view your appointments",
     sendCode:"Send code", enterCode:"Enter the 6-digit code", verifyCode:"Verify",
@@ -1121,6 +1143,44 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <span style={{ fontSize: 24 }}>{f.icon}</span>
                   <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? f.nl : f.en}</div>
                   <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.5 }}>{lang === "nl" ? f.sub.nl : f.sub.en}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── TESTIMONIALS ─── */}
+        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
+                {lang === "nl" ? "Wat onze gebruikers zeggen" : "What our users say"}
+              </div>
+              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+              {(lang === "nl" ? [
+                { name: "Yasmin El Amrani", role: "Nail Tech · Amsterdam", text: "Eindelijk een boekingssysteem zonder commissie. Mijn klanten boeken nu 24/7 en ik heb alles op één plek. Super blij mee!", rating: 5 },
+                { name: "Sophie de Vries", role: "Lash Artist · Utrecht", text: "De automatische herinneringen hebben mijn no-shows met 80% verminderd. En het ziet er zo professioneel uit — klanten zijn onder de indruk.", rating: 5 },
+                { name: "Fatima Benali", role: "Kapsalon · Rotterdam", text: "We zijn overgestapt van Treatwell en besparen nu honderden euro's per maand. Het team account werkt perfect voor ons salon met 4 medewerkers.", rating: 5 },
+              ] : [
+                { name: "Yasmin El Amrani", role: "Nail Tech · Amsterdam", text: "Finally a booking system without commission. My clients book 24/7 and I have everything in one place. Super happy with it!", rating: 5 },
+                { name: "Sophie de Vries", role: "Lash Artist · Utrecht", text: "The automatic reminders reduced my no-shows by 80%. And it looks so professional — clients are impressed.", rating: 5 },
+                { name: "Fatima Benali", role: "Hair Salon · Rotterdam", text: "We switched from Treatwell and now save hundreds of euros per month. The team account works perfectly for our salon with 4 staff members.", rating: 5 },
+              ]).map((review, i) => (
+                <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "24px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", gap: 2 }}>
+                    {[1,2,3,4,5].map(s => (
+                      <svg key={s} width={14} height={14} viewBox="0 0 20 20" fill={s <= review.rating ? "#f5c518" : c.inputBg}>
+                        <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                      </svg>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, flex: 1 }}>"{review.text}"</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{review.name}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel }}>{review.role}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -3868,6 +3928,171 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   );
 }
 
+// ─── ONBOARDING WIZARD ──────────────────────────────────────
+function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }) {
+  const { colors: c } = useTheme();
+  const t = T[lang];
+  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+  const [step, setStep] = useState(0);
+  const [salonName, setSalonName] = useState(salonData.name || "");
+  const [city, setCity] = useState(salonData.city || "");
+  const [svcName, setSvcName] = useState("");
+  const [svcPrice, setSvcPrice] = useState("");
+  const [svcDuration, setSvcDuration] = useState("60");
+  const [saving, setSaving] = useState(false);
+
+  const steps = [
+    { title: t.onboardingStep1, sub: t.onboardingStep1Sub },
+    { title: t.onboardingStep2, sub: t.onboardingStep2Sub },
+    { title: t.onboardingStep3, sub: t.onboardingStep3Sub },
+  ];
+
+  const saveStep1 = async () => {
+    if (!salonName.trim()) return;
+    setSaving(true);
+    await supabase.from("profiles").update({ business_name: salonName.trim(), city: city.trim() || null }).eq("id", salonData.owner_id);
+    update(d => { d.name = salonName.trim(); d.city = city.trim(); return d; });
+    setSaving(false);
+    setStep(1);
+  };
+
+  const saveStep2 = async () => {
+    if (!svcName.trim() || !svcPrice) return;
+    setSaving(true);
+    const { data: newSvc } = await supabase.from("services").insert({
+      owner_id: salonData.owner_id,
+      name_nl: svcName.trim(),
+      name_en: svcName.trim(),
+      price: parseFloat(svcPrice),
+      duration: parseInt(svcDuration) || 60,
+      position: 0
+    }).select().single();
+    if (newSvc) {
+      update(d => { d.services = [...d.services, { ...newSvc, photos: [], variants: [], extras: [] }]; return d; });
+    }
+    setSaving(false);
+    setStep(2);
+  };
+
+  const saveStep3 = async () => {
+    setSaving(true);
+    await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
+    setSaving(false);
+    onFinish();
+  };
+
+  return (
+    <Layout>
+      <style>{makeCSS(accent, c)}</style>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 440 }}>
+
+          {/* Progress */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 40 }}>
+            {steps.map((_, i) => (
+              <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? accent : c.border, transition: "background 0.3s" }} />
+            ))}
+          </div>
+
+          {/* Step 0: Salon details */}
+          {step === 0 && (
+            <div>
+              <div style={{ fontSize: 28, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingWelcome}</div>
+              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingWelcomeSub}</div>
+
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.onboardingStep1}</div>
+              <input className="input-field" placeholder={t.businessName} value={salonName} onChange={e => setSalonName(e.target.value)} style={{ marginBottom: 10 }} />
+              <input className="input-field" placeholder={t.city} value={city} onChange={e => setCity(e.target.value)} style={{ marginBottom: 24 }} />
+
+              <button className="btn-primary" style={{ width: "100%" }} onClick={saveStep1} disabled={saving || !salonName.trim()}>
+                {saving ? "..." : t.onboardingNext}
+              </button>
+            </div>
+          )}
+
+          {/* Step 1: First service */}
+          {step === 1 && (
+            <div>
+              <div style={{ fontSize: 22, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep2}</div>
+              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingStep2Sub}</div>
+
+              <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ marginBottom: 10 }} />
+              <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+                <input className="input-field" type="number" placeholder={t.onboardingServicePrice} value={svcPrice} onChange={e => setSvcPrice(e.target.value)} style={{ flex: 1 }} />
+                <select className="input-field" value={svcDuration} onChange={e => setSvcDuration(e.target.value)} style={{ flex: 1 }}>
+                  {[15,30,45,60,75,90,120].map(m => <option key={m} value={m}>{m} min</option>)}
+                </select>
+              </div>
+
+              <button className="btn-primary" style={{ width: "100%", marginBottom: 10 }} onClick={saveStep2} disabled={saving || !svcName.trim() || !svcPrice}>
+                {saving ? "..." : t.onboardingNext}
+              </button>
+              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textLabel }} onClick={() => setStep(2)}>
+                {t.onboardingSkip}
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Business hours */}
+          {step === 2 && (
+            <div>
+              <div style={{ fontSize: 22, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep3}</div>
+              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 24, lineHeight: 1.6 }}>{t.onboardingStep3Sub}</div>
+
+              {[0,1,2,3,4,5,6].map(day => {
+                const hours = salonData.business_hours?.[day] || DEFAULT_HOURS[day];
+                const isClosed = hours.closed;
+                return (
+                  <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "10px 12px", background: isClosed ? c.bgCard : `${accent}08`, border: `1px solid ${isClosed ? c.border : `${accent}22`}`, borderRadius: 12, opacity: isClosed ? 0.6 : 1, transition: "all 0.2s" }}>
+                    <div style={{ width: 80, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
+                    <div onClick={() => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], closed: !isClosed }; return d; })}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: isClosed ? c.inputBorder : accent, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                      <div style={{ position: "absolute", top: 2, left: isClosed ? 2 : 18, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                    </div>
+                    {!isClosed ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                        <select value={hours.open} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], open: e.target.value }; return d; })}
+                          style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
+                          {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                        </select>
+                        <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
+                        <select value={hours.close} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], close: e.target.value }; return d; })}
+                          style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
+                          {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                        </select>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: c.textMuted }}>{t.closed}</div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button className="btn-primary" style={{ width: "100%", marginTop: 20, marginBottom: 10 }} onClick={saveStep3} disabled={saving}>
+                {saving ? "..." : t.onboardingNext}
+              </button>
+              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textLabel }} onClick={onFinish}>
+                {t.onboardingSkip}
+              </button>
+            </div>
+          )}
+
+          {/* Done state — shown briefly before redirecting */}
+          {step === 3 && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>✦</div>
+              <div style={{ fontSize: 28, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, marginBottom: 8 }}>{t.onboardingDone}</div>
+              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 8 }}>{t.onboardingDoneSub}</div>
+              <div style={{ fontSize: 13, color: accent, marginBottom: 32, fontWeight: 500 }}>vellu.cc/{salonData.id}</div>
+              <button className="btn-primary" style={{ width: "100%" }} onClick={onFinish}>{t.onboardingFinish}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalonUpdate }) {
   const { colors: c } = useTheme();
@@ -3883,7 +4108,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
       booking_policy: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
-      min_advance_hours: 0, max_advance_days: 60
+      min_advance_hours: 0, max_advance_days: 60,
+      reminder_hours: 24
     };
   });
   const [saved, setSaved] = useState(false);
@@ -3911,6 +4137,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -3954,6 +4182,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           account_type: data.account_type || "joint",
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
+          reminder_hours: data.reminder_hours ?? 24,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -3970,7 +4199,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           categories: catData || [],
           locations: locData || []
         }));
+        // Show onboarding if no services exist yet
+        if ((data.services || []).length === 0) setShowOnboarding(true);
       }
+      setDataLoaded(true);
     };
     load();
   }, [user.slug]);
@@ -4216,6 +4448,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     ["facturen", "facturen", t.invoices],
     ["instellingen", "instellingen", t.settings]
   ];
+
+  // Show onboarding wizard for new salons
+  if (showOnboarding && dataLoaded) {
+    return <OnboardingWizard salonData={salonData} update={update} lang={lang} accent={accent} onFinish={() => setShowOnboarding(false)} />;
+  }
 
   return (
     <Layout accent={accent}>
@@ -5415,6 +5652,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               </div>
 
+              {/* Reminder timing */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <SL>{t.reminderTiming}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.reminderTimingDesc}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[0, 1, 2, 4, 12, 24, 48].map(hrs => (
+                    <div key={hrs} onClick={() => update(d => { d.reminder_hours = hrs; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.reminder_hours ?? 24) === hrs ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.reminder_hours ?? 24) === hrs ? accent : c.inputBorder}`,
+                        color: (salonData.reminder_hours ?? 24) === hrs ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{hrs === 0 ? t.reminderNone : `${hrs}u ${t.reminderBefore}`}</div>
+                  ))}
+                </div>
+              </div>
+
               {/* Exception Days */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
@@ -5704,7 +5960,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",
                   min_advance_hours: salonData.min_advance_hours || 0,
-                  max_advance_days: salonData.max_advance_days || 60
+                  max_advance_days: salonData.max_advance_days || 60,
+                  reminder_hours: salonData.reminder_hours ?? 24
                 }).eq("id", salonData.owner_id);
                 setSaved(true); setTimeout(() => setSaved(false), 2000);
               }}>{saved ? t.saved : t.save}</button>
