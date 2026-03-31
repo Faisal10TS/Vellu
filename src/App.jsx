@@ -4672,7 +4672,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     <Layout accent={accent}>
       <div style={{ 
         background: c.bg, 
-        minHeight: "100dvh", 
+        height: "100dvh", 
+        overflow: "hidden",
         display: "flex", 
         fontFamily: "'Jost',sans-serif", 
         color: c.text 
@@ -4766,7 +4767,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           flex: 1, 
           display: "flex", 
           flexDirection: "column",
-          minHeight: "100dvh",
+          height: "100dvh",
+          minWidth: 0,
           overflow: "hidden"
         }}>
           {/* Mobile Header */}
@@ -4828,7 +4830,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           {/* Scrollable Content */}
           <div style={{ 
             flex: 1, 
+            minHeight: 0,
             overflow: "auto", 
+            WebkitOverflowScrolling: "touch",
             padding: isMobile ? "14px 22px 140px" : "32px 40px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
@@ -6637,7 +6641,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   return (
     <Layout>
       <style>{makeCSS(accent, c)}</style>
-      <div style={{ display: "flex", minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+      <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop sidebar */}
         {!isMobile && (
           <div style={{ width: 240, padding: "28px 20px", borderRight: "1px solid " + c.border, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, background: c.bg, zIndex: 50 }}>
@@ -6670,7 +6674,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 240, padding: isMobile ? "16px 18px 100px" : "30px 40px", maxWidth: isMobile ? "100%" : 800 }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 240, padding: isMobile ? "16px 18px 100px" : "30px 40px", maxWidth: isMobile ? "100%" : 800, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
               <div>
