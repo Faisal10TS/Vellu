@@ -912,7 +912,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .profile-mobile-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
     padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom));
-    background: ${c.bg}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    background: ${c.bg};
     border-top: 1px solid ${c.border}; z-index: 100;
     display: none; gap: 12px; align-items: center;
   }
@@ -3713,7 +3713,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {!done && selectedServices.length > 0 && (
               <div style={{ 
                 position: "fixed", bottom: 0, left: 0, right: 0, 
-                background: c.navBg, backdropFilter: "blur(24px)", 
+                background: c.bg, 
                 borderTop: "1px solid " + c.border, padding: "12px 22px",
                 paddingBottom: "max(12px, env(safe-area-inset-bottom))",
                 display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100,
@@ -6216,16 +6216,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           )}
         </div>
 
-        {/* Mobile Bottom Nav */}
+        </main>
+
+        {/* Mobile Bottom Nav — must be OUTSIDE main (overflow:hidden breaks position:fixed on iOS) */}
         {isMobile && (
           <div style={{ 
             position: "fixed", 
             bottom: 0, 
             left: 0, 
             right: 0, 
-            background: c.navBg, 
-            backdropFilter: "blur(24px)", 
-            WebkitBackdropFilter: "blur(24px)",
+            background: c.bg, 
             borderTop: "1px solid " + c.border, 
             display: "flex", 
             padding: "12px 4px 8px", 
@@ -6240,7 +6240,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             ))}
           </div>
         )}
-        </main>
 
         {/* Add Appointment Modal */}
         {showAddAppt && (
@@ -7095,7 +7094,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
         {/* Mobile bottom nav */}
         {isMobile && (
-          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.navBg, backdropFilter: "blur(24px)", borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
             {navItems.map(([k, icon, label]) => (
               <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
