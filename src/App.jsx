@@ -78,6 +78,48 @@ async function sendEmails(type, booking) {
 }
 
 const ACCENT = "#c9a96e";
+
+// ─── GOOGLE CALENDAR HELPER ──────────────────────────────────
+function getGoogleCalUrl({ title, date, time, duration, description, location }) {
+  const start = new Date(date + "T" + time + ":00");
+  const end = new Date(start.getTime() + (duration || 60) * 60000);
+  const fmtCal = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmtCal(start)}/${fmtCal(end)}&details=${encodeURIComponent(description || "")}&location=${encodeURIComponent(location || "")}`;
+}
+
+// ─── WHATSAPP HELPER ─────────────────────────────────────────
+function getWhatsAppUrl(phone, message) {
+  const clean = (phone || "").replace(/[^0-9+]/g, "").replace(/^0/, "31");
+  return `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+}
+
+function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price }) {
+  if (lang === "nl") {
+    return `Hoi ${clientName}! ✨\n\nJe afspraak bij ${salonName} is bevestigd:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nTot dan! 🙏`;
+  }
+  return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nSee you then! 🙏`;
+}
+
+function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName }) {
+  if (lang === "nl") {
+    return `Hoi ${clientName}! 👋\n\nHerinnering: je hebt morgen een afspraak bij ${salonName}.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nTot morgen! ✨`;
+  }
+  return `Hi ${clientName}! 👋\n\nReminder: you have an appointment at ${salonName} tomorrow.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nSee you tomorrow! ✨`;
+}
+
+// ─── AUTO-TRANSLATE HELPER ───────────────────────────────────
+async function autoTranslateText(text) {
+  try {
+    const { data, error } = await supabase.functions.invoke("translate", {
+      body: { text, from: "nl", to: "en" }
+    });
+    if (error) throw error;
+    return data?.translated || "";
+  } catch (e) {
+    console.error("Translate error:", e);
+    return "";
+  }
+}
 const getToday = () => new Date();
 const fmt = (d) => d.toISOString().split("T")[0];
 const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
@@ -232,6 +274,19 @@ const T = {
     onboardingDone:"Je salon is klaar!", onboardingDoneSub:"Je kunt nu je link delen en boekingen ontvangen.",
     onboardingNext:"Volgende stap →", onboardingSkip:"Later instellen", onboardingFinish:"Naar je dashboard →",
     onboardingServiceName:"Behandeling naam", onboardingServicePrice:"Prijs (€)", onboardingServiceDuration:"Duur (min)",
+    // Google Calendar
+    googleCalendar:"Google Agenda", googleCalendarDesc:"Synchroniseer afspraken automatisch met je Google Agenda",
+    googleCalendarConnect:"Google Agenda koppelen", googleCalendarConnected:"Google Agenda gekoppeld ✓",
+    googleCalendarDisconnect:"Ontkoppelen", googleCalendarConnecting:"Verbinden...",
+    // Google Calendar
+    addToGoogleCal:"📅 Google Agenda", exportDayToCal:"Dag exporteren naar Google Agenda",
+    // WhatsApp
+    whatsappNumber:"WhatsApp nummer salon", whatsappEnabled:"WhatsApp notificaties",
+    whatsappEnabledDesc:"Toon WhatsApp knoppen voor klanten en in het dashboard",
+    sendWhatsApp:"WhatsApp sturen", whatsappBookingConfirm:"Bevestig via WhatsApp",
+    whatsappReminder:"Herinnering sturen via WhatsApp",
+    // Auto-translate
+    autoTranslateBtn:"✨ Vertalen", translating:"Vertalen...", translateFailed:"Vertaling mislukt",
     // Client dashboard
     myAppointments:"Mijn afspraken", enterEmailToLogin:"Voer je e-mail in om je afspraken te bekijken",
     sendCode:"Code versturen", enterCode:"Voer de 6-cijferige code in", verifyCode:"Verifiëren",
@@ -427,6 +482,19 @@ const T = {
     onboardingDone:"Your salon is ready!", onboardingDoneSub:"You can now share your link and receive bookings.",
     onboardingNext:"Next step →", onboardingSkip:"Set up later", onboardingFinish:"Go to dashboard →",
     onboardingServiceName:"Treatment name", onboardingServicePrice:"Price (€)", onboardingServiceDuration:"Duration (min)",
+    // Google Calendar
+    googleCalendar:"Google Calendar", googleCalendarDesc:"Automatically sync appointments to your Google Calendar",
+    googleCalendarConnect:"Connect Google Calendar", googleCalendarConnected:"Google Calendar connected ✓",
+    googleCalendarDisconnect:"Disconnect", googleCalendarConnecting:"Connecting...",
+    // Google Calendar
+    addToGoogleCal:"📅 Google Calendar", exportDayToCal:"Export day to Google Calendar",
+    // WhatsApp
+    whatsappNumber:"Salon WhatsApp number", whatsappEnabled:"WhatsApp notifications",
+    whatsappEnabledDesc:"Show WhatsApp buttons for clients and in the dashboard",
+    sendWhatsApp:"Send WhatsApp", whatsappBookingConfirm:"Confirm via WhatsApp",
+    whatsappReminder:"Send reminder via WhatsApp",
+    // Auto-translate
+    autoTranslateBtn:"✨ Translate", translating:"Translating...", translateFailed:"Translation failed",
     // Client dashboard
     myAppointments:"My appointments", enterEmailToLogin:"Enter your email to view your appointments",
     sendCode:"Send code", enterCode:"Enter the 6-digit code", verifyCode:"Verify",
@@ -1963,6 +2031,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       service_name: combinedServiceName, date, time, price: getPrice(),
       salon_name: initialSalon.name
     });
+
+    // 6. Create Google Calendar event (if connected)
+    if (appt) {
+      supabase.functions.invoke("google-calendar", {
+        body: {
+          action: "create",
+          owner_id: initialSalon.owner_id,
+          booking: {
+            appointment_id: appt.id,
+            service_name: combinedServiceName,
+            client_name: `${form.firstName} ${form.lastName}`,
+            client_email: clientEmail,
+            client_phone: form.phone || null,
+            staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
+            date, time, duration: getDuration(), price: getPrice()
+          }
+        }
+      }).catch(e => console.error("Google Calendar error:", e));
+    }
     
     if (form.payment === "online") {
       await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
@@ -3077,6 +3164,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
               </div>
 
+              {/* WhatsApp confirmation */}
+              {initialSalon.whatsapp_number && (
+                <div style={{ marginBottom: 32 }}>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 20px", color: "#25d366", borderColor: "rgba(37,211,102,0.3)" }} onClick={() => {
+                    const msg = getWhatsAppBookingMsg(lang, {
+                      clientName: form.firstName,
+                      salonName: initialSalon.name,
+                      date: new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                      time, serviceName: getServiceLabel(), price: getPrice().toFixed(2)
+                    });
+                    window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
+                  }}>💬 {t.whatsappBookingConfirm}</button>
+                </div>
+              )}
+
               <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
 
               {/* Write a review */}
@@ -4109,7 +4211,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       booking_policy: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60,
-      reminder_hours: 24
+      reminder_hours: 24,
+      google_calendar_connected: false
     };
   });
   const [saved, setSaved] = useState(false);
@@ -4183,6 +4286,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
+          google_calendar_connected: data.google_calendar_connected || false,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -4223,6 +4327,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
     if (onSalonUpdate) onSalonUpdate(updated);
     return updated;
   });
+
+  // Handle Google Calendar OAuth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google") === "connected") {
+      update(d => { d.google_calendar_connected = true; return d; });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [dataLoaded]);
   const markComplete = async (id) => {
     await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
     update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
@@ -4430,6 +4543,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4 }} onClick={() => sendInvoice(a.id)}>{t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color:"#86efac", marginTop:6 }}>{t.invoiceSent}</div>}
       {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}>✗ {t.noShow}</div>}
+      {/* Quick actions: Google Calendar + WhatsApp */}
+      {a.status === "confirmed" && (
+        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+          <button className="btn-ghost" style={{ flex: 1, fontSize: 9, padding: "6px 8px", color: c.textLabel }} onClick={() => {
+            const dur = parseInt(a.service_duration || a.duration || 60);
+            window.open(getGoogleCalUrl({
+              title: `${a.client_name} — ${a.service_name}`,
+              date: a.date, time: a.time, duration: dur,
+              description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n€${a.service_price}`,
+              location: salonData.name + (salonData.city ? ", " + salonData.city : "")
+            }), "_blank");
+          }}>{t.addToGoogleCal}</button>
+          {salonData.whatsapp_number && a.client_phone && (
+            <button className="btn-ghost" style={{ fontSize: 9, padding: "6px 10px", color: "#25d366", borderColor: "rgba(37,211,102,0.2)" }} onClick={() => {
+              const msg = getWhatsAppBookingMsg(lang, {
+                clientName: a.client_name, salonName: salonData.name,
+                date: new Date(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2)
+              });
+              window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
+            }}>💬 WhatsApp</button>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -5092,6 +5229,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.salonContactDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.salonPhone} value={salonData.salon_phone || ""} onChange={e => update(d => { d.salon_phone = e.target.value; return d; })} />
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>💬</div>
+                    <input className="input-field" placeholder={t.whatsappNumber} value={salonData.whatsapp_number || ""} onChange={e => update(d => { d.whatsapp_number = e.target.value; return d; })} style={{ paddingLeft: 38 }} />
+                  </div>
                   <input className="input-field" placeholder={t.salonInstagram} value={salonData.salon_instagram || ""} onChange={e => update(d => { d.salon_instagram = e.target.value; return d; })} />
                   <input className="input-field" placeholder={t.salonEmail} value={salonData.salon_email || ""} onChange={e => update(d => { d.salon_email = e.target.value; return d; })} />
                 </div>
@@ -5750,6 +5891,34 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                     });
                     setNewBlocked({ from: "", to: "", reason: "" });
                   }}>{t.addBlocked}</button>
+              </div>
+
+              {/* Google Calendar Sync */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <SL>{t.googleCalendar}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.googleCalendarDesc}</div>
+                {salonData.google_calendar_connected ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: `${accent}12`, border: `1px solid ${accent}33`, borderRadius: 12, marginBottom: 10 }}>
+                      <span style={{ fontSize: 16 }}>📅</span>
+                      <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{t.googleCalendarConnected}</span>
+                    </div>
+                    <button className="btn-ghost" style={{ width: "100%", fontSize: 10, color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }}
+                      onClick={async () => {
+                        if (!confirm(lang === "nl" ? "Google Agenda ontkoppelen?" : "Disconnect Google Calendar?")) return;
+                        await supabase.functions.invoke("google-auth", { body: { action: "disconnect", owner_id: salonData.owner_id } });
+                        update(d => { d.google_calendar_connected = false; return d; });
+                      }}>{t.googleCalendarDisconnect}</button>
+                  </div>
+                ) : (
+                  <button className="btn-ghost" style={{ width: "100%", fontSize: 12, borderColor: `${accent}33`, color: accent }}
+                    onClick={async () => {
+                      const { data } = await supabase.functions.invoke("google-auth", { body: { action: "get_url", owner_id: salonData.owner_id } });
+                      if (data?.url) window.location.href = data.url;
+                    }}>
+                    📅 {t.googleCalendarConnect}
+                  </button>
+                )}
               </div>
               </>}
 
@@ -7114,6 +7283,13 @@ function CancelRoute({ lang }) {
         date: appointment.date, time: appointment.time,
         price: appointment.service_price || 0, salon_name: salonName
       });
+    }
+
+    // Delete Google Calendar event if it exists
+    if (appointment.google_event_id && appointment.owner_id) {
+      supabase.functions.invoke("google-calendar", {
+        body: { action: "delete", owner_id: appointment.owner_id, event_id: appointment.google_event_id }
+      }).catch(e => console.error("Google Calendar delete error:", e));
     }
     
     setStatus("cancelled");
