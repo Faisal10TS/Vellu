@@ -17,7 +17,7 @@ const THEMES = {
     inputBg: "rgba(237,232,224,0.04)",
     inputBorder: "rgba(237,232,224,0.1)",
     overlay: "rgba(0,0,0,0.95)",
-    navBg: "rgba(13,11,10,0.97)",
+    navBg: "rgba(13,11,10,1)",
     selectBg: "#1a1a1a",
     toggleInactive: "rgba(237,232,224,0.15)",
     btnOnDark: "#0d0b0a",
@@ -35,7 +35,7 @@ const THEMES = {
     inputBg: "rgba(13,11,10,0.04)",
     inputBorder: "rgba(13,11,10,0.15)",
     overlay: "rgba(255,255,255,0.95)",
-    navBg: "rgba(250,249,247,0.97)",
+    navBg: "rgba(250,249,247,1)",
     selectBg: "#f0efed",
     toggleInactive: "rgba(13,11,10,0.2)",
     btnOnDark: "#1a1714",
@@ -912,7 +912,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .profile-mobile-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
     padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom));
-    background: ${c.bg}ee; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    background: ${c.bg}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border-top: 1px solid ${c.border}; z-index: 100;
     display: none; gap: 12px; align-items: center;
   }
@@ -1557,17 +1557,25 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (rating === 0) return;
-    await supabase.from("reviews").insert({
-      owner_id: salon.owner_id,
-      client_name: clientName,
-      client_email: clientEmail,
-      rating,
-      comment: comment || null
-    });
-    setSubmitted(true);
+    if (rating === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from("reviews").insert({
+        owner_id: salon.owner_id,
+        client_name: clientName,
+        client_email: clientEmail,
+        rating,
+        comment: comment || null
+      });
+      if (!error) setSubmitted(true);
+    } catch (e) {
+      console.error("Review submit error:", e);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -1588,8 +1596,8 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
       </div>
       <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
         style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
-      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined }}
-        onClick={submit} disabled={rating === 0}>{t.submitReview}</button>
+      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
+        onClick={submit} disabled={rating === 0 || submitting}>{submitting ? "..." : t.submitReview}</button>
     </div>
   );
 }
@@ -1727,6 +1735,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const profileMainRef = useRef(null);
   const profileTabsBarRef = useRef(null);
   const isScrollingToTab = useRef(false);
+  const emailLookupRef = useRef(0);
 
   // Scroll-spy: update active tab based on which section is closest to top
   useEffect(() => {
@@ -1920,8 +1929,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       setClientFound(false);
       return;
     }
+    const lookupId = ++emailLookupRef.current;
     const timer = setTimeout(async () => {
       const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).single();
+      // Ignore stale responses - only apply if this is still the latest lookup
+      if (lookupId !== emailLookupRef.current) return;
       if (data) {
         setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone, allergies: data.allergies || f.allergies }));
         setClientNoShows(data.no_show_count || 0);
@@ -1934,29 +1946,37 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return () => clearTimeout(timer);
   }, [form.email]);
 
-  // Load booked time slots for selected date
+  // Load booked time slots for selected date (include staff_id for multi-staff filtering)
   useEffect(() => {
     if (!date || !initialSalon.owner_id) return;
     const loadSlots = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("appointments")
-        .select("time, service_duration")
+        .select("time, service_duration, staff_id")
         .eq("owner_id", initialSalon.owner_id)
         .eq("date", date)
         .in("status", ["confirmed", "completed"]);
-      setBookedSlots(data || []);
+      if (!error) setBookedSlots(data || []);
     };
     loadSlots();
   }, [date, initialSalon.owner_id, slotsRefreshKey]);
 
   // Check if a time slot overlaps with existing bookings (including break time)
+  // For multi-staff salons: only check slots for the same staff member(s)
   const breakBuffer = activeBreakMinutes;
   
   const isTimeSlotBooked = (slotTime) => {
     const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
     const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
+    const selectedStaffIds = selectedServices.filter(item => item.staff).map(item => item.staff.id);
+    const hasStaffSelection = selectedStaffIds.length > 0;
+    
     for (const booked of bookedSlots) {
       if (!booked.time) continue;
+      // Multi-staff filtering: if staff is selected, only check overlaps with same staff
+      // If no staff selected (solo salon), check all appointments
+      if (hasStaffSelection && booked.staff_id && !selectedStaffIds.includes(booked.staff_id)) continue;
+      
       const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
       const bookedDuration = Math.max(booked.service_duration || 30, 30) + breakBuffer;
       // Check overlap: two ranges [slotStart, slotEnd+break) and [bookedStart, bookedEnd+break)
@@ -2166,7 +2186,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   if (mode === "profile") return (
     <Layout>
       <style>{makeCSS(accent, c)}</style>
-      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, minHeight: "100vh" }}>
+      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, minHeight: "100dvh" }}>
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
@@ -2673,7 +2693,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         
         {/* Desktop Layout */}
         {!isMobile ? (
-          <div style={{ display: "flex", minHeight: "100vh" }}>
+          <div style={{ display: "flex", minHeight: "100dvh" }}>
             {/* Left Sidebar */}
             <div style={{ 
               width: 340, 
@@ -2684,7 +2704,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               flexDirection: "column",
               position: "sticky",
               top: 0,
-              height: "100vh",
+              height: "100dvh",
               overflow: "hidden"
             }}>
               {/* Cover Image */}
@@ -3223,7 +3243,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           </div>
         </div>
       ) : (
-          <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
               <div style={{ 
@@ -4280,18 +4300,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   // Load salon data from Supabase
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
+      try {
+      const { data, error: profileError } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
+      if (profileError) { console.error("Profile load error:", profileError); setDataLoaded(true); return; }
       if (data) {
-        // Load appointments
-        const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false });
-        // Load reviews
-        const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
-        // Load staff
-        const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position");
-        // Load categories
-        const { data: catData } = await supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position");
-        // Load locations
-        const { data: locData } = await supabase.from("locations").select("*").eq("owner_id", data.id).order("position");
+        // Load all related data in parallel for faster dashboard load
+        const [
+          { data: appts },
+          { data: reviews },
+          { data: staffData },
+          { data: catData },
+          { data: locData }
+        ] = await Promise.all([
+          supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false }),
+          supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
+          supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position"),
+          supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
+          supabase.from("locations").select("*").eq("owner_id", data.id).order("position")
+        ]);
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -4341,6 +4367,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
         if ((data.services || []).length === 0) setShowOnboarding(true);
       }
       setDataLoaded(true);
+      } catch (e) {
+        console.error("Dashboard load error:", e);
+        setDataLoaded(true);
+      }
     };
     load();
   }, [user.slug]);
@@ -4370,46 +4400,59 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [dataLoaded]);
+  const [processingApptId, setProcessingApptId] = useState(null);
   const markComplete = async (id) => {
-    await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
-    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
+      await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
+    } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
-    await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
-    // Increment client no-show count
-    const appt = salonData.appointments.find(a => a.id === id);
-    if (appt?.client_id) {
-      const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
-      if (client) {
-        await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
+      await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      // Increment client no-show count
+      const appt = salonData.appointments.find(a => a.id === id);
+      if (appt?.client_id) {
+        const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
+        if (client) {
+          await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
+        }
       }
-    }
-    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
+    } finally { setProcessingApptId(null); }
   };
   const sendInvoice = async (id) => {
-    const a = salonData.appointments.find(x => x.id === id);
-    if (a) {
-      const invoiceNumber = `${salonData.invoice_prefix || "INV"}-${String(salonData.next_invoice_number || 1).padStart(4, "0")}`;
-      await sendEmails("invoice", {
-        client_name: a.client_name,
-        client_email: a.client_email,
-        service_name: a.service_name,
-        date: a.date,
-        price: a.service_price,
-        salon_name: salonData.name,
-        invoice_number: invoiceNumber,
-        salon_address: salonData.address || "",
-        salon_kvk: salonData.kvk_number || "",
-        salon_btw: salonData.btw_id || "",
-        salon_iban: salonData.iban || ""
-      });
-      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
-      // Auto-increment invoice number
-      const nextNum = (salonData.next_invoice_number || 1) + 1;
-      await supabase.from("profiles").update({ next_invoice_number: nextNum }).eq("id", salonData.owner_id);
-      update(d => { d.next_invoice_number = nextNum; return d; });
-    }
-    update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
+      const a = salonData.appointments.find(x => x.id === id);
+      if (a) {
+        const invoiceNumber = `${salonData.invoice_prefix || "INV"}-${String(salonData.next_invoice_number || 1).padStart(4, "0")}`;
+        await sendEmails("invoice", {
+          client_name: a.client_name,
+          client_email: a.client_email,
+          service_name: a.service_name,
+          date: a.date,
+          price: a.service_price,
+          salon_name: salonData.name,
+          invoice_number: invoiceNumber,
+          salon_address: salonData.address || "",
+          salon_kvk: salonData.kvk_number || "",
+          salon_btw: salonData.btw_id || "",
+          salon_iban: salonData.iban || ""
+        });
+        await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+        // Auto-increment invoice number
+        const nextNum = (salonData.next_invoice_number || 1) + 1;
+        await supabase.from("profiles").update({ next_invoice_number: nextNum }).eq("id", salonData.owner_id);
+        update(d => { d.next_invoice_number = nextNum; return d; });
+      }
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+    } finally { setProcessingApptId(null); }
   };
 
   const addService = async () => {
@@ -4570,11 +4613,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       )}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize:10 }} onClick={() => markComplete(a.id)}>{t.markComplete}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}>{t.markNoShow}</button>
+          <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
         </div>
       )}
-      {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4 }} onClick={() => sendInvoice(a.id)}>{t.sendInvoice}</button>}
+      {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color:"#86efac", marginTop:6 }}>{t.invoiceSent}</div>}
       {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}><NavIcon name="xmark" size={11} color="#f87171" /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
@@ -4644,7 +4687,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             flexDirection: "column",
             position: "sticky",
             top: 0,
-            height: "100vh",
+            height: "100dvh",
             flexShrink: 0
           }}>
             {/* Sidebar Header */}
@@ -5002,7 +5045,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       <div style={{ marginTop: 5 }}>
                         {a.invoice_sent
                           ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
-                          : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => sendInvoice(a.id)}>{t.send}</button>
+                          : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.send}</button>
                         }
                       </div>
                     </div>
@@ -6451,17 +6494,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Load data
   useEffect(() => {
     const load = async () => {
-      const { data: appts } = await supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).order("date", { ascending: false });
-      setAppointments(appts || []);
-      const { data: svcs } = await supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id);
-      const mySvcIds = staffMember.service_ids || [];
-      const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
-      setServices(filtered.map(s => ({
-        ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
-        variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-        extras: s.service_extras || [],
-        photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
-      })));
+      try {
+        const [{ data: appts }, { data: svcs }] = await Promise.all([
+          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).order("date", { ascending: false }),
+          supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id)
+        ]);
+        setAppointments(appts || []);
+        const mySvcIds = staffMember.service_ids || [];
+        const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
+        setServices(filtered.map(s => ({
+          ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
+          variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+          extras: s.service_extras || [],
+          photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
+        })));
+      } catch (e) {
+        console.error("Staff dashboard load error:", e);
+      }
     };
     load();
   }, []);
@@ -6473,13 +6522,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const calAppts = appointments.filter(a => a.status !== "cancelled" && a.date === calDate);
   const days = getDays();
 
+  const [processingApptId, setProcessingApptId] = useState(null);
   const markComplete = async (id) => {
-    await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
-    setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
+      await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+    } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
-    await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
-    setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
+      await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+    } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
     await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
@@ -6563,8 +6621,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       </div>
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px" }} onClick={() => markComplete(a.id)}><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => markNoShow(a.id)}><NavIcon name="xmark" size={10} color="#f87171" /> No-show</button>
+          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
         </div>
       )}
     </div>
@@ -7118,7 +7176,7 @@ function OwnerEntryPage({ lang, setLang }) {
   };
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
       vellu...
     </div>
   );
@@ -7220,13 +7278,13 @@ function SalonRoute({ lang, setLang }) {
   }, [slug]);
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
       vellu...
     </div>
   );
 
   if (notFound) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>Salon niet gevonden</div>
       <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} bestaat niet</div>
       <button className="btn-ghost" onClick={() => navigate("/")}>← Terug naar home</button>
