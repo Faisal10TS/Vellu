@@ -941,10 +941,12 @@ const makeCSS = (accent, c = THEMES.dark) => `
   @media (max-width: 900px) {
     .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
     .profile-header-contact { display: none; }
-    .profile-main { border-right: none; padding: 0 18px 100px; }
+    .profile-root { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    .profile-scroll-area { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .profile-main { border-right: none; padding: 0 18px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
-    .profile-mobile-bar { display: flex; }
+    .profile-mobile-bar { display: flex; position: static; flex-shrink: 0; }
     .profile-section { scroll-margin-top: 52px; }
   }
 `;
@@ -2186,7 +2188,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   if (mode === "profile") return (
     <Layout>
       <style>{makeCSS(accent, c)}</style>
-      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, minHeight: "100dvh" }}>
+      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
@@ -2214,6 +2216,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <LangToggle lang={lang} setLang={setLang} />
           </div>
         </div>
+
+        {/* ═══ SCROLLABLE AREA (mobile: flex-1 with overflow-y auto) ═══ */}
+        <div className="profile-scroll-area">
 
         {/* ═══ HERO BANNER ═══ */}
         <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
@@ -2556,6 +2561,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
           </div>
         </div>
+        </div> {/* close profile-scroll-area */}
 
         {/* ═══ MOBILE BOOK BAR ═══ */}
         <div className="profile-mobile-bar">
