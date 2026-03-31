@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /owner
+Disallow: /cancel/
+
+Sitemap: https://vellu.cc/sitemap.xml
