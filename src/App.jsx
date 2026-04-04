@@ -53,6 +53,13 @@ function ThemeProvider({ children }) {
     setTheme(next);
     try { localStorage.setItem("vellu-theme", next); } catch {}
   };
+  useEffect(() => {
+    const bg = THEMES[theme].bg;
+    document.documentElement.style.background = bg;
+    document.body.style.background = bg;
+    const root = document.getElementById("root");
+    if (root) root.style.background = bg;
+  }, [theme]);
   return (
     <ThemeContext.Provider value={{ theme, colors: THEMES[theme], toggle }}>
       {children}
@@ -1526,7 +1533,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                         background: form.accountType === type ? `${ACCENT}12` : c.inputBg,
                         border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`
                       }}>
-                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? accent : c.textSub} /></div>
+                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? ACCENT : c.textSub} /></div>
                         <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? ACCENT : c.text }}>{label}</div>
                         <div style={{ fontSize: 9, color: c.textMuted, marginTop: 3, lineHeight: 1.3 }}>{desc}</div>
                       </div>
@@ -1829,13 +1836,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     : initialSalon.services.filter(s => s.category_id === activeCategory);
 
   // Get active discount codes
-  const activeCodes = (initialSalon.discount_codes || []).filter(c => c.active);
+  const activeCodes = (initialSalon.discount_codes || []).filter(dc => dc.active);
   
   // Apply discount code - called on input change for instant feedback
   const applyDiscountCode = (code = discountCode) => {
     setDiscountError("");
     if (!code.trim()) return;
-    const found = activeCodes.find(c => c.code.toUpperCase() === code.toUpperCase());
+    const found = activeCodes.find(dc => dc.code.toUpperCase() === code.toUpperCase());
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");
@@ -1850,7 +1857,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setDiscountCode(upperVal);
     setDiscountError("");
     // Auto-apply if exact match found
-    const found = activeCodes.find(c => c.code === upperVal);
+    const found = activeCodes.find(dc => dc.code === upperVal);
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");
@@ -2069,6 +2076,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
 
     setDone(true);
+    setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     
     // 4. Send confirmation email with cancellation link
@@ -7278,7 +7286,7 @@ function SalonRoute({ lang, setLang }) {
         appointments: [],
         reviews: reviews || [],
         staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
-        categories: (categories || []).map(cat => ({ ...cat, name: lang === 'nl' ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name) })),
+        categories: categories || [],
         locations: locData || []
       });
       setLoading(false);
@@ -7294,9 +7302,10 @@ function SalonRoute({ lang, setLang }) {
 
   if (notFound) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>Salon niet gevonden</div>
-      <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} bestaat niet</div>
-      <button className="btn-ghost" onClick={() => navigate("/")}>← Terug naar home</button>
+      <style>{makeCSS(ACCENT, c)}</style>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : "Salon not found"}</div>
+      <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} {lang === "nl" ? "bestaat niet" : "does not exist"}</div>
+      <button className="btn-ghost" onClick={() => navigate("/")}>← {lang === "nl" ? "Terug naar home" : "Back to home"}</button>
     </div>
   );
 
