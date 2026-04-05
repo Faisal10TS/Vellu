@@ -6473,7 +6473,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
               {/* Save button (always visible) */}
               <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
-                const { error } = await supabase.from("profiles").update({
+                console.log("Saving profile, owner_id:", salonData.owner_id);
+                const updateData = {
                   business_name: salonData.name,
                   city: salonData.city,
                   accent_color: salonData.accent,
@@ -6489,7 +6490,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   salon_instagram: salonData.salon_instagram || null,
                   salon_email: salonData.salon_email || null,
                   whatsapp_number: salonData.whatsapp_number || null,
-
                   phone_required: salonData.phone_required || false,
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
@@ -6500,11 +6500,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24
-                }).eq("id", salonData.owner_id);
+                };
+                const { data: updatedRows, error } = await supabase.from("profiles").update(updateData).eq("id", salonData.owner_id).select();
                 if (error) {
                   console.error("Save error:", error);
-                  alert(lang === "nl" ? "Opslaan mislukt. Probeer het opnieuw." : "Save failed. Please try again.");
+                  alert(lang === "nl" ? `Opslaan mislukt: ${error.message}` : `Save failed: ${error.message}`);
+                } else if (!updatedRows || updatedRows.length === 0) {
+                  console.error("Save: no rows updated. owner_id:", salonData.owner_id, "updateData:", updateData);
+                  alert(lang === "nl" ? "Opslaan mislukt: geen rijen bijgewerkt. Mogelijk een database permissie probleem." : "Save failed: no rows updated. Possible database permission issue.");
                 } else {
+                  console.log("Save success:", updatedRows[0]?.address, updatedRows[0]?.kvk_number);
                   setSaved(true); setTimeout(() => setSaved(false), 2000);
                 }
               }}>{saved ? t.saved : t.save}</button>
