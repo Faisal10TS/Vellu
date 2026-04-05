@@ -5212,68 +5212,34 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {/* YEAR VIEW */}
               {calViewMode === "year" && (() => {
                 const baseYear = getToday().getFullYear() + calWeekOffset;
-                const MON_FULL_NL = ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"];
-                const MON_FULL_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+                const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
                 const MON_LABELS = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
-                const DAY_H = lang === "nl" ? ["M","D","W","D","V","Z","Z"] : ["M","T","W","T","F","S","S"];
+                const currentMonth = getToday().getMonth();
+                const currentYear = getToday().getFullYear();
                 return (
                   <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 18, fontWeight: 500, color: c.text, marginBottom: 16, textAlign: "center", fontFamily: "'Cormorant Garamond',serif" }}>{baseYear}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 12, textAlign: "center" }}>{baseYear}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                       {Array.from({ length: 12 }, (_, mi) => {
-                        const firstOfMonth = new Date(baseYear, mi, 1);
-                        const lastOfMonth = new Date(baseYear, mi + 1, 0);
-                        const startDay = (firstOfMonth.getDay() + 6) % 7;
-                        const daysInMonth = lastOfMonth.getDate();
-                        const cells = [];
-                        for (let i = 0; i < startDay; i++) cells.push(null);
-                        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-                        // Count appointments this month
                         const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
                         const monthApptCount = filteredAgendaAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
+                        const isCurrent = baseYear === currentYear && mi === currentMonth;
                         return (
                           <div key={mi} onClick={() => {
                             setCalViewMode("month");
-                            // Calculate month offset from current month
                             const now = getToday();
                             setCalWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
                           }} style={{
-                            background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: "10px 8px", cursor: "pointer",
+                            textAlign: "center", padding: "18px 10px", borderRadius: 10, cursor: "pointer",
+                            background: isCurrent ? accent : "transparent",
+                            border: `1px solid ${isCurrent ? accent : "transparent"}`,
                             transition: "all 0.15s"
                           }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{MON_LABELS[mi]}</div>
-                              {monthApptCount > 0 && (
-                                <div style={{ fontSize: 9, fontWeight: 700, color: accent, background: `${accent}15`, padding: "1px 6px", borderRadius: 100 }}>{monthApptCount}</div>
-                              )}
-                            </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}>
-                              {DAY_H.map((dh, i) => (
-                                <div key={i} style={{ textAlign: "center", fontSize: 7, color: c.textMuted, fontWeight: 600 }}>{dh}</div>
-                              ))}
-                              {cells.map((day, i) => {
-                                if (day === null) return <div key={`e${i}`} />;
-                                const ds = `${baseYear}-${String(mi + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                                const isToday = ds === fmt(getToday());
-                                const hasAppt = filteredAgendaAppts.some(a => a.date === ds);
-                                return (
-                                  <div key={ds} onClick={e => {
-                                    e.stopPropagation();
-                                    setCalDate(ds);
-                                    setCalViewMode("week");
-                                    const today = getToday();
-                                    const diffDays = Math.floor((new Date(ds) - today) / (1000 * 60 * 60 * 24));
-                                    setCalWeekOffset(Math.floor(diffDays / 7));
-                                  }} style={{
-                                    textAlign: "center", fontSize: 8, padding: "2px 0", borderRadius: 4,
-                                    color: isToday ? c.btnOnDark : hasAppt ? accent : c.textSub,
-                                    background: isToday ? accent : "transparent",
-                                    fontWeight: isToday || hasAppt ? 700 : 400,
-                                    cursor: "pointer"
-                                  }}>{day}</div>
-                                );
-                              })}
-                            </div>
+                            <div style={{ fontSize: 13, fontWeight: isCurrent ? 600 : 400, color: isCurrent ? c.btnOnDark : c.text }}>{MON_LABELS[mi]}</div>
+                            {monthApptCount > 0 && (
+                              <div style={{ fontSize: 10, fontWeight: 700, color: isCurrent ? c.btnOnDark : accent, marginTop: 4 }}>{monthApptCount} {t.appts}</div>
+                            )}
                           </div>
                         );
                       })}
