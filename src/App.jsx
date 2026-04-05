@@ -268,6 +268,14 @@ const T = {
     totalDuration:"Totale duur",
     // Theme
     darkMode:"Donker", lightMode:"Licht",
+    // Calendar month view
+    monthView:"Maand", weekView:"Week", prevWeek:"Vorige", nextWeek:"Volgende", prevMonth:"Vorige maand", nextMonth:"Volgende maand", backToToday:"Vandaag",
+    // Client selector
+    selectClient:"Kies een bestaande klant", searchClients:"Zoek klant op naam of e-mail...", newClient:"Nieuwe klant", orNewClient:"Of vul nieuwe gegevens in:",
+    // Time blocking
+    blockTime:"Tijd blokkeren", blockWholeDay:"Hele dag", blockTimeSlot:"Tijdslot", blockFrom:"Van", blockTo:"Tot",
+    // Custom color
+    customColor:"Eigen kleur",
     // Follow-up
     followupRate:"Follow-up response rate",
     // Reminder timing
@@ -476,6 +484,14 @@ const T = {
     totalDuration:"Total duration",
     // Theme
     darkMode:"Dark", lightMode:"Light",
+    // Calendar month view
+    monthView:"Month", weekView:"Week", prevWeek:"Previous", nextWeek:"Next", prevMonth:"Previous month", nextMonth:"Next month", backToToday:"Today",
+    // Client selector
+    selectClient:"Select existing client", searchClients:"Search client by name or email...", newClient:"New client", orNewClient:"Or enter new details:",
+    // Time blocking
+    blockTime:"Block time", blockWholeDay:"Whole day", blockTimeSlot:"Time slot", blockFrom:"From", blockTo:"To",
+    // Custom color
+    customColor:"Custom color",
     // Follow-up
     followupRate:"Follow-up response rate",
     // Reminder timing
@@ -1650,7 +1666,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   
   // Day override helpers (blocked/exception days)
   const dayOverrides = initialSalon.day_overrides || {};
-  const isDayBlocked = (dateStr) => dayOverrides[dateStr]?.type === "blocked";
+  const isDayBlocked = (dateStr) => {
+    const override = dayOverrides[dateStr];
+    if (!override || override.type !== "blocked") return false;
+    // If it has specific time bounds, it's a time-slot block, NOT a full-day block
+    if (override.block_time_start && override.block_time_end) return false;
+    return true;
+  };
+  const isTimeBlockedByOverride = (dateStr, timeStr) => {
+    const override = dayOverrides[dateStr];
+    if (!override || override.type !== "blocked") return false;
+    if (override.block_time_start && override.block_time_end) {
+      return timeStr >= override.block_time_start && timeStr < override.block_time_end;
+    }
+    return false; // whole-day blocks are handled by isDayBlocked
+  };
   const isDayException = (dateStr) => dayOverrides[dateStr]?.type === "exception";
   const getEffectiveHours = (dateStr) => {
     if (isDayBlocked(dateStr)) return { closed: true };
@@ -3018,6 +3048,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const availableTimes = TIMES.filter(tt => {
                     if (dayHours.closed || staffWindow?.closed) return false;
                     if (tt < effectiveOpen || tt >= effectiveClose) return false;
+                    // Filter out times blocked by time-slot overrides
+                    if (isTimeBlockedByOverride(date, tt)) return false;
                     // Filter out past times if selected date is today
                     if (date === fmt(getToday())) {
                       const now = getToday();
@@ -3510,6 +3542,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       const availableTimes = TIMES.filter(tt => {
                         if (dayHours.closed || staffWindow?.closed) return false;
                         if (tt < effectiveOpen || tt >= effectiveClose) return false;
+                        // Filter out times blocked by time-slot overrides
+                        if (isTimeBlockedByOverride(date, tt)) return false;
                         if (date === fmt(getToday())) {
                           const now = getToday();
                           const [h, m] = tt.split(":").map(Number);
@@ -4272,6 +4306,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
   const [agendaStaff, setAgendaStaff] = useState(null); // null = all, or staff member id
+  const [calViewMode, setCalViewMode] = useState("week"); // "week" or "month"
+  const [calWeekOffset, setCalWeekOffset] = useState(0); // offset in weeks from current
   const [salonData, setSalonData] = useState(() => {
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
@@ -4300,9 +4336,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
+  const [clientList, setClientList] = useState([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [clientMode, setClientMode] = useState("existing"); // "existing" or "new"
   // Exception/blocked days
   const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30" });
-  const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "" });
+  const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" });
   const [editingVariant, setEditingVariant] = useState(null);
   const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
   const [editingExtra, setEditingExtra] = useState(null);
@@ -4349,7 +4389,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
           salon_email: data.salon_email || "",
-
+          whatsapp_number: data.whatsapp_number || "",
           phone_required: data.phone_required || false,
           break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
@@ -4414,6 +4454,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [dataLoaded]);
+
+  // Load client list when add appointment modal opens
+  useEffect(() => {
+    if (showAddAppt && salonData.owner_id) {
+      (async () => {
+        // Only load clients who have had appointments at THIS salon
+        const uniqueClients = {};
+        (salonData.appointments || []).forEach(a => {
+          if (a.client_email && !uniqueClients[a.client_email]) {
+            uniqueClients[a.client_email] = {
+              id: a.client_id,
+              first_name: (a.client_name || "").split(" ")[0],
+              last_name: (a.client_name || "").split(" ").slice(1).join(" "),
+              email: a.client_email,
+              phone: a.client_phone || ""
+            };
+          }
+        });
+        // Also try to get full client records for these emails for most up-to-date info
+        const emails = Object.keys(uniqueClients);
+        if (emails.length > 0) {
+          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails);
+          if (fullClients) {
+            fullClients.forEach(cl => {
+              uniqueClients[cl.email] = { ...uniqueClients[cl.email], ...cl };
+            });
+          }
+        }
+        setClientList(Object.values(uniqueClients).sort((a, b) => (a.first_name || "").localeCompare(b.first_name || "")));
+      })();
+    }
+  }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
   const markComplete = async (id) => {
     if (processingApptId) return;
@@ -4896,7 +4968,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {/* Quick Actions */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 22 }}>
                 <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={accent} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowPreview(true)}>
@@ -4999,6 +5071,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
             <div className="fade-up">
               {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
               
+              {/* View mode toggle + navigation */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["week", "month"].map(mode => (
+                    <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
+                      padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.04em", transition: "all 0.2s",
+                      background: calViewMode === mode ? `${accent}18` : "transparent",
+                      color: calViewMode === mode ? accent : c.textSub,
+                      border: `1px solid ${calViewMode === mode ? `${accent}44` : c.inputBorder}`
+                    }}>{mode === "week" ? t.weekView : t.monthView}</div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {calWeekOffset !== 0 && (
+                    <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
+                      padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      background: `${accent}12`, color: accent, border: `1px solid ${accent}33`
+                    }}>{t.backToToday}</div>
+                  )}
+                  <div onClick={() => setCalWeekOffset(o => o - 1)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid " + c.inputBorder, color: c.textSub, fontSize: 14 }}>←</div>
+                  <div onClick={() => setCalWeekOffset(o => o + 1)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid " + c.inputBorder, color: c.textSub, fontSize: 14 }}>→</div>
+                </div>
+              </div>
+
               {/* Staff filter */}
               {(salonData.staff || []).length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -5021,19 +5118,95 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
-                {days.slice(0,10).map((d, i) => {
-                  const ds = fmt(d); const isSel = calDate === ds;
-                  const has = filteredAgendaAppts.filter(a => a.date === ds).length > 0;
-                  return (
-                    <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)}>
-                      <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                      {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
+              {/* WEEK VIEW */}
+              {calViewMode === "week" && (<>
+                {(() => {
+                  const base = getToday();
+                  base.setDate(base.getDate() + calWeekOffset * 7);
+                  const weekDays = Array.from({ length: 10 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d; });
+                  const MON = lang === "nl" ? MON_NL : MON_EN;
+                  const firstDay = weekDays[0];
+                  const lastDay = weekDays[weekDays.length - 1];
+                  const monthLabel = firstDay.getMonth() === lastDay.getMonth()
+                    ? `${MON[firstDay.getMonth()]} ${firstDay.getFullYear()}`
+                    : `${MON[firstDay.getMonth()]} — ${MON[lastDay.getMonth()]} ${lastDay.getFullYear()}`;
+                  return (<>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: c.textSub, marginBottom: 10, textTransform: "capitalize" }}>{monthLabel}</div>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                      {weekDays.map((d, i) => {
+                        const ds = fmt(d); const isSel = calDate === ds;
+                        const isToday = ds === fmt(getToday());
+                        const has = filteredAgendaAppts.filter(a => a.date === ds).length > 0;
+                        return (
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)} style={isToday && !isSel ? { border: `1px solid ${accent}66` } : undefined}>
+                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
+                            {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </>);
+                })()}
+              </>)}
+
+              {/* MONTH VIEW */}
+              {calViewMode === "month" && (() => {
+                const base = getToday();
+                const targetMonth = new Date(base.getFullYear(), base.getMonth() + calWeekOffset, 1);
+                const year = targetMonth.getFullYear();
+                const month = targetMonth.getMonth();
+                const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+                const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+                const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
+                const firstOfMonth = new Date(year, month, 1);
+                const lastOfMonth = new Date(year, month + 1, 0);
+                const startDay = (firstOfMonth.getDay() + 6) % 7; // Monday = 0
+                const daysInMonth = lastOfMonth.getDate();
+                const cells = [];
+                for (let i = 0; i < startDay; i++) cells.push(null);
+                for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+                return (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 12, textAlign: "center" }}>{MON_FULL[month]} {year}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                      {DAY_HEADERS.map(dh => (
+                        <div key={dh} style={{ textAlign: "center", fontSize: 9, fontWeight: 600, color: c.textLabel, padding: "4px 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>{dh}</div>
+                      ))}
+                      {cells.map((day, i) => {
+                        if (day === null) return <div key={`e${i}`} />;
+                        const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                        const isSel = calDate === ds;
+                        const isToday = ds === fmt(getToday());
+                        const count = filteredAgendaAppts.filter(a => a.date === ds).length;
+                        return (
+                          <div key={ds} onClick={() => { 
+                            setCalDate(ds); 
+                            setCalViewMode("week"); 
+                            // Calculate correct week offset so the clicked date is visible
+                            const clickedDate = new Date(ds);
+                            const today = getToday();
+                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
+                            setCalWeekOffset(Math.floor(diffDays / 7));
+                          }} style={{
+                            textAlign: "center", padding: "8px 2px", borderRadius: 10, cursor: "pointer", position: "relative",
+                            background: isSel ? accent : isToday ? `${accent}12` : "transparent",
+                            border: `1px solid ${isSel ? accent : isToday ? `${accent}44` : "transparent"}`,
+                            transition: "all 0.15s"
+                          }}>
+                            <div style={{ fontSize: 12, fontWeight: isSel || isToday ? 600 : 400, color: isSel ? c.btnOnDark : c.text }}>{day}</div>
+                            {count > 0 && (
+                              <div style={{ fontSize: 8, fontWeight: 700, color: isSel ? c.btnOnDark : accent, marginTop: 2 }}>{count}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {calAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
                 : calAppts.map(a => <ApptCard key={a.id} a={a} />)
@@ -5310,10 +5483,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <SL>{t.brandColor}</SL>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     {["#c9a96e","#e8a598","#a8c5a0","#9bb5d6","#c4a8d4","#d4756a","#6abfb8","#e8c547"].map(clr => (
                       <div key={clr} onClick={() => update(d => { d.accent = clr; return d; })} style={{ width: 26, height: 26, borderRadius: "50%", background: clr, cursor: "pointer", outline: salonData.accent === clr ? "2px solid " + c.text : "none", outlineOffset: 2, transform: salonData.accent === clr ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
                     ))}
+                    <div style={{ position: "relative", width: 26, height: 26, cursor: "pointer" }}>
+                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: `conic-gradient(red, yellow, lime, aqua, blue, magenta, red)`, border: "2px solid " + c.border }} />
+                      <input type="color" value={salonData.accent || "#c9a96e"} onChange={e => update(d => { d.accent = e.target.value; return d; })}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", opacity: 0 }}
+                        title={t.customColor} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5943,10 +6122,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
-                {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "blocked").map(([date, v]) => (
-                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 14, marginBottom: 6 }}>
+                {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
+                  <div key={date + (v.block_time_start || "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</div>
+                      {v.block_time_start && v.block_time_end && (
+                        <div style={{ fontSize: 10, color: accent, fontWeight: 500 }}>{v.block_time_start} — {v.block_time_end}</div>
+                      )}
                       {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
                     </div>
                     <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
@@ -5964,27 +6146,59 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                       }}>×</button>
                   </div>
                 ))}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                  <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
-                  <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
-                  <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", flex: 2, minWidth: 120 }} />
+                {/* Block mode toggle: whole day or time slot */}
+                <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 10 }}>
+                  <div onClick={() => setNewBlocked(f => ({...f, mode: "day"}))} style={{
+                    padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    background: (newBlocked.mode || "day") === "day" ? "rgba(248,113,113,0.12)" : "transparent",
+                    color: (newBlocked.mode || "day") === "day" ? "#f87171" : c.textSub,
+                    border: `1px solid ${(newBlocked.mode || "day") === "day" ? "rgba(248,113,113,0.3)" : c.inputBorder}`
+                  }}>{t.blockWholeDay}</div>
+                  <div onClick={() => setNewBlocked(f => ({...f, mode: "time"}))} style={{
+                    padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    background: newBlocked.mode === "time" ? "rgba(248,113,113,0.12)" : "transparent",
+                    color: newBlocked.mode === "time" ? "#f87171" : c.textSub,
+                    border: `1px solid ${newBlocked.mode === "time" ? "rgba(248,113,113,0.3)" : c.inputBorder}`
+                  }}>{t.blockTimeSlot}</div>
                 </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
+                  {(newBlocked.mode || "day") === "day" && (
+                    <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
+                  )}
+                  {newBlocked.mode === "time" && (<>
+                    <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                    </select>
+                    <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
+                    <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                    </select>
+                  </>)}
+                </div>
+                <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
                 <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: "rgba(248,113,113,0.2)", color: "#f87171" }}
                   onClick={() => {
                     if (!newBlocked.from) return;
                     const endDate = newBlocked.to || newBlocked.from;
                     update(d => {
                       const o = {...(d.day_overrides || {})};
-                      let cur = new Date(newBlocked.from);
-                      const end = new Date(endDate);
-                      const first = fmt(cur);
-                      while (cur <= end) {
-                        o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
-                        cur.setDate(cur.getDate() + 1);
+                      if (newBlocked.mode === "time") {
+                        // Time-slot block: store on single date with time range
+                        o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30" };
+                      } else {
+                        // Whole day block
+                        let cur = new Date(newBlocked.from);
+                        const end = new Date(endDate);
+                        const first = fmt(cur);
+                        while (cur <= end) {
+                          o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
+                          cur.setDate(cur.getDate() + 1);
+                        }
                       }
                       d.day_overrides = o; return d;
                     });
-                    setNewBlocked({ from: "", to: "", reason: "" });
+                    setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30" });
                   }}>{t.addBlocked}</button>
               </div>
 
@@ -6200,7 +6414,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
 
               {/* Save button (always visible) */}
               <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
-                await supabase.from("profiles").update({
+                const { error } = await supabase.from("profiles").update({
                   business_name: salonData.name,
                   city: salonData.city,
                   accent_color: salonData.accent,
@@ -6215,6 +6429,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   salon_phone: salonData.salon_phone || null,
                   salon_instagram: salonData.salon_instagram || null,
                   salon_email: salonData.salon_email || null,
+                  whatsapp_number: salonData.whatsapp_number || null,
 
                   phone_required: salonData.phone_required || false,
                   break_minutes: salonData.break_minutes || 0,
@@ -6227,7 +6442,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24
                 }).eq("id", salonData.owner_id);
-                setSaved(true); setTimeout(() => setSaved(false), 2000);
+                if (error) {
+                  console.error("Save error:", error);
+                  alert(lang === "nl" ? "Opslaan mislukt. Probeer het opnieuw." : "Save failed. Please try again.");
+                } else {
+                  setSaved(true); setTimeout(() => setSaved(false), 2000);
+                }
               }}>{saved ? t.saved : t.save}</button>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
             </div>
@@ -6312,11 +6532,84 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   </div>
                   <div>
                     <SL>{t.clientDetails}</SL>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
-                      <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
-                      <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
+                    {/* Client mode toggle */}
+                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                      <div onClick={() => { setClientMode("existing"); setClientSearch(""); }} style={{
+                        padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        background: clientMode === "existing" ? `${accent}18` : "transparent",
+                        color: clientMode === "existing" ? accent : c.textSub,
+                        border: `1px solid ${clientMode === "existing" ? `${accent}44` : c.inputBorder}`
+                      }}>{t.selectClient}</div>
+                      <div onClick={() => setClientMode("new")} style={{
+                        padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        background: clientMode === "new" ? `${accent}18` : "transparent",
+                        color: clientMode === "new" ? accent : c.textSub,
+                        border: `1px solid ${clientMode === "new" ? `${accent}44` : c.inputBorder}`
+                      }}>{t.newClient}</div>
                     </div>
+                    
+                    {clientMode === "existing" ? (
+                      <div style={{ position: "relative" }}>
+                        <input className="input-field" placeholder={t.searchClients} value={clientSearch}
+                          onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+                          onFocus={() => setShowClientDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                          style={{ fontSize: 12, marginBottom: 4 }} />
+                        {showClientDropdown && clientList.length > 0 && (
+                          <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 50, background: c.bg, border: "1px solid " + c.border, borderRadius: 12, maxHeight: 200, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
+                            {clientList
+                              .filter(cl => {
+                                if (!clientSearch) return true;
+                                const q = clientSearch.toLowerCase();
+                                return (cl.first_name || "").toLowerCase().includes(q) || (cl.last_name || "").toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").includes(q);
+                              })
+                              .slice(0, 15)
+                              .map((cl, idx) => (
+                                <div key={cl.id || cl.email || idx} onClick={() => {
+                                  setAddApptForm(f => ({
+                                    ...f,
+                                    client_name: `${cl.first_name || ""} ${cl.last_name || ""}`.trim(),
+                                    client_email: cl.email || "",
+                                    client_phone: cl.phone || ""
+                                  }));
+                                  setClientSearch(`${cl.first_name || ""} ${cl.last_name || ""}`.trim());
+                                  setShowClientDropdown(false);
+                                }} style={{
+                                  padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid " + c.border,
+                                  transition: "background 0.15s"
+                                }} onMouseOver={e => e.currentTarget.style.background = c.bgCardHover} onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{cl.first_name} {cl.last_name}</div>
+                                  <div style={{ fontSize: 10, color: c.textLabel }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
+                                </div>
+                              ))}
+                            {clientList.filter(cl => {
+                              if (!clientSearch) return true;
+                              const q = clientSearch.toLowerCase();
+                              return (cl.first_name || "").toLowerCase().includes(q) || (cl.last_name || "").toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q);
+                            }).length === 0 && (
+                              <div style={{ padding: "14px", textAlign: "center", fontSize: 11, color: c.textMuted }}>
+                                {lang === "nl" ? "Geen klanten gevonden" : "No clients found"}
+                                <div style={{ marginTop: 6 }}>
+                                  <span onClick={() => setClientMode("new")} style={{ color: accent, cursor: "pointer", fontWeight: 600 }}>{t.newClient} →</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {addApptForm.client_email && (
+                          <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 10, padding: "8px 12px", marginTop: 6, fontSize: 11 }}>
+                            <div style={{ fontWeight: 500, color: c.text }}>{addApptForm.client_name}</div>
+                            <div style={{ color: c.textLabel, fontSize: 10 }}>{addApptForm.client_email}{addApptForm.client_phone ? ` · ${addApptForm.client_phone}` : ""}</div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
+                        <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
+                        <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
@@ -7262,6 +7555,7 @@ function SalonRoute({ lang, setLang }) {
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",
         salon_email: data.salon_email || "",
+        whatsapp_number: data.whatsapp_number || "",
 
         phone_required: data.phone_required || false,
         break_minutes: data.break_minutes || 0,
