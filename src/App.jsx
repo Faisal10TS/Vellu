@@ -269,7 +269,7 @@ const T = {
     // Theme
     darkMode:"Donker", lightMode:"Licht",
     // Calendar month view
-    monthView:"Maand", weekView:"Week", prevWeek:"Vorige", nextWeek:"Volgende", prevMonth:"Vorige maand", nextMonth:"Volgende maand", backToToday:"Vandaag",
+    monthView:"Maand", weekView:"Week", prevWeek:"Vorige", nextWeek:"Volgende", prevMonth:"Vorige maand", nextMonth:"Volgende maand", backToToday:"Vandaag", yearView:"Jaar",
     // Client selector
     selectClient:"Kies een bestaande klant", searchClients:"Zoek klant op naam of e-mail...", newClient:"Nieuwe klant", orNewClient:"Of vul nieuwe gegevens in:",
     // Time blocking
@@ -485,7 +485,7 @@ const T = {
     // Theme
     darkMode:"Dark", lightMode:"Light",
     // Calendar month view
-    monthView:"Month", weekView:"Week", prevWeek:"Previous", nextWeek:"Next", prevMonth:"Previous month", nextMonth:"Next month", backToToday:"Today",
+    monthView:"Month", weekView:"Week", prevWeek:"Previous", nextWeek:"Next", prevMonth:"Previous month", nextMonth:"Next month", backToToday:"Today", yearView:"Year",
     // Client selector
     selectClient:"Select existing client", searchClients:"Search client by name or email...", newClient:"New client", orNewClient:"Or enter new details:",
     // Time blocking
@@ -4348,6 +4348,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  const [tempColor, setTempColor] = useState(null); // local color for smooth picker
+  const colorDebounceRef = useRef(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -5074,14 +5076,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
               {/* View mode toggle + navigation */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {["week", "month"].map(mode => (
+                  {["week", "month", "year"].map(mode => (
                     <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
                       padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       letterSpacing: "0.04em", transition: "all 0.2s",
                       background: calViewMode === mode ? `${accent}18` : "transparent",
                       color: calViewMode === mode ? accent : c.textSub,
                       border: `1px solid ${calViewMode === mode ? `${accent}44` : c.inputBorder}`
-                    }}>{mode === "week" ? t.weekView : t.monthView}</div>
+                    }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -5207,6 +5209,80 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                 );
               })()}
 
+              {/* YEAR VIEW */}
+              {calViewMode === "year" && (() => {
+                const baseYear = getToday().getFullYear() + calWeekOffset;
+                const MON_FULL_NL = ["Jan","Feb","Mrt","Apr","Mei","Jun","Jul","Aug","Sep","Okt","Nov","Dec"];
+                const MON_FULL_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                const MON_LABELS = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
+                const DAY_H = lang === "nl" ? ["M","D","W","D","V","Z","Z"] : ["M","T","W","T","F","S","S"];
+                return (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 18, fontWeight: 500, color: c.text, marginBottom: 16, textAlign: "center", fontFamily: "'Cormorant Garamond',serif" }}>{baseYear}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                      {Array.from({ length: 12 }, (_, mi) => {
+                        const firstOfMonth = new Date(baseYear, mi, 1);
+                        const lastOfMonth = new Date(baseYear, mi + 1, 0);
+                        const startDay = (firstOfMonth.getDay() + 6) % 7;
+                        const daysInMonth = lastOfMonth.getDate();
+                        const cells = [];
+                        for (let i = 0; i < startDay; i++) cells.push(null);
+                        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+                        // Count appointments this month
+                        const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
+                        const monthApptCount = filteredAgendaAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
+                        return (
+                          <div key={mi} onClick={() => {
+                            setCalViewMode("month");
+                            // Calculate month offset from current month
+                            const now = getToday();
+                            setCalWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
+                          }} style={{
+                            background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: "10px 8px", cursor: "pointer",
+                            transition: "all 0.15s"
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{MON_LABELS[mi]}</div>
+                              {monthApptCount > 0 && (
+                                <div style={{ fontSize: 9, fontWeight: 700, color: accent, background: `${accent}15`, padding: "1px 6px", borderRadius: 100 }}>{monthApptCount}</div>
+                              )}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}>
+                              {DAY_H.map((dh, i) => (
+                                <div key={i} style={{ textAlign: "center", fontSize: 7, color: c.textMuted, fontWeight: 600 }}>{dh}</div>
+                              ))}
+                              {cells.map((day, i) => {
+                                if (day === null) return <div key={`e${i}`} />;
+                                const ds = `${baseYear}-${String(mi + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                                const isToday = ds === fmt(getToday());
+                                const hasAppt = filteredAgendaAppts.some(a => a.date === ds);
+                                return (
+                                  <div key={ds} onClick={e => {
+                                    e.stopPropagation();
+                                    setCalDate(ds);
+                                    setCalViewMode("week");
+                                    const today = getToday();
+                                    const diffDays = Math.floor((new Date(ds) - today) / (1000 * 60 * 60 * 24));
+                                    setCalWeekOffset(Math.floor(diffDays / 7));
+                                  }} style={{
+                                    textAlign: "center", fontSize: 8, padding: "2px 0", borderRadius: 4,
+                                    color: isToday ? c.btnOnDark : hasAppt ? accent : c.textSub,
+                                    background: isToday ? accent : "transparent",
+                                    fontWeight: isToday || hasAppt ? 700 : 400,
+                                    cursor: "pointer"
+                                  }}>{day}</div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {calViewMode !== "year" && (<>
               {calAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
                 : calAppts.map(a => <ApptCard key={a.id} a={a} />)
@@ -5216,6 +5292,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <NavIcon name="calendar" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en) naar agenda` : `Export ${calAppts.length} appointment(s) to calendar`}
                 </button>
               )}
+              </>)}
             </div>
           )}
 
@@ -5485,11 +5562,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalon
                   <SL>{t.brandColor}</SL>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     {["#c9a96e","#e8a598","#a8c5a0","#9bb5d6","#c4a8d4","#d4756a","#6abfb8","#e8c547"].map(clr => (
-                      <div key={clr} onClick={() => update(d => { d.accent = clr; return d; })} style={{ width: 26, height: 26, borderRadius: "50%", background: clr, cursor: "pointer", outline: salonData.accent === clr ? "2px solid " + c.text : "none", outlineOffset: 2, transform: salonData.accent === clr ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
+                      <div key={clr} onClick={() => { setTempColor(null); update(d => { d.accent = clr; return d; }); }} style={{ width: 26, height: 26, borderRadius: "50%", background: clr, cursor: "pointer", outline: (tempColor || salonData.accent) === clr ? "2px solid " + c.text : "none", outlineOffset: 2, transform: (tempColor || salonData.accent) === clr ? "scale(1.18)" : "none", transition: "all 0.2s" }} />
                     ))}
                     <div style={{ position: "relative", width: 26, height: 26, cursor: "pointer" }}>
                       <div style={{ width: 26, height: 26, borderRadius: "50%", background: `conic-gradient(red, yellow, lime, aqua, blue, magenta, red)`, border: "2px solid " + c.border }} />
-                      <input type="color" value={salonData.accent || "#c9a96e"} onChange={e => update(d => { d.accent = e.target.value; return d; })}
+                      <input type="color" value={tempColor || salonData.accent || "#c9a96e"} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTempColor(val);
+                          if (colorDebounceRef.current) clearTimeout(colorDebounceRef.current);
+                          colorDebounceRef.current = setTimeout(() => {
+                            update(d => { d.accent = val; return d; });
+                            setTempColor(null);
+                          }, 400);
+                        }}
+                        onBlur={() => {
+                          if (tempColor) {
+                            if (colorDebounceRef.current) clearTimeout(colorDebounceRef.current);
+                            update(d => { d.accent = tempColor; return d; });
+                            setTempColor(null);
+                          }
+                        }}
                         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", opacity: 0 }}
                         title={t.customColor} />
                     </div>
