@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useRef } from "react";
+import { useState, useEffect, createContext, useContext, useRef, Component } from "react";
 import { supabase } from "./supabase.js";
 import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
 
@@ -90,7 +90,8 @@ const ACCENT = "#c9a96e";
 function getGoogleCalUrl({ title, date, time, duration, description, location }) {
   const start = new Date(date + "T" + time + ":00");
   const end = new Date(start.getTime() + (duration || 60) * 60000);
-  const fmtCal = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmtCal = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmtCal(start)}/${fmtCal(end)}&details=${encodeURIComponent(description || "")}&location=${encodeURIComponent(location || "")}`;
 }
 
@@ -114,19 +115,6 @@ function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, servi
   return `Hi ${clientName}! 👋\n\nReminder: you have an appointment at ${salonName} tomorrow.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nSee you tomorrow! ✨`;
 }
 
-// ─── AUTO-TRANSLATE HELPER ───────────────────────────────────
-async function autoTranslateText(text) {
-  try {
-    const { data, error } = await supabase.functions.invoke("translate", {
-      body: { text, from: "nl", to: "en" }
-    });
-    if (error) throw error;
-    return data?.translated || "";
-  } catch (e) {
-    console.error("Translate error:", e);
-    return "";
-  }
-}
 const getToday = () => new Date();
 const fmt = (d) => d.toISOString().split("T")[0];
 const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
@@ -290,10 +278,9 @@ const T = {
     onboardingNext:"Volgende stap →", onboardingSkip:"Later instellen", onboardingFinish:"Naar je dashboard →",
     onboardingServiceName:"Behandeling naam", onboardingServicePrice:"Prijs (€)", onboardingServiceDuration:"Duur (min)",
     // Google Calendar
-    googleCalendar:"Google Agenda", googleCalendarDesc:"Synchroniseer afspraken automatisch met je Google Agenda",
+    googleCalendarDesc:"Synchroniseer afspraken automatisch met je Google Agenda",
     googleCalendarConnect:"Google Agenda koppelen", googleCalendarConnected:"Google Agenda gekoppeld",
     googleCalendarDisconnect:"Ontkoppelen", googleCalendarConnecting:"Verbinden...",
-    // Google Calendar
     addToGoogleCal:"Google Agenda", exportDayToCal:"Dag exporteren naar Google Agenda",
     // WhatsApp
     whatsappNumber:"WhatsApp nummer salon", whatsappEnabled:"WhatsApp notificaties",
@@ -506,10 +493,9 @@ const T = {
     onboardingNext:"Next step →", onboardingSkip:"Set up later", onboardingFinish:"Go to dashboard →",
     onboardingServiceName:"Treatment name", onboardingServicePrice:"Price (€)", onboardingServiceDuration:"Duration (min)",
     // Google Calendar
-    googleCalendar:"Google Calendar", googleCalendarDesc:"Automatically sync appointments to your Google Calendar",
+    googleCalendarDesc:"Automatically sync appointments to your Google Calendar",
     googleCalendarConnect:"Connect Google Calendar", googleCalendarConnected:"Google Calendar connected",
     googleCalendarDisconnect:"Disconnect", googleCalendarConnecting:"Connecting...",
-    // Google Calendar
     addToGoogleCal:"Google Calendar", exportDayToCal:"Export day to Google Calendar",
     // WhatsApp
     whatsappNumber:"Salon WhatsApp number", whatsappEnabled:"WhatsApp notifications",
@@ -584,12 +570,9 @@ const T = {
   }
 };
 
-// ─── NO DEMO SALONS (removed) ────────────────────────────────
-const DEMO_SALONS = {};
 
 // ─── CSS ─────────────────────────────────────────────────────
 const makeCSS = (accent, c = THEMES.dark) => `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Jost:wght@300;400;500;600&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::-webkit-scrollbar { width: 0; height: 0; }
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
@@ -1097,6 +1080,7 @@ function Header({ title, subtitle, right, onBack, accent }) {
 // ─── LANDING ─────────────────────────────────────────────────
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
   const { colors: c, theme } = useTheme();
+  const navigate = useNavigate();
   const t = T[lang];
   const [slugInput, setSlugInput] = useState("");
   const [error, setError] = useState("");
@@ -1107,7 +1091,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
       .replace(/^https?:\/\//, "")
       .replace(/^(www\.)?vellu\.cc\//, "");
     if (!clean) return;
-    window.location.href = "/" + clean;
+    navigate("/" + clean);
   };
 
   const faqs = lang === "nl" ? [
@@ -1150,7 +1134,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
-            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => window.location.href = "/owner"}>
+            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => navigate("/owner")}>
               <NavIcon name="crown" size={12} color={ACCENT} /> {lang === "nl" ? "Inloggen" : "Sign in"}
             </button>
           </div>
@@ -1173,7 +1157,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes."}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => window.location.href = "/owner"}>
+              <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => navigate("/owner")}>
                 {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
               </button>
               <button className="btn-ghost" style={{ width: "auto", padding: "16px 28px", fontSize: 13, color: c.textSub }} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
@@ -1352,7 +1336,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     ))}
                   </div>
                   <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${ACCENT}44`, color: ACCENT }) }}
-                    onClick={() => window.location.href = "/owner"}>
+                    onClick={() => navigate("/owner")}>
                     {lang === "nl" ? "Beginnen" : "Get started"}
                   </button>
                 </div>
@@ -1393,7 +1377,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <p style={{ fontSize: 14, color: c.textLabel, marginBottom: 28, lineHeight: 1.6 }}>
               {lang === "nl" ? "Klaar in 2 minuten. Geen commissie. Geen gedoe." : "Ready in 2 minutes. No commission. No hassle."}
             </p>
-            <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => window.location.href = "/owner"}>
+            <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => navigate("/owner")}>
               {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
             </button>
           </div>
@@ -1433,7 +1417,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     setError("");
 
     if (mode === "signup") {
-      const slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
+      let slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
+      // Check slug uniqueness
+      const { data: existing } = await supabase.from("profiles").select("id").eq("slug", slug).maybeSingle();
+      if (existing) {
+        slug = slug + "-" + Math.random().toString(36).slice(2, 6);
+      }
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -2028,10 +2017,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return false;
   };
 
-  // Generate random cancellation token
+  // Generate random cancellation token (cryptographically secure)
   const generateToken = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    const values = crypto.getRandomValues(new Uint32Array(24));
+    return Array.from(values, (v) => chars[v % chars.length]).join("");
   };
 
   // Confirm booking - handles client save, appointment insert, cancellation token
@@ -4298,7 +4288,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
 }
 
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
-function OwnerApp({ user, onLogout, lang, setLang, salons = DEMO_SALONS, onSalonUpdate }) {
+function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: c } = useTheme();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
@@ -7673,6 +7663,7 @@ function SalonRoute({ lang, setLang }) {
 // ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────
 function CancelRoute({ lang }) {
   const { colors: c } = useTheme();
+  const navigate = useNavigate();
   const { token } = useParams();
   const t = T[lang];
   const [status, setStatus] = useState("loading");
@@ -7806,7 +7797,7 @@ function CancelRoute({ lang }) {
               {t.confirmCancel}
             </button>
             
-            <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => window.location.href = "/"}>
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => navigate("/")}>
               {lang === "nl" ? "Terug" : "Back"}
             </button>
           </div>
@@ -7821,7 +7812,7 @@ function CancelRoute({ lang }) {
             <p style={{ color: c.textSub, marginBottom: 30 }}>
               {lang === "nl" ? "Je ontvangt een bevestiging per e-mail." : "You will receive a confirmation email."}
             </p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
+            <button className="btn-ghost" onClick={() => navigate("/")}>
               {lang === "nl" ? "Terug naar home" : "Back to home"}
             </button>
           </div>
@@ -7834,7 +7825,7 @@ function CancelRoute({ lang }) {
               {t.cannotCancel}
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>{t.cancelBeforeTime}</p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
+            <button className="btn-ghost" onClick={() => navigate("/")}>
               {lang === "nl" ? "Terug naar home" : "Back to home"}
             </button>
           </div>
@@ -7849,7 +7840,7 @@ function CancelRoute({ lang }) {
             <p style={{ color: c.textSub, marginBottom: 30 }}>
               {lang === "nl" ? "Deze annuleringslink is niet geldig." : "This cancellation link is not valid."}
             </p>
-            <button className="btn-ghost" onClick={() => window.location.href = "/"}>
+            <button className="btn-ghost" onClick={() => navigate("/")}>
               {lang === "nl" ? "Terug naar home" : "Back to home"}
             </button>
           </div>
@@ -7866,7 +7857,7 @@ function AppInner() {
   const [salon, setSalon] = useState(null);
   const [owner, setOwner] = useState(null);
   const [lang, setLang] = useState("nl");
-  const [salons, setSalons] = useState(DEMO_SALONS);
+  const [salons, setSalons] = useState({});
 
   const updateSalon = (updated) => setSalons(prev => ({ ...prev, [updated.id]: updated }));
   const handleSelectSalon = (s) => { setSalon(salons[s.id] || s); setScreen("client"); };
@@ -7888,6 +7879,7 @@ function AppInner() {
 // ─── PRIVACY POLICY ──────────────────────────────────────────
 function PrivacyPage({ lang, setLang }) {
   const { colors: c } = useTheme();
+  const navigate = useNavigate();
   const content = lang === "nl" ? {
     title: "Privacybeleid",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -7922,7 +7914,7 @@ function PrivacyPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -7942,6 +7934,7 @@ function PrivacyPage({ lang, setLang }) {
 // ─── TERMS OF SERVICE ────────────────────────────────────────
 function TermsPage({ lang, setLang }) {
   const { colors: c } = useTheme();
+  const navigate = useNavigate();
   const content = lang === "nl" ? {
     title: "Algemene Voorwaarden",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -7986,7 +7979,7 @@ function TermsPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -8010,6 +8003,7 @@ function TermsPage({ lang, setLang }) {
 // ─── CONTACT / ABOUT PAGE ────────────────────────────────────
 function ContactPage({ lang, setLang }) {
   const { colors: c } = useTheme();
+  const navigate = useNavigate();
   const content = lang === "nl" ? {
     title: "Over Vellu", subtitle: "Het verhaal achter het platform",
     mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
@@ -8033,7 +8027,7 @@ function ContactPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
@@ -8054,7 +8048,7 @@ function ContactPage({ lang, setLang }) {
           <div style={{ textAlign: "center", padding: "28px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 20, marginBottom: 32 }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
-            <button className="btn-primary" onClick={() => window.location.href = "/owner"}>{content.ctaBtn}</button>
+            <button className="btn-primary" onClick={() => navigate("/owner")}>{content.ctaBtn}</button>
           </div>
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
@@ -8069,6 +8063,7 @@ function ContactPage({ lang, setLang }) {
 // ─── DATA PROCESSING AGREEMENT (VERWERKINGSOVEREENKOMST) ─────
 function DpaPage({ lang, setLang }) {
   const { colors: c } = useTheme();
+  const navigate = useNavigate();
   const content = lang === "nl" ? {
     title: "Verwerkingsovereenkomst",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -8118,7 +8113,7 @@ function DpaPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = "/"}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -8179,23 +8174,45 @@ function CookieConsent({ lang }) {
   );
 }
 
+class ErrorBoundary extends Component {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err, info) { console.error("ErrorBoundary caught:", err, info); }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0d0b0a", color: "#ede8e0", fontFamily: "system-ui, sans-serif", padding: 32, textAlign: "center" }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 300, marginBottom: 8 }}>Er ging iets mis</div>
+          <div style={{ fontSize: 13, opacity: 0.5, marginBottom: 24 }}>Something went wrong</div>
+          <button onClick={() => window.location.reload()} style={{ padding: "10px 24px", borderRadius: 8, border: "1px solid rgba(237,232,224,0.15)", background: "transparent", color: "#ede8e0", cursor: "pointer", fontSize: 13 }}>
+            Herlaad pagina / Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function VelluApp() {
   const [lang, setLang] = useState("nl");
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<AppInner />} />
-            <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
-            <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
-            <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
-            <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
-            <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
-            <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
-                <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
-          </Routes>
-          <CookieConsent lang={lang} />
-        </BrowserRouter>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<AppInner />} />
+              <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
+              <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
+              <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
+              <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
+              <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
+              <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
+                  <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
+            </Routes>
+            <CookieConsent lang={lang} />
+          </BrowserRouter>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

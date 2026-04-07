@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-  'https://pqvovkwqkapmpibktpwb.supabase.co',
-  'sb_publishable_9a56u0YAwjJFjeQ6AGpJeg_qrzPnl0k'
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 export default async function handler(req, res) {
@@ -37,11 +37,11 @@ export default async function handler(req, res) {
 
       // Send reminder email via existing edge function
       try {
-        await fetch('https://pqvovkwqkapmpibktpwb.supabase.co/functions/v1/send-emails', {
+        const emailRes = await fetch(`${process.env.VITE_SUPABASE_URL}/functions/v1/send-emails`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer sb_publishable_9a56u0YAwjJFjeQ6AGpJeg_qrzPnl0k'
+            'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
           },
           body: JSON.stringify({
             type: 'appointment_reminder',
@@ -57,6 +57,12 @@ export default async function handler(req, res) {
             }
           })
         })
+
+        // Only mark as sent if email actually succeeded
+        if (!emailRes.ok) {
+          console.error('Email failed for appointment:', appt.id, await emailRes.text())
+          continue
+        }
 
         // Mark reminder as sent
         await supabase

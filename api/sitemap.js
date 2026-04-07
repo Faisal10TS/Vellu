@@ -1,15 +1,13 @@
 export default async function handler(req, res) {
-  const SUPABASE_URL = "https://pqvovkwqkapmpibktpwb.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_9a56u0YAwjJFjeQ6AGpJeg_qrzPnl0k";
+  const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+  const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY;
   const baseUrl = "https://vellu.cc";
   const today = new Date().toISOString().split("T")[0];
 
   let profiles = [];
-  let debugInfo = "";
 
   try {
     const url = `${SUPABASE_URL}/rest/v1/profiles?select=slug`;
-    debugInfo += `Fetching: ${url}\n`;
 
     const response = await fetch(url, {
       headers: {
@@ -19,27 +17,12 @@ export default async function handler(req, res) {
       },
     });
 
-    debugInfo += `Status: ${response.status}\n`;
-
     if (response.ok) {
       const data = await response.json();
-      debugInfo += `Rows: ${data.length}\n`;
       profiles = data.filter((p) => p.slug);
-    } else {
-      const errorText = await response.text();
-      debugInfo += `Error: ${errorText}\n`;
     }
   } catch (e) {
-    debugInfo += `Exception: ${e.message}\n`;
-  }
-
-  // Log for Vercel function logs
-  console.log("Sitemap debug:", debugInfo);
-
-  // If ?debug=1, show debug info instead of XML
-  if (req.query?.debug === "1") {
-    res.setHeader("Content-Type", "text/plain");
-    return res.status(200).send(debugInfo + "\nProfiles found: " + profiles.map((p) => p.slug).join(", "));
+    console.error("Sitemap error:", e.message);
   }
 
   const staticPages = [
