@@ -5066,12 +5066,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           )}
 
           {/* Scrollable Content */}
-          <div style={{ 
-            flex: 1, 
+          <div style={{
+            flex: 1,
             minHeight: 0,
-            overflow: "auto", 
+            overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "14px 22px 180px" : "32px 40px",
+            padding: isMobile ? "14px 22px 80px" : "32px 40px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -6726,9 +6726,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button */}
-              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
-                console.log("Saving profile, owner_id:", salonData.owner_id);
+              {/* Save button is rendered outside the scroll area -- see below */}
+            </div>
+          )}
+        </div>
+
+        {/* Settings save bar -- outside scroll area, always visible at bottom */}
+        {view === "instellingen" && (
+          <div style={{ flexShrink: 0, padding: isMobile ? "12px 22px" : "12px 40px", marginBottom: isMobile ? 60 : 0, borderTop: "1px solid " + c.border, display: "flex", alignItems: "center", gap: 10, justifyContent: "center" }}>
+            <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.25s" }} onClick={async () => {
                 const updateData = {
                   business_name: salonData.name,
                   city: salonData.city,
@@ -6770,10 +6776,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
-              <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         </main>
 
