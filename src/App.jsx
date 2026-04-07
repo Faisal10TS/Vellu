@@ -12,8 +12,8 @@ const THEMES = {
     borderHover: "rgba(237,232,224,0.15)",
     text: "#ede8e0",
     textSub: "rgba(237,232,224,0.5)",
-    textMuted: "rgba(237,232,224,0.25)",
-    textLabel: "rgba(237,232,224,0.35)",
+    textMuted: "rgba(237,232,224,0.35)",
+    textLabel: "rgba(237,232,224,0.45)",
     inputBg: "rgba(237,232,224,0.04)",
     inputBorder: "rgba(237,232,224,0.1)",
     overlay: "rgba(0,0,0,0.95)",
@@ -30,8 +30,8 @@ const THEMES = {
     borderHover: "rgba(13,11,10,0.22)",
     text: "#1a1714",
     textSub: "rgba(13,11,10,0.7)",
-    textMuted: "rgba(13,11,10,0.4)",
-    textLabel: "rgba(13,11,10,0.55)",
+    textMuted: "rgba(13,11,10,0.5)",
+    textLabel: "rgba(13,11,10,0.6)",
     inputBg: "rgba(13,11,10,0.04)",
     inputBorder: "rgba(13,11,10,0.15)",
     overlay: "rgba(255,255,255,0.95)",
@@ -784,17 +784,17 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .radio.on::after { content:''; width:7px; height:7px; border-radius:50%; background:${accent}; display:block; }
 
   .badge { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.08em; text-transform: uppercase; }
-  .badge-confirmed { background: rgba(147,197,253,0.1); color: #93c5fd; border: 1px solid rgba(147,197,253,0.2); }
-  .badge-completed { background: rgba(134,239,172,0.1); color: #86efac; border: 1px solid rgba(134,239,172,0.2); }
-  .badge-cancelled { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
-  .badge-no_show { background: rgba(251,146,60,0.1); color: #fb923c; border: 1px solid rgba(251,146,60,0.2); }
+  .badge-confirmed { background: rgba(59,130,246,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#93c5fd" : "#2563eb"}; border: 1px solid rgba(59,130,246,${c === THEMES.dark ? "0.2" : "0.15"}); }
+  .badge-completed { background: rgba(34,197,94,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#86efac" : "#16a34a"}; border: 1px solid rgba(34,197,94,${c === THEMES.dark ? "0.2" : "0.15"}); }
+  .badge-cancelled { background: rgba(239,68,68,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#f87171" : "#dc2626"}; border: 1px solid rgba(239,68,68,${c === THEMES.dark ? "0.2" : "0.15"}); }
+  .badge-no_show { background: rgba(249,115,22,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#fb923c" : "#ea580c"}; border: 1px solid rgba(249,115,22,${c === THEMES.dark ? "0.2" : "0.15"}); }
 
   .confirm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid ${c.bgCardHover}; }
   .confirm-row:last-child { border-bottom: none; }
   .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
 
-  .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 100px; padding: 5px; display: flex; gap: 2px; }
-  .lang-btn { padding: 5px 10px; border-radius: 100px; font-family: 'Jost',sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
+  .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 100px; padding: 4px; display: flex; gap: 2px; }
+  .lang-btn { padding: 7px 12px; border-radius: 100px; font-family: 'Jost',sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
   .lang-btn.active { background: ${accent}; color: ${c.btnOnDark}; }
   .lang-btn.inactive { background: transparent; color: ${c.textLabel}; }
 
@@ -974,7 +974,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .profile-review-card:last-child { border-bottom: none; }
   .profile-write-review-btn {
     display: inline-block; padding: 10px 24px; border: 1px solid ${c.border};
-    border-radius: 8px; font-size: 13px; font-weight: 500; color: ${c.text};
+    border-radius: 100px; font-size: 13px; font-weight: 500; color: ${c.text};
     cursor: pointer; transition: all 0.2s; background: transparent;
     font-family: 'Jost', sans-serif; margin-top: 8px;
   }
@@ -1008,7 +1008,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
     margin-top: 6px; font-size: 13px; color: ${c.textSub};
   }
   .profile-book-btn {
-    width: 100%; padding: 13px; border-radius: 8px; border: none;
+    width: 100%; padding: 13px; border-radius: 100px; border: none;
     background: ${accent}; color: ${c.btnOnDark}; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s; font-family: 'Jost', sans-serif;
     margin-top: 16px;
@@ -1173,7 +1173,7 @@ function ThemeToggle() {
   return (
     <div className="lang-toggle">
       {[["light","sun"], ["dark","moon"]].map(([m, icon]) => (
-        <button key={m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ padding: "5px 9px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={12} color="currentColor" /></button>
+        <button key={m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
       ))}
     </div>
   );
@@ -1475,7 +1475,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ─── FAQ ─── */}
         <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {lang === "nl" ? "Veelgestelde vragen" : "FAQ"}
@@ -1498,7 +1498,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ─── FINAL CTA ─── */}
         <div style={{ padding: "60px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 500, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
+          <div style={{ maxWidth: 600, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
               {lang === "nl" ? "Begin vandaag met je eigen boekingspagina" : "Start your own booking page today"}
             </div>
@@ -1729,7 +1729,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   }
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, textAlign: "left" }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, textAlign: "left" }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>{t.writeReview}</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {[1,2,3,4,5].map(s => (
@@ -3098,7 +3098,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {staffForService.map(m => (
                             <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                               <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
-                              {m.role && <div style={{ fontSize: 9, color: c.textLabel }}>{m.role}</div>}
+                              {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                             </div>
                           ))}
                         </div>
@@ -3608,7 +3608,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               {staffForService.map(m => (
                                 <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
-                                  {m.role && <div style={{ fontSize: 9, color: c.textLabel }}>{m.role}</div>}
+                                  {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                                 </div>
                               ))}
                             </div>
@@ -3713,7 +3713,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       )}
                       
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
                         <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
@@ -3984,7 +3984,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   };
 
   if (!open) return (
-    <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+    <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
       onClick={() => setOpen(true)}>{t.addVariant}</button>
   );
 
@@ -4026,7 +4026,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
   };
 
   if (!open) return (
-    <button className="btn-ghost" style={{ fontSize: 9, padding: "4px 10px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+    <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
       onClick={() => setOpen(true)}>{t.addExtra}</button>
   );
 
@@ -4319,7 +4319,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
           {/* Step 0: Salon details */}
           {step === 0 && (
             <div>
-              <div style={{ fontSize: 28, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingWelcome}</div>
+              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingWelcome}</div>
               <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingWelcomeSub}</div>
 
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.onboardingStep1}</div>
@@ -4335,7 +4335,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
           {/* Step 1: First service */}
           {step === 1 && (
             <div>
-              <div style={{ fontSize: 22, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep2}</div>
+              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep2}</div>
               <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingStep2Sub}</div>
 
               <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ marginBottom: 10 }} />
@@ -4358,7 +4358,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
           {/* Step 2: Business hours */}
           {step === 2 && (
             <div>
-              <div style={{ fontSize: 22, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep3}</div>
+              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep3}</div>
               <div style={{ fontSize: 13, color: c.textSub, marginBottom: 24, lineHeight: 1.6 }}>{t.onboardingStep3Sub}</div>
 
               {[0,1,2,3,4,5,6].map(day => {
@@ -5143,7 +5143,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* Revenue Chart + Popular Services */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22 }}>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                     <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
                     <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{lang === "nl" ? "Bekijk meer →" : "View more →"}</span>
@@ -5188,7 +5188,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     );
                   })()}
                 </div>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
                   <SL>{t.popularServices}</SL>
                   {(() => {
                     const svcCount = {};
@@ -5520,7 +5520,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Revenue chart */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
                 </div>
@@ -5583,7 +5583,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Popular services */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.popularServices}</SL>
                 {(() => {
                   const svcCount = {};
@@ -5606,7 +5606,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Busiest days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.busiestDays}</SL>
                 {(() => {
                   const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -5626,7 +5626,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Busiest hours heatmap */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Drukste uren" : "Busiest hours"}</SL>
                 {(() => {
                   const hourCounts = {};
@@ -5652,7 +5652,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Client retention */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Klant retentie" : "Client retention"}</SL>
                 {(() => {
                   const clientVisits = {};
@@ -5679,7 +5679,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Reviews */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
                 <SL>{t.reviews} ({salonData.reviews?.length || 0})</SL>
                 {(!salonData.reviews || salonData.reviews.length === 0)
                   ? <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
@@ -5737,7 +5737,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "salon" && <>
 
               {/* Billing / Subscription */}
-              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.billing}</SL>
                 {salonData.plan ? (
                   <div>
@@ -5767,7 +5767,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Profile */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.profile}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.businessName} value={salonData.name} onChange={e => update(d => { d.name = e.target.value; return d; })} />
@@ -5806,7 +5806,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Salon Contact Details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.salonContact}</SL>
                 <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.salonContactDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -5821,7 +5821,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Invoice details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.invoiceDetails}</SL>
                 <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.invoiceSettings}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -5843,7 +5843,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "diensten" && <>
 
               {/* Services + photos */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.services}</SL>
                 {salonData.services.length === 0 && (
                   <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>{lang === "nl" ? "Nog geen diensten" : "No services yet"}</div>
@@ -6012,7 +6012,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "team" && <>
 
               {/* Staff / Team */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.staff}</SL>
                 {/* Account type toggle */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -6031,7 +6031,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
                 {(salonData.staff || []).map(m => (
-                  <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 10 }}>
+                  <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 10 }}>
                     {/* Staff header row */}
                     <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                       {/* Photo */}
@@ -6212,7 +6212,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "planning" && <>
 
               {/* Locations */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.locations}</SL>
                 {(salonData.locations || []).length === 0 && (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noLocations}</div>
@@ -6250,7 +6250,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Business Hours */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.businessHours}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.businessHoursDesc}</div>
                 {[0,1,2,3,4,5,6].map(day => {
@@ -6355,7 +6355,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Break time between appointments */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.breakMinutes}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.breakMinutesDesc}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6374,7 +6374,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Reminder timing */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.reminderTiming}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.reminderTimingDesc}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6393,7 +6393,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Rebook nudge timing */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.rebookNudge}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.rebookNudgeDesc}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6412,7 +6412,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Exception Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "exception").map(([date, v]) => (
@@ -6444,7 +6444,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Blocked Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
@@ -6528,7 +6528,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Google Calendar Sync */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.googleCalendar}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.googleCalendarDesc}</div>
                 {salonData.google_calendar_connected ? (
@@ -6560,7 +6560,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "facturatie" && <>
 
               {/* Appearance Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.appearance}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.logoDesc}</div>
                 
@@ -6616,7 +6616,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Booking Policy Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>{t.bookingPolicyDesc}</div>
                 <textarea 
@@ -6629,7 +6629,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Phone Required Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
@@ -6652,7 +6652,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Booking Window Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingWindow}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.bookingWindowDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -6691,7 +6691,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Discount Codes Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.discountCodes}</SL>
                 
                 {/* Existing codes */}
