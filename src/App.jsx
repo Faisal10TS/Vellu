@@ -6726,15 +6726,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button is rendered outside the scroll area -- see below */}
-            </div>
-          )}
-        </div>
-
-        {/* Settings save bar -- outside scroll area, always visible at bottom */}
-        {view === "instellingen" && (
-          <div style={{ flexShrink: 0, padding: isMobile ? "12px 22px" : "12px 40px", marginBottom: isMobile ? 60 : 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-            <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.25s", pointerEvents: "auto", boxShadow: `0 4px 20px ${accent}44, 0 8px 32px rgba(0,0,0,0.4)` }} onClick={async () => {
+              {/* Save button */}
+              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0 8px" }}>
+              <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }} onClick={async () => {
                 const updateData = {
                   business_name: salonData.name,
                   city: salonData.city,
@@ -6776,8 +6770,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
-          </div>
-        )}
+              </div>
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
+            </div>
+          )}
+        </div>
 
         </main>
 
