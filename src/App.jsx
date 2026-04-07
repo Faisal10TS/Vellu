@@ -5065,7 +5065,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
           )}
 
-          {/* Scrollable Content */}
+          {/* Scrollable Content (settings has its own scroll -- see below) */}
+          {view !== "instellingen" ? (
           <div style={{
             flex: 1,
             minHeight: 0,
@@ -5697,8 +5698,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
           )}
 
-          {/* INSTELLINGEN */}
-          {view === "instellingen" && (
+          </div>
+          ) : (
+          /* INSTELLINGEN -- own scroll area with pinned save button */
+          <>
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: isMobile ? "14px 22px 20px" : "32px 40px 20px",
+            backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
+          }}>
             <div className="fade-up">
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
@@ -6726,9 +6737,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button */}
-              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0 8px" }}>
-              <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }} onClick={async () => {
+            </div>
+          </div>
+          </>
+          )}
+
+        </main>
+
+        {/* Floating save button -- position:fixed OUTSIDE main, like cookie banner */}
+        {view === "instellingen" && (
+          <div style={{ position: "fixed", bottom: isMobile ? 70 : 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 99, pointerEvents: "none" }}>
+            <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", pointerEvents: "auto", boxShadow: `0 4px 20px ${accent}44, 0 8px 32px rgba(0,0,0,0.5)` }} onClick={async () => {
                 const updateData = {
                   business_name: salonData.name,
                   city: salonData.city,
@@ -6770,13 +6789,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
-              </div>
-              <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
-            </div>
-          )}
-        </div>
-
-        </main>
+          </div>
+        )}
 
         {/* Mobile Bottom Nav — must be OUTSIDE main (overflow:hidden breaks position:fixed on iOS) */}
         {isMobile && (
