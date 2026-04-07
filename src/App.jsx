@@ -5071,7 +5071,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             minHeight: 0,
             overflow: "auto", 
             WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "14px 22px 140px" : "32px 40px",
+            padding: isMobile ? "14px 22px 180px" : "32px 40px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
