@@ -6869,15 +6869,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div>
                     <SL>{t.clientDetails}</SL>
                     {/* Client mode toggle */}
-                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                       <div onClick={() => { setClientMode("existing"); setClientSearch(""); }} style={{
-                        padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        flex: 1, padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontSize: 11, fontWeight: 600, textAlign: "center",
                         background: clientMode === "existing" ? `${accent}18` : "transparent",
                         color: clientMode === "existing" ? accent : c.textSub,
                         border: `1px solid ${clientMode === "existing" ? `${accent}44` : c.inputBorder}`
                       }}>{t.selectClient}</div>
                       <div onClick={() => setClientMode("new")} style={{
-                        padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        flex: 1, padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontSize: 11, fontWeight: 600, textAlign: "center",
                         background: clientMode === "new" ? `${accent}18` : "transparent",
                         color: clientMode === "new" ? accent : c.textSub,
                         border: `1px solid ${clientMode === "new" ? `${accent}44` : c.inputBorder}`
@@ -6890,9 +6890,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
                           onFocus={() => setShowClientDropdown(true)}
                           onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                          style={{ fontSize: 12, marginBottom: 4 }} />
+                          style={{ fontSize: 13, marginBottom: 8 }} />
                         {showClientDropdown && clientList.length > 0 && (
-                          <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 50, background: c.bg, border: "1px solid " + c.border, borderRadius: 12, maxHeight: 200, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
+                          <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 50, background: c.bg, border: "1px solid " + c.border, borderRadius: 16, maxHeight: 280, overflowY: "auto", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", padding: "6px 0" }}>
                             {clientList
                               .filter(cl => {
                                 if (!clientSearch) return true;
@@ -6911,11 +6911,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   setClientSearch(`${cl.first_name || ""} ${cl.last_name || ""}`.trim());
                                   setShowClientDropdown(false);
                                 }} style={{
-                                  padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid " + c.border,
-                                  transition: "background 0.15s"
+                                  padding: "14px 18px", cursor: "pointer", borderBottom: "1px solid " + c.border,
+                                  transition: "background 0.15s", borderRadius: 8, margin: "0 6px"
                                 }} onMouseOver={e => e.currentTarget.style.background = c.bgCardHover} onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{cl.first_name} {cl.last_name}</div>
-                                  <div style={{ fontSize: 10, color: c.textLabel }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
+                                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 3 }}>{cl.first_name} {cl.last_name}</div>
+                                  <div style={{ fontSize: 11, color: c.textLabel }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
                                 </div>
                               ))}
                             {clientList.filter(cl => {
