@@ -2100,7 +2100,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     const lookupId = ++emailLookupRef.current;
     const timer = setTimeout(async () => {
-      const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).single();
+      const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).maybeSingle();
       // Ignore stale responses - only apply if this is still the latest lookup
       if (lookupId !== emailLookupRef.current) return;
       if (data) {
@@ -2173,7 +2173,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // 1. Save or update client
     const clientEmail = form.email.toLowerCase();
     let clientId = null;
-    const { data: existingClient } = await supabase.from("clients").select("id").eq("email", clientEmail).single();
+    const { data: existingClient } = await supabase.from("clients").select("id").eq("email", clientEmail).maybeSingle();
     
     if (existingClient) {
       clientId = existingClient.id;
@@ -2219,22 +2219,24 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       client_allergies: form.allergies || null,
       location_id: selectedLocation?.id || null
     };
-    const { data: appt } = await supabase.from("appointments").insert(apptData).select("id").single();
-    
+    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("id").single();
+
+    if (apptError || !appt) {
+      throw new Error(apptError?.message || "Appointment insert failed");
+    }
+
     // 3. Generate cancellation token (expires 24h before appointment)
     let cancelToken = null;
-    if (appt) {
-      const token = generateToken();
-      const appointmentDate = new Date(date + "T" + time + ":00");
-      const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
-      
-      await supabase.from("cancellation_tokens").insert({
-        appointment_id: appt.id,
-        token: token,
-        expires_at: expiresAt.toISOString()
-      });
-      cancelToken = token;
-    }
+    const token = generateToken();
+    const appointmentDate = new Date(date + "T" + time + ":00");
+    const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
+
+    await supabase.from("cancellation_tokens").insert({
+      appointment_id: appt.id,
+      token: token,
+      expires_at: expiresAt.toISOString()
+    });
+    cancelToken = token;
 
     setDone(true);
     setSubmitting(false);
@@ -6974,7 +6976,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // Save client
                     const email = addApptForm.client_email.toLowerCase();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).single();
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
                     if (existing) { clientId = existing.id; }
                     else {
                       const nameParts = addApptForm.client_name.split(" ");
@@ -6991,25 +6993,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
                       staff_id: staffMember?.id || null, staff_name: staffMember?.name || null
                     };
-                    const { data: appt } = await supabase.from("appointments").insert(apptData).select("*").single();
-                    if (appt) {
-                      update(d => { d.appointments = [appt, ...d.appointments]; return d; });
-                      // Send confirmation email
-                      await sendEmails("booking_confirmation", {
-                        client_name: addApptForm.client_name, client_email: email,
+                    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
+                    if (apptError || !appt) {
+                      toast.show(lang === "nl" ? "Fout bij het toevoegen van afspraak" : "Error adding appointment", "error");
+                      setAddApptLoading(false);
+                      return;
+                    }
+                    update(d => { d.appointments = [appt, ...d.appointments]; return d; });
+                    // Send confirmation email
+                    await sendEmails("booking_confirmation", {
+                      client_name: addApptForm.client_name, client_email: email,
+                      service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
+                      payment: "on-arrival", price: price,
+                      salon_name: salonData.name, owner_email: null
+                    });
+                    // Notify assigned staff
+                    if (staffMember?.email) {
+                      await sendEmails("booking_notification", {
+                        owner_email: null, staff_emails: [staffMember.email],
+                        client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                        payment: "on-arrival", price: price,
-                        salon_name: salonData.name, owner_email: null
+                        price, salon_name: salonData.name
                       });
-                      // Notify assigned staff
-                      if (staffMember?.email) {
-                        await sendEmails("booking_notification", {
-                          owner_email: null, staff_emails: [staffMember.email],
-                          client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
-                          service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                          price, salon_name: salonData.name
-                        });
-                      }
                     }
                     setAddApptDone(true);
                     setAddApptLoading(false);
@@ -7698,7 +7703,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const duration = variant ? variant.duration : (svc?.duration || 60);
                     const email = addApptForm.client_email.toLowerCase();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).single();
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
                     if (existing) clientId = existing.id;
                     else {
                       const nameParts = addApptForm.client_name.split(" ");
@@ -7713,22 +7718,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
                       staff_id: staffMember.id, staff_name: myStaff.name
                     };
-                    const { data: appt } = await supabase.from("appointments").insert(apptData).select("*").single();
-                    if (appt) {
-                      setAppointments(a => [appt, ...a]);
-                      await sendEmails("booking_confirmation", {
-                        client_name: addApptForm.client_name, client_email: email,
-                        service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
-                        payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null
-                      });
-                      // Notify owner about new booking
-                      await sendEmails("booking_notification", {
-                        owner_email: salonProfile.email || null, staff_emails: [],
-                        client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
-                        service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
-                        price, salon_name: salonProfile.business_name
-                      });
+                    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
+                    if (apptError || !appt) {
+                      setAddApptLoading(false);
+                      return;
                     }
+                    setAppointments(a => [appt, ...a]);
+                    await sendEmails("booking_confirmation", {
+                      client_name: addApptForm.client_name, client_email: email,
+                      service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
+                      payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null
+                    });
+                    // Notify owner about new booking
+                    await sendEmails("booking_notification", {
+                      owner_email: salonProfile.email || null, staff_emails: [],
+                      client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
+                      service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
+                      price, salon_name: salonProfile.business_name
+                    });
                     setAddApptDone(true);
                     setAddApptLoading(false);
                   }}>
