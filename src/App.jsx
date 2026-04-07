@@ -6726,9 +6726,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button (floating, compact) */}
-              <div style={{ position: "sticky", bottom: isMobile ? 80 : 20, zIndex: 20, display: "flex", justifyContent: "center", paddingTop: 16 }}>
-              <button className="btn-primary" style={{ width: "auto", padding: "14px 48px", borderRadius: 100, boxShadow: `0 8px 32px ${accent}44` }} onClick={async () => {
+              {/* Save button */}
+              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0 8px" }}>
+              <button className="btn-primary" style={{ width: "auto", padding: "14px 48px", borderRadius: 100 }} onClick={async () => {
                 console.log("Saving profile, owner_id:", salonData.owner_id);
                 const updateData = {
                   business_name: salonData.name,
