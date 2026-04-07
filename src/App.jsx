@@ -6885,22 +6885,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     
                     {clientMode === "existing" ? (
-                      <div style={{ position: "relative" }}>
+                      <div>
                         <input className="input-field" placeholder={t.searchClients} value={clientSearch}
-                          onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
-                          onFocus={() => setShowClientDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                          style={{ fontSize: 13, marginBottom: 8 }} />
-                        {showClientDropdown && clientList.length > 0 && (
-                          <div style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 50, background: c.bg, border: "1px solid " + c.border, borderRadius: 16, maxHeight: 280, overflowY: "auto", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", padding: "6px 0" }}>
-                            {clientList
-                              .filter(cl => {
-                                if (!clientSearch) return true;
-                                const q = clientSearch.toLowerCase();
-                                return (cl.first_name || "").toLowerCase().includes(q) || (cl.last_name || "").toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").includes(q);
-                              })
-                              .slice(0, 15)
-                              .map((cl, idx) => (
+                          onChange={e => setClientSearch(e.target.value)}
+                          style={{ fontSize: 13, marginBottom: 12 }} />
+                        {/* Client list -- inline, not a dropdown */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto" }}>
+                          {(() => {
+                            const filtered = clientList.filter(cl => {
+                              if (!clientSearch) return true;
+                              const q = clientSearch.toLowerCase();
+                              return (cl.first_name || "").toLowerCase().includes(q) || (cl.last_name || "").toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").includes(q);
+                            }).slice(0, 10);
+                            if (filtered.length === 0) return (
+                              <div style={{ textAlign: "center", padding: "20px 0", color: c.textMuted, fontSize: 12 }}>
+                                {lang === "nl" ? "Geen klanten gevonden" : "No clients found"}
+                                <div style={{ marginTop: 8 }}>
+                                  <span onClick={() => setClientMode("new")} style={{ color: accent, cursor: "pointer", fontWeight: 600, fontSize: 12 }}>{t.newClient} →</span>
+                                </div>
+                              </div>
+                            );
+                            return filtered.map((cl, idx) => {
+                              const isSelected = addApptForm.client_email === cl.email;
+                              const initials = ((cl.first_name?.[0] || "") + (cl.last_name?.[0] || "")).toUpperCase();
+                              return (
                                 <div key={cl.id || cl.email || idx} onClick={() => {
                                   setAddApptForm(f => ({
                                     ...f,
@@ -6909,34 +6917,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     client_phone: cl.phone || ""
                                   }));
                                   setClientSearch(`${cl.first_name || ""} ${cl.last_name || ""}`.trim());
-                                  setShowClientDropdown(false);
                                 }} style={{
-                                  padding: "14px 18px", cursor: "pointer", borderBottom: "1px solid " + c.border,
-                                  transition: "background 0.15s", borderRadius: 8, margin: "0 6px"
-                                }} onMouseOver={e => e.currentTarget.style.background = c.bgCardHover} onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 3 }}>{cl.first_name} {cl.last_name}</div>
-                                  <div style={{ fontSize: 11, color: c.textLabel }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
+                                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                                  background: isSelected ? `${accent}12` : c.bgCard,
+                                  border: `1px solid ${isSelected ? accent : c.border}`,
+                                  borderRadius: 14, cursor: "pointer", transition: "all 0.15s"
+                                }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? `${accent}22` : c.bgCardHover, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: isSelected ? accent : c.textSub, flexShrink: 0 }}>
+                                    {initials}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{cl.first_name} {cl.last_name}</div>
+                                    {(cl.email || cl.phone) && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>}
+                                  </div>
+                                  {isSelected && <div style={{ width: 20, height: 20, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ color: c.btnOnDark, fontSize: 12 }}>✓</span></div>}
                                 </div>
-                              ))}
-                            {clientList.filter(cl => {
-                              if (!clientSearch) return true;
-                              const q = clientSearch.toLowerCase();
-                              return (cl.first_name || "").toLowerCase().includes(q) || (cl.last_name || "").toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q);
-                            }).length === 0 && (
-                              <div style={{ padding: "14px", textAlign: "center", fontSize: 11, color: c.textMuted }}>
-                                {lang === "nl" ? "Geen klanten gevonden" : "No clients found"}
-                                <div style={{ marginTop: 6 }}>
-                                  <span onClick={() => setClientMode("new")} style={{ color: accent, cursor: "pointer", fontWeight: 600 }}>{t.newClient} →</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {addApptForm.client_email && (
-                          <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 10, padding: "8px 12px", marginTop: 6, fontSize: 11 }}>
-                            <div style={{ fontWeight: 500, color: c.text }}>{addApptForm.client_name}</div>
-                            <div style={{ color: c.textLabel, fontSize: 10 }}>{addApptForm.client_email}{addApptForm.client_phone ? ` · ${addApptForm.client_phone}` : ""}</div>
-                          </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                        {false && addApptForm.client_email && (
+                          <div></div>
                         )}
                       </div>
                     ) : (
