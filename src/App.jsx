@@ -131,6 +131,52 @@ function ToastContainer({ toasts }) {
   );
 }
 
+// ─── CONFIRM MODAL ───────────────────────────────────────────
+function useConfirm() {
+  const [state, setState] = useState(null); // { message, resolve }
+  const confirm = (message) => new Promise((resolve) => setState({ message, resolve }));
+  const handleYes = () => { state?.resolve(true); setState(null); };
+  const handleNo = () => { state?.resolve(false); setState(null); };
+  return { confirmState: state, confirm, handleYes, handleNo };
+}
+
+function ConfirmModal({ state, onYes, onNo, lang }) {
+  const { colors: c } = useTheme();
+  if (!state) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo}>
+      <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "'Jost',sans-serif" }}>{state.message}</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+            {lang === "nl" ? "Annuleren" : "Cancel"}
+          </button>
+          <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#f87171", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+            {lang === "nl" ? "Verwijderen" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SHARED IMAGE COMPRESSION ────────────────────────────────
+async function compressImage(file, maxDim = 1600) {
+  if (file.size <= 1024 * 1024) return file;
+  try {
+    const img = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } catch (e) {
+    return file; // fallback to original
+  }
+}
+
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
   try {
@@ -4373,6 +4419,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   });
   const [saved, setSaved] = useState(false);
   const toast = useToast();
+  const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
@@ -4386,6 +4433,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [] });
   // Manual appointment
   const [showAddAppt, setShowAddAppt] = useState(false);
+  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent"
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
@@ -4484,6 +4533,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     };
     load();
   }, [user.slug]);
+
+  // Real-time subscription for new/updated appointments
+  useEffect(() => {
+    if (!salonData.owner_id) return;
+    const channel = supabase
+      .channel("owner-appointments")
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `owner_id=eq.${salonData.owner_id}` }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          update(d => { d.appointments = [payload.new, ...d.appointments]; return d; });
+          toast.show(lang === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
+        } else if (payload.eventType === "UPDATE") {
+          update(d => { d.appointments = d.appointments.map(a => a.id === payload.new.id ? payload.new : a); return d; });
+        } else if (payload.eventType === "DELETE") {
+          update(d => { d.appointments = d.appointments.filter(a => a.id !== payload.old.id); return d; });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [salonData.owner_id]);
 
   const accent = salonData.accent;
   const appts = salonData.appointments;
@@ -4625,22 +4693,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   const addPhoto = async (serviceId, file) => {
     setPhotoUploading(serviceId);
-    // Compress image if > 1MB
-    let uploadFile = file;
-    if (file.size > 1024 * 1024) {
-      try {
-        const img = await createImageBitmap(file);
-        const canvas = document.createElement("canvas");
-        const maxDim = 1600;
-        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
-        uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
-      } catch(e) { /* fallback to original */ }
-    }
-    // Upload to Supabase Storage
+    const uploadFile = await compressImage(file);
     const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("service-photos")
@@ -4828,6 +4881,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   return (
     <Layout accent={accent}>
       <ToastContainer toasts={toast.toasts} />
+      <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{
         background: c.bg,
         height: "100dvh",
@@ -5336,9 +5390,51 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view === "facturen" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
-              {completedAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noCompleted}</div>
-                : completedAppts.map(a => (
+
+              {completedAppts.length > 0 && (<>
+                {/* Search and filter bar */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam of dienst..." : "Search by name or service..."} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
+                    style={{ flex: 1, minWidth: 180, fontSize: 12, padding: "10px 14px" }} />
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[["all", lang === "nl" ? "Alles" : "All"], ["unsent", lang === "nl" ? "Te versturen" : "Unsent"], ["sent", lang === "nl" ? "Verstuurd" : "Sent"]].map(([key, label]) => (
+                      <div key={key} onClick={() => setInvoiceFilter(key)} style={{
+                        padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 500, transition: "all 0.2s",
+                        background: invoiceFilter === key ? `${accent}18` : "transparent",
+                        color: invoiceFilter === key ? accent : c.textSub,
+                        border: `1px solid ${invoiceFilter === key ? `${accent}44` : c.inputBorder}`
+                      }}>{label}</div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary card */}
+                <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+                  <div className="stat-card" style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.totalEarnings}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{completedAppts.length} {t.treatments}</div>
+                  </div>
+                  <div className="stat-card" style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: "#f59e0b" }}>{completedAppts.filter(a => !a.invoice_sent).length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "facturen" : "invoices"}</div>
+                  </div>
+                </div>
+              </>)}
+
+              {/* Invoice list */}
+              {(() => {
+                const searchLower = invoiceSearch.toLowerCase();
+                const filtered = completedAppts.filter(a => {
+                  if (invoiceFilter === "sent" && !a.invoice_sent) return false;
+                  if (invoiceFilter === "unsent" && a.invoice_sent) return false;
+                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
+                  return true;
+                });
+                if (completedAppts.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noCompleted}</div>;
+                if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Geen resultaten" : "No results"}</div>;
+                return filtered.map(a => (
                   <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
@@ -5354,15 +5450,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                     </div>
                   </div>
-                ))
-              }
-              {completedAppts.length > 0 && (
-                <div style={{ marginTop: 14, background: `${accent}08`, border: `1px solid ${accent}1a`, borderRadius: 20, padding: "18px 22px" }}>
-                  <SL>{t.totalEarnings}</SL>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 38, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
-                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{completedAppts.length} {t.treatments}</div>
-                </div>
-              )}
+                ));
+              })()}
             </div>
           )}
 
@@ -5506,6 +5595,59 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <span style={{ fontSize: 10, color: c.textLabel, width: 20, textAlign: "right" }}>{dayCounts[i]}</span>
                     </div>
                   ));
+                })()}
+              </div>
+
+              {/* Busiest hours heatmap */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Drukste uren" : "Busiest hours"}</SL>
+                {(() => {
+                  const hourCounts = {};
+                  appts.forEach(a => { if (a.time) { const h = parseInt(a.time.split(":")[0]); hourCounts[h] = (hourCounts[h] || 0) + 1; } });
+                  const hours = [];
+                  for (let h = 8; h <= 21; h++) hours.push(h);
+                  const max = Math.max(...hours.map(h => hourCounts[h] || 0), 1);
+                  return (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
+                      {hours.map(h => {
+                        const count = hourCounts[h] || 0;
+                        const pct = (count / max) * 100;
+                        return (
+                          <div key={h} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                            <div style={{ width: "100%", borderRadius: 4, background: count > 0 ? `${accent}${Math.max(Math.round(pct * 0.8 + 20), 20).toString(16).padStart(2,"0")}` : c.bgCardHover, height: Math.max(pct * 0.7, 2), transition: "height 0.3s" }} />
+                            <span style={{ fontSize: 8, color: c.textMuted }}>{h}:00</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Client retention */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Klant retentie" : "Client retention"}</SL>
+                {(() => {
+                  const clientVisits = {};
+                  appts.forEach(a => { if (a.client_email) clientVisits[a.client_email] = (clientVisits[a.client_email] || 0) + 1; });
+                  const total = Object.keys(clientVisits).length;
+                  const returning = Object.values(clientVisits).filter(v => v > 1).length;
+                  const pct = total > 0 ? Math.round((returning / total) * 100) : 0;
+                  return (
+                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                      <div style={{ position: "relative", width: 80, height: 80 }}>
+                        <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: "rotate(-90deg)" }}>
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke={c.bgCardHover} strokeWidth="3" />
+                          <circle cx="18" cy="18" r="15.9" fill="none" stroke={accent} strokeWidth="3" strokeDasharray={`${pct} ${100 - pct}`} strokeLinecap="round" />
+                        </svg>
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 600, color: accent }}>{pct}%</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{returning} {lang === "nl" ? "terugkerende klanten" : "returning clients"}</div>
+                        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{total} {lang === "nl" ? "unieke klanten totaal" : "unique clients total"}</div>
+                      </div>
+                    </div>
+                  );
                 })()}
               </div>
 
@@ -5700,7 +5842,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {editingService !== s.id && (
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={() => { if (confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>×</button>
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={async () => { if (await showConfirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>×</button>
                         </div>
                       )}
                     </div>
@@ -5936,11 +6078,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
-                              if (!confirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
+                              if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
                               await supabase.from("staff_members").delete().eq("id", m.id);
                               update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
+                              toast.show(lang === "nl" ? `${m.name} verwijderd` : `${m.name} deleted`);
                             }}>×</button>
                           </>
                         )}
@@ -6056,7 +6199,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           }}><NavIcon name="edit" size={12} /></button>
                         <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
                           onClick={async () => {
-                            if (!confirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
+                            if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
                             await supabase.from("locations").delete().eq("id", loc.id);
                             update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
                           }}>×</button>
@@ -6340,7 +6483,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <button className="btn-ghost" style={{ width: "100%", fontSize: 10, color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }}
                       onClick={async () => {
-                        if (!confirm(lang === "nl" ? "Google Agenda ontkoppelen?" : "Disconnect Google Calendar?")) return;
+                        if (!await showConfirm(lang === "nl" ? "Google Agenda ontkoppelen?" : "Disconnect Google Calendar?")) return;
                         await supabase.functions.invoke("google-auth", { body: { action: "disconnect", owner_id: salonData.owner_id } });
                         update(d => { d.google_calendar_connected = false; return d; });
                       }}>{t.googleCalendarDisconnect}</button>
@@ -6904,6 +7047,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = salonProfile.accent_color || ACCENT;
+  const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
 
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
@@ -6993,21 +7137,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   const staffAddPhoto = async (serviceId, file) => {
     setStaffPhotoUploading(serviceId);
-    // Compress image if > 1MB
-    let uploadFile = file;
-    if (file.size > 1024 * 1024) {
-      try {
-        const img = await createImageBitmap(file);
-        const canvas = document.createElement("canvas");
-        const maxDim = 1600;
-        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
-        uploadFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
-      } catch(e) { /* fallback */ }
-    }
+    const uploadFile = await compressImage(file);
     const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
     if (uploadError) { console.error("Upload error:", uploadError); setStaffPhotoUploading(null); return; }
@@ -7082,6 +7212,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   return (
     <Layout>
       <style>{makeCSS(accent, c)}</style>
+      <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop sidebar */}
         {!isMobile && (
@@ -7326,7 +7457,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
                             onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={12} /></button>
                           <button className="btn-ghost" style={{ fontSize: 9, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                            onClick={async () => { if (!confirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) return; await supabase.from("services").delete().eq("id", s.id); setServices(svcs => svcs.filter(sv => sv.id !== s.id)); }}><NavIcon name="xmark" size={12} /></button>
+                            onClick={async () => { if (!await showConfirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) return; await supabase.from("services").delete().eq("id", s.id); setServices(svcs => svcs.filter(sv => sv.id !== s.id)); }}><NavIcon name="xmark" size={12} /></button>
                         </div>
                       )}
                     </div>
