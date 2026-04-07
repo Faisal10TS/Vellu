@@ -3108,7 +3108,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {initialSalon.reviews.slice(0, 3).map(r => (
                       <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name.split(" ")[0]}</span>
+                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (lang === "nl" ? "Klant" : "Client")}</span>
                           <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                         </div>
                         {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
@@ -3811,7 +3811,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {initialSalon.reviews.slice(0, 3).map(r => (
                         <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name.split(" ")[0]}</span>
+                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (lang === "nl" ? "Klant" : "Client")}</span>
                             <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                           </div>
                           {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
@@ -4534,6 +4534,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     load();
   }, [user.slug]);
 
+  // Keep a ref to lang so the real-time callback always has the current value
+  const langRef = useRef(lang);
+  useEffect(() => { langRef.current = lang; }, [lang]);
+
   // Real-time subscription for new/updated appointments
   useEffect(() => {
     if (!salonData.owner_id) return;
@@ -4542,7 +4546,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `owner_id=eq.${salonData.owner_id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
           update(d => { d.appointments = [payload.new, ...d.appointments]; return d; });
-          toast.show(lang === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
+          toast.show(langRef.current === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
         } else if (payload.eventType === "UPDATE") {
           update(d => { d.appointments = d.appointments.map(a => a.id === payload.new.id ? payload.new : a); return d; });
         } else if (payload.eventType === "DELETE") {
@@ -4906,7 +4910,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {/* Sidebar Header */}
             <div style={{ padding: "28px 24px", borderBottom: "1px solid " + c.border }}>
               <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
-              <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.08em" }}>OWNER DASHBOARD</div>
+              <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.08em" }}>{lang === "nl" ? "EIGENAAR DASHBOARD" : "OWNER DASHBOARD"}</div>
             </div>
 
             {/* Salon Info */}
@@ -5809,7 +5813,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.services}</SL>
                 {salonData.services.length === 0 && (
-                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>{t.noAppts}</div>
+                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>{lang === "nl" ? "Nog geen diensten" : "No services yet"}</div>
                 )}
                 {salonData.services.map(s => (
                   <div key={s.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
@@ -7077,7 +7081,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [addApptDone, setAddApptDone] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
   const [svcError, setSvcError] = useState("");
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   // Load data
   useEffect(() => {
@@ -7920,53 +7929,60 @@ function CancelRoute({ lang }) {
   }, [token]);
 
   const handleCancel = async () => {
-    await supabase.from("appointments").update({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      cancellation_reason: reason || null
-    }).eq("id", appointment.id);
-    
-    await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
-    
-    await sendEmails("booking_cancelled", {
-      client_name: appointment.client_name,
-      client_email: appointment.client_email,
-      service_name: appointment.service_name,
-      date: appointment.date,
-      time: appointment.time
-    });
+    try {
+      const { error: apptError } = await supabase.from("appointments").update({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason || null
+      }).eq("id", appointment.id);
 
-    // Notify owner + staff about cancellation
-    const notifyEmails = [];
-    let salonName = "";
-    if (appointment.owner_id) {
-      const { data: ownerProfile } = await supabase.from("profiles").select("email, business_name").eq("id", appointment.owner_id).single();
-      if (ownerProfile?.email) notifyEmails.push(ownerProfile.email);
-      if (ownerProfile?.business_name) salonName = ownerProfile.business_name;
-    }
-    if (appointment.staff_id) {
-      const { data: staffData } = await supabase.from("staff_members").select("email").eq("id", appointment.staff_id).single();
-      if (staffData?.email) notifyEmails.push(staffData.email);
-    }
-    if (notifyEmails.length > 0) {
-      await sendEmails("booking_notification", {
-        owner_email: notifyEmails[0] || null,
-        staff_emails: notifyEmails.slice(1),
-        client_name: appointment.client_name, client_phone: null,
-        service_name: `GEANNULEERD: ${appointment.service_name}`,
-        date: appointment.date, time: appointment.time,
-        price: appointment.service_price || 0, salon_name: salonName
+      if (apptError) throw apptError;
+
+      await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
+
+      await sendEmails("booking_cancelled", {
+        client_name: appointment.client_name,
+        client_email: appointment.client_email,
+        service_name: appointment.service_name,
+        date: appointment.date,
+        time: appointment.time
       });
-    }
 
-    // Delete Google Calendar event if it exists
-    if (appointment.google_event_id && appointment.owner_id) {
-      supabase.functions.invoke("google-calendar", {
-        body: { action: "delete", owner_id: appointment.owner_id, event_id: appointment.google_event_id }
-      }).catch(e => console.error("Google Calendar delete error:", e));
+      // Notify owner + staff about cancellation
+      const notifyEmails = [];
+      let salonName = "";
+      if (appointment.owner_id) {
+        const { data: ownerProfile } = await supabase.from("profiles").select("email, business_name").eq("id", appointment.owner_id).single();
+        if (ownerProfile?.email) notifyEmails.push(ownerProfile.email);
+        if (ownerProfile?.business_name) salonName = ownerProfile.business_name;
+      }
+      if (appointment.staff_id) {
+        const { data: staffData } = await supabase.from("staff_members").select("email").eq("id", appointment.staff_id).single();
+        if (staffData?.email) notifyEmails.push(staffData.email);
+      }
+      if (notifyEmails.length > 0) {
+        await sendEmails("booking_notification", {
+          owner_email: notifyEmails[0] || null,
+          staff_emails: notifyEmails.slice(1),
+          client_name: appointment.client_name, client_phone: null,
+          service_name: `GEANNULEERD: ${appointment.service_name}`,
+          date: appointment.date, time: appointment.time,
+          price: appointment.service_price || 0, salon_name: salonName
+        });
+      }
+
+      // Delete Google Calendar event if it exists
+      if (appointment.google_event_id && appointment.owner_id) {
+        supabase.functions.invoke("google-calendar", {
+          body: { action: "delete", owner_id: appointment.owner_id, event_id: appointment.google_event_id }
+        }).catch(e => console.error("Google Calendar delete error:", e));
+      }
+
+      setStatus("cancelled");
+    } catch (err) {
+      console.error("Cancel error:", err);
+      setStatus("error");
     }
-    
-    setStatus("cancelled");
   };
 
   return (
@@ -7974,7 +7990,7 @@ function CancelRoute({ lang }) {
       <style>{makeCSS(ACCENT, c)}</style>
       <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
         {status === "loading" && (
-          <div style={{ color: c.textLabel }}>laden...</div>
+          <div style={{ color: c.textLabel }}>{lang === "nl" ? "laden..." : "loading..."}</div>
         )}
         
         {status === "confirm" && appointment && (
@@ -8066,12 +8082,11 @@ function CancelRoute({ lang }) {
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────
-function AppInner() {
+function AppInner({ lang, setLang }) {
   const { colors: c } = useTheme();
   const [screen, setScreen] = useState("landing");
   const [salon, setSalon] = useState(null);
   const [owner, setOwner] = useState(null);
-  const [lang, setLang] = useState("nl");
   const [salons, setSalons] = useState({});
 
   const updateSalon = (updated) => setSalons(prev => ({ ...prev, [updated.id]: updated }));
@@ -8084,8 +8099,8 @@ function AppInner() {
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
       {screen === "owner" && (() => {
         const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
-        if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={() => { setOwner(null); setScreen("landing"); }} />;
-        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={() => { setOwner(null); setScreen("landing"); }} />;
+        if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
+        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}
     </>
   );
@@ -8418,7 +8433,7 @@ export default function VelluApp() {
       <ThemeProvider>
         <BrowserRouter>
             <Routes>
-              <Route path="/" element={<AppInner />} />
+              <Route path="/" element={<AppInner lang={lang} setLang={setLang} />} />
               <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
               <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
               <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />

@@ -36,7 +36,7 @@ serve(async () => {
 
       const salonName = appt.profiles?.business_name || "de salon";
       const slug = appt.profiles?.slug || "";
-      const reviewUrl = `https://vellu.cc/${slug}?review=true&email=${encodeURIComponent(appt.client_email)}`;
+      const reviewUrl = `https://vellu.cc/${slug}?review=true`;
       const rebookUrl = `https://vellu.cc/${slug}`;
 
       // Send email via Resend

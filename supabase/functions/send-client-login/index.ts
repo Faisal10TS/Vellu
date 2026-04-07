@@ -46,8 +46,10 @@ serve(async (req) => {
       );
     }
 
-    // Generate 6-digit code
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate 6-digit code (cryptographically secure)
+    const randomBytes = new Uint32Array(1);
+    crypto.getRandomValues(randomBytes);
+    const code = String(100000 + (randomBytes[0] % 900000));
     
     // Set expiry to 5 minutes from now
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();

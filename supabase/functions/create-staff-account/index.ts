@@ -39,17 +39,7 @@ serve(async (req) => {
       });
     }
 
-    // Check if email is already in use
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const emailExists = existingUsers?.users?.some(u => u.email === email.toLowerCase());
-    if (emailExists) {
-      return new Response(JSON.stringify({ error: "email_taken" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Create auth user for staff member
+    // Create auth user for staff member (createUser will fail if email already exists)
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase(),
       password: password,
@@ -57,7 +47,9 @@ serve(async (req) => {
     });
 
     if (createError) {
-      return new Response(JSON.stringify({ error: createError.message }), {
+      // Supabase returns "A user with this email address has already been registered" for duplicates
+      const isDuplicate = createError.message?.toLowerCase().includes("already") || createError.message?.toLowerCase().includes("exists");
+      return new Response(JSON.stringify({ error: isDuplicate ? "email_taken" : createError.message }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -1,19 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const FROM_EMAIL = "hello@vellu.cc";
+const FROM_EMAIL = "noreply@vellu.cc";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not configured");
+
     const {
       clientName,
       clientEmail,
@@ -26,8 +28,16 @@ serve(async (req) => {
       invoiceId,
     } = await req.json();
 
-    const btw = (parseFloat(servicePrice) * 0.21).toFixed(2);
-    const total = (parseFloat(servicePrice) * 1.21).toFixed(2);
+    // Input validation
+    if (!clientEmail || !serviceName || servicePrice === undefined) {
+      return new Response(JSON.stringify({ error: "Missing required fields: clientEmail, serviceName, servicePrice" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const price = parseFloat(servicePrice) || 0;
+    const btw = (price * 0.21).toFixed(2);
+    const total = (price * 1.21).toFixed(2);
 
     const html = `
       <!DOCTYPE html>
@@ -127,11 +137,15 @@ serve(async (req) => {
 
     const data = await res.json();
 
+    if (!res.ok) {
+      console.error("Resend API error:", data);
+      return new Response(JSON.stringify({ success: false, error: data?.message || "Email send failed" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ success: true, data }), {
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
