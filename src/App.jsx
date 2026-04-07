@@ -6726,9 +6726,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button (sticky at bottom of scroll area) */}
-              <div style={{ position: "sticky", bottom: isMobile ? 80 : 0, zIndex: 20, paddingTop: 16, paddingBottom: 8, background: `linear-gradient(to bottom, transparent, ${c.bg} 16px)` }}>
-              <button className="btn-primary" onClick={async () => {
+              {/* Save button */}
+              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
                 console.log("Saving profile, owner_id:", salonData.owner_id);
                 const updateData = {
                   business_name: salonData.name,
@@ -6772,7 +6771,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 }
               }}>{saved ? t.saved : t.save}</button>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
-              </div>
             </div>
           )}
         </div>
