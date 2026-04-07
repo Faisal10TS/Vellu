@@ -718,6 +718,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px ${accent}55; }
   .btn-primary:disabled { opacity: 0.28; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-primary:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
 
   .btn-ghost {
     background: transparent; color: ${c.textSub};
@@ -726,6 +727,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
     letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer; transition: all 0.2s;
   }
   .btn-ghost:hover { background: ${c.bgCardHover}; color: ${c.text}; border-color: ${c.borderHover}; }
+  .btn-ghost:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
 
   .input-field {
     background: ${c.inputBg}; border: 1px solid ${c.inputBorder};
@@ -756,6 +758,8 @@ const makeCSS = (accent, c = THEMES.dark) => `
     padding: 10px 12px; border-radius: 15px; cursor: pointer; min-width: 44px;
     border: 1px solid transparent; flex-shrink: 0; transition: all 0.2s;
   }
+  .day-scroll { -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); mask-image: linear-gradient(to right, black 85%, transparent 100%); }
+  .day-scroll::-webkit-scrollbar { display: none; }
   .day-chip:hover { background: ${accent}18; border-color: ${accent}44; }
   .day-chip.sel { background: ${accent}; border-color: ${accent}; }
   .day-chip.sel span { color: ${c.btnOnDark} !important; }
@@ -863,7 +867,9 @@ const makeCSS = (accent, c = THEMES.dark) => `
 
   .profile-hero {
     position: relative; overflow: hidden; width: 100%;
-    background: linear-gradient(135deg, #1a1814 0%, ${c.bg} 40%, #18161a 100%);
+    background: ${c === THEMES.dark
+      ? "linear-gradient(135deg, #1a1814 0%, " + c.bg + " 40%, #18161a 100%)"
+      : "linear-gradient(135deg, #e8e4df 0%, " + c.bg + " 40%, #ddd8d2 100%)"};
   }
   .profile-hero-cover {
     width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0;
@@ -1513,7 +1519,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Footer */}
         <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
-          <div style={{ fontSize: 11, color: c.textMuted }}>© {new Date().getFullYear()} vellu · <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Privacy</a> · <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a> · <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Verwerkingsovereenkomst" : "DPA"}</a> · <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a></div>
+          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
+            <span>© {new Date().getFullYear()} vellu</span>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Privacy</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+            <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Verwerkingsovereenkomst" : "DPA"}</a>
+            <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
+          </div>
         </footer>
       </div>
     </Layout>
@@ -1697,6 +1709,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   const { colors: c } = useTheme();
   const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1733,7 +1746,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>{t.writeReview}</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {[1,2,3,4,5].map(s => (
-          <span key={s} onClick={() => setRating(s)} style={{ fontSize: 26, cursor: "pointer", color: s <= rating ? accent : c.textMuted, transition: "all 0.15s", transform: s <= rating ? "scale(1.1)" : "none" }}>★</span>
+          <span key={s} onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} style={{ fontSize: 26, cursor: "pointer", color: s <= (hoverRating || rating) ? accent : c.textMuted, transition: "all 0.15s", transform: s <= (hoverRating || rating) ? "scale(1.1)" : "none" }}>★</span>
         ))}
       </div>
       <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
@@ -3141,7 +3154,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Step 2 — Date & Time */}
               {step === 2 && <>
                 <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
-                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                   {days.map((d, i) => {
                     const ds = fmt(d); 
                     const isSel = date === ds;
@@ -3635,7 +3648,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {/* Step 2 — Date & Time (mobile) */}
                   {step === 2 && <>
                     <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
-                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                       {days.map((d, i) => {
                         const ds = fmt(d); 
                         const isSel = date === ds;
@@ -5072,13 +5085,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             minHeight: 0,
             overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "14px 22px 80px" : "32px 40px",
+            padding: isMobile ? "14px 22px 80px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
               
               {/* 4 Stat Cards */}
@@ -5221,7 +5234,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* AGENDA */}
           {view === "agenda" && (
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
               
               {/* View mode toggle + navigation */}
@@ -5285,7 +5298,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     : `${MON[firstDay.getMonth()]} — ${MON[lastDay.getMonth()]} ${lastDay.getFullYear()}`;
                   return (<>
                     <div style={{ fontSize: 12, fontWeight: 500, color: c.textSub, marginBottom: 10, textTransform: "capitalize" }}>{monthLabel}</div>
-                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                       {weekDays.map((d, i) => {
                         const ds = fmt(d); const isSel = calDate === ds;
                         const isToday = ds === fmt(getToday());
@@ -5415,7 +5428,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* FACTUREN */}
           {view === "facturen" && (
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
               {completedAppts.length > 0 && (<>
@@ -5484,7 +5497,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* ANALYTICS */}
           {view === "analytics" && (
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={lang === "nl" ? "Inzicht in je salon" : "Insight into your salon"}>{t.analytics}</PTitle>}
 
               {/* Key metrics */}
@@ -7353,7 +7366,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {view === "agenda" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                 {days.slice(0,7).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
                   const has = appointments.filter(a => a.status !== "cancelled" && a.date === ds).length > 0;
@@ -7375,7 +7388,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
           {/* FACTUREN */}
           {view === "facturen" && (
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
               {completedAppts.length === 0
                 ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Nog geen voltooide afspraken" : "No completed appointments yet"}</div>
