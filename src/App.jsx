@@ -393,6 +393,7 @@ const T = {
     followupRate:"Follow-up response rate",
     // Reminder timing
     reminderTiming:"Herinnering timing", reminderTimingDesc:"Wanneer krijgen klanten een herinnering voor hun afspraak?",
+    rebookNudge:"Herboek herinnering", rebookNudgeDesc:"Na hoeveel weken krijgen klanten een 'we missen je' e-mail?", rebookNudgeOff:"Uit", rebookNudgeWeeks:"weken",
     reminderBefore:"voor de afspraak", reminderNone:"Geen herinnering",
     // Onboarding
     onboardingWelcome:"Welkom bij Vellu!", onboardingWelcomeSub:"Laten we je salon instellen. Dit duurt maar 2 minuten.",
@@ -608,6 +609,7 @@ const T = {
     followupRate:"Follow-up response rate",
     // Reminder timing
     reminderTiming:"Reminder timing", reminderTimingDesc:"When should clients receive a reminder for their appointment?",
+    rebookNudge:"Rebook reminder", rebookNudgeDesc:"After how many weeks should clients get a 'we miss you' email?", rebookNudgeOff:"Off", rebookNudgeWeeks:"weeks",
     reminderBefore:"before the appointment", reminderNone:"No reminder",
     // Onboarding
     onboardingWelcome:"Welcome to Vellu!", onboardingWelcomeSub:"Let's set up your salon. This only takes 2 minutes.",
@@ -4432,6 +4434,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60,
       reminder_hours: 24,
+      rebook_nudge_days: 28,
       google_calendar_connected: false
     };
   });
@@ -4523,6 +4526,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
+          rebook_nudge_days: data.rebook_nudge_days ?? 28,
           google_calendar_connected: data.google_calendar_connected || false,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
@@ -6377,6 +6381,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Rebook nudge timing */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <SL>{t.rebookNudge}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.rebookNudgeDesc}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[0, 7, 14, 21, 28, 42, 56].map(days => (
+                    <div key={days} onClick={() => update(d => { d.rebook_nudge_days = days; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.rebook_nudge_days ?? 28) === days ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.rebook_nudge_days ?? 28) === days ? accent : c.inputBorder}`,
+                        color: (salonData.rebook_nudge_days ?? 28) === days ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{days === 0 ? t.rebookNudgeOff : `${days / 7} ${t.rebookNudgeWeeks}`}</div>
+                  ))}
+                </div>
+              </div>
+
               {/* Exception Days */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
@@ -6732,7 +6755,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   account_type: salonData.account_type || "joint",
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
-                  reminder_hours: salonData.reminder_hours ?? 24
+                  reminder_hours: salonData.reminder_hours ?? 24,
+                  rebook_nudge_days: salonData.rebook_nudge_days ?? 28
                 };
                 const { data: updatedRows, error } = await supabase.from("profiles").update(updateData).eq("id", salonData.owner_id).select();
                 if (error) {
