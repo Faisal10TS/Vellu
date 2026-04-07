@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useRef, Component } from "react";
+import { useState, useEffect, createContext, useContext, useRef, Component, Suspense } from "react";
 import { supabase } from "./supabase.js";
 import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
 
@@ -158,6 +158,24 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
       </div>
     </div>
   );
+}
+
+// ─── SEO HELPER ─────────────────────────────────────────────
+function useSEO({ title, description, ogImage, url }) {
+  useEffect(() => {
+    if (title) document.title = title;
+    const setMeta = (property, content) => {
+      if (!content) return;
+      let el = document.querySelector(`meta[property="${property}"]`) || document.querySelector(`meta[name="${property}"]`);
+      if (el) { el.setAttribute("content", content); }
+      else { el = document.createElement("meta"); el.setAttribute(property.startsWith("og:") || property.startsWith("twitter:") ? "property" : "name", property); el.setAttribute("content", content); document.head.appendChild(el); }
+    };
+    if (description) { setMeta("description", description); setMeta("og:description", description); setMeta("twitter:description", description); }
+    if (title) { setMeta("og:title", title); setMeta("twitter:title", title); }
+    if (ogImage) { setMeta("og:image", ogImage); setMeta("twitter:image", ogImage); }
+    if (url) { setMeta("og:url", url); }
+    return () => { document.title = "Vellu - Beauty Booking Platform | 0% Commissie"; };
+  }, [title, description, ogImage, url]);
 }
 
 // ─── SHARED IMAGE COMPRESSION ────────────────────────────────
@@ -2329,7 +2347,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
           {initialSalon.logo_url ? (
-            <img src={initialSalon.logo_url} className="profile-header-logo" alt="" />
+            <img src={initialSalon.logo_url} className="profile-header-logo" alt={`${initialSalon.name} logo`} />
           ) : (
             <div className="profile-header-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
           )}
@@ -2359,7 +2377,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {/* ═══ HERO BANNER ═══ */}
         <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
           {initialSalon.cover_image_url && (
-            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt="" />
+            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} />
           )}
           <div className="profile-hero-gradient" />
           <div className="profile-hero-content">
@@ -2396,7 +2414,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {profileFilteredServices.map(s => (
                 <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
                   {s.photos?.length > 0 ? (
-                    <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt="" />
+                    <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt={svcName(s)} />
                   ) : (
                     <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="scissors" size={20} color={c.textMuted} /></div>
                   )}
@@ -2433,7 +2451,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div key={member.id}>
                       <div className="profile-team-row" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)}>
                         {member.avatar_url ? (
-                          <img src={member.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt="" />
+                          <img src={member.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt={member.name} />
                         ) : (
                           <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
                         )}
@@ -2474,7 +2492,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
                   {allPhotos.map((photo, idx) => (
                     <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
-                      <img src={photo.url || photo} loading="lazy" alt="" />
+                      <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (lang === "nl" ? "Galerij foto" : "Gallery photo")} />
                     </div>
                   ))}
                 </div>
@@ -2618,7 +2636,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div className="profile-sidebar-inner">
               {/* Circular logo */}
               {initialSalon.logo_url ? (
-                <img src={initialSalon.logo_url} className="profile-sidebar-logo" alt="" />
+                <img src={initialSalon.logo_url} className="profile-sidebar-logo" alt={`${initialSalon.name} logo`} />
               ) : (
                 <div className="profile-sidebar-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
               )}
@@ -7526,7 +7544,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                       {(s.photos || []).map(p => (
                         <div key={p.id} style={{ position: "relative", width: 50, height: 50, borderRadius: 8, overflow: "hidden" }}>
-                          <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={p.url} alt={lang === "nl" ? "Service foto" : "Service photo"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           <button onClick={() => staffDeletePhoto(s.id, p.id, p.url)} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", fontSize: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                         </div>
                       ))}
@@ -7865,6 +7883,14 @@ function SalonRoute({ lang, setLang }) {
     };
     load();
   }, [slug]);
+
+  // Dynamic SEO for salon pages
+  useSEO({
+    title: salon ? `${salon.name} | Vellu` : undefined,
+    description: salon ? `${lang === "nl" ? "Boek een afspraak bij" : "Book an appointment at"} ${salon.name}${salon.city ? ` in ${salon.city}` : ""}. ${lang === "nl" ? "Online boeken, geen commissie." : "Book online, no commission."}` : undefined,
+    ogImage: salon?.cover_image_url || salon?.logo_url || undefined,
+    url: `https://vellu.cc/${slug}`
+  });
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
@@ -8432,6 +8458,7 @@ export default function VelluApp() {
     <ErrorBoundary>
       <ThemeProvider>
         <BrowserRouter>
+          <Suspense fallback={null}>
             <Routes>
               <Route path="/" element={<AppInner lang={lang} setLang={setLang} />} />
               <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
@@ -8440,8 +8467,9 @@ export default function VelluApp() {
               <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
               <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
               <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
-                  <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
+              <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
             </Routes>
+          </Suspense>
             <CookieConsent lang={lang} />
           </BrowserRouter>
       </ThemeProvider>
