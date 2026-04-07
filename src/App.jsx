@@ -6726,8 +6726,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button */}
-              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
+              {/* Save button (floating, compact) */}
+              <div style={{ position: "sticky", bottom: isMobile ? 80 : 20, zIndex: 20, display: "flex", justifyContent: "center", paddingTop: 16 }}>
+              <button className="btn-primary" style={{ width: "auto", padding: "14px 48px", borderRadius: 100, boxShadow: `0 8px 32px ${accent}44` }} onClick={async () => {
                 console.log("Saving profile, owner_id:", salonData.owner_id);
                 const updateData = {
                   business_name: salonData.name,
@@ -6770,6 +6771,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
+              </div>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
             </div>
           )}
