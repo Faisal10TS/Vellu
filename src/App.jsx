@@ -6727,8 +6727,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </>}
 
               {/* Save button */}
-              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0 8px" }}>
-              <button className="btn-primary" style={{ width: "auto", padding: "14px 48px", borderRadius: 100 }} onClick={async () => {
+              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
                 console.log("Saving profile, owner_id:", salonData.owner_id);
                 const updateData = {
                   business_name: salonData.name,
@@ -6771,7 +6770,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
-              </div>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
             </div>
           )}
@@ -6781,15 +6779,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
         {/* Mobile Bottom Nav — must be OUTSIDE main (overflow:hidden breaks position:fixed on iOS) */}
         {isMobile && (
-          <div style={{ 
-            position: "fixed", 
-            bottom: 0, 
-            left: 0, 
-            right: 0, 
-            background: c.bg, 
-            borderTop: "1px solid " + c.border, 
-            display: "flex", 
-            padding: "12px 4px 8px", 
+          <div style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: c.bg,
+            borderTop: "1px solid " + c.border,
+            display: "flex",
+            padding: "12px 4px 8px",
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
             zIndex: 100
           }}>
