@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext, useRef, Component } from "react";
 import { supabase } from "./supabase.js";
-import { BrowserRouter, Routes, Route, useParams, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
 
 // ─── THEME SYSTEM ─────────────────────────────────────────────
 const THEMES = {
@@ -69,6 +69,67 @@ function ThemeProvider({ children }) {
 
 function useTheme() { return useContext(ThemeContext); }
 
+// ─── LOADING SKELETON ────────────────────────────────────────
+function Skeleton({ width = "100%", height = 16, radius = 8, style = {} }) {
+  const { colors: c } = useTheme();
+  return (
+    <div style={{ width, height, borderRadius: radius, background: c.bgCardHover, animation: "pulse 1.5s ease-in-out infinite", ...style }} />
+  );
+}
+
+function DashboardSkeleton() {
+  const { colors: c } = useTheme();
+  return (
+    <div style={{ padding: "32px 40px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 22 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} className="stat-card">
+            <Skeleton width={80} height={10} style={{ marginBottom: 12 }} />
+            <Skeleton width={60} height={28} style={{ marginBottom: 6 }} />
+            <Skeleton width={50} height={10} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 22 }}>
+        {[0,1,2,3].map(i => <Skeleton key={i} height={42} radius={100} />)}
+      </div>
+      <Skeleton width={120} height={10} style={{ marginBottom: 14 }} />
+      {[0,1,2].map(i => <Skeleton key={i} height={90} radius={20} style={{ marginBottom: 10 }} />)}
+    </div>
+  );
+}
+
+// ─── TOAST SYSTEM ────────────────────────────────────────────
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const show = (message, type = "success") => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
+  return { toasts, show };
+}
+
+function ToastContainer({ toasts }) {
+  const { colors: c } = useTheme();
+  if (toasts.length === 0) return null;
+  return (
+    <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 500,
+          fontFamily: "'Jost',sans-serif", animation: "fadeUp 0.3s ease",
+          background: t.type === "success" ? "rgba(134,239,172,0.15)" : t.type === "error" ? "rgba(248,113,113,0.15)" : c.bgCard,
+          color: t.type === "success" ? "#86efac" : t.type === "error" ? "#f87171" : c.text,
+          border: `1px solid ${t.type === "success" ? "rgba(134,239,172,0.3)" : t.type === "error" ? "rgba(248,113,113,0.3)" : c.border}`,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+        }}>
+          {t.type === "success" ? "✓ " : t.type === "error" ? "✕ " : ""}{t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
@@ -577,6 +638,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   ::-webkit-scrollbar { width: 0; height: 0; }
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
   @keyframes scaleIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
   @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
   .fade-up { animation: fadeUp 0.38s cubic-bezier(0.16,1,0.3,1) both; }
@@ -4310,6 +4372,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     };
   });
   const [saved, setSaved] = useState(false);
+  const toast = useToast();
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
@@ -4338,6 +4401,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  const [staffInvite, setStaffInvite] = useState({}); // { [staffId]: { email, password } }
   const [tempColor, setTempColor] = useState(null); // local color for smooth picker
   const colorDebounceRef = useRef(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -4358,7 +4422,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           { data: catData },
           { data: locData }
         ] = await Promise.all([
-          supabase.from("appointments").select("*").eq("owner_id", data.id).order("date", { ascending: false }),
+          supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
           supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position"),
           supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
@@ -4485,6 +4549,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
+      toast.show(lang === "nl" ? "Afspraak voltooid" : "Appointment completed");
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -4530,6 +4595,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         update(d => { d.next_invoice_number = nextNum; return d; });
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+      toast.show(lang === "nl" ? "Factuur verstuurd" : "Invoice sent");
     } finally { setProcessingApptId(null); }
   };
 
@@ -4578,7 +4644,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("service-photos")
-      .upload(fileName, file, { cacheControl: "3600", upsert: false });
+      .upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
@@ -4643,7 +4709,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const events = apptList.map(a => {
       const start = new Date(a.date + "T" + a.time + ":00");
       const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
-      const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const pad = (n) => String(n).padStart(2, "0");
+      const fmt2 = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
       return [
         "BEGIN:VEVENT",
         `DTSTART:${fmt2(start)}`,
@@ -4741,16 +4808,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     ["instellingen", "instellingen", t.settings]
   ];
 
+  // Show loading skeleton while data is being fetched
+  if (!dataLoaded) {
+    return (
+      <Layout accent={accent}>
+        <div style={{ background: c.bg, height: "100dvh", display: "flex", fontFamily: "'Jost',sans-serif", color: c.text }}>
+          <style>{makeCSS(accent, c)}</style>
+          <DashboardSkeleton />
+        </div>
+      </Layout>
+    );
+  }
+
   // Show onboarding wizard for new salons
-  if (showOnboarding && dataLoaded) {
+  if (showOnboarding) {
     return <OnboardingWizard salonData={salonData} update={update} lang={lang} accent={accent} onFinish={() => setShowOnboarding(false)} />;
   }
 
   return (
     <Layout accent={accent}>
-      <div style={{ 
-        background: c.bg, 
-        height: "100dvh", 
+      <ToastContainer toasts={toast.toasts} />
+      <div style={{
+        background: c.bg,
+        height: "100dvh",
         overflow: "hidden",
         display: "flex", 
         fontFamily: "'Jost',sans-serif", 
@@ -4941,7 +5021,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div className="stat-card">
                       <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.weeklyRevenue}</div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>€{weekRevenue.toFixed(0)}</div>
-                      {weekChange !== 0 && <div style={{ fontSize: 10, color: weekChange > 0 ? "#86efac" : "#f87171", marginTop: 4 }}>{weekChange > 0 ? "+" : ""}{weekChange}% vs vorige week</div>}
+                      {weekChange !== 0 && <div style={{ fontSize: 10, color: weekChange > 0 ? "#86efac" : "#f87171", marginTop: 4 }}>{weekChange > 0 ? "+" : ""}{weekChange}% {lang === "nl" ? "vs vorige week" : "vs last week"}</div>}
                     </div>
                     <div className="stat-card">
                       <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.monthlyRevenue}</div>
@@ -5115,7 +5195,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {(() => {
                   const base = getToday();
                   base.setDate(base.getDate() + calWeekOffset * 7);
-                  const weekDays = Array.from({ length: 10 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d; });
+                  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d; });
                   const MON = lang === "nl" ? MON_NL : MON_EN;
                   const firstDay = weekDays[0];
                   const lastDay = weekDays[weekDays.length - 1];
@@ -5916,25 +5996,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}><NavIcon name="key" size={10} color={accent} /> {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              <input className="input-field" placeholder={t.staffEmail} type="email" id={`staff-email-${m.id}`} style={{ fontSize: 11, padding: "8px 10px" }} />
-                              <input className="input-field" placeholder={t.staffPassword} type="text" id={`staff-pass-${m.id}`} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <input className="input-field" placeholder={t.staffEmail} type="email" value={staffInvite[m.id]?.email || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), email: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <input className="input-field" placeholder={t.staffPassword} type="text" value={staffInvite[m.id]?.password || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), password: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
                               <button className="btn-ghost" style={{ fontSize: 10, color: accent, borderColor: `${accent}44` }}
                                 onClick={async () => {
-                                  const emailEl = document.getElementById(`staff-email-${m.id}`);
-                                  const passEl = document.getElementById(`staff-pass-${m.id}`);
-                                  const staffEmail = emailEl?.value;
-                                  const staffPass = passEl?.value;
+                                  const staffEmail = staffInvite[m.id]?.email;
+                                  const staffPass = staffInvite[m.id]?.password;
                                   if (!staffEmail || !staffPass || staffPass.length < 6) return;
-                                  const res = await fetch(`https://pqvovkwqkapmpibktpwb.supabase.co/functions/v1/create-staff-account`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ staff_id: m.id, email: staffEmail, password: staffPass, owner_id: salonData.owner_id })
+                                  const { data: result, error } = await supabase.functions.invoke("create-staff-account", {
+                                    body: { staff_id: m.id, email: staffEmail, password: staffPass, owner_id: salonData.owner_id }
                                   });
-                                  const result = await res.json();
-                                  if (result.success) {
+                                  if (error) { alert(error.message || "Error"); return; }
+                                  if (result?.success) {
                                     update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, user_id: result.user_id, email: staffEmail} : s); return d; });
+                                    setStaffInvite(prev => { const next = {...prev}; delete next[m.id]; return next; });
                                     alert(t.inviteSent + "\n" + staffEmail + " → " + t.staffLoginInfo);
-                                  } else { alert(result.error === "email_taken" ? t.emailTaken : (result.error || "Error")); }
+                                  } else { alert(result?.error === "email_taken" ? t.emailTaken : (result?.error || "Error")); }
                                 }}>{t.inviteStaff}</button>
                             </div>
                           </div>
@@ -6461,8 +6538,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
               </>}
 
-              {/* Save button (always visible) */}
-              <button className="btn-primary" style={{ marginTop: 16 }} onClick={async () => {
+              {/* Save button (sticky at bottom of scroll area) */}
+              <div style={{ position: "sticky", bottom: isMobile ? 80 : 0, zIndex: 20, paddingTop: 16, paddingBottom: 8, background: `linear-gradient(to bottom, transparent, ${c.bg} 16px)` }}>
+              <button className="btn-primary" onClick={async () => {
                 console.log("Saving profile, owner_id:", salonData.owner_id);
                 const updateData = {
                   business_name: salonData.name,
@@ -6497,13 +6575,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   alert(lang === "nl" ? `Opslaan mislukt: ${error.message}` : `Save failed: ${error.message}`);
                 } else if (!updatedRows || updatedRows.length === 0) {
                   console.error("Save: no rows updated. owner_id:", salonData.owner_id, "updateData:", updateData);
-                  alert(lang === "nl" ? "Opslaan mislukt: geen rijen bijgewerkt. Mogelijk een database permissie probleem." : "Save failed: no rows updated. Possible database permission issue.");
+                  toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
                 } else {
                   console.log("Save success:", updatedRows[0]?.address, updatedRows[0]?.kvk_number);
                   setSaved(true); setTimeout(() => setSaved(false), 2000);
+                  toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
               }}>{saved ? t.saved : t.save}</button>
               <button className="btn-ghost" style={{ width: "100%", marginTop: 10, color: c.textLabel, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
+              </div>
             </div>
           )}
         </div>
@@ -6524,7 +6604,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
             zIndex: 100
           }}>
-            {navItems.map(([k, icon, label]) => (
+            {navItems.filter(([k]) => k !== "analytics").map(([k, icon, label]) => (
               <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
                 <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
@@ -6860,7 +6940,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const load = async () => {
       try {
         const [{ data: appts }, { data: svcs }] = await Promise.all([
-          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).order("date", { ascending: false }),
+          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id)
         ]);
         setAppointments(appts || []);
@@ -6929,8 +7009,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       } catch(e) { /* fallback */ }
     }
     const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
-    const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, file, { cacheControl: "3600", upsert: false });
-    if (uploadError) { console.error("Upload error:", uploadError); return; }
+    const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
+    if (uploadError) { console.error("Upload error:", uploadError); setStaffPhotoUploading(null); return; }
     const { data: { publicUrl } } = supabase.storage.from("service-photos").getPublicUrl(fileName);
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
       service_id: serviceId, owner_id: salonProfile.id, storage_path: publicUrl
@@ -7078,7 +7158,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
-                {days.slice(0,10).map((d, i) => {
+                {days.slice(0,7).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
                   const has = appointments.filter(a => a.status !== "cancelled" && a.date === ds).length > 0;
                   return (
@@ -7541,7 +7621,7 @@ function OwnerEntryPage({ lang, setLang }) {
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
-      vellu...
+      <div style={{ width: 40, height: 40, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
     </div>
   );
 
@@ -7589,14 +7669,18 @@ function SalonRoute({ lang, setLang }) {
       // Check Supabase
       const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
-      // Load reviews
-      const { data: reviews } = await supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false });
-      // Load staff
-      const { data: staffData } = await supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position");
-      // Load categories
-      const { data: categories } = await supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position");
-      // Load locations
-      const { data: locData } = await supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position");
+      // Load related data in parallel for faster page load
+      const [
+        { data: reviews },
+        { data: staffData },
+        { data: categories },
+        { data: locData }
+      ] = await Promise.all([
+        supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
+        supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position"),
+        supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
+        supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position")
+      ]);
       setSalon({
         id: data.slug,
         owner_id: data.id,
@@ -7644,7 +7728,7 @@ function SalonRoute({ lang, setLang }) {
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
-      vellu...
+      <div style={{ width: 40, height: 40, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
     </div>
   );
 
@@ -8139,6 +8223,7 @@ function DpaPage({ lang, setLang }) {
 // ─── COOKIE CONSENT ──────────────────────────────────────────
 function CookieConsent({ lang }) {
   const { colors: c } = useTheme();
+  const location = useLocation();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -8147,7 +8232,8 @@ function CookieConsent({ lang }) {
     }
   }, []);
 
-  if (!visible) return null;
+  // Don't show on owner dashboard or cancel pages
+  if (!visible || location.pathname.startsWith("/owner") || location.pathname.startsWith("/cancel")) return null;
 
   return (
     <div style={{
