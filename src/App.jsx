@@ -478,6 +478,23 @@ const T = {
     backToProfile:"← Terug naar profiel",
     nDaysAgo:"dagen geleden", nWeeksAgo:"weken geleden", nMonthsAgo:"maanden geleden",
     gallery:"Galerij", noGallery:"Nog geen foto's in de galerij",
+    // Landing page
+    heroTag:"Voor nail techs, lash artists, kappers & meer",
+    heroTitle:"Jouw salon.", heroBrand:"Jouw merk. Jouw klanten.",
+    heroSub:"Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie. Klaar in 2 minuten.",
+    startFree:"Gratis beginnen →", howItWork:"Hoe werkt het?",
+    searchLabel:"Al een afspraak? Ga naar je salon",
+    liveIn3:"In 3 stappen live",
+    step1:"Maak je pagina", step1d:"Voeg je behandelingen toe, stel je team in, kies je kleuren. Je eigen link: vellu.cc/jouw-naam.",
+    step2:"Deel je link", step2d:"Zet je link in je Instagram bio, WhatsApp status of visitekaartje. Klanten boeken direct, zonder tussenpartij.",
+    step3:"Ontvang boekingen", step3d:"Automatische bevestigingen, 24u herinneringen en follow-up emails. Jij focust op je vak, Vellu regelt de rest.",
+    everythingNeeded:"Alles wat je salon nodig heeft",
+    whatUsersSay:"Wat onze gebruikers zeggen",
+    simplePricing:"Simpele, eerlijke prijzen", perMonth:"/maand", getStarted:"Beginnen",
+    popular:"Populair", faqTitle:"Veelgestelde vragen",
+    ctaTitle:"Begin vandaag met je eigen boekingspagina",
+    ctaSub:"Klaar in 2 minuten. Geen commissie. Geen gedoe.",
+    closed:"gesloten",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -694,6 +711,23 @@ const T = {
     backToProfile:"← Back to profile",
     nDaysAgo:"days ago", nWeeksAgo:"weeks ago", nMonthsAgo:"months ago",
     gallery:"Gallery", noGallery:"No photos in gallery yet",
+    // Landing page
+    heroTag:"For nail techs, lash artists, hairdressers & more",
+    heroTitle:"Your salon.", heroBrand:"Your brand. Your clients.",
+    heroSub:"Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes.",
+    startFree:"Start for free →", howItWork:"How does it work?",
+    searchLabel:"Have an appointment? Go to your salon",
+    liveIn3:"Live in 3 steps",
+    step1:"Create your page", step1d:"Add your treatments, set up your team, choose your colors. Your own link: vellu.cc/your-name.",
+    step2:"Share your link", step2d:"Put your link in your Instagram bio, WhatsApp status or business card. Clients book directly, no middleman.",
+    step3:"Receive bookings", step3d:"Automatic confirmations, 24h reminders and follow-up emails. You focus on your craft, Vellu handles the rest.",
+    everythingNeeded:"Everything your salon needs",
+    whatUsersSay:"What our users say",
+    simplePricing:"Simple, honest pricing", perMonth:"/month", getStarted:"Get started",
+    popular:"Popular", faqTitle:"FAQ",
+    ctaTitle:"Start your own booking page today",
+    ctaSub:"Ready in 2 minutes. No commission. No hassle.",
+    closed:"closed",
   }
 };
 
@@ -1269,7 +1303,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
             <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => navigate("/owner")}>
-              <NavIcon name="crown" size={12} color={ACCENT} /> {lang === "nl" ? "Inloggen" : "Sign in"}
+              <NavIcon name="crown" size={12} color={ACCENT} /> {t.signIn}
             </button>
           </div>
         </nav>
@@ -1278,24 +1312,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "80px 24px 60px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
           <div className="fade-up">
             <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 28 }}>
-              <NavIcon name="sparkle" size={11} color={ACCENT} /> {lang === "nl" ? "Voor nail techs, lash artists, kappers & meer" : "For nail techs, lash artists, hairdressers & more"}
+              <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
             </div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(44px, 9vw, 72px)", fontWeight: 300, letterSpacing: "0.06em", lineHeight: 1.05, marginBottom: 24 }}>
-              {lang === "nl" ? "Jouw salon." : "Your salon."}
+              {t.heroTitle}
               <br />
-              <span style={{ color: ACCENT }}>{lang === "nl" ? "Jouw merk. Jouw klanten." : "Your brand. Your clients."}</span>
+              <span style={{ color: ACCENT }}>{t.heroBrand}</span>
             </h1>
             <p style={{ fontSize: "clamp(14px, 2vw, 17px)", color: c.textSub, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 40px", letterSpacing: "0.01em" }}>
-              {lang === "nl" 
-                ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie. Klaar in 2 minuten." 
-                : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes."}
+              {t.heroSub}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => navigate("/owner")}>
-                {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
+                {t.startFree}
               </button>
               <button className="btn-ghost" style={{ width: "auto", padding: "16px 28px", fontSize: 13, color: c.textSub }} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
-                {lang === "nl" ? "Hoe werkt het?" : "How does it work?"}
+                {t.howItWork}
               </button>
             </div>
           </div>
@@ -1321,7 +1353,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
           <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "28px 28px", maxWidth: 440, margin: "0 auto" }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
-              {lang === "nl" ? "Al een afspraak? Ga naar je salon" : "Have an appointment? Go to your salon"}
+              {t.searchLabel}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ flex: 1, position: "relative" }}>
@@ -1339,24 +1371,24 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "In 3 stappen live" : "Live in 3 steps"}
+                {t.liveIn3}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
               {[
-                { num: "01", icon: "diamond", nl: ["Maak je pagina", "Voeg je behandelingen toe, stel je team in, kies je kleuren. Je eigen link: vellu.cc/jouw-naam."], en: ["Create your page", "Add your treatments, set up your team, choose your colors. Your own link: vellu.cc/your-name."] },
-                { num: "02", icon: "target", nl: ["Deel je link", "Zet je link in je Instagram bio, WhatsApp status of visitekaartje. Klanten boeken direct, zonder tussenpartij."], en: ["Share your link", "Put your link in your Instagram bio, WhatsApp status or business card. Clients book directly, no middleman."] },
-                { num: "03", icon: "sparkle", nl: ["Ontvang boekingen", "Automatische bevestigingen, 24u herinneringen en follow-up emails. Jij focust op je vak, Vellu regelt de rest."], en: ["Receive bookings", "Automatic confirmations, 24h reminders and follow-up emails. You focus on your craft, Vellu handles the rest."] }
+                { num: "01", icon: "diamond", title: t.step1, desc: t.step1d },
+                { num: "02", icon: "target", title: t.step2, desc: t.step2d },
+                { num: "03", icon: "sparkle", title: t.step3, desc: t.step3d }
               ].map((item, i) => (
                 <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${ACCENT}12` }}>{item.num}</div>
                   <div style={{ marginBottom: 16 }}><NavIcon name={item.icon} size={28} color={ACCENT} /></div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 10 }}>
-                    {lang === "nl" ? item.nl[0] : item.en[0]}
+                    {item.title}
                   </div>
                   <div style={{ fontSize: 13, color: c.textLabel, lineHeight: 1.7 }}>
-                    {lang === "nl" ? item.nl[1] : item.en[1]}
+                    {item.desc}
                   </div>
                 </div>
               ))}
@@ -1369,7 +1401,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Alles wat je salon nodig heeft" : "Everything your salon needs"}
+                {t.everythingNeeded}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
@@ -1399,7 +1431,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Wat onze gebruikers zeggen" : "What our users say"}
+                {t.whatUsersSay}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
@@ -1437,7 +1469,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Simpele, eerlijke prijzen" : "Simple, honest pricing"}
+                {t.simplePricing}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
@@ -1453,13 +1485,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 }}>
                   {plan.popular && (
                     <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: ACCENT, color: c.btnOnDark, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "5px 16px", borderRadius: 100 }}>
-                      {lang === "nl" ? "Populair" : "Popular"}
+                      {t.popular}
                     </div>
                   )}
                   <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{plan.name}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: ACCENT }}>
-                      €{plan.price}<span style={{ fontSize: 16, color: c.textMuted }}>{lang === "nl" ? "/maand" : "/month"}</span>
+                      €{plan.price}<span style={{ fontSize: 16, color: c.textMuted }}>{t.perMonth}</span>
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
@@ -1471,7 +1503,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   </div>
                   <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${ACCENT}44`, color: ACCENT }) }}
                     onClick={() => navigate("/owner")}>
-                    {lang === "nl" ? "Beginnen" : "Get started"}
+                    {t.getStarted}
                   </button>
                 </div>
               ))}
@@ -1484,7 +1516,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {lang === "nl" ? "Veelgestelde vragen" : "FAQ"}
+                {t.faqTitle}
               </div>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
@@ -1506,13 +1538,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "60px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: 600, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
-              {lang === "nl" ? "Begin vandaag met je eigen boekingspagina" : "Start your own booking page today"}
+              {t.ctaTitle}
             </div>
             <p style={{ fontSize: 14, color: c.textLabel, marginBottom: 28, lineHeight: 1.6 }}>
-              {lang === "nl" ? "Klaar in 2 minuten. Geen commissie. Geen gedoe." : "Ready in 2 minutes. No commission. No hassle."}
+              {t.ctaSub}
             </p>
             <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => navigate("/owner")}>
-              {lang === "nl" ? "Gratis beginnen →" : "Start for free →"}
+              {t.startFree}
             </button>
           </div>
         </div>
@@ -2164,6 +2196,30 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       }
     }
     return false;
+  };
+
+  // Shared time-slot filter: returns available times for a given date
+  const getAvailableTimes = (forDate) => {
+    const dayHours = getEffectiveHours(forDate);
+    const staffWindow = getStaffTimeWindow(forDate);
+    const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
+    const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
+    return TIMES.filter(tt => {
+      if (dayHours.closed || staffWindow?.closed) return false;
+      if (tt < effectiveOpen || tt >= effectiveClose) return false;
+      if (isTimeBlockedByOverride(forDate, tt)) return false;
+      if (forDate === fmt(getToday())) {
+        const now = getToday();
+        const [h, m] = tt.split(":").map(Number);
+        if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+      }
+      if (minAdvanceHours > 0 && forDate === fmt(getToday())) {
+        const now = getToday();
+        const slotDate = new Date(forDate + "T" + tt + ":00");
+        if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
+      }
+      return true;
+    });
   };
 
   // Generate random cancellation token (cryptographically secure)
@@ -3182,29 +3238,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
                 <SL>{t.selectTime}</SL>
                 {(() => {
-                  const dayHours = getEffectiveHours(date);
-                  const staffWindow = getStaffTimeWindow(date);
-                  const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
-                  const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
-                  const availableTimes = TIMES.filter(tt => {
-                    if (dayHours.closed || staffWindow?.closed) return false;
-                    if (tt < effectiveOpen || tt >= effectiveClose) return false;
-                    // Filter out times blocked by time-slot overrides
-                    if (isTimeBlockedByOverride(date, tt)) return false;
-                    // Filter out past times if selected date is today
-                    if (date === fmt(getToday())) {
-                      const now = getToday();
-                      const [h, m] = tt.split(":").map(Number);
-                      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
-                    }
-                    // Filter out times within min_advance_hours
-                    if (minAdvanceHours > 0 && date === fmt(getToday())) {
-                      const now = getToday();
-                      const slotDate = new Date(date + "T" + tt + ":00");
-                      if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
-                    }
-                    return true;
-                  });
+                  const availableTimes = getAvailableTimes(date);
                   return availableTimes.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                       {availableTimes.map(tt => {
@@ -3676,27 +3710,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <SL>{t.selectTime}</SL>
                     {(() => {
-                      const dayHours = getEffectiveHours(date);
-                      const staffWindow = getStaffTimeWindow(date);
-                      const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
-                      const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
-                      const availableTimes = TIMES.filter(tt => {
-                        if (dayHours.closed || staffWindow?.closed) return false;
-                        if (tt < effectiveOpen || tt >= effectiveClose) return false;
-                        // Filter out times blocked by time-slot overrides
-                        if (isTimeBlockedByOverride(date, tt)) return false;
-                        if (date === fmt(getToday())) {
-                          const now = getToday();
-                          const [h, m] = tt.split(":").map(Number);
-                          if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
-                        }
-                        if (minAdvanceHours > 0 && date === fmt(getToday())) {
-                          const now = getToday();
-                          const slotDate = new Date(date + "T" + tt + ":00");
-                          if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
-                        }
-                        return true;
-                      });
+                      const availableTimes = getAvailableTimes(date);
                       return availableTimes.length > 0 ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                           {availableTimes.map(tt => {
