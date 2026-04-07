@@ -1713,10 +1713,12 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
 
   const submit = async () => {
     if (rating === 0 || submitting) return;
     setSubmitting(true);
+    setReviewError("");
     try {
       const { error } = await supabase.from("reviews").insert({
         owner_id: salon.owner_id,
@@ -1725,9 +1727,14 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
         rating,
         comment: comment || null
       });
-      if (!error) setSubmitted(true);
+      if (error) {
+        setReviewError(lang === "nl" ? "Kon review niet opslaan. Probeer het opnieuw." : "Could not save review. Please try again.");
+      } else {
+        setSubmitted(true);
+      }
     } catch (e) {
       console.error("Review submit error:", e);
+      setReviewError(lang === "nl" ? "Er ging iets mis." : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
@@ -1751,6 +1758,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
       </div>
       <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
         style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
+      {reviewError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8, textAlign: "center" }}>{reviewError}</div>}
       <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
         onClick={submit} disabled={rating === 0 || submitting}>{submitting ? "..." : t.submitReview}</button>
     </div>
@@ -4287,7 +4295,8 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
   const saveStep1 = async () => {
     if (!salonName.trim()) return;
     setSaving(true);
-    await supabase.from("profiles").update({ business_name: salonName.trim(), city: city.trim() || null }).eq("id", salonData.owner_id);
+    const { error } = await supabase.from("profiles").update({ business_name: salonName.trim(), city: city.trim() || null }).eq("id", salonData.owner_id);
+    if (error) { setSaving(false); return; }
     update(d => { d.name = salonName.trim(); d.city = city.trim(); return d; });
     setSaving(false);
     setStep(1);
@@ -4296,7 +4305,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
   const saveStep2 = async () => {
     if (!svcName.trim() || !svcPrice) return;
     setSaving(true);
-    const { data: newSvc } = await supabase.from("services").insert({
+    const { data: newSvc, error } = await supabase.from("services").insert({
       owner_id: salonData.owner_id,
       name_nl: svcName.trim(),
       name_en: svcName.trim(),
@@ -4304,16 +4313,16 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
       duration: parseInt(svcDuration) || 60,
       position: 0
     }).select().single();
-    if (newSvc) {
-      update(d => { d.services = [...d.services, { ...newSvc, photos: [], variants: [], extras: [] }]; return d; });
-    }
+    if (error || !newSvc) { setSaving(false); return; }
+    update(d => { d.services = [...d.services, { ...newSvc, photos: [], variants: [], extras: [] }]; return d; });
     setSaving(false);
     setStep(2);
   };
 
   const saveStep3 = async () => {
     setSaving(true);
-    await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
+    const { error } = await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
+    if (error) { setSaving(false); return; }
     setSaving(false);
     setStep(3);
   };
@@ -4665,14 +4674,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
-      // Increment client no-show count
+      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      if (error) return;
+      // Increment client no-show count atomically using rpc or direct SQL
       const appt = salonData.appointments.find(a => a.id === id);
       if (appt?.client_id) {
-        const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
-        if (client) {
-          await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
-        }
+        await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id }).catch(() => {
+          // Fallback to non-atomic increment if RPC doesn't exist
+          supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single().then(({ data: client }) => {
+            if (client) supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
+          });
+        });
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
     } finally { setProcessingApptId(null); }
@@ -4726,6 +4738,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
 
   const deleteService = async (id) => {
+    // Delete related records first to avoid orphaned data
+    await supabase.from("service_photos").delete().eq("service_id", id);
+    await supabase.from("service_extras").delete().eq("service_id", id);
+    await supabase.from("service_variants").delete().eq("service_id", id);
     await supabase.from("services").delete().eq("id", id);
     update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
   };
@@ -4760,12 +4776,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     
     if (dbError) {
       console.error("DB error:", dbError);
+      // Clean up orphaned file from storage
+      await supabase.storage.from("service-photos").remove([fileName]);
       setPhotoUploading(null);
       return;
     }
-    
+
     // Update local state
-    update(d => { 
+    update(d => {
       d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s); 
       return d; 
     });
@@ -7198,20 +7216,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
-      setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
-      setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
     } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
-    await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
+    const { error } = await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
+    if (error) return;
     setMyStaff(s => ({...s, working_hours: whForm}));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
@@ -7228,7 +7247,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
       service_id: serviceId, owner_id: salonProfile.id, storage_path: publicUrl
     }).select().single();
-    if (dbError) { console.error("DB error:", dbError); return; }
+    if (dbError) {
+      console.error("DB error:", dbError);
+      // Clean up orphaned file from storage
+      await supabase.storage.from("service-photos").remove([fileName]);
+      setStaffPhotoUploading(null);
+      return;
+    }
     setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s));
     setStaffPhotoUploading(null);
   };
@@ -7783,9 +7808,9 @@ function OwnerEntryPage({ lang, setLang }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         // FIRST check if user is a staff member (before profile check)
-        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
         if (staffMember) {
-          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
           if (salonProfile) {
             setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
             setLoading(false);
@@ -7793,7 +7818,7 @@ function OwnerEntryPage({ lang, setLang }) {
           }
         }
         // Then check if user is an owner
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
         if (profile) {
           setOwner({
             name: profile.business_name || "Mijn Salon",
