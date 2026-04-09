@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useRef, Component, Suspense } from "react";
+import { useState, useEffect, useMemo, createContext, useContext, useRef, Component, Suspense } from "react";
 import { supabase } from "./supabase.js";
 import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
 
@@ -1132,9 +1132,10 @@ const makeCSS = (accent, c = THEMES.dark) => `
 // Layout wrapper - full-screen responsive (replaces old Phone component)
 function Layout({ children, accent = ACCENT, maxWidth = "100%" }) {
   const { colors: c } = useTheme();
+  const css = useMemo(() => makeCSS(accent, c), [accent, c]);
   return (
     <div style={{ width: "100%", maxWidth, margin: "0 auto", background: c.bg, minHeight: "100dvh" }}>
-      <style>{makeCSS(accent, c)}</style>
+      <style>{css}</style>
       {children}
     </div>
   );
@@ -1253,6 +1254,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const { colors: c, theme } = useTheme();
   const navigate = useNavigate();
   const t = T[lang];
+  useSEO({
+    title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : "Vellu - Beauty Booking Platform | 0% Commission",
+    description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
+    url: "https://vellu.cc/"
+  });
   const [slugInput, setSlugInput] = useState("");
   const [error, setError] = useState("");
   const [faqOpen, setFaqOpen] = useState(null);
@@ -2434,7 +2440,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   if (mode === "profile") return (
     <Layout>
-      <style>{makeCSS(accent, c)}</style>
+
       <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
@@ -2936,7 +2942,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   return (
     <Layout>
-      <style>{makeCSS(accent, c)}</style>
+
       <div style={{ 
         minHeight: "100dvh", 
         background: c.bg,
@@ -4233,7 +4239,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         alignItems: "center", justifyContent: "center", padding: "40px 24px",
         fontFamily: "'Jost',sans-serif", color: c.text, position: "relative"
       }}>
-        <style>{makeCSS(accent, c)}</style>
+  
         <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)", width: "80%", maxWidth: 600, height: "50%", background: `radial-gradient(ellipse at center, ${accent}08 0%, transparent 70%)`, pointerEvents: "none" }} />
         
         {/* Header */}
@@ -4358,7 +4364,7 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
 
   return (
     <Layout>
-      <style>{makeCSS(accent, c)}</style>
+
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 440 }}>
 
@@ -4955,7 +4961,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return (
       <Layout accent={accent}>
         <div style={{ background: c.bg, height: "100dvh", display: "flex", fontFamily: "'Jost',sans-serif", color: c.text }}>
-          <style>{makeCSS(accent, c)}</style>
+    
           <DashboardSkeleton />
         </div>
       </Layout>
@@ -7349,7 +7355,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   return (
     <Layout>
-      <style>{makeCSS(accent, c)}</style>
+
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop sidebar */}
@@ -8009,7 +8015,7 @@ function SalonRoute({ lang, setLang }) {
 
   if (notFound) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : "Salon not found"}</div>
       <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} {lang === "nl" ? "bestaat niet" : "does not exist"}</div>
       <button className="btn-ghost" onClick={() => navigate("/")}>← {lang === "nl" ? "Terug naar home" : "Back to home"}</button>
@@ -8122,7 +8128,7 @@ function CancelRoute({ lang }) {
 
   return (
     <div style={{ minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
         {status === "loading" && (
           <div style={{ color: c.textLabel }}>{lang === "nl" ? "laden..." : "loading..."}</div>
@@ -8245,6 +8251,7 @@ function AppInner({ lang, setLang }) {
 function PrivacyPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
+  useSEO({ title: lang === "nl" ? "Privacybeleid | Vellu" : "Privacy Policy | Vellu", url: "https://vellu.cc/privacy" });
   const content = lang === "nl" ? {
     title: "Privacybeleid",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -8275,7 +8282,7 @@ function PrivacyPage({ lang, setLang }) {
 
   return (
     <Layout>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
@@ -8300,6 +8307,7 @@ function PrivacyPage({ lang, setLang }) {
 function TermsPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
+  useSEO({ title: lang === "nl" ? "Voorwaarden | Vellu" : "Terms of Service | Vellu", url: "https://vellu.cc/terms" });
   const content = lang === "nl" ? {
     title: "Algemene Voorwaarden",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -8340,7 +8348,7 @@ function TermsPage({ lang, setLang }) {
 
   return (
     <Layout>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
@@ -8369,6 +8377,7 @@ function TermsPage({ lang, setLang }) {
 function ContactPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
+  useSEO({ title: lang === "nl" ? "Contact | Vellu" : "Contact | Vellu", url: "https://vellu.cc/contact" });
   const content = lang === "nl" ? {
     title: "Over Vellu", subtitle: "Het verhaal achter het platform",
     mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
@@ -8388,7 +8397,7 @@ function ContactPage({ lang, setLang }) {
   };
   return (
     <Layout>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
@@ -8429,6 +8438,7 @@ function ContactPage({ lang, setLang }) {
 function DpaPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
+  useSEO({ title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : "Data Processing Agreement | Vellu", url: "https://vellu.cc/dpa" });
   const content = lang === "nl" ? {
     title: "Verwerkingsovereenkomst",
     updated: "Laatst bijgewerkt: maart 2026",
@@ -8474,7 +8484,7 @@ function DpaPage({ lang, setLang }) {
   };
   return (
     <Layout>
-      <style>{makeCSS(ACCENT, c)}</style>
+
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
