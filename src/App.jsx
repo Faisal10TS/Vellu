@@ -821,6 +821,13 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .radio.on { border-color: ${accent}; box-shadow: 0 0 0 3px ${accent}22; }
   .radio.on::after { content:''; width:7px; height:7px; border-radius:50%; background:${accent}; display:block; }
 
+  /* Focus-visible outlines for keyboard navigation */
+  .time-chip:focus-visible, .day-chip:focus-visible, .pay-opt:focus-visible,
+  .service-card:focus-visible, .nav-item:focus-visible, .salon-pill:focus-visible,
+  .photo-thumb:focus-visible, .profile-tab:focus-visible {
+    outline: 2px solid ${accent}; outline-offset: 2px;
+  }
+
   .badge { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.08em; text-transform: uppercase; }
   .badge-confirmed { background: rgba(59,130,246,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#93c5fd" : "#2563eb"}; border: 1px solid rgba(59,130,246,${c === THEMES.dark ? "0.2" : "0.15"}); }
   .badge-completed { background: rgba(34,197,94,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#86efac" : "#16a34a"}; border: 1px solid rgba(34,197,94,${c === THEMES.dark ? "0.2" : "0.15"}); }
@@ -5157,7 +5164,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view === "dashboard" && (
             <div className="fade-up" style={{ maxWidth: 960 }}>
               {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
-              
+
+              {/* Onboarding checklist for new salons */}
+              {appts.length === 0 && (
+                <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "24px 22px", marginBottom: 20 }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{lang === "nl" ? "Welkom bij Vellu" : "Welcome to Vellu"}</div>
+                  <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16, lineHeight: 1.6 }}>{lang === "nl" ? "Volg deze stappen om je eerste boeking te ontvangen:" : "Follow these steps to get your first booking:"}</div>
+                  {[
+                    { done: salonData.services?.length > 0, nl: "Voeg je behandelingen toe", en: "Add your services", action: () => setView("instellingen") },
+                    { done: salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed), nl: "Stel je openingstijden in", en: "Set your business hours", action: () => setView("instellingen") },
+                    { done: salonData.logo_url, nl: "Upload je logo", en: "Upload your logo", action: () => setView("instellingen") },
+                    { done: false, nl: "Deel je link: vellu.cc/" + salonData.id, en: "Share your link: vellu.cc/" + salonData.id, action: () => { navigator.clipboard.writeText("vellu.cc/" + salonData.id).catch(() => {}); } },
+                  ].map((step, i) => (
+                    <div key={i} onClick={step.action} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, cursor: "pointer", marginBottom: 4, background: step.done ? `${accent}08` : "transparent", border: `1px solid ${step.done ? accent + "22" : c.border}` }}>
+                      <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${step.done ? accent : c.textMuted}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {step.done && <NavIcon name="check" size={12} color={accent} />}
+                      </div>
+                      <div style={{ fontSize: 12, color: step.done ? c.textSub : c.text, textDecoration: step.done ? "line-through" : "none" }}>{lang === "nl" ? step.nl : step.en}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* 4 Stat Cards */}
               {(() => {
                 const now = new Date();
