@@ -11,9 +11,9 @@ const THEMES = {
     border: "rgba(237,232,224,0.08)",
     borderHover: "rgba(237,232,224,0.15)",
     text: "#ede8e0",
-    textSub: "rgba(237,232,224,0.5)",
-    textMuted: "rgba(237,232,224,0.35)",
-    textLabel: "rgba(237,232,224,0.45)",
+    textSub: "rgba(237,232,224,0.6)",
+    textMuted: "rgba(237,232,224,0.55)",
+    textLabel: "rgba(237,232,224,0.58)",
     inputBg: "rgba(237,232,224,0.04)",
     inputBorder: "rgba(237,232,224,0.1)",
     overlay: "rgba(0,0,0,0.95)",
@@ -30,8 +30,8 @@ const THEMES = {
     borderHover: "rgba(13,11,10,0.22)",
     text: "#1a1714",
     textSub: "rgba(13,11,10,0.7)",
-    textMuted: "rgba(13,11,10,0.5)",
-    textLabel: "rgba(13,11,10,0.6)",
+    textMuted: "rgba(13,11,10,0.6)",
+    textLabel: "rgba(13,11,10,0.65)",
     inputBg: "rgba(13,11,10,0.04)",
     inputBorder: "rgba(13,11,10,0.15)",
     overlay: "rgba(255,255,255,0.95)",
@@ -2072,7 +2072,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }, 0);
     if (appliedDiscount) {
       if (appliedDiscount.type === "percent") {
-        total = total * (1 - appliedDiscount.amount / 100);
+        total = Math.max(0, total * (1 - appliedDiscount.amount / 100));
       } else {
         total = Math.max(0, total - appliedDiscount.amount);
       }
@@ -2140,7 +2140,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     const lookupId = ++emailLookupRef.current;
     const timer = setTimeout(async () => {
-      const { data } = await supabase.from("clients").select("*").eq("email", form.email.toLowerCase()).maybeSingle();
+      const { data } = await supabase.from("clients").select("first_name, last_name, phone, allergies, no_show_count").eq("email", form.email.toLowerCase()).maybeSingle();
       // Ignore stale responses - only apply if this is still the latest lookup
       if (lookupId !== emailLookupRef.current) return;
       if (data) {
@@ -2159,12 +2159,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   useEffect(() => {
     if (!date || !initialSalon.owner_id) return;
     const loadSlots = async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("appointments")
         .select("time, service_duration, staff_id")
         .eq("owner_id", initialSalon.owner_id)
         .eq("date", date)
         .in("status", ["confirmed", "completed"]);
+      // Filter by location for multi-location salons
+      if (selectedLocation?.id) query = query.eq("location_id", selectedLocation.id);
+      const { data, error } = await query;
       if (!error) setBookedSlots(data || []);
     };
     loadSlots();
@@ -2204,9 +2207,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const staffWindow = getStaffTimeWindow(forDate);
     const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
     const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
+    const serviceDuration = Math.max(getDuration(), 30);
     return TIMES.filter(tt => {
       if (dayHours.closed || staffWindow?.closed) return false;
       if (tt < effectiveOpen || tt >= effectiveClose) return false;
+      // Check if service fits before closing time
+      const [sh, sm] = tt.split(":").map(Number);
+      const slotEndMinutes = sh * 60 + sm + serviceDuration;
+      const [ch, cm] = effectiveClose.split(":").map(Number);
+      if (slotEndMinutes > ch * 60 + cm) return false;
       if (isTimeBlockedByOverride(forDate, tt)) return false;
       if (forDate === fmt(getToday())) {
         const now = getToday();
@@ -3284,6 +3293,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                   <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                   <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  {form.allergies && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling." : "Allergy info is only used for your safety during the treatment."}</div>}
                 </div>
                 
                 {/* No-show warning */}
@@ -3756,6 +3766,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                       <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                       <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  {form.allergies && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling." : "Allergy info is only used for your safety during the treatment."}</div>}
                     </div>
                     
                     {/* No-show warning */}
@@ -4268,9 +4279,9 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                 <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
                   onClick={() => {
                     // TODO: Replace with Mollie checkout when ready
-                    alert(lang === "nl" 
-                      ? `iDEAL betaling voor ${plan.name} (€${plan.price}/maand) komt binnenkort. Neem contact op via info@vellu.cc om je account te activeren.`
-                      : `iDEAL payment for ${plan.name} (€${plan.price}/month) coming soon. Contact info@vellu.cc to activate your account.`
+                    toast.show(lang === "nl"
+                      ? `Neem contact op via info@vellu.cc om ${plan.name} te activeren.`
+                      : `Contact info@vellu.cc to activate ${plan.name}.`
                     );
                   }}
                 >{t.selectPlan}</button>
@@ -4679,7 +4690,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : "Error completing", "error"); return; }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
       toast.show(lang === "nl" ? "Afspraak voltooid" : "Appointment completed");
     } finally { setProcessingApptId(null); }
@@ -5803,7 +5815,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                     {salonData.plan === "starter" && (
                       <button className="btn-ghost" style={{ marginTop: 12, fontSize: 10, color: accent, borderColor: `${accent}44` }}
-                        onClick={() => alert(lang === "nl" ? "Neem contact op via info@vellu.cc om te upgraden." : "Contact info@vellu.cc to upgrade.")}>
+                        onClick={() => toast.show(lang === "nl" ? "Neem contact op via info@vellu.cc om te upgraden." : "Contact info@vellu.cc to upgrade.")}>
                         {t.upgradePlan} → {t.planProfessional}
                       </button>
                     )}
@@ -6224,7 +6236,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}><NavIcon name="key" size={10} color={accent} /> {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               <input className="input-field" placeholder={t.staffEmail} type="email" value={staffInvite[m.id]?.email || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), email: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                              <input className="input-field" placeholder={t.staffPassword} type="text" value={staffInvite[m.id]?.password || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), password: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <input className="input-field" placeholder={t.staffPassword} type="password" value={staffInvite[m.id]?.password || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), password: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
                               <button className="btn-ghost" style={{ fontSize: 10, color: accent, borderColor: `${accent}44` }}
                                 onClick={async () => {
                                   const staffEmail = staffInvite[m.id]?.email;
@@ -6233,12 +6245,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   const { data: result, error } = await supabase.functions.invoke("create-staff-account", {
                                     body: { staff_id: m.id, email: staffEmail, password: staffPass, owner_id: salonData.owner_id }
                                   });
-                                  if (error) { alert(error.message || "Error"); return; }
+                                  if (error) { toast.show(lang === "nl" ? "Fout bij uitnodigen" : "Error inviting staff", "error"); return; }
                                   if (result?.success) {
                                     update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, user_id: result.user_id, email: staffEmail} : s); return d; });
                                     setStaffInvite(prev => { const next = {...prev}; delete next[m.id]; return next; });
-                                    alert(t.inviteSent + "\n" + staffEmail + " → " + t.staffLoginInfo);
-                                  } else { alert(result?.error === "email_taken" ? t.emailTaken : (result?.error || "Error")); }
+                                    toast.show(t.inviteSent);
+                                  } else { toast.show(result?.error === "email_taken" ? t.emailTaken : (lang === "nl" ? "Fout" : "Error"), "error"); }
                                 }}>{t.inviteStaff}</button>
                             </div>
                           </div>
@@ -6826,12 +6838,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const { data: updatedRows, error } = await supabase.from("profiles").update(updateData).eq("id", salonData.owner_id).select();
                 if (error) {
                   console.error("Save error:", error);
-                  alert(lang === "nl" ? `Opslaan mislukt: ${error.message}` : `Save failed: ${error.message}`);
+                  toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
                 } else if (!updatedRows || updatedRows.length === 0) {
-                  console.error("Save: no rows updated. owner_id:", salonData.owner_id, "updateData:", updateData);
+                  console.error("Save: no rows updated");
                   toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
                 } else {
-                  console.log("Save success:", updatedRows[0]?.address, updatedRows[0]?.kvk_number);
+                  // Settings saved successfully
                   setSaved(true); setTimeout(() => setSaved(false), 2000);
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : "Settings saved");
                 }
@@ -7954,14 +7966,10 @@ function SalonRoute({ lang, setLang }) {
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
-        discount_codes: data.discount_codes || [],
+        discount_codes: (data.discount_codes || []).filter(d => d.active),
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,
         max_advance_days: data.max_advance_days || 60,
-        address: data.address || "",
-        kvk_number: data.kvk_number || "",
-        btw_id: data.btw_id || "",
-        iban: data.iban || "",
         services: (data.services || []).map(s => ({
           ...s,
           name_nl: s.name_nl || s.name || "",
