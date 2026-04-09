@@ -114,7 +114,7 @@ function ToastContainer({ toasts }) {
   const { colors: c } = useTheme();
   if (toasts.length === 0) return null;
   return (
-    <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div role="status" aria-live="polite" style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
       {toasts.map(t => (
         <div key={t.id} style={{
           padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 500,
@@ -144,7 +144,7 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
   const { colors: c } = useTheme();
   if (!state) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo}>
+    <div role="dialog" aria-modal="true" aria-label={lang === "nl" ? "Bevestiging" : "Confirmation"} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo} onKeyDown={e => e.key === "Escape" && onNo()}>
       <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "'Jost',sans-serif" }}>{state.message}</div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -312,7 +312,7 @@ const T = {
     reviews:"Reviews", writeReview:"Review schrijven", rating:"Beoordeling", reviewComment:"Hoe was je ervaring?",
     submitReview:"Verstuur review", reviewSubmitted:"Bedankt voor je review!", noReviews:"Nog geen reviews",
     analytics:"Analytics", weeklyRevenue:"Omzet deze week", monthlyRevenue:"Omzet deze maand",
-    totalRevenue:"Totale omzet", totalAppts:"Totaal afspraken", avgRating:"Gem. beoordeling",
+    totalRevenue:"Omzet (90 dagen)", totalAppts:"Afspraken (90 dagen)", avgRating:"Gem. beoordeling",
     popularServices:"Populairste behandelingen", busiestDays:"Drukste dagen",
     revenueOverTime:"Omzet verloop", bookings:"boekingen",
     staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker", staffBio:"Korte bio (zichtbaar voor klanten)",
@@ -545,7 +545,7 @@ const T = {
     reviews:"Reviews", writeReview:"Write a review", rating:"Rating", reviewComment:"How was your experience?",
     submitReview:"Submit review", reviewSubmitted:"Thank you for your review!", noReviews:"No reviews yet",
     analytics:"Analytics", weeklyRevenue:"Revenue this week", monthlyRevenue:"Revenue this month",
-    totalRevenue:"Total revenue", totalAppts:"Total appointments", avgRating:"Avg. rating",
+    totalRevenue:"Revenue (90 days)", totalAppts:"Appointments (90 days)", avgRating:"Avg. rating",
     popularServices:"Most popular services", busiestDays:"Busiest days",
     revenueOverTime:"Revenue over time", bookings:"bookings",
     staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name", staffBio:"Short bio (visible to clients)",
@@ -1142,7 +1142,7 @@ function Layout({ children, accent = ACCENT, maxWidth = "100%" }) {
 }
 
 function NavIcon({ name, size = 18, color = "currentColor" }) {
-  const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+  const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", focusable: "false" };
   const icons = {
     dashboard: <svg {...props}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
     agenda: <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
@@ -1602,7 +1602,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       // Check slug uniqueness
       const { data: existing } = await supabase.from("profiles").select("id").eq("slug", slug).maybeSingle();
       if (existing) {
+        const originalSlug = slug;
         slug = slug + "-" + Math.random().toString(36).slice(2, 6);
+        setError(lang === "nl"
+          ? `vellu.cc/${originalSlug} is al bezet. Je krijgt: vellu.cc/${slug}`
+          : `vellu.cc/${originalSlug} is taken. You'll get: vellu.cc/${slug}`);
+        setLoading(false);
+        setForm(f => ({...f, slug}));
+        return;
       }
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
@@ -6875,7 +6882,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
             zIndex: 100
           }}>
-            {navItems.filter(([k]) => k !== "analytics").map(([k, icon, label]) => (
+            {navItems.map(([k, icon, label]) => (
               <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
@@ -7239,6 +7246,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     };
     load();
   }, []);
+
+  // Real-time subscription for staff appointments
+  useEffect(() => {
+    if (!staffMember.id || !salonProfile.id) return;
+    const channel = supabase
+      .channel("staff-appointments")
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `staff_id=eq.${staffMember.id}` }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          setAppointments(a => [payload.new, ...a]);
+        } else if (payload.eventType === "UPDATE") {
+          setAppointments(a => a.map(x => x.id === payload.new.id ? payload.new : x));
+        } else if (payload.eventType === "DELETE") {
+          setAppointments(a => a.filter(x => x.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [staffMember.id, salonProfile.id]);
 
   const activeAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
