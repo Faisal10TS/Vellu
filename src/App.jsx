@@ -142,10 +142,12 @@ function useConfirm() {
 
 function ConfirmModal({ state, onYes, onNo, lang }) {
   const { colors: c } = useTheme();
+  const trapRef = useRef(null);
+  useFocusTrap(trapRef, !!state);
   if (!state) return null;
   return (
-    <div role="dialog" aria-modal="true" aria-label={lang === "nl" ? "Bevestiging" : "Confirmation"} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo} onKeyDown={e => e.key === "Escape" && onNo()}>
-      <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
+    <div role="dialog" aria-modal="true" aria-label={t.confirmation} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo} onKeyDown={e => e.key === "Escape" && onNo()}>
+      <div ref={trapRef} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "'Jost',sans-serif" }}>{state.message}</div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
@@ -158,6 +160,26 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
       </div>
     </div>
   );
+}
+
+// ─── FOCUS TRAP HOOK ────────────────────────────────────────
+function useFocusTrap(ref, isActive) {
+  useEffect(() => {
+    if (!isActive || !ref.current) return;
+    const el = ref.current;
+    const focusable = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const prevFocus = document.activeElement;
+    if (first) first.focus();
+    const handler = (e) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last?.focus(); } }
+      else { if (document.activeElement === last) { e.preventDefault(); first?.focus(); } }
+    };
+    el.addEventListener("keydown", handler);
+    return () => { el.removeEventListener("keydown", handler); prevFocus?.focus(); };
+  }, [isActive, ref]);
 }
 
 // ─── SEO HELPER ─────────────────────────────────────────────
@@ -510,6 +532,17 @@ const T = {
     addServices:"Voeg je behandelingen toe", setHours:"Stel je openingstijden in",
     uploadLogo:"Upload je logo", shareLink:"Deel je link: ",
     contactOwnerServices:"Neem contact op met de saloneigenaar om diensten toe te voegen of te verwijderen.",
+    add:"Toevoegen", preview:"Preview", owner:"eigenaar", ownerDashboard:"EIGENAAR DASHBOARD",
+    salonInsight:"Inzicht in je salon", vsLastWeek:"vs vorige week", previewPage:"Bekijk pagina",
+    exportCalendar:"Exporteer agenda", viewMore:"Bekijk meer →", everyone:"Iedereen",
+    confirmed:"Bevestigd", cancelled:"Geannuleerd", completed:"Voltooid",
+    apptCompleted:"Afspraak voltooid", errorCompleting:"Fout bij voltooien",
+    invoiceSent:"Factuur verstuurd", client:"Klant",
+    searchPlaceholder:"Zoek op naam of dienst...", services:"Diensten",
+    reviewSaveFailed:"Kon review niet opslaan. Probeer het opnieuw.",
+    somethingWrong:"Er ging iets mis.", confirmation:"Bevestiging",
+    allergyDisclaimer:"Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling.",
+    noTreatmentsCatYet:"Nog geen behandelingen beschikbaar",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -758,6 +791,17 @@ const T = {
     addServices:"Add your services", setHours:"Set your business hours",
     uploadLogo:"Upload your logo", shareLink:"Share your link: ",
     contactOwnerServices:"Contact the salon owner to add or remove services.",
+    add:"Add", preview:"Preview", owner:"owner", ownerDashboard:"OWNER DASHBOARD",
+    salonInsight:"Insight into your salon", vsLastWeek:"vs last week", previewPage:"Preview page",
+    exportCalendar:"Export calendar", viewMore:"View more →", everyone:"Everyone",
+    confirmed:"Confirmed", cancelled:"Cancelled", completed:"Completed",
+    apptCompleted:"Appointment completed", errorCompleting:"Error completing",
+    invoiceSent:"Invoice sent", client:"Client",
+    searchPlaceholder:"Search by name or service...", services:"Services",
+    reviewSaveFailed:"Could not save review. Please try again.",
+    somethingWrong:"Something went wrong.", confirmation:"Confirmation",
+    allergyDisclaimer:"Allergy info is only used for your safety during the treatment.",
+    noTreatmentsCatYet:"No treatments available yet",
   }
 };
 
@@ -1813,13 +1857,13 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
         comment: comment || null
       });
       if (error) {
-        setReviewError(lang === "nl" ? "Kon review niet opslaan. Probeer het opnieuw." : "Could not save review. Please try again.");
+        setReviewError(t.reviewSaveFailed);
       } else {
         setSubmitted(true);
       }
     } catch (e) {
       console.error("Review submit error:", e);
-      setReviewError(lang === "nl" ? "Er ging iets mis." : "Something went wrong.");
+      setReviewError(t.somethingWrong);
     } finally {
       setSubmitting(false);
     }
@@ -2610,7 +2654,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {member.bio && <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 12 }}>{member.bio}</div>}
                           {memberServices.length > 0 && (
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{lang === "nl" ? "Diensten" : "Services"}</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                                 {memberServices.map(s => (
                                   <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
@@ -2895,7 +2939,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div style={{ textAlign: "center", marginBottom: 20 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
-                  {lang === "nl" ? "Hoe was je afspraak?" : "How was your appointment?"}
+                  {t.howWasAppt}
                 </div>
               </div>
               <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
@@ -2925,7 +2969,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       marginTop: isMobile ? 0 : 20
     }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
-        {lang === "nl" ? "Jouw boeking" : "Your booking"}
+        {t.yourBooking}
         {selectedServices.length > 0 && <span style={{ color: accent, marginLeft: 6 }}>({selectedServices.length})</span>}
       </div>
       {selectedLocation && (
@@ -3270,7 +3314,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {initialSalon.reviews.slice(0, 3).map(r => (
                       <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (lang === "nl" ? "Klant" : "Client")}</span>
+                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
                           <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                         </div>
                         {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
@@ -3348,7 +3392,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                   <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                   <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling." : "Allergy info is only used for your safety during the treatment."}</div>}
+                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
                 </div>
                 
                 {/* No-show warning */}
@@ -3821,7 +3865,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                       <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                       <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling." : "Allergy info is only used for your safety during the treatment."}</div>}
+                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
                     </div>
                     
                     {/* No-show warning */}
@@ -3934,7 +3978,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {initialSalon.reviews.slice(0, 3).map(r => (
                         <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (lang === "nl" ? "Klant" : "Client")}</span>
+                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
                             <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                           </div>
                           {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
@@ -4024,7 +4068,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div style={{ textAlign: "center", marginBottom: 20 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
-                  {lang === "nl" ? "Hoe was je afspraak?" : "How was your appointment?"}
+                  {t.howWasAppt}
                 </div>
                 <div style={{ fontSize: 12, color: c.textSub, marginTop: 4 }}>{initialSalon.name}</div>
               </div>
@@ -4038,7 +4082,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
         {/* Gallery overlay */}
         {gallery && (
-          <div className="gallery-overlay" onClick={() => setGallery(null)}>
+          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
             <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               {gallery.photos.map((p, i) => (
@@ -4103,7 +4147,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
       </div>
       {(!form.name_nl || !form.price) && <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"}</div>}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -4141,7 +4185,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
         <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -4202,7 +4246,7 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -4245,7 +4289,7 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{lang === "nl" ? "Toevoegen" : "Add"}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -4746,9 +4790,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
-      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : "Error completing", "error"); return; }
+      if (error) { toast.show(t.errorCompleting, "error"); return; }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
-      toast.show(lang === "nl" ? "Afspraak voltooid" : "Appointment completed");
+      toast.show(t.apptCompleted);
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -4797,7 +4841,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         update(d => { d.next_invoice_number = nextNum; return d; });
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
-      toast.show(lang === "nl" ? "Factuur verstuurd" : "Invoice sent");
+      toast.show(t.invoiceSent);
     } finally { setProcessingApptId(null); }
   };
 
@@ -5046,7 +5090,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {/* Sidebar Header */}
             <div style={{ padding: "28px 24px", borderBottom: "1px solid " + c.border }}>
               <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
-              <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.08em" }}>{lang === "nl" ? "EIGENAAR DASHBOARD" : "OWNER DASHBOARD"}</div>
+              <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.08em" }}>{t.ownerDashboard}</div>
             </div>
 
             {/* Salon Info */}
@@ -5134,7 +5178,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             }}>
               <div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, fontWeight: 400, letterSpacing: "0.06em" }}>{salonData.name}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.1em", textTransform: "uppercase" }}>{lang === "nl" ? "eigenaar" : "owner"}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.1em", textTransform: "uppercase" }}>{t.owner}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ThemeToggle />
@@ -5157,7 +5201,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {navItems.find(([k]) => k === view)?.[2] || t.dashboard}
                 </h1>
                 <div style={{ fontSize: 12, color: c.textLabel }}>
-                  {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (lang === "nl" ? "Inzicht in je salon" : "Insight into your salon") : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
+                  {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 12 }}>
@@ -5166,7 +5210,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   style={{ fontSize: 11, borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 6 }} 
                   onClick={() => setShowPreview(true)}
                 >
-                  <NavIcon name="eye" size={14} color={accent} /> {lang === "nl" ? "Preview" : "Preview"}
+                  <NavIcon name="eye" size={14} color={accent} /> {t.preview}
                 </button>
                 <button 
                   className="btn-ghost" 
@@ -5237,7 +5281,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div className="stat-card">
                       <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.weeklyRevenue}</div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>€{weekRevenue.toFixed(0)}</div>
-                      {weekChange !== 0 && <div style={{ fontSize: 10, color: weekChange > 0 ? "#86efac" : "#f87171", marginTop: 4 }}>{weekChange > 0 ? "+" : ""}{weekChange}% {lang === "nl" ? "vs vorige week" : "vs last week"}</div>}
+                      {weekChange !== 0 && <div style={{ fontSize: 10, color: weekChange > 0 ? "#86efac" : "#f87171", marginTop: 4 }}>{weekChange > 0 ? "+" : ""}{weekChange}% {t.vsLastWeek}</div>}
                     </div>
                     <div className="stat-card">
                       <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.monthlyRevenue}</div>
@@ -5260,7 +5304,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <NavIcon name="plus" size={14} color={accent} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowPreview(true)}>
-                  <NavIcon name="eye" size={14} color={c.textSub} /> {lang === "nl" ? "Bekijk pagina" : "Preview page"}
+                  <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
                 </button>
                 {appts.length > 0 && (
                   <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", borderColor: `${accent}22`, color: accent, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
@@ -5268,7 +5312,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     if (upcoming.length === 0) return;
                     exportCalendar(upcoming);
                   }}>
-                    <NavIcon name="download" size={14} color={accent} /> {lang === "nl" ? "Exporteer agenda" : "Export calendar"}
+                    <NavIcon name="download" size={14} color={accent} /> {t.exportCalendar}
                   </button>
                 )}
                 <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: copied ? "#86efac" : undefined, borderColor: copied ? "rgba(134,239,172,0.3)" : undefined }} onClick={copyLink}>
@@ -5281,7 +5325,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                     <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
-                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{lang === "nl" ? "Bekijk meer →" : "View more →"}</span>
+                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
                   </div>
                   {(() => {
                     const weeks = [];
@@ -5393,7 +5437,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     background: !agendaStaff ? accent : "transparent",
                     color: !agendaStaff ? c.btnOnDark : c.textSub,
                     border: `1px solid ${!agendaStaff ? accent : c.inputBorder}`
-                  }}>{lang === "nl" ? "Iedereen" : "Everyone"}</div>
+                  }}>{t.everyone}</div>
                   {(salonData.staff || []).map(m => (
                     <div key={m.id} onClick={() => setAgendaStaff(agendaStaff === m.id ? null : m.id)} style={{
                       padding: "5px 12px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -5556,7 +5600,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {completedAppts.length > 0 && (<>
                 {/* Search and filter bar */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam of dienst..." : "Search by name or service..."} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
+                  <input className="input-field" placeholder={t.searchPlaceholder} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
                     style={{ flex: 1, minWidth: 180, fontSize: 12, padding: "10px 14px" }} />
                   <div style={{ display: "flex", gap: 4 }}>
                     {[["all", lang === "nl" ? "Alles" : "All"], ["unsent", lang === "nl" ? "Te versturen" : "Unsent"], ["sent", lang === "nl" ? "Verstuurd" : "Sent"]].map(([key, label]) => (
@@ -5620,7 +5664,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* ANALYTICS */}
           {view === "analytics" && (
             <div className="fade-up" style={{ maxWidth: 960 }}>
-              {isMobile && <PTitle sub={lang === "nl" ? "Inzicht in je salon" : "Insight into your salon"}>{t.analytics}</PTitle>}
+              {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
 
               {/* Key metrics */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
@@ -5852,7 +5896,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 16, borderBottom: "1px solid " + c.border }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
-                  ["diensten", "diensten", lang === "nl" ? "Diensten" : "Services"],
+                  ["diensten", "diensten", t.services],
                   ["team", "team", lang === "nl" ? "Team" : "Team"],
                   ["planning", "planning", lang === "nl" ? "Planning" : "Schedule"],
                   ["facturatie", "overig", lang === "nl" ? "Overig" : "Other"],
@@ -7155,7 +7199,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
         {/* Photo gallery overlay */}
         {gallery && (
-          <div className="gallery-overlay" onClick={() => setGallery(null)}>
+          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
             <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               {gallery.photos.map((p, i) => (
