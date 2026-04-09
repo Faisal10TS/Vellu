@@ -3166,7 +3166,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const staffForService = getStaffForService(s.id);
                   return (
                   <div key={s.id}>
-                    <div className={`service-card ${isSel ? "sel" : ""}`} onClick={() => toggleServiceSelection(s)}>
+                    <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                           {/* Checkbox */}
@@ -3656,7 +3656,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       const staffForService = getStaffForService(s.id);
                       return (
                       <div key={s.id}>
-                        <div className={`service-card ${isSel ? "sel" : ""}`} onClick={() => toggleServiceSelection(s)}>
+                        <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               {/* Checkbox */}
@@ -6942,7 +6942,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             zIndex: 100
           }}>
             {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
+              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
               </div>
@@ -7454,7 +7454,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
               {navItems.map(([k, icon, label]) => (
-                <div key={k} className="nav-item" onClick={() => setView(k)} style={{
+                <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{
                   display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12,
                   background: view === k ? `${accent}12` : "transparent",
                   border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
@@ -7887,7 +7887,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         {isMobile && (
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
             {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" onClick={() => setView(k)} style={{ gap: 3 }}>
+              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
               </div>
