@@ -1531,7 +1531,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             {faqs.map(([q, a], i) => (
               <div key={i} style={{ borderBottom: "1px solid " + c.border, marginBottom: 0 }}>
-                <div onClick={() => setFaqOpen(faqOpen === i ? null : i)} style={{ padding: "18px 0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "18px 0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{q}</div>
                   <div style={{ fontSize: 18, color: c.textMuted, transition: "transform 0.2s", transform: faqOpen === i ? "rotate(45deg)" : "none" }}>+</div>
                 </div>
@@ -3254,7 +3254,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     const staffWindow = getStaffTimeWindow(ds);
                     const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
                     return (
-                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
                         <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                         <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
@@ -3270,8 +3270,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {availableTimes.map(tt => {
                         const booked = isTimeSlotBooked(tt);
                         return (
-                          <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} 
+                          <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} role="button" tabIndex={booked ? -1 : 0} aria-label={tt} aria-disabled={booked}
                             onClick={() => { if (!booked) setTime(tt); }}
+                            onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !booked) { e.preventDefault(); setTime(tt); } }}
                             style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
                           >{tt}</div>
                         );
@@ -3327,7 +3328,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                   {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
-                    <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} onClick={() => setForm(f => ({...f, payment: v}))}>
+                    <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                       <div className={`radio ${form.payment === v ? "on" : ""}`} />
                       <NavIcon name={icon} size={15} color={c.textSub} />
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
@@ -3727,7 +3728,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         const staffWindow = getStaffTimeWindow(ds);
                         const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
@@ -3800,7 +3801,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <SL>{t.payMethod}</SL>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                       {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
-                        <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} onClick={() => setForm(f => ({...f, payment: v}))}>
+                        <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                           <div className={`radio ${form.payment === v ? "on" : ""}`} />
                           <NavIcon name={icon} size={15} color={c.textSub} />
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
@@ -5367,7 +5368,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const isToday = ds === fmt(getToday());
                         const has = filteredAgendaAppts.filter(a => a.date === ds).length > 0;
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)} style={isToday && !isSel ? { border: `1px solid ${accent}66` } : undefined}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }} style={isToday && !isSel ? { border: `1px solid ${accent}66` } : undefined}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                             {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
@@ -7190,6 +7191,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
+  const [staffWeekOffset, setStaffWeekOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
   const [services, setServices] = useState([]);
   const [myStaff, setMyStaff] = useState(staffMember);
@@ -7457,12 +7459,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {view === "agenda" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
-                {days.slice(0,7).map((d, i) => {
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setStaffWeekOffset(w => w - 1)}>←</button>
+                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 10 }} onClick={() => setStaffWeekOffset(0)}>{lang === "nl" ? "Vandaag" : "Today"}</button>
+                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setStaffWeekOffset(w => w + 1)}>→</button>
+              </div>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
+                {days.slice(staffWeekOffset * 7, staffWeekOffset * 7 + 7).map((d, i) => {
                   const ds = fmt(d); const isSel = calDate === ds;
                   const has = appointments.filter(a => a.status !== "cancelled" && a.date === ds).length > 0;
                   return (
-                    <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} onClick={() => setCalDate(ds)}>
+                    <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}>
                       <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                       <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                       {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
@@ -7625,8 +7632,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
                             onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={12} /></button>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                            onClick={async () => { if (!await showConfirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) return; await supabase.from("services").delete().eq("id", s.id); setServices(svcs => svcs.filter(sv => sv.id !== s.id)); }}><NavIcon name="xmark" size={12} /></button>
+                          {/* Service deletion restricted to salon owner */}
                         </div>
                       )}
                     </div>
@@ -7699,29 +7705,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   </div>
                 ))}
 
-                {/* Add new service */}
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>{lang === "nl" ? "Nieuwe dienst" : "New service"}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    <input className="input-field" placeholder={lang === "nl" ? "Dienst naam (NL)" : "Service name (NL)"} value={newSvc.name_nl} onChange={e => setNewSvc(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                    <input className="input-field" placeholder={lang === "nl" ? "Dienst naam (EN)" : "Service name (EN)"} value={newSvc.name_en} onChange={e => setNewSvc(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                    <input className="input-field" placeholder={`${lang === "nl" ? "Prijs" : "Price"} (€)`} type="number" value={newSvc.price} onChange={e => setNewSvc(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                    <input className="input-field" placeholder={`${lang === "nl" ? "Duur" : "Duration"} (min)`} type="number" value={newSvc.duration} onChange={e => setNewSvc(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                  </div>
-                  {svcError && <div style={{ fontSize: 10, color: "#f87171", marginTop: 4 }}>{svcError}</div>}
-                  <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
-                    onClick={async () => {
-                      if (!newSvc.name_nl || !newSvc.price) { setSvcError(lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"); return; }
-                      setSvcError("");
-                      const { data, error } = await supabase.from("services").insert({
-                        owner_id: salonProfile.id, name: newSvc.name_nl, name_nl: newSvc.name_nl,
-                        name_en: newSvc.name_en || null, price: parseFloat(newSvc.price), duration: parseInt(newSvc.duration)
-                      }).select().single();
-                      if (!error && data) {
-                        setServices(svcs => [...svcs, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || "", variants: [], extras: [], photos: [] }]);
-                        setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" });
-                      }
-                    }}>+ {lang === "nl" ? "Behandeling toevoegen" : "Add service"}</button>
+                {/* Service creation restricted to salon owner */}
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border, textAlign: "center" }}>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Neem contact op met de saloneigenaar om diensten toe te voegen of te verwijderen." : "Contact the salon owner to add or remove services."}</div>
                 </div>
               </div>
 
