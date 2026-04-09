@@ -149,10 +149,10 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
         <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "'Jost',sans-serif" }}>{state.message}</div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
-            {lang === "nl" ? "Annuleren" : "Cancel"}
+            {t.cancel}
           </button>
           <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#f87171", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
-            {lang === "nl" ? "Verwijderen" : "Delete"}
+            {t.delete}
           </button>
         </div>
       </div>
@@ -495,6 +495,21 @@ const T = {
     ctaTitle:"Begin vandaag met je eigen boekingspagina",
     ctaSub:"Klaar in 2 minuten. Geen commissie. Geen gedoe.",
     closed:"gesloten",
+    back:"Terug", close:"Sluiten", cancel:"Annuleren", delete:"Verwijderen",
+    terms:"Voorwaarden", dpa:"Verwerkingsovereenkomst", privacy:"Privacy",
+    noTreatments:"Geen behandelingen beschikbaar", noTreatmentsCat:"Geen behandelingen in deze categorie",
+    noTimesAvailable:"Geen beschikbare tijden op deze dag",
+    forgotPassword:"Wachtwoord vergeten?", resetSent:"Reset link verstuurd! Check je inbox.",
+    fillAllFields:"Vul alle velden in", fillEmail:"Vul je e-mailadres in", fillBusinessName:"Vul je bedrijfsnaam in",
+    wrongCredentials:"Verkeerd e-mail of wachtwoord",
+    bookingError:"Er ging iets mis bij het boeken. Probeer het opnieuw.",
+    galleryPhoto:"Galerij foto", goodToKnow:"Goed om te weten",
+    yourBooking:"Jouw boeking", chooseVariant:"Kies een variant voor: ",
+    howWasAppt:"Hoe was je afspraak?", today:"vandaag",
+    welcomeVellu:"Welkom bij Vellu", followSteps:"Volg deze stappen om je eerste boeking te ontvangen:",
+    addServices:"Voeg je behandelingen toe", setHours:"Stel je openingstijden in",
+    uploadLogo:"Upload je logo", shareLink:"Deel je link: ",
+    contactOwnerServices:"Neem contact op met de saloneigenaar om diensten toe te voegen of te verwijderen.",
   },
   en: {
     book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
@@ -728,6 +743,21 @@ const T = {
     ctaTitle:"Start your own booking page today",
     ctaSub:"Ready in 2 minutes. No commission. No hassle.",
     closed:"closed",
+    back:"Back", close:"Close", cancel:"Cancel", delete:"Delete",
+    terms:"Terms", dpa:"Data Processing Agreement", privacy:"Privacy",
+    noTreatments:"No treatments available", noTreatmentsCat:"No treatments in this category",
+    noTimesAvailable:"No available times on this day",
+    forgotPassword:"Forgot password?", resetSent:"Reset link sent! Check your inbox.",
+    fillAllFields:"Fill in all fields", fillEmail:"Enter your email", fillBusinessName:"Enter your business name",
+    wrongCredentials:"Incorrect email or password",
+    bookingError:"Something went wrong while booking. Please try again.",
+    galleryPhoto:"Gallery photo", goodToKnow:"Good to know",
+    yourBooking:"Your booking", chooseVariant:"Choose a variant for: ",
+    howWasAppt:"How was your appointment?", today:"today",
+    welcomeVellu:"Welcome to Vellu", followSteps:"Follow these steps to get your first booking:",
+    addServices:"Add your services", setHours:"Set your business hours",
+    uploadLogo:"Upload your logo", shareLink:"Share your link: ",
+    contactOwnerServices:"Contact the salon owner to add or remove services.",
   }
 };
 
@@ -1570,8 +1600,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ fontSize: 11, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
             <span>© {new Date().getFullYear()} vellu</span>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Privacy</a>
-            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
-            <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Verwerkingsovereenkomst" : "DPA"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
+            <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.dpa}</a>
             <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
           </div>
         </footer>
@@ -1591,7 +1621,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const [resetSent, setResetSent] = useState(false);
 
   const handleReset = async () => {
-    if (!form.email) { setError(lang === "nl" ? "Vul je e-mailadres in" : "Enter your email"); return; }
+    if (!form.email) { setError(t.fillEmail); return; }
     setLoading(true); setError("");
     const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo: "https://vellu.cc/owner" });
     if (error) { setError(error.message); } else { setResetSent(true); }
@@ -1599,8 +1629,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   };
 
   const handle = async () => {
-    if (!form.email || !form.password) { setError(lang === "nl" ? "Vul alle velden in" : "Fill in all fields"); return; }
-    if (mode === "signup" && !form.businessName) { setError(lang === "nl" ? "Vul je bedrijfsnaam in" : "Enter your business name"); return; }
+    if (!form.email || !form.password) { setError(t.fillAllFields); return; }
+    if (mode === "signup" && !form.businessName) { setError(t.fillBusinessName); return; }
     setLoading(true);
     setError("");
 
@@ -1643,7 +1673,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
-      if (error) { setError(lang === "nl" ? "Verkeerd e-mail of wachtwoord" : "Incorrect email or password"); setLoading(false); return; }
+      if (error) { setError(t.wrongCredentials); setLoading(false); return; }
       // Load profile
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
       const slug = profile?.slug || data.user.email.split("@")[0];
@@ -1680,7 +1710,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
         {/* Back button */}
         <div style={{ position: "absolute", top: 32, left: 32 }}>
-          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {lang === "nl" ? "Terug" : "Back"}</button>
+          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {t.back}</button>
         </div>
         
         {/* Lang toggle */}
@@ -1745,12 +1775,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               <input className="input-field" placeholder={t.passwordField} type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))} />
             </div>
             {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
-            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{lang === "nl" ? "Reset link verstuurd! Check je inbox." : "Reset link sent! Check your inbox."}</div>}
+            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
             {mode === "signin" && (
               <button style={{ display: "block", width: "100%", marginTop: 12, background: "none", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}
                 onClick={handleReset}>
-                {lang === "nl" ? "Wachtwoord vergeten?" : "Forgot password?"}
+                {t.forgotPassword}
               </button>
             )}
           </div>
@@ -2382,7 +2412,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     } catch (err) {
       console.error("Booking error:", err);
-      setErrorToast(lang === "nl" ? "Er ging iets mis bij het boeken. Probeer het opnieuw." : "Something went wrong while booking. Please try again.");
+      setErrorToast(t.bookingError);
       setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
     }
@@ -2546,7 +2576,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               ))}
               {profileFilteredServices.length === 0 && (
                 <div style={{ textAlign: "center", padding: "40px 16px", color: c.textMuted, fontSize: 13 }}>
-                  {lang === "nl" ? "Geen behandelingen beschikbaar" : "No treatments available"}
+                  {t.noTreatments}
                 </div>
               )}
             </section>
@@ -2605,7 +2635,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
                   {allPhotos.map((photo, idx) => (
                     <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
-                      <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (lang === "nl" ? "Galerij foto" : "Gallery photo")} />
+                      <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
                     </div>
                   ))}
                 </div>
@@ -2698,7 +2728,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {/* Booking policy */}
                 {initialSalon.booking_policy && (
                   <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{lang === "nl" ? "Goed om te weten" : "Good to know"}</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.goodToKnow}</h3>
                     <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
                       <NavIcon name="clipboard" size={14} color={c.textSub} />
                       <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
@@ -2739,7 +2769,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}>
                 <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : "Privacy"}</a>
                 {" · "}
-                <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+                <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{t.terms}</a>
               </div>
             </div>
           </div>
@@ -2847,8 +2877,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {/* Gallery overlay */}
         {gallery && (
           <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
-            <button onClick={() => setGallery(null)} aria-label={lang === "nl" ? "Sluiten" : "Close"} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 40, height: 40, borderRadius: "50%", fontSize: 20, cursor: "pointer", zIndex: 10 }}>&times;</button>
-            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={lang === "nl" ? "Galerij foto" : "Gallery photo"} />
+            <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 40, height: 40, borderRadius: "50%", fontSize: 20, cursor: "pointer", zIndex: 10 }}>&times;</button>
+            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={t.galleryPhoto} />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               {gallery.photos.map((p, i) => (
                 <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
@@ -2870,7 +2900,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
-                {lang === "nl" ? "Sluiten" : "Close"}
+                {t.close}
               </button>
             </div>
           </div>
@@ -3287,7 +3317,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                   ) : (
                     <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
-                      {lang === "nl" ? "Geen beschikbare tijden op deze dag" : "No available times on this day"}
+                      {t.noTimesAvailable}
                     </div>
                   );
                 })()}
@@ -3760,7 +3790,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       ) : (
                         <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
-                          {lang === "nl" ? "Geen beschikbare tijden op deze dag" : "No available times on this day"}
+                          {t.noTimesAvailable}
                         </div>
                       );
                     })()}
@@ -4000,7 +4030,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
-                {lang === "nl" ? "Sluiten" : "Close"}
+                {t.close}
               </button>
             </div>
           </div>
@@ -5168,19 +5198,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Onboarding checklist for new salons */}
               {appts.length === 0 && (
                 <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "24px 22px", marginBottom: 20 }}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{lang === "nl" ? "Welkom bij Vellu" : "Welcome to Vellu"}</div>
-                  <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16, lineHeight: 1.6 }}>{lang === "nl" ? "Volg deze stappen om je eerste boeking te ontvangen:" : "Follow these steps to get your first booking:"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{t.welcomeVellu}</div>
+                  <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16, lineHeight: 1.6 }}>{t.followSteps}</div>
                   {[
-                    { done: salonData.services?.length > 0, nl: "Voeg je behandelingen toe", en: "Add your services", action: () => setView("instellingen") },
-                    { done: salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed), nl: "Stel je openingstijden in", en: "Set your business hours", action: () => setView("instellingen") },
-                    { done: salonData.logo_url, nl: "Upload je logo", en: "Upload your logo", action: () => setView("instellingen") },
-                    { done: false, nl: "Deel je link: vellu.cc/" + salonData.id, en: "Share your link: vellu.cc/" + salonData.id, action: () => { navigator.clipboard.writeText("vellu.cc/" + salonData.id).catch(() => {}); } },
+                    { done: salonData.services?.length > 0, label: t.addServices, action: () => setView("instellingen") },
+                    { done: salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed), label: t.setHours, action: () => setView("instellingen") },
+                    { done: salonData.logo_url, label: t.uploadLogo, action: () => setView("instellingen") },
+                    { done: false, label: t.shareLink + "vellu.cc/" + salonData.id, action: () => { navigator.clipboard.writeText("vellu.cc/" + salonData.id).catch(() => {}); } },
                   ].map((step, i) => (
                     <div key={i} onClick={step.action} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, cursor: "pointer", marginBottom: 4, background: step.done ? `${accent}08` : "transparent", border: `1px solid ${step.done ? accent + "22" : c.border}` }}>
                       <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${step.done ? accent : c.textMuted}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {step.done && <NavIcon name="check" size={12} color={accent} />}
                       </div>
-                      <div style={{ fontSize: 12, color: step.done ? c.textSub : c.text, textDecoration: step.done ? "line-through" : "none" }}>{lang === "nl" ? step.nl : step.en}</div>
+                      <div style={{ fontSize: 12, color: step.done ? c.textSub : c.text, textDecoration: step.done ? "line-through" : "none" }}>{step.label}</div>
                     </div>
                   ))}
                 </div>
@@ -7116,7 +7146,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
                   <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color="#86efac" /></div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
-                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{lang === "nl" ? "Sluiten" : "Close"}</button>
+                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{t.close}</button>
                 </div>
               )}
             </div>
@@ -7146,7 +7176,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
                 <div style={{ fontSize: 10, color: c.textLabel, marginTop: 3, letterSpacing: "0.06em" }}>vellu.cc/{salonData.id}</div>
               </div>
-              <button className="btn-ghost" style={{ padding: "7px 14px", fontSize: 12 }} onClick={() => setShowPreview(false)}><NavIcon name="xmark" size={12} /> {lang === "nl" ? "Sluiten" : "Close"}</button>
+              <button className="btn-ghost" style={{ padding: "7px 14px", fontSize: 12 }} onClick={() => setShowPreview(false)}><NavIcon name="xmark" size={12} /> {t.close}</button>
             </div>
             <div style={{ width: "100%", maxWidth: 390, background: c.bg, borderRadius: 28, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
               <div style={{ background: c.bg, backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, padding: "24px 22px 0", fontFamily: "'Jost',sans-serif", color: c.text }}>
@@ -7735,7 +7765,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
                 {/* Service creation restricted to salon owner */}
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Neem contact op met de saloneigenaar om diensten toe te voegen of te verwijderen." : "Contact the salon owner to add or remove services."}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{t.contactOwnerServices}</div>
                 </div>
               </div>
 
@@ -7846,7 +7876,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
                   <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color="#86efac" /></div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
-                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{lang === "nl" ? "Sluiten" : "Close"}</button>
+                  <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{t.close}</button>
                 </div>
               )}
             </div>
@@ -8209,7 +8239,7 @@ function CancelRoute({ lang }) {
             </button>
             
             <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug" : "Back"}
+              {t.back}
             </button>
           </div>
         )}
@@ -8325,7 +8355,7 @@ function PrivacyPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -8391,7 +8421,7 @@ function TermsPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -8440,7 +8470,7 @@ function ContactPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
@@ -8465,7 +8495,7 @@ function ContactPage({ lang, setLang }) {
           </div>
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
-            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
           </div>
         </div>
       </div>
@@ -8527,7 +8557,7 @@ function DpaPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {lang === "nl" ? "Terug" : "Back"}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -8541,7 +8571,7 @@ function DpaPage({ lang, setLang }) {
           ))}
           <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
-            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Voorwaarden" : "Terms"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
           </div>
         </div>
