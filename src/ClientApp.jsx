@@ -70,7 +70,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false, reviewEmail = "" }) {
-  const { colors: c } = useTheme();
+  const { colors: c, theme } = useTheme();
   const accent = initialSalon.accent || ACCENT;
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
@@ -1006,19 +1006,54 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Address */}
               {hasLocations ? (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-                  {(initialSalon.locations || []).map(loc => (
-                    <div key={loc.id} style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
-                      <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
-                      {loc.address && <div style={{ fontSize: 13, color: c.textSub }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
-                      {loc.phone && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
-                    </div>
-                  ))}
+                  {(initialSalon.locations || []).map(loc => {
+                    const locQuery = [loc.address, loc.city].filter(Boolean).join(", ");
+                    return (
+                      <div key={loc.id} style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                        <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
+                        {loc.address && <div style={{ fontSize: 13, color: c.textSub }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                        {loc.phone && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
+                        {locQuery && (
+                          <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}` }}>
+                            <iframe
+                              title={`${loc.name} — map`}
+                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&output=embed`}
+                              width="100%"
+                              height={isMobile ? 180 : 220}
+                              style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.3) contrast(1.1)" : "none" }}
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (initialSalon.address || initialSalon.city) ? (
-                <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.6 }}>
-                  <span style={{ marginRight: 6 }}><NavIcon name="mappin" size={12} color={c.textSub} /></span>
-                  {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
-                </div>
+                <>
+                  <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.6 }}>
+                    <span style={{ marginRight: 6 }}><NavIcon name="mappin" size={12} color={c.textSub} /></span>
+                    {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
+                  </div>
+                  {(() => {
+                    const mainQuery = [initialSalon.address, initialSalon.city].filter(Boolean).join(", ");
+                    if (!mainQuery) return null;
+                    return (
+                      <div style={{ marginTop: 14, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.border}` }}>
+                        <iframe
+                          title={`${initialSalon.name} — map`}
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&output=embed`}
+                          width="100%"
+                          height={isMobile ? 220 : 280}
+                          style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.3) contrast(1.1)" : "none" }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                      </div>
+                    );
+                  })()}
+                </>
               ) : null}
             </section>
 
