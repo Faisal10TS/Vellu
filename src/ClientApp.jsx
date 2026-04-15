@@ -703,7 +703,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   ];
 
   if (mode === "profile") return (
-    <Layout>
+    <Layout accent={accent}>
 
       <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
 
@@ -1219,9 +1219,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   );
 
   return (
-    <Layout>
+    <Layout accent={accent}>
 
-      <div style={{ 
+      <div style={{
         minHeight: "100dvh", 
         background: c.bg,
         backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -10%, ${accent}08 0%, transparent 60%)`,
