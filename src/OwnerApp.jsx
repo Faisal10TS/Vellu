@@ -1089,36 +1089,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* Desktop Header */}
           {!isMobile && (
-            <div style={{ 
-              padding: "24px 40px", 
+            <div style={{
+              padding: "24px 40px",
               borderBottom: "1px solid " + c.border,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
             }}>
-              <div>
-                <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 4 }}>
-                  {navItems.find(([k]) => k === view)?.[2] || t.dashboard}
-                </h1>
-                <div style={{ fontSize: 12, color: c.textLabel }}>
-                  {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
+              <div style={{
+                maxWidth: 960,
+                margin: "0 auto",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div>
+                  <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 4 }}>
+                    {navItems.find(([k]) => k === view)?.[2] || t.dashboard}
+                  </h1>
+                  <div style={{ fontSize: 12, color: c.textLabel }}>
+                    {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 12 }}>
-                <button 
-                  className="btn-ghost" 
-                  style={{ fontSize: 11, borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 6 }} 
-                  onClick={() => setShowPreview(true)}
-                >
-                  <NavIcon name="eye" size={14} color={accent} /> {t.preview}
-                </button>
-                <button 
-                  className="btn-ghost" 
-                  style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }} 
-                  onClick={copyLink}
-                >
-                  <NavIcon name="link" size={14} color={copied ? "#86efac" : c.textSub} /> {copied ? "✓ " + t.copied : t.copyLink}
-                </button>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 11, borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={() => setShowPreview(true)}
+                  >
+                    <NavIcon name="eye" size={14} color={accent} /> {t.preview}
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={copyLink}
+                  >
+                    <NavIcon name="link" size={14} color={copied ? "#86efac" : c.textSub} /> {copied ? "✓ " + t.copied : t.copyLink}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1136,7 +1141,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
-            <div className="fade-up" style={{ maxWidth: 960 }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
 
               {/* Onboarding checklist for new salons */}
@@ -1300,7 +1305,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* AGENDA */}
           {view === "agenda" && (
-            <div className="fade-up" style={{ maxWidth: 960 }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
               
               {/* View mode toggle + navigation */}
@@ -1494,7 +1499,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* FACTUREN */}
           {view === "facturen" && (
-            <div className="fade-up" style={{ maxWidth: 960 }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
               {completedAppts.length > 0 && (<>
@@ -1573,7 +1578,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* ANALYTICS */}
           {view === "analytics" && (
-            <div className="fade-up" style={{ maxWidth: 960 }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
 
               {/* Key metrics */}
@@ -1799,7 +1804,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             padding: isMobile ? "14px 22px 20px" : "32px 40px 20px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
-            <div className="fade-up">
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
               {/* Settings tabs */}
