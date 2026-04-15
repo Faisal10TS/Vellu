@@ -503,6 +503,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent"
+  const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
@@ -1539,23 +1540,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 });
                 if (completedAppts.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noCompleted}</div>;
                 if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Geen resultaten" : "No results"}</div>;
-                return filtered.map(a => (
-                  <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
-                      <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.date} · {a.service_name}</div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
-                      <div style={{ marginTop: 5 }}>
-                        {a.invoice_sent
-                          ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
-                          : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.send}</button>
-                        }
+                const visible = invoicesExpanded ? filtered : filtered.slice(0, 10);
+                return <>
+                  {visible.map(a => (
+                    <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
+                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.date} · {a.service_name}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                        <div style={{ marginTop: 5 }}>
+                          {a.invoice_sent
+                            ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
+                            : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.send}</button>
+                          }
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ));
+                  ))}
+                  {filtered.length > 10 && (
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                      <button className="btn-ghost" onClick={() => setInvoicesExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                        {invoicesExpanded ? t.showLess : `${t.showMore} (${filtered.length - 10})`}
+                      </button>
+                    </div>
+                  )}
+                </>;
               })()}
             </div>
           )}
