@@ -1804,27 +1804,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             minHeight: 0,
             overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            // zero top padding so the sticky tab bar sits flush against the header — no gradient gap above it
-            // extra bottom padding so the floating save button never covers the last content
-            padding: isMobile ? "0 22px 160px" : "0 40px 100px",
+            // No horizontal padding on the scroll container — the sticky tab bar
+            // spans edge-to-edge so its border-bottom can match the desktop header's
+            // full-width line. Content underneath (fade-up) applies its own padding.
+            padding: isMobile ? "0 0 160px" : "0 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
-              {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
-              {/* Settings tabs — sticky so they stay visible while scrolling.
-                  - paddingTop gives breathing room from the desktop header.
-                  - box-shadow extends the bg color 16px below the bar (matches
-                    marginBottom) so content scrolling past doesn't peek through
-                    the transparent margin strip.
-                  - bg is opaque so content scrolls cleanly behind. */}
+            {/* Settings tabs — sticky + full-width border to match Instellingen header */}
+            <div style={{
+              position: "sticky", top: 0, zIndex: 20,
+              background: c.bg,
+              borderBottom: "1px solid " + c.border,
+              paddingTop: isMobile ? 14 : 20, paddingBottom: 12,
+              boxShadow: `0 16px 0 0 ${c.bg}`,
+              marginBottom: 16
+            }}>
               <div style={{
-                display: "flex", gap: 6, overflowX: "auto",
-                paddingTop: isMobile ? 14 : 20, paddingBottom: 12, marginBottom: 16,
-                borderBottom: "1px solid " + c.border,
-                position: "sticky", top: 0, zIndex: 20,
-                background: c.bg,
-                boxShadow: `0 16px 0 0 ${c.bg}`
+                maxWidth: 960,
+                margin: "0 auto",
+                padding: isMobile ? "0 22px" : "0 40px",
+                display: "flex", gap: 6, overflowX: "auto"
               }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
@@ -1843,6 +1843,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   }}><NavIcon name={icon} size={14} color={settingsTab === key ? accent : c.textSub} /> {label}</div>
                 ))}
               </div>
+            </div>
+
+            <div className="fade-up" style={{
+              maxWidth: 960,
+              margin: "0 auto",
+              padding: isMobile ? "0 22px" : "0 40px"
+            }}>
+              {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
               {/* ═══ SALON TAB ═══ */}
               {settingsTab === "salon" && <>
