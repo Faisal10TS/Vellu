@@ -492,7 +492,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
   // Edit states
   const [editingService, setEditingService] = useState(null);
@@ -1116,7 +1115,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <button
                     className="btn-ghost"
                     style={{ fontSize: 11, borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 6 }}
-                    onClick={() => setShowPreview(true)}
+                    onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}
                   >
                     <NavIcon name="eye" size={14} color={accent} /> {t.preview}
                   </button>
@@ -1212,7 +1211,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={accent} /> {t.addAppointment}
                 </button>
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowPreview(true)}>
+                <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
                   <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
                 </button>
                 {appts.length > 0 && (
@@ -3163,73 +3162,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
         )}
 
-        {/* Client preview modal */}
-        {showPreview && (
-          <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 300, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "20px 16px", overflowY: "auto" }}>
-            <div style={{ width: "100%", maxWidth: 390, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text, fontWeight: 300 }}>
-                  {lang === "nl" ? "Zo zien klanten jouw pagina" : "This is what clients see"}
-                </div>
-                <div style={{ fontSize: 10, color: c.textLabel, marginTop: 3, letterSpacing: "0.06em" }}>vellu.cc/{salonData.id}</div>
-              </div>
-              <button className="btn-ghost" style={{ padding: "7px 14px", fontSize: 12 }} onClick={() => setShowPreview(false)}><NavIcon name="xmark" size={12} /> {t.close}</button>
-            </div>
-            <div style={{ width: "100%", maxWidth: 390, background: c.bg, borderRadius: 28, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
-              <div style={{ background: c.bg, backgroundImage: `radial-gradient(ellipse 70% 35% at 50% -5%, ${accent}12 0%, transparent 55%)`, padding: "24px 22px 0", fontFamily: "'Jost',sans-serif", color: c.text }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                  <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, fontWeight: 400, letterSpacing: "0.06em" }}>{salonData.name}</div>
-                    <div style={{ fontSize: 10, color: c.textLabel, marginTop: 3 }}>{salonData.city}</div>
-                  </div>
-                  <div style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 100, padding: "5px 10px", fontSize: 10, color: c.textLabel }}>NL / EN</div>
-                </div>
-                <div style={{ display: "flex", gap: 5, marginBottom: 22 }}>
-                  {[1,2,3,4].map(s => <div key={s} style={{ flex: 1, height: 2, borderRadius: 4, background: s === 1 ? accent : c.border }} />)}
-                </div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontSize: 24, color: c.text, marginBottom: 6 }}>
-                  {lang === "nl" ? "Kies een Behandeling" : "Select a Service"}
-                </div>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 20 }}>
-                  {lang === "nl" ? "Kies de behandeling die je wilt" : "Choose the treatment you'd like"}
-                </div>
-              </div>
-              <div style={{ padding: "0 22px 28px", background: c.bg, fontFamily: "'Jost',sans-serif" }}>
-                {salonData.services.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "32px 0", color: c.textMuted, fontSize: 13 }}>
-                    {lang === "nl" ? "Nog geen diensten toegevoegd" : "No services added yet"}
-                  </div>
-                ) : salonData.services.map(s => (
-                  <div key={s.id} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "17px 19px", marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14, color: c.text }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
-                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
-                          {s.duration} min
-                          {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} foto's</span>}
-                        </div>
-                      </div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{s.price}</div>
-                    </div>
-                    {(s.photos || []).length > 0 && (
-                      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginTop: 12 }}>
-                        {s.photos.map((p, i) => (
-                          <img key={p.id || i} src={p.url || p} style={{ width: 68, height: 68, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: "1px solid " + c.border }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div style={{ background: accent, color: c.btnOnDark, borderRadius: 100, padding: "15px", textAlign: "center", fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 6, opacity: 0.4 }}>
-                  {lang === "nl" ? "Volgende →" : "Next →"}
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: 16, fontSize: 11, color: c.textMuted, textAlign: "center", letterSpacing: "0.04em" }}>
-              {lang === "nl" ? "Dit is een preview — klanten kunnen hier niet boeken" : "This is a preview — clients cannot book here"}
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   );
