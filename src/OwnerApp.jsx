@@ -1804,14 +1804,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             minHeight: 0,
             overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "14px 22px 20px" : "32px 40px 20px",
+            // extra bottom padding so the floating save button never covers the last content
+            padding: isMobile ? "14px 22px 160px" : "32px 40px 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
-              {/* Settings tabs */}
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 16, borderBottom: "1px solid " + c.border }}>
+              {/* Settings tabs — sticky so they stay visible while scrolling */}
+              <div style={{
+                display: "flex", gap: 6, overflowX: "auto",
+                paddingTop: 4, paddingBottom: 12, marginBottom: 16,
+                borderBottom: "1px solid " + c.border,
+                position: "sticky", top: 0, zIndex: 20,
+                background: c.bg
+              }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
                   ["diensten", "diensten", t.services],
