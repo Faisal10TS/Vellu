@@ -504,6 +504,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent"
   const [invoicesExpanded, setInvoicesExpanded] = useState(false);
+  const [analyticsReviewsExpanded, setAnalyticsReviewsExpanded] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
@@ -1778,19 +1779,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Reviews */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
                 <SL>{t.reviews} ({salonData.reviews?.length || 0})</SL>
-                {(!salonData.reviews || salonData.reviews.length === 0)
-                  ? <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
-                  : salonData.reviews.map(r => (
-                    <div key={r.id} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid " + c.border }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontWeight: 500, fontSize: 13 }}>{r.client_name}</span>
-                        <span style={{ color: accent, fontSize: 13 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                {(!salonData.reviews || salonData.reviews.length === 0) ? (
+                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
+                ) : (() => {
+                  const visible = analyticsReviewsExpanded ? salonData.reviews : salonData.reviews.slice(0, 5);
+                  return <>
+                    {visible.map(r => (
+                      <div key={r.id} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid " + c.border }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontWeight: 500, fontSize: 13 }}>{r.client_name}</span>
+                          <span style={{ color: accent, fontSize: 13 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                        </div>
+                        {r.comment && <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString()}</div>
                       </div>
-                      {r.comment && <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString()}</div>
-                    </div>
-                  ))
-                }
+                    ))}
+                    {salonData.reviews.length > 5 && (
+                      <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                        <button className="btn-ghost" onClick={() => setAnalyticsReviewsExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                          {analyticsReviewsExpanded ? t.showLess : `${t.showMore} (${salonData.reviews.length - 5})`}
+                        </button>
+                      </div>
+                    )}
+                  </>;
+                })()}
               </div>
             </div>
           )}
