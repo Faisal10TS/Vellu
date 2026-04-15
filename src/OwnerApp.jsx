@@ -1811,13 +1811,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
-              {/* Settings tabs — sticky so they stay visible while scrolling */}
+              {/* Settings tabs — sticky so they stay visible while scrolling.
+                  box-shadow extends the bg color 16px below the bar (matches
+                  marginBottom) so content scrolling past doesn't peek through
+                  the transparent margin strip. */}
               <div style={{
                 display: "flex", gap: 6, overflowX: "auto",
                 paddingTop: 4, paddingBottom: 12, marginBottom: 16,
                 borderBottom: "1px solid " + c.border,
                 position: "sticky", top: 0, zIndex: 20,
-                background: c.bg
+                background: c.bg,
+                boxShadow: `0 16px 0 0 ${c.bg}`
               }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
