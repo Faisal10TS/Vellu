@@ -1824,7 +1824,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 maxWidth: 960,
                 margin: "0 auto",
                 padding: isMobile ? "0 22px" : "0 40px",
-                display: "flex", gap: 6, overflowX: "auto"
+                display: "flex", gap: 6, overflowX: "auto",
+                justifyContent: "center"
               }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
