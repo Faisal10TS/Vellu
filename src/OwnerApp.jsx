@@ -2734,6 +2734,114 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Locations */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.locations}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.locations || []).length}</div>
+                </div>
+
+                {/* Main location from profile — shown when no explicit locations exist */}
+                {(salonData.locations || []).length === 0 && (salonData.address || salonData.city) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 10, background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}33`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <NavIcon name="mappin" size={14} color={accent} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Hoofdlocatie" : "Main location"}</span>
+                        <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                          {lang === "nl" ? "Uit profiel" : "From profile"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textLabel }}>{salonData.address}{salonData.city ? `, ${salonData.city}` : ""}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>{lang === "nl" ? "Klanten zien dit adres op je boekingspagina." : "Clients see this address on your booking page."}</div>
+                    </div>
+                  </div>
+                )}
+
+                {(salonData.locations || []).length === 0 && !(salonData.address || salonData.city) ? (
+                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "14px 0", fontStyle: "italic" }}>{t.noLocations}</div>
+                ) : (salonData.locations || []).length === 0 ? (
+                  <div style={{ fontSize: 11, color: c.textMuted, padding: "4px 2px 10px", lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "Voeg extra locaties toe als je op meerdere plekken werkt — klanten kunnen dan kiezen bij het boeken."
+                      : "Add extra locations if you work from multiple venues — clients can then choose at booking time."}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                    {(salonData.locations || []).map(loc => {
+                      const isEditing = editingLocation === loc.id;
+                      return (
+                        <div key={loc.id} style={{ background: c.bg, border: `1px solid ${isEditing ? `${accent}44` : c.border}`, borderRadius: 14, padding: isEditing ? 14 : "12px 14px", transition: "border-color 0.2s" }}>
+                          {isEditing ? (
+                            <div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam" : "Name"}</div>
+                                  <input className="input-field" value={editLocForm.name} onChange={e => setEditLocForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.city}</div>
+                                  <input className="input-field" value={editLocForm.city} onChange={e => setEditLocForm(f => ({...f, city: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                                </div>
+                              </div>
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                                <input className="input-field" value={editLocForm.address} onChange={e => setEditLocForm(f => ({...f, address: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                              </div>
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Telefoon" : "Phone"}</div>
+                                <input className="input-field" value={editLocForm.phone} onChange={e => setEditLocForm(f => ({...f, phone: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                  await supabase.from("locations").update({ name: editLocForm.name, address: editLocForm.address || null, city: editLocForm.city || null, phone: editLocForm.phone || null }).eq("id", loc.id);
+                                  update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, ...editLocForm} : l); return d; });
+                                  setEditingLocation(null);
+                                }}>
+                                  <NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}
+                                </button>
+                                <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingLocation(null)}>
+                                  <NavIcon name="xmark" size={12} color="currentColor" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <NavIcon name="mappin" size={14} color={accent} />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{loc.name}</div>
+                                {(loc.address || loc.city) && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                                {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{loc.phone}</div>}
+                              </div>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button onClick={() => { setEditingLocation(loc.id); setEditLocForm({ name: loc.name, address: loc.address || "", city: loc.city || "", phone: loc.phone || "" }); }}
+                                  style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <NavIcon name="edit" size={11} color="currentColor" />
+                                </button>
+                                <button onClick={async () => {
+                                  if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
+                                  await supabase.from("locations").delete().eq("id", loc.id);
+                                  update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
+                                }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <NavIcon name="xmark" size={11} color="currentColor" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
+                  update(d => { d.locations = [...(d.locations || []), loc]; return d; });
+                }} />
+              </div>
+
               {/* Salon Contact Details */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.salonContact}</div>
@@ -3313,88 +3421,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* ═══ PLANNING TAB ═══ */}
               {settingsTab === "planning" && <>
-
-              {/* Locations */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.locations}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.locations || []).length}</div>
-                </div>
-                {(salonData.locations || []).length === 0 ? (
-                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "14px 0", fontStyle: "italic" }}>{t.noLocations}</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-                    {(salonData.locations || []).map(loc => {
-                      const isEditing = editingLocation === loc.id;
-                      return (
-                        <div key={loc.id} style={{ background: c.bg, border: `1px solid ${isEditing ? `${accent}44` : c.border}`, borderRadius: 14, padding: isEditing ? 14 : "12px 14px", transition: "border-color 0.2s" }}>
-                          {isEditing ? (
-                            <div>
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                <div>
-                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam" : "Name"}</div>
-                                  <input className="input-field" value={editLocForm.name} onChange={e => setEditLocForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.city}</div>
-                                  <input className="input-field" value={editLocForm.city} onChange={e => setEditLocForm(f => ({...f, city: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
-                                </div>
-                              </div>
-                              <div style={{ marginBottom: 8 }}>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
-                                <input className="input-field" value={editLocForm.address} onChange={e => setEditLocForm(f => ({...f, address: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
-                              </div>
-                              <div style={{ marginBottom: 10 }}>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Telefoon" : "Phone"}</div>
-                                <input className="input-field" value={editLocForm.phone} onChange={e => setEditLocForm(f => ({...f, phone: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
-                              </div>
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                                  await supabase.from("locations").update({ name: editLocForm.name, address: editLocForm.address || null, city: editLocForm.city || null, phone: editLocForm.phone || null }).eq("id", loc.id);
-                                  update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, ...editLocForm} : l); return d; });
-                                  setEditingLocation(null);
-                                }}>
-                                  <NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}
-                                </button>
-                                <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingLocation(null)}>
-                                  <NavIcon name="xmark" size={12} color="currentColor" />
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <NavIcon name="mappin" size={14} color={accent} />
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{loc.name}</div>
-                                {(loc.address || loc.city) && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
-                                {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{loc.phone}</div>}
-                              </div>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <button onClick={() => { setEditingLocation(loc.id); setEditLocForm({ name: loc.name, address: loc.address || "", city: loc.city || "", phone: loc.phone || "" }); }}
-                                  style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <NavIcon name="edit" size={11} color="currentColor" />
-                                </button>
-                                <button onClick={async () => {
-                                  if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
-                                  await supabase.from("locations").delete().eq("id", loc.id);
-                                  update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
-                                }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <NavIcon name="xmark" size={11} color="currentColor" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
-                  update(d => { d.locations = [...(d.locations || []), loc]; return d; });
-                }} />
-              </div>
 
               {/* Business Hours */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>

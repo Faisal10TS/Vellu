@@ -93,6 +93,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return locs.length === 1 ? locs[0] : null;
   });
   const hasLocations = (initialSalon.locations || []).length > 1;
+  const hasAnyLocation = (initialSalon.locations || []).length > 0;
   const goToStep = (s) => {
     if (s === 2) setSlotsRefreshKey(k => k + 1); // Refresh booked slots when entering date step
     setStep(s);
@@ -1032,7 +1033,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
 
               {/* Address */}
-              {hasLocations ? (
+              {hasAnyLocation ? (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
                   {(initialSalon.locations || []).map(loc => {
                     const locAddr = (loc.address || "").trim();
