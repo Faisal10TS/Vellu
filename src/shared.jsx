@@ -20,6 +20,9 @@ const THEMES = {
     selectBg: "#1a1a1a",
     toggleInactive: "rgba(237,232,224,0.15)",
     btnOnDark: "#0d0b0a",
+    success: "#86efac",
+    danger: "#f87171",
+    warning: "#f59e0b",
   },
   light: {
     bg: "#faf9f7",
@@ -38,6 +41,9 @@ const THEMES = {
     selectBg: "#f0efed",
     toggleInactive: "rgba(13,11,10,0.2)",
     btnOnDark: "#1a1714",
+    success: "#16a34a",
+    danger: "#dc2626",
+    warning: "#d97706",
   }
 };
 

@@ -492,9 +492,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [hasSharedLink, setHasSharedLink] = useState(() => {
+    try { return !!localStorage.getItem(`vellu_shared_${salonData.id}`); } catch { return false; }
+  });
   const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
   // Edit states
   const [editingService, setEditingService] = useState(null);
+  const [expandedServiceId, setExpandedServiceId] = useState(null);
+  const [showNewServiceForm, setShowNewServiceForm] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(null);
+  const [editLocForm, setEditLocForm] = useState({ name: "", address: "", city: "", phone: "" });
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
   const [editingStaff, setEditingStaff] = useState(null);
   const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [] });
@@ -840,6 +847,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     navigator.clipboard.writeText(`vellu.cc/${salonData.id}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    try { localStorage.setItem(`vellu_shared_${salonData.id}`, "1"); } catch {}
+    setHasSharedLink(true);
   };
 
   const exportCalendar = (apptList) => {
@@ -889,19 +898,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       </div>
       {a.client_allergies && (
-        <div style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+        <div style={{ fontSize: 10, color: c.warning, background: `${c.warning}14`, border: `1px solid ${c.warning}28`, borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
           ⚠️ {t.clientAllergies}: {a.client_allergies}
         </div>
       )}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6 }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
         </div>
       )}
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
-      {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color:"#86efac", marginTop:6 }}>{t.invoiceSent}</div>}
-      {a.status === "no_show" && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}><NavIcon name="xmark" size={11} color="#f87171" /> {t.noShow}</div>}
+      {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
+      {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
@@ -1124,7 +1133,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}
                     onClick={copyLink}
                   >
-                    <NavIcon name="link" size={14} color={copied ? "#86efac" : c.textSub} /> {copied ? "✓ " + t.copied : t.copyLink}
+                    <NavIcon name="link" size={14} color={copied ? c.success : c.textSub} /> {copied ? "✓ " + t.copied : t.copyLink}
                   </button>
                 </div>
               </div>
@@ -1156,7 +1165,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     { done: salonData.services?.length > 0, label: t.addServices, action: () => setView("instellingen") },
                     { done: salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed), label: t.setHours, action: () => setView("instellingen") },
                     { done: salonData.logo_url, label: t.uploadLogo, action: () => setView("instellingen") },
-                    { done: false, label: t.shareLink + "vellu.cc/" + salonData.id, action: () => { navigator.clipboard.writeText("vellu.cc/" + salonData.id).catch(() => {}); } },
+                    { done: hasSharedLink, label: t.shareLink + "vellu.cc/" + salonData.id, action: copyLink },
                   ].map((step, i) => (
                     <div key={i} onClick={step.action} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, cursor: "pointer", marginBottom: 4, background: step.done ? `${accent}08` : "transparent", border: `1px solid ${step.done ? accent + "22" : c.border}` }}>
                       <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${step.done ? accent : c.textMuted}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1168,7 +1177,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               )}
 
-              {/* 4 Stat Cards */}
+              {/* TODAY HERO — the first thing owners want to know */}
               {(() => {
                 const now = new Date();
                 const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
@@ -1179,450 +1188,207 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
+
+                // Daily revenue for sparklines
+                const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                const revByDay = {};
+                appts.forEach(a => {
+                  if (a.status !== "completed") return;
+                  const d = new Date(a.date);
+                  revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+                });
+                const weekDaily = [];
+                for (let i = 6; i >= 0; i--) {
+                  const d = new Date(now); d.setDate(now.getDate() - i);
+                  weekDaily.push(revByDay[dayKey(d)] || 0);
+                }
+                const monthDaily = [];
+                for (let i = 29; i >= 0; i--) {
+                  const d = new Date(now); d.setDate(now.getDate() - i);
+                  monthDaily.push(revByDay[dayKey(d)] || 0);
+                }
+                const sparkline = (data, color) => {
+                  if (!data || data.length < 2) return null;
+                  const W = 200, H = 80, pad = 4;
+                  const max = Math.max(...data, 1);
+                  const min = Math.min(...data);
+                  const range = max - min || 1;
+                  const pts = data.map((v, i) => {
+                    const x = pad + (i / (data.length - 1)) * (W - pad * 2);
+                    const y = pad + (H - pad * 2) - ((v - min) / range) * (H - pad * 2);
+                    return { x, y };
+                  });
+                  // Smooth bezier curve
+                  const linePath = pts.reduce((acc, p, i) => {
+                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                    const prev = pts[i - 1];
+                    const cx1 = prev.x + (p.x - prev.x) / 2;
+                    const cy1 = prev.y;
+                    const cx2 = prev.x + (p.x - prev.x) / 2;
+                    const cy2 = p.y;
+                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                  }, "");
+                  const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${H - pad} L${pts[0].x.toFixed(1)},${H - pad} Z`;
+                  const lastPt = pts[pts.length - 1];
+                  const gradId = "spark-" + color.replace(/[^a-z0-9]/gi, "") + "-" + data.length;
+                  return (
+                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                      <defs>
+                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                          <stop offset="100%" stopColor={color} stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={areaPath} fill={`url(#${gradId})`} />
+                      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                      <circle cx={lastPt.x} cy={lastPt.y} r="3" fill={color} vectorEffect="non-scaling-stroke" />
+                    </svg>
+                  );
+                };
+
+                // Rating breakdown for the rating card
+                const ratingDist = [5, 4, 3, 2, 1].map(r => {
+                  const count = (salonData.reviews || []).filter(rv => rv.rating === r).length;
+                  const pct = salonData.reviews?.length > 0 ? (count / salonData.reviews.length) * 100 : 0;
+                  return { rating: r, count, pct };
+                });
+                const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
                 return (
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 22 }}>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.today}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>{todayAppts.length}</div>
-                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{t.appts}</div>
+                  <>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 22 }}>
+                    {/* Left: Today's appointments — the hero */}
+                    <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 22, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
+                        <div>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.today}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.15 }}>
+                            {todayAppts.length} {todayAppts.length === 1 ? (lang === "nl" ? "afspraak" : "appointment") : t.appts.toLowerCase()}
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, textTransform: "capitalize" }}>{todayDate}</div>
+                        </div>
+                        {todayAppts.length > 0 && (
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : "Expected"}</div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>€{todayRevenue.toFixed(0)}</div>
+                          </div>
+                        )}
+                      </div>
+                      {todayAppts.length === 0 ? (
+                        <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative" }}>
+                          <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
+                          <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
+                          <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : "View agenda →"}</div>
+                        </div>
+                      ) : (
+                        <div style={{ position: "relative" }}>
+                          {todayAppts.slice(0, 3).map(a => <ApptCard key={a.id} a={a} />)}
+                          {todayAppts.length > 3 && (
+                            <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
+                              {lang === "nl" ? `+ ${todayAppts.length - 3} meer · Bekijk alles →` : `+ ${todayAppts.length - 3} more · View all →`}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.weeklyRevenue}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>€{weekRevenue.toFixed(0)}</div>
-                      {weekChange !== 0 && <div style={{ fontSize: 10, color: weekChange > 0 ? "#86efac" : "#f87171", marginTop: 4 }}>{weekChange > 0 ? "+" : ""}{weekChange}% {t.vsLastWeek}</div>}
-                    </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.monthlyRevenue}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>€{monthRevenue.toFixed(0)}</div>
-                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{t.total.toLowerCase()}</div>
-                    </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.avgRating}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: c.text }}>{avgRating} ★</div>
-                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{salonData.reviews?.length || 0} {t.reviews?.toLowerCase?.() || "reviews"}</div>
+
+                    {/* Right: 3 KPI cards — consistent structure, equal heights */}
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
+                      {/* WEEK REVENUE */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.weeklyRevenue}</div>
+                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : "7 days"}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                          {weekChange !== 0 && (
+                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                              {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
+                          {sparkline(weekDaily, accent)}
+                        </div>
+                      </div>
+
+                      {/* MONTH REVENUE */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
+                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
+                          {sparkline(monthDaily, accent)}
+                        </div>
+                      </div>
+
+                      {/* RATING — breakdown bars as the visual */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
+                          <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{salonData.reviews?.length || 0} {t.reviews?.toLowerCase?.() || "reviews"}</span>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, display: "flex", alignItems: "center", gap: 6, lineHeight: 1, marginTop: 6 }}>
+                          {avgRating}
+                          <svg width={18} height={18} viewBox="0 0 20 20" fill={accent}>
+                            <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                          {salonData.reviews?.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                              {ratingDist.map(r => (
+                                <div key={r.rating} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, color: c.textMuted }}>
+                                  <span style={{ width: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.rating}</span>
+                                  <div style={{ flex: 1, height: 5, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${r.pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                                  </div>
+                                  <span style={{ width: 14, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "8px 0" }}>{lang === "nl" ? "Nog geen reviews" : "No reviews yet"}</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  </>
                 );
               })()}
 
-              {/* Quick Actions */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 22 }}>
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", borderStyle: "dashed", borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+              {/* Quick Actions — primary first, rest ghost */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
+                <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
-                  <NavIcon name="plus" size={14} color={accent} /> {t.addAppointment}
+                  <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
+                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
                   <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
                 </button>
+                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: copied ? c.success : undefined, borderColor: copied ? `${c.success}55` : undefined }} onClick={copyLink}>
+                  <NavIcon name="link" size={14} color={copied ? c.success : c.textSub} /> {copied ? t.copied : t.copyLink}
+                </button>
                 {appts.length > 0 && (
-                  <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", borderColor: `${accent}22`, color: accent, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
+                  <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
                     const upcoming = appts.filter(a => a.status === "confirmed");
                     if (upcoming.length === 0) return;
                     exportCalendar(upcoming);
                   }}>
-                    <NavIcon name="download" size={14} color={accent} /> {t.exportCalendar}
+                    <NavIcon name="download" size={14} color={c.textSub} /> {t.exportCalendar}
                   </button>
                 )}
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: copied ? "#86efac" : undefined, borderColor: copied ? "rgba(134,239,172,0.3)" : undefined }} onClick={copyLink}>
-                  <NavIcon name="link" size={14} color={copied ? "#86efac" : c.textSub} /> {copied ? t.copied : t.copyLink}
-                </button>
               </div>
 
               {/* Revenue Chart + Popular Services */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22 }}>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                    <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
-                    <span style={{ fontSize: 10, color: accent, cursor: "pointer" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
-                  </div>
-                  {(() => {
-                    const weeks = [];
-                    const now = new Date();
-                    for (let w = 7; w >= 0; w--) {
-                      const weekStart = new Date(now);
-                      weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
-                      weekStart.setHours(0,0,0,0);
-                      const weekEnd = new Date(weekStart);
-                      weekEnd.setDate(weekStart.getDate() + 7);
-                      const rev = appts
-                        .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
-                        .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                      const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
-                      weeks.push({ label, revenue: rev });
-                    }
-                    const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
-                    const chartH = 100;
-                    const barW = 100 / weeks.length;
-                    return (
-                      <div>
-                        <div style={{ position: "relative", height: chartH + 30 }}>
-                          <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
-                            {weeks.map((w, i) => {
-                              const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
-                              const x = i * barW + barW * 0.15;
-                              const bw = barW * 0.7;
-                              return <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" fill={i === weeks.length - 1 ? accent : `${accent}66`} />;
-                            })}
-                          </svg>
-                          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
-                            {weeks.map((w, i) => <div key={i} style={{ fontSize: 10, color: c.textMuted, textAlign: "center", flex: 1 }}>{w.label}</div>)}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
-                          {weeks.map((w, i) => <div key={i} style={{ fontSize: 10, color: i === weeks.length - 1 ? accent : c.textLabel, textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>{w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}</div>)}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
-                  <SL>{t.popularServices}</SL>
-                  {(() => {
-                    const svcCount = {};
-                    appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
-                    const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                    if (sorted.length === 0) return <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
-                    const max = sorted[0][1];
-                    return sorted.map(([name, count]) => (
-                      <div key={name} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
-                          <span style={{ fontSize: 11, color: c.textLabel }}>{count} {t.bookings}</span>
-                        </div>
-                        <div style={{ height: 4, borderRadius: 4, background: c.bgCardHover }}>
-                          <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              </div>
-
-              <SL>{t.todayAppts}</SL>
-              {todayAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
-                : todayAppts.map(a => <ApptCard key={a.id} a={a} />)
-              }
-            </div>
-          )}
-
-          {/* AGENDA */}
-          {view === "agenda" && (
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
-              {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
-              
-              {/* View mode toggle + navigation */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {["week", "month", "year"].map(mode => (
-                    <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
-                      padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      letterSpacing: "0.04em", transition: "all 0.2s",
-                      background: calViewMode === mode ? `${accent}18` : "transparent",
-                      color: calViewMode === mode ? accent : c.textSub,
-                      border: `1px solid ${calViewMode === mode ? `${accent}44` : c.inputBorder}`
-                    }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  {calWeekOffset !== 0 && (
-                    <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
-                      padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      background: `${accent}12`, color: accent, border: `1px solid ${accent}33`
-                    }}>{t.backToToday}</div>
-                  )}
-                  <div onClick={() => setCalWeekOffset(o => o - 1)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid " + c.inputBorder, color: c.textSub, fontSize: 14 }}>←</div>
-                  <div onClick={() => setCalWeekOffset(o => o + 1)} style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: "1px solid " + c.inputBorder, color: c.textSub, fontSize: 14 }}>→</div>
-                </div>
-              </div>
-
-              {/* Staff filter */}
-              {(salonData.staff || []).length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-                  <div onClick={() => setAgendaStaff(null)} style={{
-                    padding: "5px 12px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                    letterSpacing: "0.04em", transition: "all 0.2s",
-                    background: !agendaStaff ? accent : "transparent",
-                    color: !agendaStaff ? c.btnOnDark : c.textSub,
-                    border: `1px solid ${!agendaStaff ? accent : c.inputBorder}`
-                  }}>{t.everyone}</div>
-                  {(salonData.staff || []).map(m => (
-                    <div key={m.id} onClick={() => setAgendaStaff(agendaStaff === m.id ? null : m.id)} style={{
-                      padding: "5px 12px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      letterSpacing: "0.04em", transition: "all 0.2s",
-                      background: agendaStaff === m.id ? accent : "transparent",
-                      color: agendaStaff === m.id ? c.btnOnDark : c.textSub,
-                      border: `1px solid ${agendaStaff === m.id ? accent : c.inputBorder}`
-                    }}>{m.name}</div>
-                  ))}
-                </div>
-              )}
-
-              {/* WEEK VIEW */}
-              {calViewMode === "week" && (<>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
+                {/* Revenue area chart */}
                 {(() => {
-                  const base = getToday();
-                  base.setDate(base.getDate() + calWeekOffset * 7);
-                  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d; });
-                  const MON = lang === "nl" ? MON_NL : MON_EN;
-                  const firstDay = weekDays[0];
-                  const lastDay = weekDays[weekDays.length - 1];
-                  const monthLabel = firstDay.getMonth() === lastDay.getMonth()
-                    ? `${MON[firstDay.getMonth()]} ${firstDay.getFullYear()}`
-                    : `${MON[firstDay.getMonth()]} — ${MON[lastDay.getMonth()]} ${lastDay.getFullYear()}`;
-                  return (<>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: c.textSub, marginBottom: 10, textTransform: "capitalize" }}>{monthLabel}</div>
-                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
-                      {weekDays.map((d, i) => {
-                        const ds = fmt(d); const isSel = calDate === ds;
-                        const isToday = ds === fmt(getToday());
-                        const has = filteredAgendaAppts.filter(a => a.date === ds).length > 0;
-                        return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }} style={isToday && !isSel ? { border: `1px solid ${accent}66` } : undefined}>
-                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
-                            <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                            {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>);
-                })()}
-              </>)}
-
-              {/* MONTH VIEW */}
-              {calViewMode === "month" && (() => {
-                const base = getToday();
-                const targetMonth = new Date(base.getFullYear(), base.getMonth() + calWeekOffset, 1);
-                const year = targetMonth.getFullYear();
-                const month = targetMonth.getMonth();
-                const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
-                const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-                const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
-                const firstOfMonth = new Date(year, month, 1);
-                const lastOfMonth = new Date(year, month + 1, 0);
-                const startDay = (firstOfMonth.getDay() + 6) % 7; // Monday = 0
-                const daysInMonth = lastOfMonth.getDate();
-                const cells = [];
-                for (let i = 0; i < startDay; i++) cells.push(null);
-                for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
-                return (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 12, textAlign: "center" }}>{MON_FULL[month]} {year}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-                      {DAY_HEADERS.map(dh => (
-                        <div key={dh} style={{ textAlign: "center", fontSize: 10, fontWeight: 600, color: c.textLabel, padding: "4px 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>{dh}</div>
-                      ))}
-                      {cells.map((day, i) => {
-                        if (day === null) return <div key={`e${i}`} />;
-                        const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                        const isSel = calDate === ds;
-                        const isToday = ds === fmt(getToday());
-                        const count = filteredAgendaAppts.filter(a => a.date === ds).length;
-                        return (
-                          <div key={ds} onClick={() => { 
-                            setCalDate(ds); 
-                            setCalViewMode("week"); 
-                            // Calculate correct week offset so the clicked date is visible
-                            const clickedDate = new Date(ds);
-                            const today = getToday();
-                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
-                            setCalWeekOffset(Math.floor(diffDays / 7));
-                          }} style={{
-                            textAlign: "center", padding: "8px 2px", borderRadius: 10, cursor: "pointer", position: "relative",
-                            background: isSel ? accent : isToday ? `${accent}12` : "transparent",
-                            border: `1px solid ${isSel ? accent : isToday ? `${accent}44` : "transparent"}`,
-                            transition: "all 0.15s"
-                          }}>
-                            <div style={{ fontSize: 12, fontWeight: isSel || isToday ? 600 : 400, color: isSel ? c.btnOnDark : c.text }}>{day}</div>
-                            {count > 0 && (
-                              <div style={{ fontSize: 10, fontWeight: 700, color: isSel ? c.btnOnDark : accent, marginTop: 2 }}>{count}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* YEAR VIEW */}
-              {calViewMode === "year" && (() => {
-                const baseYear = getToday().getFullYear() + calWeekOffset;
-                const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
-                const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-                const MON_LABELS = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
-                const currentMonth = getToday().getMonth();
-                const currentYear = getToday().getFullYear();
-                return (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 12, textAlign: "center" }}>{baseYear}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                      {Array.from({ length: 12 }, (_, mi) => {
-                        const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
-                        const monthApptCount = filteredAgendaAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
-                        const isCurrent = baseYear === currentYear && mi === currentMonth;
-                        return (
-                          <div key={mi} onClick={() => {
-                            setCalViewMode("month");
-                            const now = getToday();
-                            setCalWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
-                          }} style={{
-                            textAlign: "center", padding: "18px 10px", borderRadius: 10, cursor: "pointer",
-                            background: isCurrent ? accent : "transparent",
-                            border: `1px solid ${isCurrent ? accent : "transparent"}`,
-                            transition: "all 0.15s"
-                          }}>
-                            <div style={{ fontSize: 13, fontWeight: isCurrent ? 600 : 400, color: isCurrent ? c.btnOnDark : c.text }}>{MON_LABELS[mi]}</div>
-                            {monthApptCount > 0 && (
-                              <div style={{ fontSize: 10, fontWeight: 700, color: isCurrent ? c.btnOnDark : accent, marginTop: 4 }}>{monthApptCount} {t.appts}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {calViewMode !== "year" && (<>
-              {calAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
-                : calAppts.map(a => <ApptCard key={a.id} a={a} />)
-              }
-              {calAppts.length > 0 && (
-                <button className="btn-ghost" style={{ width: "100%", marginTop: 12, fontSize: 10, borderColor: `${accent}22`, color: accent }} onClick={() => exportCalendar(calAppts)}>
-                  <NavIcon name="calendar" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en) naar agenda` : `Export ${calAppts.length} appointment(s) to calendar`}
-                </button>
-              )}
-              </>)}
-            </div>
-          )}
-
-          {/* FACTUREN */}
-          {view === "facturen" && (
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
-              {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
-
-              {completedAppts.length > 0 && (<>
-                {/* Search and filter bar */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  <input className="input-field" placeholder={t.searchPlaceholder} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
-                    style={{ flex: 1, minWidth: 180, fontSize: 12, padding: "10px 14px" }} />
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {[["all", lang === "nl" ? "Alles" : "All"], ["unsent", lang === "nl" ? "Te versturen" : "Unsent"], ["sent", lang === "nl" ? "Verstuurd" : "Sent"]].map(([key, label]) => (
-                      <div key={key} onClick={() => setInvoiceFilter(key)} style={{
-                        padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 500, transition: "all 0.2s",
-                        background: invoiceFilter === key ? `${accent}18` : "transparent",
-                        color: invoiceFilter === key ? accent : c.textSub,
-                        border: `1px solid ${invoiceFilter === key ? `${accent}44` : c.inputBorder}`
-                      }}>{label}</div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Summary card */}
-                <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-                  <div className="stat-card" style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{completedAppts.length} {t.treatments}</div>
-                  </div>
-                  <div className="stat-card" style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: "#f59e0b" }}>{completedAppts.filter(a => !a.invoice_sent).length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "facturen" : "invoices"}</div>
-                  </div>
-                </div>
-              </>)}
-
-              {/* Invoice list */}
-              {(() => {
-                const searchLower = invoiceSearch.toLowerCase();
-                const filtered = completedAppts.filter(a => {
-                  if (invoiceFilter === "sent" && !a.invoice_sent) return false;
-                  if (invoiceFilter === "unsent" && a.invoice_sent) return false;
-                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
-                  return true;
-                });
-                if (completedAppts.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noCompleted}</div>;
-                if (filtered.length === 0) return <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Geen resultaten" : "No results"}</div>;
-                const visible = invoicesExpanded ? filtered : filtered.slice(0, 10);
-                return <>
-                  {visible.map(a => (
-                    <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
-                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.date} · {a.service_name}</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
-                        <div style={{ marginTop: 5 }}>
-                          {a.invoice_sent
-                            ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
-                            : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.send}</button>
-                          }
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {filtered.length > 10 && (
-                    <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
-                      <button className="btn-ghost" onClick={() => setInvoicesExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
-                        {invoicesExpanded ? t.showLess : `${t.showMore} (${filtered.length - 10})`}
-                      </button>
-                    </div>
-                  )}
-                </>;
-              })()}
-            </div>
-          )}
-
-          {/* ANALYTICS */}
-          {view === "analytics" && (
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
-              {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
-
-              {/* Key metrics */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                {(() => {
-                  const now = new Date();
-                  const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-                  const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
-                  const weekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                  const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                  const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
-                  return <>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.weeklyRevenue}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>€{weekRevenue.toFixed(0)}</div>
-                    </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>€{monthRevenue.toFixed(0)}</div>
-                    </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalAppts}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, marginTop: 4 }}>{appts.length}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{completedAppts.length} {t.treatments}</div>
-                    </div>
-                    <div className="stat-card">
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, marginTop: 4 }}>{avgRating} ★</div>
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{salonData.reviews?.length || 0} {t.reviews.toLowerCase()}</div>
-                    </div>
-                  </>;
-                })()}
-              </div>
-
-              {/* Revenue chart */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <SL style={{ marginBottom: 0 }}>{t.revenueOverTime}</SL>
-                </div>
-                {(() => {
-                  // Build last 8 weeks of revenue data
                   const weeks = [];
                   const now = new Date();
                   for (let w = 7; w >= 0; w--) {
@@ -1637,68 +1403,1100 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                     weeks.push({ label, revenue: rev });
                   }
+                  const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
                   const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
-                  const chartH = 120;
-                  const barW = 100 / weeks.length;
-                  
+                  const avgWeek = total8w / weeks.length;
+                  const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
+                  const nonZero = weeks.filter(w => w.revenue > 0);
+                  const firstHalfAvg = weeks.slice(0, 4).reduce((s, w) => s + w.revenue, 0) / 4;
+                  const secondHalfAvg = weeks.slice(4).reduce((s, w) => s + w.revenue, 0) / 4;
+                  const trendPct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : 0;
+                  // Chart dimensions — viewBox matches intended pixel size to minimize distortion
+                  const W = 560, H = 220, PAD_L = 16, PAD_R = 16, PAD_TOP = 32, PAD_BOT = 30;
+                  const innerW = W - PAD_L - PAD_R;
+                  const innerH = H - PAD_TOP - PAD_BOT;
+                  const pts = weeks.map((w, i) => {
+                    const x = PAD_L + (i / (weeks.length - 1)) * innerW;
+                    const y = PAD_TOP + innerH - (w.revenue / maxRev) * innerH;
+                    return { x, y, ...w };
+                  });
+                  // Smooth curve via cubic bezier
+                  const smoothPath = pts.reduce((acc, p, i) => {
+                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                    const prev = pts[i - 1];
+                    const cx1 = prev.x + (p.x - prev.x) / 2;
+                    const cy1 = prev.y;
+                    const cx2 = prev.x + (p.x - prev.x) / 2;
+                    const cy2 = p.y;
+                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                  }, "");
+                  const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
+                  const gradId = "rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
                   return (
-                    <div>
-                      {/* SVG Bar Chart */}
-                      <div style={{ position: "relative", height: chartH + 30 }}>
-                        <svg width="100%" height={chartH} viewBox={`0 0 100 ${chartH}`} preserveAspectRatio="none" style={{ display: "block" }}>
-                          {weeks.map((w, i) => {
-                            const barH = Math.max((w.revenue / maxRev) * (chartH - 10), 2);
-                            const x = i * barW + barW * 0.15;
-                            const bw = barW * 0.7;
-                            return (
-                              <rect key={i} x={x} y={chartH - barH} width={bw} height={barH} rx="2" 
-                                fill={i === weeks.length - 1 ? accent : `${accent}66`}
-                              />
-                            );
-                          })}
-                        </svg>
-                        {/* Labels */}
-                        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 6 }}>
-                          {weeks.map((w, i) => (
-                            <div key={i} style={{ fontSize: 10, color: c.textMuted, textAlign: "center", flex: 1 }}>
-                              {w.label}
-                            </div>
-                          ))}
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                      {/* Header */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
                         </div>
+                        <span style={{ fontSize: 10, color: accent, cursor: "pointer", padding: "6px 12px", borderRadius: 100, border: `1px solid ${accent}33`, letterSpacing: "0.06em" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
                       </div>
-                      {/* Revenue labels on hover area */}
-                      <div style={{ display: "flex", justifyContent: "space-around", marginTop: 4 }}>
-                        {weeks.map((w, i) => (
-                          <div key={i} style={{ fontSize: 10, color: i === weeks.length - 1 ? accent : c.textLabel, textAlign: "center", flex: 1, fontWeight: i === weeks.length - 1 ? 600 : 400 }}>
-                            {w.revenue > 0 ? `€${w.revenue.toFixed(0)}` : "—"}
+                      {/* Chart area — flex grows to fill card */}
+                      <div style={{ flex: 1, display: "flex", alignItems: "stretch", marginTop: 14, minHeight: 180 }}>
+                        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
+                          <defs>
+                            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
+                              <stop offset="100%" stopColor={accent} stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          {/* Horizontal gridlines — subtle */}
+                          {[0.25, 0.5, 0.75].map(pct => (
+                            <line key={pct} x1={PAD_L} y1={PAD_TOP + innerH * pct} x2={W - PAD_R} y2={PAD_TOP + innerH * pct} stroke={c.border} strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
+                          ))}
+                          {/* Baseline */}
+                          <line x1={PAD_L} y1={PAD_TOP + innerH} x2={W - PAD_R} y2={PAD_TOP + innerH} stroke={c.border} strokeWidth="1" />
+                          {/* Area fill */}
+                          {maxRev > 0 && <path d={areaPath} fill={`url(#${gradId})`} />}
+                          {/* Smooth line */}
+                          {maxRev > 0 && <path d={smoothPath} fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                          {/* Peak label — only if there's actual data */}
+                          {pts[peakIdx].revenue > 0 && (
+                            <g>
+                              <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
+                              <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
+                                €{pts[peakIdx].revenue.toFixed(0)}
+                              </text>
+                            </g>
+                          )}
+                          {/* Data dots — current week bigger */}
+                          {pts.map((p, i) => (
+                            <g key={i}>
+                              <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
+                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                              </circle>
+                              {i === pts.length - 1 && (
+                                <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
+                                  <animate attributeName="r" values="8;14;8" dur="2s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.25;0;0.25" dur="2s" repeatCount="indefinite" />
+                                </circle>
+                              )}
+                            </g>
+                          ))}
+                          {/* X axis labels — first, middle, last */}
+                          {[0, Math.floor(pts.length / 2), pts.length - 1].map(i => (
+                            <text key={i} x={pts[i].x} y={H - 10} fontSize="11" fill={c.textMuted} textAnchor={i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"} fontFamily="'Jost',sans-serif">
+                              {pts[i].label}
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+                      {/* Footer stats row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : "Trend"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text }}>
+                            {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "—"} {Math.abs(trendPct)}%
                           </div>
-                        ))}
+                        </div>
                       </div>
                     </div>
                   );
                 })()}
+
+                {/* Popular services — thumbnails + revenue */}
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
+                    <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Top 5" : "Top 5"}</div>
+                  </div>
+                  {(() => {
+                    const svcStats = {};
+                    appts.forEach(a => {
+                      if (a.status !== "completed" && a.status !== "confirmed") return;
+                      const n = a.service_name?.split(" — ")[0] || "?";
+                      if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
+                      svcStats[n].count += 1;
+                      svcStats[n].revenue += parseFloat(a.service_price || 0);
+                    });
+                    const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                    if (sorted.length === 0) return (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
+                        <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
+                        <div style={{ fontSize: 12 }}>{t.noAppts}</div>
+                      </div>
+                    );
+                    const max = sorted[0][1].count;
+                    return (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                        {sorted.map(([name, stats], idx) => {
+                          const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                          const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
+                          return (
+                            <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              {thumb ? (
+                                <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
+                              ) : (
+                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <NavIcon name="scissors" size={16} color={c.textMuted} />
+                                </div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                                  </div>
+                                  <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
-              {/* Popular services */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.popularServices}</SL>
-                {(() => {
-                  const svcCount = {};
-                  appts.forEach(a => { const n = a.service_name?.split(" — ")[0] || "?"; svcCount[n] = (svcCount[n] || 0) + 1; });
-                  const sorted = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                  if (sorted.length === 0) return <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noAppts}</div>;
-                  const max = sorted[0][1];
-                  return sorted.map(([name, count]) => (
-                    <div key={name} style={{ marginBottom: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, fontWeight: 500 }}>{name}</span>
-                        <span style={{ fontSize: 11, color: c.textLabel }}>{count} {t.bookings}</span>
+            </div>
+          )}
+
+          {/* AGENDA */}
+          {view === "agenda" && (() => {
+            const todayDate = getToday();
+            const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+            const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
+            const MON_SHORT = lang === "nl" ? MON_NL : MON_EN;
+
+            // Compute the current period's appointments for the summary bar
+            let periodAppts = [];
+            let periodLabel = "";
+            if (calViewMode === "week") {
+              const base = new Date(todayDate);
+              base.setDate(base.getDate() + calWeekOffset * 7);
+              const weekStart = new Date(base);
+              weekStart.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekStart.getDate() + 6);
+              const ws = fmt(weekStart);
+              const we = fmt(weekEnd);
+              periodAppts = filteredAgendaAppts.filter(a => a.date >= ws && a.date <= we);
+              const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+              periodLabel = sameMonth
+                ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
+                : `${weekStart.getDate()} ${MON_SHORT[weekStart.getMonth()]} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
+            } else if (calViewMode === "month") {
+              const target = new Date(todayDate.getFullYear(), todayDate.getMonth() + calWeekOffset, 1);
+              const prefix = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}`;
+              periodAppts = filteredAgendaAppts.filter(a => a.date?.startsWith(prefix));
+              periodLabel = `${MON_FULL[target.getMonth()]} ${target.getFullYear()}`;
+            } else {
+              const yr = todayDate.getFullYear() + calWeekOffset;
+              periodAppts = filteredAgendaAppts.filter(a => a.date?.startsWith(String(yr)));
+              periodLabel = String(yr);
+            }
+            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const periodConfirmed = periodAppts.filter(a => a.status === "confirmed").length;
+            const periodDone = periodAppts.filter(a => a.status === "completed").length;
+
+            return (
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+              {isMobile && <PTitle sub={t.manageAppts}>{t.agenda}</PTitle>}
+
+              {/* Top toolbar — view toggle (left) + period navigator (right) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  {["week", "month", "year"].map(mode => (
+                    <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
+                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                      background: calViewMode === mode ? accent : "transparent",
+                      color: calViewMode === mode ? c.btnOnDark : c.textSub,
+                    }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {calWeekOffset !== 0 && (
+                    <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
+                      padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
+                    }}>{t.backToToday}</div>
+                  )}
+                  <div onClick={() => setCalWeekOffset(o => o - 1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Vorige" : "Previous"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalWeekOffset(o => o - 1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
+                  <div onClick={() => setCalWeekOffset(o => o + 1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Volgende" : "Next"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalWeekOffset(o => o + 1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Staff filter */}
+              {(salonData.staff || []).length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  <div onClick={() => setAgendaStaff(null)} style={{
+                    padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                    background: !agendaStaff ? accent : "transparent",
+                    color: !agendaStaff ? c.btnOnDark : c.textSub,
+                    border: `1px solid ${!agendaStaff ? accent : c.inputBorder}`
+                  }}>{t.everyone}</div>
+                  {(salonData.staff || []).map(m => (
+                    <div key={m.id} onClick={() => setAgendaStaff(agendaStaff === m.id ? null : m.id)} style={{
+                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                      background: agendaStaff === m.id ? accent : "transparent",
+                      color: agendaStaff === m.id ? c.btnOnDark : c.textSub,
+                      border: `1px solid ${agendaStaff === m.id ? accent : c.inputBorder}`
+                    }}>{m.name}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Period summary strip */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal" : "Total"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Bevestigd" : "Confirmed"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodConfirmed}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : "Completed"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodDone}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>€{periodRevenue.toFixed(0)}</div>
+                </div>
+              </div>
+
+              {/* WEEK VIEW — calendar grid with appointment previews */}
+              {calViewMode === "week" && (() => {
+                const base = getToday();
+                base.setDate(base.getDate() + calWeekOffset * 7);
+                // Align to Monday as week start
+                const dayOfWeek = (base.getDay() + 6) % 7; // 0 = Monday
+                const weekStart = new Date(base);
+                weekStart.setDate(base.getDate() - dayOfWeek);
+                const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
+                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+                return (
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    {/* Day headers */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                      {weekDays.map((d, i) => {
+                        const ds = fmt(d);
+                        const isToday = ds === fmt(getToday());
+                        return (
+                          <div key={i} style={{
+                            textAlign: "center", padding: "10px 4px",
+                            borderRight: i < 6 ? `1px solid ${c.border}` : "none",
+                            background: isToday ? `${accent}10` : "transparent"
+                          }}>
+                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
+                            <div style={{
+                              fontSize: 13, fontWeight: isToday ? 700 : 500,
+                              color: isToday ? c.btnOnDark : c.text,
+                              width: isToday ? 24 : "auto", height: isToday ? 24 : "auto",
+                              borderRadius: isToday ? "50%" : 0,
+                              background: isToday ? accent : "transparent",
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              minWidth: isToday ? 24 : "auto"
+                            }}>{d.getDate()}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Day cells with appointments */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                      {weekDays.map((d, i) => {
+                        const ds = fmt(d);
+                        const isSel = calDate === ds;
+                        const dayAppts = filteredAgendaAppts
+                          .filter(a => a.date === ds)
+                          .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                        const visibleAppts = dayAppts.slice(0, 5);
+                        const moreCount = dayAppts.length - visibleAppts.length;
+                        return (
+                          <div key={i} role="button" tabIndex={0}
+                            onClick={() => setCalDate(ds)}
+                            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
+                            style={{
+                              minHeight: 180, padding: "8px 8px 10px", cursor: "pointer",
+                              background: isSel ? `${accent}22` : "transparent",
+                              borderRight: i < 6 ? `1px solid ${c.border}` : "none",
+                              transition: "background 0.15s",
+                              display: "flex", flexDirection: "column", gap: 4
+                            }}>
+                            {dayAppts.length === 0 ? (
+                              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3 }}>
+                                <div style={{ fontSize: 11, color: c.textMuted }}>—</div>
+                              </div>
+                            ) : (
+                              <>
+                                {visibleAppts.map((a, ai) => {
+                                  const statusColor = a.status === "completed" ? c.success : a.status === "cancelled" || a.status === "no_show" ? c.danger : accent;
+                                  const isCancelled = a.status === "cancelled" || a.status === "no_show";
+                                  return (
+                                    <div key={ai} style={{
+                                      padding: "4px 6px", borderRadius: 4,
+                                      background: `${statusColor}14`,
+                                      borderLeft: `2.5px solid ${statusColor}`,
+                                      overflow: "hidden",
+                                      opacity: isCancelled ? 0.5 : 1
+                                    }}>
+                                      <div style={{
+                                        fontSize: 10, fontWeight: 600, color: statusColor,
+                                        fontVariantNumeric: "tabular-nums",
+                                        textDecoration: isCancelled ? "line-through" : "none"
+                                      }}>{a.time}</div>
+                                      <div style={{
+                                        fontSize: 10, color: c.textSub,
+                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                        textDecoration: isCancelled ? "line-through" : "none"
+                                      }}>{a.client_name?.split(" ")[0] || ""}</div>
+                                      <div style={{
+                                        fontSize: 9, color: c.textMuted,
+                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                                      }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>
+                                    </div>
+                                  );
+                                })}
+                                {moreCount > 0 && (
+                                  <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center", padding: "2px 0" }}>
+                                    +{moreCount} {lang === "nl" ? "meer" : "more"}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* MONTH VIEW — proper calendar grid with lines */}
+              {calViewMode === "month" && (() => {
+                const base = getToday();
+                const targetMonth = new Date(base.getFullYear(), base.getMonth() + calWeekOffset, 1);
+                const year = targetMonth.getFullYear();
+                const month = targetMonth.getMonth();
+                const firstOfMonth = new Date(year, month, 1);
+                const lastOfMonth = new Date(year, month + 1, 0);
+                const startDay = (firstOfMonth.getDay() + 6) % 7; // Monday = 0
+                const daysInMonth = lastOfMonth.getDate();
+                // Build cells including leading/trailing days from prev/next month for a full 6-row grid
+                const cells = [];
+                // Leading days from previous month
+                const prevMonthLast = new Date(year, month, 0).getDate();
+                for (let i = startDay - 1; i >= 0; i--) {
+                  const d = prevMonthLast - i;
+                  const prevMonth = month === 0 ? 11 : month - 1;
+                  const prevYear = month === 0 ? year - 1 : year;
+                  cells.push({ day: d, month: prevMonth, year: prevYear, muted: true });
+                }
+                // Current month days
+                for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, month, year, muted: false });
+                // Trailing days from next month — fill to complete rows
+                const totalCells = Math.ceil(cells.length / 7) * 7;
+                const needed = totalCells - cells.length;
+                for (let d = 1; d <= needed; d++) {
+                  const nextMonth = month === 11 ? 0 : month + 1;
+                  const nextYear = month === 11 ? year + 1 : year;
+                  cells.push({ day: d, month: nextMonth, year: nextYear, muted: true });
+                }
+                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+                const rows = cells.length / 7;
+                return (
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    {/* Day headers */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                      {DAY_HEADERS.map((dh, i) => (
+                        <div key={dh} style={{
+                          textAlign: "center", fontSize: 10, fontWeight: 600, color: c.textLabel,
+                          padding: "10px 0", letterSpacing: "0.12em", textTransform: "uppercase",
+                          borderRight: i < 6 ? `1px solid ${c.border}` : "none"
+                        }}>{dh}</div>
+                      ))}
+                    </div>
+                    {/* Calendar grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                      {cells.map((cell, i) => {
+                        const ds = `${cell.year}-${String(cell.month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
+                        const isSel = calDate === ds;
+                        const isToday = ds === fmt(getToday());
+                        const count = filteredAgendaAppts.filter(a => a.date === ds).length;
+                        const dayAppts = filteredAgendaAppts.filter(a => a.date === ds).slice(0, 3);
+                        const col = i % 7;
+                        const row = Math.floor(i / 7);
+                        return (
+                          <div key={i} onClick={() => {
+                            setCalDate(ds);
+                            setCalViewMode("week");
+                            const clickedDate = new Date(ds);
+                            const today = getToday();
+                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
+                            setCalWeekOffset(Math.floor(diffDays / 7));
+                          }} style={{
+                            minHeight: 92, padding: "8px 8px 6px", cursor: "pointer", position: "relative",
+                            background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
+                            borderRight: col < 6 ? `1px solid ${c.border}` : "none",
+                            borderBottom: row < rows - 1 ? `1px solid ${c.border}` : "none",
+                            transition: "background 0.15s",
+                            opacity: cell.muted ? 0.35 : 1,
+                            display: "flex", flexDirection: "column", gap: 4
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{
+                                fontSize: 12, fontWeight: isToday ? 700 : 500,
+                                color: isToday ? accent : isSel ? accent : c.text,
+                                width: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
+                                borderRadius: isToday ? "50%" : 0,
+                                background: isToday ? accent : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                ...(isToday ? { color: c.btnOnDark, fontSize: 11 } : {})
+                              }}>{cell.day}</div>
+                              {count > 0 && !cell.muted && (
+                                <div style={{
+                                  fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100,
+                                  background: `${accent}22`, color: accent
+                                }}>{count}</div>
+                              )}
+                            </div>
+                            {/* Mini appt previews */}
+                            {!cell.muted && dayAppts.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+                                {dayAppts.map((a, ai) => (
+                                  <div key={ai} style={{
+                                    fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                                    background: `${accent}1a`, color: c.textSub,
+                                    borderLeft: `2px solid ${accent}`,
+                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                                  }}>
+                                    {a.time} {a.client_name?.split(" ")[0] || ""}
+                                  </div>
+                                ))}
+                                {count > 3 && (
+                                  <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* YEAR VIEW */}
+              {calViewMode === "year" && (() => {
+                const baseYear = getToday().getFullYear() + calWeekOffset;
+                const currentMonth = getToday().getMonth();
+                const currentYear = getToday().getFullYear();
+                const monthCounts = Array.from({ length: 12 }, (_, mi) => {
+                  const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
+                  return filteredAgendaAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
+                });
+                const maxMonthCount = Math.max(...monthCounts, 1);
+                return (
+                  <div style={{ marginBottom: 20, display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 10 }}>
+                    {MON_FULL.map((monthName, mi) => {
+                      const isCurrent = baseYear === currentYear && mi === currentMonth;
+                      const count = monthCounts[mi];
+                      const pct = (count / maxMonthCount) * 100;
+                      return (
+                        <div key={mi} onClick={() => {
+                          setCalViewMode("month");
+                          const now = getToday();
+                          setCalWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
+                        }} style={{
+                          padding: "16px 18px", borderRadius: 14, cursor: "pointer",
+                          background: isCurrent ? `${accent}12` : c.bgCard,
+                          border: `1px solid ${isCurrent ? `${accent}55` : c.border}`,
+                          transition: "all 0.2s",
+                          display: "flex", flexDirection: "column", gap: 10
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, color: c.text }}>{monthName}</div>
+                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : "Now"}</div>}
+                          </div>
+                          <div>
+                            <div style={{ height: 4, borderRadius: 3, background: c.inputBg, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: count > 0 ? c.textSub : c.textMuted, marginTop: 6 }}>
+                              {count > 0 ? `${count} ${t.appts?.toLowerCase() || "afspraken"}` : (lang === "nl" ? "Geen afspraken" : "No appointments")}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Appointments list (week/month views) */}
+              {calViewMode !== "year" && (<>
+                {calAppts.length === 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={36} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>
+                      {calDate === fmt(getToday()) ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}
+                    </div>
+                    <button className="btn-ghost" style={{ padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 8 }}
+                      onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: calDate, time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                      <NavIcon name="plus" size={13} color="currentColor" /> {t.addAppointment}
+                    </button>
+                  </div>
+                ) : (
+                  calAppts.map(a => <ApptCard key={a.id} a={a} />)
+                )}
+                {calAppts.length > 0 && (
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
+                    <NavIcon name="download" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en)` : `Export ${calAppts.length} appointment(s)`}
+                  </button>
+                )}
+              </>)}
+            </div>
+            );
+          })()}
+
+          {/* FACTUREN */}
+          {view === "facturen" && (() => {
+            const unsent = completedAppts.filter(a => !a.invoice_sent);
+            const sent = completedAppts.filter(a => a.invoice_sent);
+            const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            const thisMonthAppts = completedAppts.filter(a => a.date?.startsWith(thisMonthPrefix));
+            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+
+            const formatDate = (ds) => {
+              if (!ds) return "";
+              const d = new Date(ds);
+              const MON = lang === "nl" ? MON_NL : MON_EN;
+              return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+            };
+            const initials = (name) => {
+              if (!name) return "?";
+              const parts = name.trim().split(/\s+/);
+              return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+            };
+
+            return (
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+              {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
+
+              {completedAppts.length > 0 && (<>
+                {/* Stat cards */}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{thisMonthTotal.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>€{unsentTotal.toFixed(0)}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
+                  </div>
+                </div>
+
+                {/* Search + filter toolbar */}
+                <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                  <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+                    <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: c.textMuted, pointerEvents: "none", display: "flex" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                    </div>
+                    <input className="input-field" placeholder={t.searchPlaceholder} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
+                      style={{ width: "100%", fontSize: 12, padding: "11px 14px 11px 38px" }} />
+                    {invoiceSearch && (
+                      <button onClick={() => setInvoiceSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%", background: c.inputBorder, border: "none", color: c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                    {[
+                      ["all", lang === "nl" ? "Alles" : "All", completedAppts.length],
+                      ["unsent", lang === "nl" ? "Open" : "Unsent", unsent.length],
+                      ["sent", lang === "nl" ? "Verstuurd" : "Sent", sent.length]
+                    ].map(([key, label, count]) => (
+                      <div key={key} onClick={() => setInvoiceFilter(key)} style={{
+                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                        background: invoiceFilter === key ? accent : "transparent",
+                        color: invoiceFilter === key ? c.btnOnDark : c.textSub,
+                        display: "inline-flex", alignItems: "center", gap: 6
+                      }}>
+                        {label}
+                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700 }}>{count}</span>
                       </div>
-                      <div style={{ height: 4, borderRadius: 4, background: c.bgCardHover }}>
-                        <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(count / max) * 100}%`, transition: "width 0.4s" }} />
+                    ))}
+                  </div>
+                </div>
+              </>)}
+
+              {/* Invoice list */}
+              {(() => {
+                const searchLower = invoiceSearch.toLowerCase();
+                const filtered = completedAppts.filter(a => {
+                  if (invoiceFilter === "sent" && !a.invoice_sent) return false;
+                  if (invoiceFilter === "unsent" && a.invoice_sent) return false;
+                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
+                  return true;
+                });
+                if (completedAppts.length === 0) return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{t.noCompleted}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : "Invoices appear here once you mark an appointment as completed."}</div>
+                  </div>
+                );
+                if (filtered.length === 0) return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : "No results for this filter"}</div>
+                    {(invoiceSearch || invoiceFilter !== "all") && (
+                      <button className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => { setInvoiceSearch(""); setInvoiceFilter("all"); }}>
+                        {lang === "nl" ? "Filter wissen" : "Clear filter"}
+                      </button>
+                    )}
+                  </div>
+                );
+                const visible = invoicesExpanded ? filtered : filtered.slice(0, 10);
+                return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {visible.map(a => {
+                    const isSending = processingApptId === a.id;
+                    return (
+                      <div key={a.id} style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: "14px 18px", background: c.bgCard,
+                        border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
+                        borderRadius: 14, transition: "border-color 0.15s"
+                      }}>
+                        {/* Avatar */}
+                        <div style={{
+                          width: 42, height: 42, borderRadius: "50%",
+                          background: `${accent}14`, border: `1px solid ${accent}22`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 600, color: accent, flexShrink: 0,
+                          letterSpacing: "0.04em"
+                        }}>{initials(a.client_name)}</div>
+
+                        {/* Client + service */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
+                            {!a.invoice_sent && (
+                              <span style={{ fontSize: 8, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                {lang === "nl" ? "Open" : "Unsent"}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>{formatDate(a.date)}</span>
+                            <span>·</span>
+                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>
+                            {a.staff_name && <><span>·</span><span>{a.staff_name}</span></>}
+                          </div>
+                        </div>
+
+                        {/* Price */}
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+
+                        {/* Action */}
+                        <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
+                          {a.invoice_sent ? (
+                            <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                              <NavIcon name="check" size={10} color={c.success} /> {t.sent}
+                            </span>
+                          ) : (
+                            <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
+                              {isSending ? (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
+                                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                </svg>
+                              ) : (
+                                <NavIcon name="send" size={11} color="currentColor" />
+                              )}
+                              {isSending ? "..." : t.send}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filtered.length > 10 && (
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
+                      <button className="btn-ghost" onClick={() => setInvoicesExpanded(v => !v)} style={{ padding: "10px 22px", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {invoicesExpanded ? (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                            {t.showLess}
+                          </>
+                        ) : (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            {t.showMore} ({filtered.length - 10})
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>;
+              })()}
+            </div>
+            );
+          })()}
+
+          {/* ANALYTICS */}
+          {view === "analytics" && (
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+              {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
+
+              {/* Key metrics + Revenue chart — combined IIFE to share computed data */}
+              {(() => {
+                const now = new Date();
+                const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+                const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
+                const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
+                const weekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const prevWeekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= prevWeekStart && new Date(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
+                const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
+
+                // Daily revenue for sparklines
+                const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                const revByDay = {};
+                appts.forEach(a => {
+                  if (a.status !== "completed") return;
+                  const d = new Date(a.date);
+                  revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+                });
+                const weekDaily = [];
+                for (let i = 6; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); weekDaily.push(revByDay[dayKey(d)] || 0); }
+                const monthDaily = [];
+                for (let i = 29; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); monthDaily.push(revByDay[dayKey(d)] || 0); }
+
+                const sparkline = (data, color) => {
+                  if (!data || data.length < 2) return null;
+                  const W = 200, H = 80, pad = 4;
+                  const max = Math.max(...data, 1);
+                  const min = Math.min(...data);
+                  const range = max - min || 1;
+                  const pts = data.map((v, i) => {
+                    const x = pad + (i / (data.length - 1)) * (W - pad * 2);
+                    const y = pad + (H - pad * 2) - ((v - min) / range) * (H - pad * 2);
+                    return { x, y };
+                  });
+                  const linePath = pts.reduce((acc, p, i) => {
+                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                    const prev = pts[i - 1];
+                    const cx1 = prev.x + (p.x - prev.x) / 2;
+                    const cy1 = prev.y;
+                    const cx2 = prev.x + (p.x - prev.x) / 2;
+                    const cy2 = p.y;
+                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                  }, "");
+                  const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${H - pad} L${pts[0].x.toFixed(1)},${H - pad} Z`;
+                  const lastPt = pts[pts.length - 1];
+                  const gradId = "anspark-" + color.replace(/[^a-z0-9]/gi, "") + "-" + data.length;
+                  return (
+                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                      <defs>
+                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                          <stop offset="100%" stopColor={color} stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={areaPath} fill={`url(#${gradId})`} />
+                      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                      <circle cx={lastPt.x} cy={lastPt.y} r="3" fill={color} vectorEffect="non-scaling-stroke" />
+                    </svg>
+                  );
+                };
+
+                // Rating distribution
+                const ratingDist = [5, 4, 3, 2, 1].map(r => {
+                  const count = (salonData.reviews || []).filter(rv => rv.rating === r).length;
+                  const pct = salonData.reviews?.length > 0 ? (count / salonData.reviews.length) * 100 : 0;
+                  return { rating: r, count, pct };
+                });
+
+                // Weekly revenue for the big area chart
+                const weeks = [];
+                for (let w = 7; w >= 0; w--) {
+                  const weekStart = new Date(now);
+                  weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+                  weekStart.setHours(0,0,0,0);
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekStart.getDate() + 7);
+                  const rev = appts
+                    .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                    .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                  const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                  weeks.push({ label, revenue: rev });
+                }
+                const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
+                const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
+                const avgWeek = total8w / weeks.length;
+                const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
+                const firstHalfAvg = weeks.slice(0, 4).reduce((s, w) => s + w.revenue, 0) / 4;
+                const secondHalfAvg = weeks.slice(4).reduce((s, w) => s + w.revenue, 0) / 4;
+                const trendPct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : 0;
+                const W = 560, H = 220, PAD_L = 16, PAD_R = 16, PAD_TOP = 32, PAD_BOT = 30;
+                const innerW = W - PAD_L - PAD_R;
+                const innerH = H - PAD_TOP - PAD_BOT;
+                const pts = weeks.map((w, i) => {
+                  const x = PAD_L + (i / (weeks.length - 1)) * innerW;
+                  const y = PAD_TOP + innerH - (w.revenue / maxRev) * innerH;
+                  return { x, y, ...w };
+                });
+                const smoothPath = pts.reduce((acc, p, i) => {
+                  if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                  const prev = pts[i - 1];
+                  const cx1 = prev.x + (p.x - prev.x) / 2;
+                  const cy1 = prev.y;
+                  const cx2 = prev.x + (p.x - prev.x) / 2;
+                  const cy2 = p.y;
+                  return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                }, "");
+                const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
+                const gradId = "an-rev-grad";
+
+                return (
+                  <>
+                    {/* Stat cards row */}
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
+                      {/* Week */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.weeklyRevenue}</div>
+                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7d" : "7d"}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                          {weekChange !== 0 && (
+                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                              {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>{sparkline(weekDaily, accent)}</div>
+                      </div>
+                      {/* Month */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
+                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30d" : "30d"}</div>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>{sparkline(monthDaily, accent)}</div>
+                      </div>
+                      {/* Total appointments */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalAppts}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{appts.length}</div>
+                        <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 6 }}>
+                          <div>
+                            <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>{t.treatments}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub }}>
+                              <div style={{ flex: 1, height: 4, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
+                                <div style={{ height: "100%", background: accent, width: `${appts.length > 0 ? (completedAppts.length / appts.length) * 100 : 0}%` }} />
+                              </div>
+                              <span style={{ fontVariantNumeric: "tabular-nums" }}>{completedAppts.length}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Rating */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
+                          <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{salonData.reviews?.length || 0}</span>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, display: "flex", alignItems: "center", gap: 6, lineHeight: 1, marginTop: 6 }}>
+                          {avgRating}
+                          <svg width={18} height={18} viewBox="0 0 20 20" fill={accent}>
+                            <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                          {salonData.reviews?.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              {ratingDist.map(r => (
+                                <div key={r.rating} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: c.textMuted }}>
+                                  <span style={{ width: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.rating}</span>
+                                  <div style={{ flex: 1, height: 4, background: c.inputBg, borderRadius: 2, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${r.pct}%`, background: accent, borderRadius: 2 }} />
+                                  </div>
+                                  <span style={{ width: 12, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 9, color: c.textMuted, textAlign: "center" }}>{lang === "nl" ? "Geen reviews" : "No reviews"}</div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ));
+
+                    {/* Revenue area chart — big hero */}
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "22px 24px", marginBottom: 14, display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 14, minHeight: 200 }}>
+                        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
+                          <defs>
+                            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
+                              <stop offset="100%" stopColor={accent} stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          {[0.25, 0.5, 0.75].map(pct => (
+                            <line key={pct} x1={PAD_L} y1={PAD_TOP + innerH * pct} x2={W - PAD_R} y2={PAD_TOP + innerH * pct} stroke={c.border} strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
+                          ))}
+                          <line x1={PAD_L} y1={PAD_TOP + innerH} x2={W - PAD_R} y2={PAD_TOP + innerH} stroke={c.border} strokeWidth="1" />
+                          {maxRev > 0 && <path d={areaPath} fill={`url(#${gradId})`} />}
+                          {maxRev > 0 && <path d={smoothPath} fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                          {pts[peakIdx].revenue > 0 && (
+                            <g>
+                              <rect x={pts[peakIdx].x - 30} y={pts[peakIdx].y - 26} width="60" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
+                              <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
+                                €{pts[peakIdx].revenue.toFixed(0)}
+                              </text>
+                            </g>
+                          )}
+                          {pts.map((p, i) => (
+                            <g key={i}>
+                              <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
+                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                              </circle>
+                              {i === pts.length - 1 && (
+                                <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
+                                  <animate attributeName="r" values="8;14;8" dur="2s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.25;0;0.25" dur="2s" repeatCount="indefinite" />
+                                </circle>
+                              )}
+                            </g>
+                          ))}
+                          {[0, Math.floor(pts.length / 2), pts.length - 1].map(i => (
+                            <text key={i} x={pts[i].x} y={H - 10} fontSize="11" fill={c.textMuted} textAnchor={i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"} fontFamily="'Jost',sans-serif">
+                              {pts[i].label}
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : "Trend"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text }}>
+                            {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "—"} {Math.abs(trendPct)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Popular services — thumbnails + revenue */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
+                  <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
+                </div>
+                {(() => {
+                  const svcStats = {};
+                  appts.forEach(a => {
+                    if (a.status !== "completed" && a.status !== "confirmed") return;
+                    const n = a.service_name?.split(" — ")[0] || "?";
+                    if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
+                    svcStats[n].count += 1;
+                    svcStats[n].revenue += parseFloat(a.service_price || 0);
+                  });
+                  const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                  if (sorted.length === 0) return (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10, padding: "24px 0" }}>
+                      <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
+                      <div style={{ fontSize: 12 }}>{t.noAppts}</div>
+                    </div>
+                  );
+                  const max = sorted[0][1].count;
+                  return sorted.map(([name, stats], idx) => {
+                    const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                    const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
+                    return (
+                      <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
+                        {thumb ? (
+                          <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <NavIcon name="scissors" size={16} color={c.textMuted} />
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                              <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                            </div>
+                            <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
                 })()}
               </div>
 
@@ -1876,7 +2674,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 100, letterSpacing: "0.08em", textTransform: "uppercase", background: `${accent}22`, color: accent, border: `1px solid ${accent}44` }}>
                         {salonData.plan === "starter" ? t.planStarter : t.planProfessional}
                       </span>
-                      <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: "rgba(134,239,172,0.1)", color: "#86efac", border: "1px solid rgba(134,239,172,0.2)" }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: `${c.success}1a`, color: c.success, border: `1px solid ${c.success}33` }}>
                         {t.activePlan}
                       </span>
                     </div>
@@ -1937,34 +2735,58 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Salon Contact Details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.salonContact}</SL>
-                <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.salonContactDesc}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                  <input className="input-field" placeholder={t.salonPhone} value={salonData.salon_phone || ""} onChange={e => update(d => { d.salon_phone = e.target.value; return d; })} />
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><NavIcon name="chat" size={16} color={c.textMuted} /></div>
-                    <input className="input-field" placeholder={t.whatsappNumber} value={salonData.whatsapp_number || ""} onChange={e => update(d => { d.whatsapp_number = e.target.value; return d; })} style={{ paddingLeft: 38 }} />
-                  </div>
-                  <input className="input-field" placeholder={t.salonInstagram} value={salonData.salon_instagram || ""} onChange={e => update(d => { d.salon_instagram = e.target.value; return d; })} />
-                  <input className="input-field" placeholder={t.salonEmail} value={salonData.salon_email || ""} onChange={e => update(d => { d.salon_email = e.target.value; return d; })} />
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.salonContact}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.salonContactDesc}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { icon: "phone", placeholder: t.salonPhone, value: salonData.salon_phone, key: "salon_phone" },
+                    { icon: "chat", placeholder: t.whatsappNumber, value: salonData.whatsapp_number, key: "whatsapp_number" },
+                    { icon: "camera", placeholder: t.salonInstagram, value: salonData.salon_instagram, key: "salon_instagram" },
+                    { icon: "mail", placeholder: t.salonEmail, value: salonData.salon_email, key: "salon_email" },
+                  ].map(field => (
+                    <div key={field.key} style={{ position: "relative" }}>
+                      <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}>
+                        <NavIcon name={field.icon} size={14} color={c.textMuted} />
+                      </div>
+                      <input className="input-field" placeholder={field.placeholder} value={field.value || ""} onChange={e => update(d => { d[field.key] = e.target.value; return d; })} style={{ paddingLeft: 40, width: "100%" }} />
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Invoice details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.invoiceDetails}</SL>
-                <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{t.invoiceSettings}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                  <input className="input-field" placeholder={t.address} value={salonData.address || ""} onChange={e => update(d => { d.address = e.target.value; return d; })} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
-                    <input className="input-field" placeholder={t.kvkNumber} value={salonData.kvk_number || ""} onChange={e => update(d => { d.kvk_number = e.target.value; return d; })} />
-                    <input className="input-field" placeholder={t.btwId} value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} />
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                    <input className="input-field" placeholder="Haarlemmerdijk 95, 1013 KD Amsterdam" value={salonData.address || ""} onChange={e => update(d => { d.address = e.target.value; return d; })} style={{ width: "100%" }} />
                   </div>
-                  <input className="input-field" placeholder={t.ibanNumber} value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
-                    <input className="input-field" placeholder={t.invoicePrefix + " (bijv. INV)"} value={salonData.invoice_prefix || "INV"} onChange={e => update(d => { d.invoice_prefix = e.target.value; return d; })} />
-                    <input className="input-field" placeholder="Volgend nr" type="number" value={salonData.next_invoice_number || 1} onChange={e => update(d => { d.next_invoice_number = parseInt(e.target.value) || 1; return d; })} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
+                      <input className="input-field" placeholder="12345678" value={salonData.kvk_number || ""} onChange={e => update(d => { d.kvk_number = e.target.value; return d; })} style={{ width: "100%" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
+                      <input className="input-field" placeholder="NL123456789B01" value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
+                    <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
+                      <input className="input-field" placeholder="INV" value={salonData.invoice_prefix || "INV"} onChange={e => update(d => { d.invoice_prefix = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
+                      <input className="input-field" placeholder="1" type="number" value={salonData.next_invoice_number || 1} onChange={e => update(d => { d.next_invoice_number = parseInt(e.target.value) || 1; return d; })} style={{ width: "100%", fontVariantNumeric: "tabular-nums" }} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1973,169 +2795,319 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ DIENSTEN TAB ═══ */}
               {settingsTab === "diensten" && <>
 
-              {/* Services + photos */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.services}</SL>
-                {salonData.services.length === 0 && (
-                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>{lang === "nl" ? "Nog geen diensten" : "No services yet"}</div>
+              {/* Services list — collapsible cards */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.services}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{salonData.services.length} {salonData.services.length === 1 ? (lang === "nl" ? "dienst" : "service") : (lang === "nl" ? "diensten" : "services")}</div>
+                </div>
+
+                {salonData.services.length === 0 && !showNewServiceForm && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="diensten" size={32} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen diensten toegevoegd" : "No services yet"}</div>
+                  </div>
                 )}
-                {salonData.services.map(s => (
-                  <div key={s.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {editingService === s.id ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                              <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="Naam (NL)" />
-                              <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="Name (EN)" />
-                              <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="€" />
-                              <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} placeholder="min" />
+
+                {salonData.services.map(s => {
+                  const isExpanded = expandedServiceId === s.id;
+                  const isEditing = editingService === s.id;
+                  const variantCount = (s.variants || []).length;
+                  const extrasCount = (s.extras || []).length;
+                  const photoCount = (s.photos || []).length;
+                  const heroPhoto = s.photos?.[0]?.url || s.photos?.[0];
+                  const minVariantPrice = variantCount > 0 ? Math.min(...s.variants.map(v => parseFloat(v.price))) : null;
+                  const displayPrice = minVariantPrice !== null ? `€${minVariantPrice}+` : `€${s.price}`;
+
+                  return (
+                    <div key={s.id} style={{
+                      background: c.bgCard,
+                      border: `1px solid ${isExpanded ? `${accent}44` : c.border}`,
+                      borderRadius: 16, marginBottom: 10,
+                      transition: "border-color 0.2s",
+                      overflow: "hidden"
+                    }}>
+                      {isEditing ? (
+                        /* ── EDIT MODE — clean full-width form ── */
+                        <div style={{ padding: 18 }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : "Edit service"}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                              <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
-                                await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
-                                update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv); return d; });
-                                setEditingService(null);
-                              }}><NavIcon name="check" size={11} /> {t.saveChanges}</button>
-                              <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }} onClick={() => setEditingService(null)}><NavIcon name="xmark" size={12} /></button>
+                            <div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                              <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                              <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Duur (minuten)" : "Duration (minutes)"}</div>
+                              <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                           </div>
-                        ) : (
-                          <>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
-                            <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>€{s.price} · {s.duration} {t.min}</div>
-                          </>
-                        )}
-                      </div>
-                      {editingService !== s.id && (
-                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }} onClick={async () => { if (await showConfirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}>×</button>
+                          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                            <button className="btn-primary" style={{ padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", flex: 1 }} onClick={async () => {
+                              await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv); return d; });
+                              setEditingService(null);
+                            }}>
+                              <NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}
+                            </button>
+                            <button className="btn-ghost" style={{ padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setEditingService(null)}>
+                              <NavIcon name="xmark" size={12} color="currentColor" /> {t.cancel}
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          {/* ── HEADER ROW — always visible ── */}
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 14,
+                            padding: 16, cursor: "pointer",
+                            background: isExpanded ? `${accent}08` : "transparent",
+                            transition: "background 0.15s"
+                          }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
+                            {/* Thumb */}
+                            {heroPhoto ? (
+                              <img src={heroPhoto} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
+                            ) : (
+                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <NavIcon name="scissors" size={18} color={c.textMuted} />
+                              </div>
+                            )}
+                            {/* Name + meta */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
+                              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <span>{s.duration} {t.min}</span>
+                                {variantCount > 0 && <><span>·</span><span>{variantCount} {variantCount === 1 ? (lang === "nl" ? "variant" : "variant") : (lang === "nl" ? "varianten" : "variants")}</span></>}
+                                {extrasCount > 0 && <><span>·</span><span>{extrasCount} extra{extrasCount === 1 ? "" : "s"}</span></>}
+                                {photoCount > 0 && <><span>·</span><span>{photoCount} {photoCount === 1 ? (lang === "nl" ? "foto" : "photo") : (lang === "nl" ? "foto's" : "photos")}</span></>}
+                              </div>
+                            </div>
+                            {/* Price */}
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
+                            {/* Actions */}
+                            <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                              <button onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedServiceId(null); }}
+                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
+                                title={lang === "nl" ? "Bewerken" : "Edit"}>
+                                <NavIcon name="edit" size={13} color="currentColor" />
+                              </button>
+                              <button onClick={async () => { if (await showConfirm(lang === "nl" ? "Dienst verwijderen?" : "Delete service?")) deleteService(s.id); }}
+                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
+                                title={lang === "nl" ? "Verwijderen" : "Delete"}>
+                                <NavIcon name="xmark" size={13} color="currentColor" />
+                              </button>
+                              <div style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ── EXPANDED CONTENT ── */}
+                          {isExpanded && (
+                            <div style={{ padding: "0 16px 18px", borderTop: `1px solid ${c.border}` }}>
+                              {/* VARIANTS */}
+                              <div style={{ marginTop: 18 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.variants}</div>
+                                  <div style={{ fontSize: 10, color: c.textMuted }}>{variantCount}</div>
+                                </div>
+                                {variantCount === 0 ? (
+                                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "10px 0", fontStyle: "italic" }}>{lang === "nl" ? "Geen varianten" : "No variants"}</div>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {(s.variants || []).map(v => (
+                                      <div key={v.id}>
+                                        {editingVariant === v.id ? (
+                                          <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                              <input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam (NL)" : "Name (NL)"} />
+                                              <input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam (EN)" : "Name (EN)"} />
+                                              <input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder="€" />
+                                              <input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Duur (min)" : "Duration (min)"} />
+                                            </div>
+                                            <input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%", marginBottom: 8 }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} />
+                                            <div style={{ display: "flex", gap: 6 }}>
+                                              <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                                await supabase.from("service_variants").update({ name_nl: editVariantForm.name_nl, name_en: editVariantForm.name_en || null, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration), description_nl: editVariantForm.description_nl || null }).eq("id", v.id);
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...editVariantForm, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration)} : vr)} : svc); return d; });
+                                                setEditingVariant(null);
+                                              }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
+                                              <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingVariant(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
+                                              {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{v.description_nl}</div>}
+                                              <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
+                                            </div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>€{v.price}</div>
+                                            <div style={{ display: "flex", gap: 4 }}>
+                                              <button onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
+                                                style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <NavIcon name="edit" size={11} color="currentColor" />
+                                              </button>
+                                              <button onClick={async () => {
+                                                await supabase.from("service_variants").delete().eq("id", v.id);
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
+                                              }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <NavIcon name="xmark" size={11} color="currentColor" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div style={{ marginTop: 8 }}>
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                                    update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: [...(svc.variants||[]), variant]} : svc); return d; });
+                                  }} />
+                                </div>
+                              </div>
+
+                              {/* EXTRAS */}
+                              <div style={{ marginTop: 20 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.extras}</div>
+                                  <div style={{ fontSize: 10, color: c.textMuted }}>{extrasCount}</div>
+                                </div>
+                                {extrasCount === 0 ? (
+                                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "10px 0", fontStyle: "italic" }}>{lang === "nl" ? "Geen extra's" : "No extras"}</div>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {(s.extras || []).map(e => (
+                                      <div key={e.id}>
+                                        {editingExtra === e.id ? (
+                                          <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
+                                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
+                                              <input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam" : "Name"} />
+                                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder="€" />
+                                            </div>
+                                            <div style={{ display: "flex", gap: 6 }}>
+                                              <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                                await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price) }).eq("id", e.id);
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, price: editExtraForm.price} : ex)} : svc); return d; });
+                                                setEditingExtra(null);
+                                              }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
+                                              <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                            <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
+                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+€{e.price}</div>
+                                            <div style={{ display: "flex", gap: 4 }}>
+                                              <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
+                                                style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <NavIcon name="edit" size={11} color="currentColor" />
+                                              </button>
+                                              <button onClick={async () => {
+                                                await supabase.from("service_extras").delete().eq("id", e.id);
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: (svc.extras||[]).filter(x => x.id !== e.id)} : svc); return d; });
+                                              }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <NavIcon name="xmark" size={11} color="currentColor" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div style={{ marginTop: 8 }}>
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                                    update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: [...(svc.extras||[]), extra]} : svc); return d; });
+                                  }} />
+                                </div>
+                              </div>
+
+                              {/* PHOTOS */}
+                              <div style={{ marginTop: 20 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{lang === "nl" ? "Foto's" : "Photos"}</div>
+                                  <div style={{ fontSize: 10, color: c.textMuted }}>{photoCount}</div>
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {(s.photos || []).map((p, i) => (
+                                    <div key={p.id || i} style={{ position: "relative", flexShrink: 0 }}>
+                                      <img src={p.url || p} loading="lazy" onClick={() => setGallery({ photos: s.photos, idx: i })}
+                                        style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", cursor: "pointer", border: `1px solid ${c.border}` }} />
+                                      <button onClick={() => deletePhoto(s.id, p.id, p.url || p)}
+                                        style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <label style={{ width: 72, height: 72, borderRadius: 10, border: `1.5px dashed ${accent}55`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 2, flexShrink: 0, opacity: photoUploading === s.id ? 0.5 : 1 }}>
+                                    {photoUploading === s.id ? (
+                                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
+                                        <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                      </svg>
+                                    ) : (
+                                      <>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                                        <span style={{ fontSize: 8, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{t.addPhoto}</span>
+                                      </>
+                                    )}
+                                    <input type="file" accept="image/*" multiple style={{ display: "none" }}
+                                      onChange={e => Array.from(e.target.files).forEach(f => addPhoto(s.id, f))} />
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
+                  );
+                })}
 
-                    {/* Variants */}
-                    <div style={{ marginTop: 10, marginLeft: 8, paddingLeft: 10, borderLeft: `2px solid ${accent}22` }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.variants}</div>
-                      {(s.variants || []).map(v => (
-                        <div key={v.id} style={{ marginBottom: 5, padding: "6px 0" }}>
-                          {editingVariant === v.id ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                                <input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Naam (NL)" />
-                                <input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Name (EN)" />
-                                <input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="€" />
-                                <input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="min" />
-                              </div>
-                              <input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} />
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "4px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
-                                  await supabase.from("service_variants").update({ name_nl: editVariantForm.name_nl, name_en: editVariantForm.name_en || null, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration), description_nl: editVariantForm.description_nl || null }).eq("id", v.id);
-                                  update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...editVariantForm, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration)} : vr)} : svc); return d; });
-                                  setEditingVariant(null);
-                                }}><NavIcon name="check" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setEditingVariant(null)}><NavIcon name="xmark" size={12} /></button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 500 }}>{v.name_nl}</div>
-                                {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted }}>{v.description_nl}</div>}
-                                <div style={{ fontSize: 10, color: c.textLabel }}>€{v.price} · {v.duration} {t.min}</div>
-                              </div>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
-                                  onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}><NavIcon name="edit" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                                  onClick={async () => {
-                                    await supabase.from("service_variants").delete().eq("id", v.id);
-                                    update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
-                                  }}>×</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
-                        update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: [...(svc.variants||[]), variant]} : svc); return d; });
-                      }} />
+                {/* Add new service — collapsible CTA */}
+                {showNewServiceForm ? (
+                  <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 16, padding: 18, marginTop: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Nieuwe dienst" : "New service"}</div>
+                      <button onClick={() => { setShowNewServiceForm(false); setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" }); }} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
                     </div>
-
-                    {/* Extras */}
-                    <div style={{ marginTop: 8, marginLeft: 8, paddingLeft: 10, borderLeft: `2px solid ${accent}22` }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.extras}</div>
-                      {(s.extras || []).map(e => (
-                        <div key={e.id} style={{ marginBottom: 5, padding: "4px 0" }}>
-                          {editingExtra === e.id ? (
-                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                              <input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 10, padding: "6px 8px", flex: 2 }} placeholder="Naam" />
-                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 10, padding: "6px 8px", flex: 1 }} placeholder="€" />
-                              <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
-                                await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price) }).eq("id", e.id);
-                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, price: editExtraForm.price} : ex)} : svc); return d; });
-                                setEditingExtra(null);
-                              }}><NavIcon name="check" size={12} /></button>
-                              <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} /></button>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{ fontSize: 11, fontWeight: 500 }}>{e.name_nl} <span style={{ color: c.textLabel }}>+€{e.price}</span></div>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
-                                  onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}><NavIcon name="edit" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                                  onClick={async () => {
-                                    await supabase.from("service_extras").delete().eq("id", e.id);
-                                    update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: (svc.extras||[]).filter(x => x.id !== e.id)} : svc); return d; });
-                                  }}>×</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
-                        update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: [...(svc.extras||[]), extra]} : svc); return d; });
-                      }} />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                        <input className="input-field" placeholder="Gel Manicure" value={newSvc.name_nl} onChange={e => setNewSvc(s => ({...s, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                        <input className="input-field" placeholder="Gel Manicure" value={newSvc.name_en} onChange={e => setNewSvc(s => ({...s, name_en: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                        <input className="input-field" placeholder="45" type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Duur (minuten)" : "Duration (minutes)"}</div>
+                        <input className="input-field" placeholder="60" type="number" value={newSvc.duration} onChange={e => setNewSvc(s => ({...s, duration: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
+                      </div>
                     </div>
-
-                    {/* Photo management */}
-                    <div className="photo-grid">
-                      {(s.photos || []).map((p, i) => (
-                        <div key={p.id || i} style={{ position: "relative", flexShrink: 0 }}>
-                          <img src={p.url || p} className="photo-thumb" loading="lazy" onClick={() => setGallery({ photos: s.photos, idx: i })} />
-                          <div onClick={() => deletePhoto(s.id, p.id, p.url || p)} style={{ position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", fontWeight: 700, lineHeight: 1 }}>×</div>
-                        </div>
-                      ))}
-                      <label className="photo-add" style={{ flexShrink: 0, opacity: photoUploading === s.id ? 0.5 : 1 }}>
-                        {photoUploading === s.id ? (
-                          <span style={{ fontSize: 12, color: accent, animation: "spin 1s linear infinite" }}>⏳</span>
-                        ) : (
-                          <>
-                            <span style={{ fontSize: 18, color: `${accent}88` }}>+</span>
-                            <span style={{ fontSize: 10, color: `${accent}66`, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.addPhoto}</span>
-                          </>
-                        )}
-                        <input type="file" accept="image/*" multiple style={{ display: "none" }}
-                          onChange={e => Array.from(e.target.files).forEach(f => addPhoto(s.id, f))} />
-                      </label>
-                    </div>
+                    {svcError && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8 }}>{svcError}</div>}
+                    <button className="btn-primary" style={{ width: "100%", padding: "12px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => { await addService(); setShowNewServiceForm(false); }}>
+                      <NavIcon name="plus" size={13} color={c.btnOnDark} /> {t.addService}
+                    </button>
                   </div>
-                ))}
-
-                {/* Add new service */}
-                <div style={{ marginTop: 4 }}>
-                  <SL>{lang === "nl" ? "Nieuwe dienst" : "New service"}</SL>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <input className="input-field" placeholder={t.serviceName} value={newSvc.name_nl} onChange={e => setNewSvc(s => ({...s, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "11px 13px" }} />
-                    <input className="input-field" placeholder={t.serviceNameEn} value={newSvc.name_en} onChange={e => setNewSvc(s => ({...s, name_en: e.target.value}))} style={{ fontSize: 12, padding: "11px 13px" }} />
-                    <input className="input-field" placeholder={t.price} type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} style={{ fontSize: 12, padding: "11px 13px" }} />
-                    <input className="input-field" placeholder={t.duration} type="number" value={newSvc.duration} onChange={e => setNewSvc(s => ({...s, duration: e.target.value}))} style={{ fontSize: 12, padding: "11px 13px" }} />
-                  </div>
-                  {svcError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8 }}>{svcError}</div>}
-                  <button className="btn-ghost" style={{ width: "100%", borderStyle: "dashed", borderColor: `${accent}33`, color: accent, fontSize: 11 }} onClick={addService}>{t.addService}</button>
-                </div>
+                ) : (
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 10, padding: "14px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowNewServiceForm(true)}>
+                    <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Nieuwe dienst toevoegen" : "Add new service"}
+                  </button>
+                )}
               </div>
               </>}
 
@@ -2174,7 +3146,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <div onClick={async () => {
                                 await supabase.from("staff_members").update({ avatar_url: null }).eq("id", m.id);
                                 update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, avatar_url: null} : s); return d; });
-                              }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer" }}>×</div>
+                              }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: c.danger, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer", border: `2px solid ${c.bgCard}` }}>×</div>
                             )}
                           </div>
                         ) : (
@@ -2245,7 +3217,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         ) : (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }} onClick={async () => {
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
                               if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
@@ -2328,7 +3300,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                         )}
                         {salonData.account_type === "team" && m.user_id && (
-                          <div style={{ fontSize: 10, color: "#86efac", display: "flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {m.email || t.staffLoginInfo}</div>
+                          <div style={{ fontSize: 10, color: c.success, display: "flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color={c.success} /> {m.email || t.staffLoginInfo}</div>
                         )}
                       </div>
                     )}
@@ -2343,38 +3315,82 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "planning" && <>
 
               {/* Locations */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.locations}</SL>
-                {(salonData.locations || []).length === 0 && (
-                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noLocations}</div>
-                )}
-                {(salonData.locations || []).map(loc => (
-                  <div key={loc.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{loc.name}</div>
-                        {loc.address && <div style={{ fontSize: 10, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }}
-                          onClick={() => {
-                            const newName = prompt(lang === "nl" ? "Locatienaam:" : "Location name:", loc.name);
-                            if (newName && newName !== loc.name) {
-                              const newAddr = prompt(lang === "nl" ? "Adres:" : "Address:", loc.address || "");
-                              supabase.from("locations").update({ name: newName, address: newAddr || null }).eq("id", loc.id);
-                              update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, name: newName, address: newAddr} : l); return d; });
-                            }
-                          }}><NavIcon name="edit" size={12} /></button>
-                        <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
-                          onClick={async () => {
-                            if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
-                            await supabase.from("locations").delete().eq("id", loc.id);
-                            update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
-                          }}>×</button>
-                      </div>
-                    </div>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.locations}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.locations || []).length}</div>
+                </div>
+                {(salonData.locations || []).length === 0 ? (
+                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "14px 0", fontStyle: "italic" }}>{t.noLocations}</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                    {(salonData.locations || []).map(loc => {
+                      const isEditing = editingLocation === loc.id;
+                      return (
+                        <div key={loc.id} style={{ background: c.bg, border: `1px solid ${isEditing ? `${accent}44` : c.border}`, borderRadius: 14, padding: isEditing ? 14 : "12px 14px", transition: "border-color 0.2s" }}>
+                          {isEditing ? (
+                            <div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam" : "Name"}</div>
+                                  <input className="input-field" value={editLocForm.name} onChange={e => setEditLocForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.city}</div>
+                                  <input className="input-field" value={editLocForm.city} onChange={e => setEditLocForm(f => ({...f, city: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                                </div>
+                              </div>
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                                <input className="input-field" value={editLocForm.address} onChange={e => setEditLocForm(f => ({...f, address: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                              </div>
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Telefoon" : "Phone"}</div>
+                                <input className="input-field" value={editLocForm.phone} onChange={e => setEditLocForm(f => ({...f, phone: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                  await supabase.from("locations").update({ name: editLocForm.name, address: editLocForm.address || null, city: editLocForm.city || null, phone: editLocForm.phone || null }).eq("id", loc.id);
+                                  update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, ...editLocForm} : l); return d; });
+                                  setEditingLocation(null);
+                                }}>
+                                  <NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}
+                                </button>
+                                <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingLocation(null)}>
+                                  <NavIcon name="xmark" size={12} color="currentColor" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <NavIcon name="mappin" size={14} color={accent} />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{loc.name}</div>
+                                {(loc.address || loc.city) && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                                {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{loc.phone}</div>}
+                              </div>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button onClick={() => { setEditingLocation(loc.id); setEditLocForm({ name: loc.name, address: loc.address || "", city: loc.city || "", phone: loc.phone || "" }); }}
+                                  style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <NavIcon name="edit" size={11} color="currentColor" />
+                                </button>
+                                <button onClick={async () => {
+                                  if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : "Delete location?")) return;
+                                  await supabase.from("locations").delete().eq("id", loc.id);
+                                  update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
+                                }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <NavIcon name="xmark" size={11} color="currentColor" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
                 <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
                   update(d => { d.locations = [...(d.locations || []), loc]; return d; });
                 }} />
@@ -2552,7 +3568,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</div>
                       <div style={{ fontSize: 10, color: c.textLabel }}>{v.open} — {v.close}</div>
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
                       onClick={() => update(d => { const o = {...(d.day_overrides || {})}; delete o[date]; d.day_overrides = o; return d; })}>×</button>
                   </div>
                 ))}
@@ -2579,7 +3595,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
-                  <div key={date + (v.block_time_start || "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 14, marginBottom: 6 }}>
+                  <div key={date + (v.block_time_start || "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${c.danger}10`, border: `1px solid ${c.danger}26`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</div>
                       {v.block_time_start && v.block_time_end && (
@@ -2587,7 +3603,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       )}
                       {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
                       onClick={() => {
                         update(d => {
                           const o = {...(d.day_overrides || {})};
@@ -2606,15 +3622,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 10 }}>
                   <div onClick={() => setNewBlocked(f => ({...f, mode: "day"}))} style={{
                     padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                    background: (newBlocked.mode || "day") === "day" ? "rgba(248,113,113,0.12)" : "transparent",
-                    color: (newBlocked.mode || "day") === "day" ? "#f87171" : c.textSub,
-                    border: `1px solid ${(newBlocked.mode || "day") === "day" ? "rgba(248,113,113,0.3)" : c.inputBorder}`
+                    background: (newBlocked.mode || "day") === "day" ? `${c.danger}1f` : "transparent",
+                    color: (newBlocked.mode || "day") === "day" ? c.danger : c.textSub,
+                    border: `1px solid ${(newBlocked.mode || "day") === "day" ? `${c.danger}4d` : c.inputBorder}`
                   }}>{t.blockWholeDay}</div>
                   <div onClick={() => setNewBlocked(f => ({...f, mode: "time"}))} style={{
                     padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                    background: newBlocked.mode === "time" ? "rgba(248,113,113,0.12)" : "transparent",
-                    color: newBlocked.mode === "time" ? "#f87171" : c.textSub,
-                    border: `1px solid ${newBlocked.mode === "time" ? "rgba(248,113,113,0.3)" : c.inputBorder}`
+                    background: newBlocked.mode === "time" ? `${c.danger}1f` : "transparent",
+                    color: newBlocked.mode === "time" ? c.danger : c.textSub,
+                    border: `1px solid ${newBlocked.mode === "time" ? `${c.danger}4d` : c.inputBorder}`
                   }}>{t.blockTimeSlot}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -2633,7 +3649,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </>)}
                 </div>
                 <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
-                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: "rgba(248,113,113,0.2)", color: "#f87171" }}
+                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
                   onClick={() => {
                     if (!newBlocked.from) return;
                     const endDate = newBlocked.to || newBlocked.from;
@@ -2668,7 +3684,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <NavIcon name="calendar" size={16} color={accent} />
                       <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{t.googleCalendarConnected}</span>
                     </div>
-                    <button className="btn-ghost" style={{ width: "100%", fontSize: 10, color: "#f87171", borderColor: "rgba(248,113,113,0.2)" }}
+                    <button className="btn-ghost" style={{ width: "100%", fontSize: 10, color: c.danger, borderColor: `${c.danger}33` }}
                       onClick={async () => {
                         if (!await showConfirm(lang === "nl" ? "Google Agenda ontkoppelen?" : "Disconnect Google Calendar?")) return;
                         await supabase.functions.invoke("google-auth", { body: { action: "disconnect", owner_id: salonData.owner_id } });
@@ -2691,59 +3707,72 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {settingsTab === "facturatie" && <>
 
               {/* Appearance Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.appearance}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.logoDesc}</div>
-                
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>{t.appearance}</div>
+
                 {/* Logo upload */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                  {salonData.logo_url ? (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.logoDesc}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {salonData.logo_url ? (
+                      <div style={{ position: "relative" }}>
+                        <img src={salonData.logo_url} style={{ width: 72, height: 72, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}` }} />
+                        <button onClick={() => update(d => { d.logo_url = ""; return d; })}
+                          style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ width: 72, height: 72, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4, flexShrink: 0 }}>
+                        <NavIcon name="camera" size={20} color={accent} />
+                        <span style={{ fontSize: 8, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.logo}</span>
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
+                          const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                          if (!error) {
+                            const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                            update(d => { d.logo_url = publicUrl; return d; });
+                          }
+                        }} />
+                      </label>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 2 }}>{t.logo}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Verschijnt op je pagina en facturen" : "Shown on your page and invoices"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cover image upload */}
+                <div>
+                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.coverDesc}</div>
+                  {salonData.cover_image_url ? (
                     <div style={{ position: "relative" }}>
-                      <img src={salonData.logo_url} style={{ width: 60, height: 60, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
-                      <div onClick={() => update(d => { d.logo_url = ""; return d; })} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</div>
+                      <img src={salonData.cover_image_url} style={{ width: "100%", height: 120, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}`, display: "block" }} />
+                      <button onClick={() => update(d => { d.cover_image_url = ""; return d; })}
+                        style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
                     </div>
                   ) : (
-                    <label style={{ width: 60, height: 60, borderRadius: 12, border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4 }}>
-                      <NavIcon name="camera" size={18} color={`${accent}88`} />
-                      <span style={{ fontSize: 10, color: `${accent}66`, textTransform: "uppercase" }}>{t.logo}</span>
+                    <label style={{ width: "100%", height: 120, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 6 }}>
+                      <NavIcon name="image" size={22} color={accent} />
+                      <span style={{ fontSize: 10, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.uploadCover}</span>
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                         const file = e.target.files[0];
                         if (!file) return;
-                        const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
+                        const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
                         const { error } = await supabase.storage.from("business-images").upload(fileName, file);
                         if (!error) {
                           const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                          update(d => { d.logo_url = publicUrl; return d; });
+                          update(d => { d.cover_image_url = publicUrl; return d; });
                         }
                       }} />
                     </label>
                   )}
-                  <span style={{ fontSize: 12, color: c.textSub }}>{t.logo}</span>
                 </div>
-
-                {/* Cover image upload */}
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>{t.coverDesc}</div>
-                {salonData.cover_image_url ? (
-                  <div style={{ position: "relative", marginBottom: 16 }}>
-                    <img src={salonData.cover_image_url} style={{ width: "100%", height: 80, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
-                    <div onClick={() => update(d => { d.cover_image_url = ""; return d; })} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#ff4757", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer" }}>×</div>
-                  </div>
-                ) : (
-                  <label style={{ width: "100%", height: 80, borderRadius: 12, border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4, marginBottom: 16 }}>
-                    <NavIcon name="image" size={18} color={`${accent}88`} />
-                    <span style={{ fontSize: 10, color: `${accent}66`, textTransform: "uppercase" }}>{t.uploadCover}</span>
-                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
-                      const { error } = await supabase.storage.from("business-images").upload(fileName, file);
-                      if (!error) {
-                        const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                        update(d => { d.cover_image_url = publicUrl; return d; });
-                      }
-                    }} />
-                  </label>
-                )}
               </div>
 
               {/* Booking Policy Section */}
@@ -2822,49 +3851,81 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Discount Codes Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.discountCodes}</SL>
-                
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.discountCodes}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.discount_codes || []).filter(c => c.active).length} / {(salonData.discount_codes || []).length} {lang === "nl" ? "actief" : "active"}</div>
+                </div>
+
                 {/* Existing codes */}
-                {(salonData.discount_codes || []).map((code, idx) => (
-                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "10px 12px", background: c.bg, borderRadius: 14, border: "1px solid " + c.border }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: accent, fontFamily: "monospace" }}>{code.code}</div>
-                      <div style={{ fontSize: 11, color: c.textSub }}>
-                        {code.type === "percent" ? `${code.amount}%` : `€${code.amount}`} {t.discount.toLowerCase()}
+                {(salonData.discount_codes || []).length === 0 ? (
+                  <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "14px 0", fontStyle: "italic" }}>{lang === "nl" ? "Geen kortingscodes" : "No discount codes"}</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                    {(salonData.discount_codes || []).map((code, idx) => (
+                      <div key={idx} style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "12px 14px",
+                        background: code.active ? c.bg : c.inputBg,
+                        borderRadius: 14,
+                        border: `1px solid ${code.active ? `${c.success}33` : c.border}`,
+                        opacity: code.active ? 1 : 0.6,
+                        transition: "all 0.2s"
+                      }}>
+                        {/* Tag icon */}
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <NavIcon name="tag" size={14} color={accent} />
+                        </div>
+                        {/* Code + amount */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: c.text, fontFamily: "monospace", letterSpacing: "0.04em" }}>{code.code}</div>
+                          <div style={{ fontSize: 11, color: c.textSub, marginTop: 2 }}>
+                            <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `€${code.amount}`}</span>
+                            {" "}{t.discount.toLowerCase()}
+                          </div>
+                        </div>
+                        {/* Active toggle */}
+                        <div
+                          onClick={() => update(d => { d.discount_codes[idx].active = !d.discount_codes[idx].active; return d; })}
+                          style={{
+                            width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                            background: code.active ? c.success : c.toggleInactive,
+                            position: "relative", transition: "background 0.2s", flexShrink: 0
+                          }}>
+                          <div style={{ position: "absolute", top: 2, left: code.active ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                        </div>
+                        {/* Delete */}
+                        <button onClick={() => update(d => { d.discount_codes = d.discount_codes.filter((_, i) => i !== idx); return d; })}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <NavIcon name="xmark" size={11} color="currentColor" />
+                        </button>
                       </div>
-                    </div>
-                    <div 
-                      onClick={() => update(d => { d.discount_codes[idx].active = !d.discount_codes[idx].active; return d; })}
-                      style={{ 
-                        width: 36, height: 20, borderRadius: 10, cursor: "pointer",
-                        background: code.active ? "#4ade80" : c.toggleInactive,
-                        position: "relative", transition: "background 0.2s"
-                      }}
-                    >
-                      <div style={{ position: "absolute", top: 2, left: code.active ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
-                    </div>
-                    <div onClick={() => update(d => { d.discount_codes = d.discount_codes.filter((_, i) => i !== idx); return d; })} style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,71,87,0.1)", color: "#ff4757", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14 }}>×</div>
+                    ))}
                   </div>
-                ))}
+                )}
 
                 {/* Add new code form */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  <input className="input-field" placeholder={t.discountCode} value={newDiscount.code} onChange={e => setNewDiscount(d => ({...d, code: e.target.value.toUpperCase()}))} style={{ flex: 1, minWidth: 100, fontSize: 12 }} />
-                  <input className="input-field" placeholder={t.discountAmount} type="number" value={newDiscount.amount} onChange={e => setNewDiscount(d => ({...d, amount: e.target.value}))} style={{ width: 70, fontSize: 12 }} />
-                  <select value={newDiscount.type} onChange={e => setNewDiscount(d => ({...d, type: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 10, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif" }}>
-                    <option value="percent" style={{ background: c.selectBg }}>%</option>
-                    <option value="fixed" style={{ background: c.selectBg }}>€</option>
-                  </select>
+                <div style={{ padding: 14, background: c.bg, border: `1px dashed ${accent}44`, borderRadius: 14 }}>
+                  <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>{lang === "nl" ? "Nieuwe code" : "New code"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 0.7fr", gap: 8, marginBottom: 10 }}>
+                    <input className="input-field" placeholder={t.discountCode} value={newDiscount.code} onChange={e => setNewDiscount(d => ({...d, code: e.target.value.toUpperCase()}))} style={{ fontSize: 12, padding: "10px 12px", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                    <input className="input-field" placeholder={t.discountAmount} type="number" value={newDiscount.amount} onChange={e => setNewDiscount(d => ({...d, amount: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+                    <select value={newDiscount.type} onChange={e => setNewDiscount(d => ({...d, type: e.target.value}))} style={{ background: c.inputBg, border: "1px solid " + c.inputBorder, borderRadius: 14, padding: "10px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
+                      <option value="percent" style={{ background: c.selectBg }}>%</option>
+                      <option value="fixed" style={{ background: c.selectBg }}>€</option>
+                    </select>
+                  </div>
+                  <button className="btn-ghost" style={{ width: "100%", padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
+                    if (!newDiscount.code || !newDiscount.amount) return;
+                    update(d => {
+                      d.discount_codes = [...(d.discount_codes || []), { ...newDiscount, amount: parseFloat(newDiscount.amount) }];
+                      return d;
+                    });
+                    setNewDiscount({ code: "", amount: "", type: "percent", active: true });
+                  }}>
+                    <NavIcon name="plus" size={13} color="currentColor" /> {t.addDiscountCode}
+                  </button>
                 </div>
-                <button className="btn-ghost" style={{ marginTop: 10, width: "100%", fontSize: 12 }} onClick={() => {
-                  if (!newDiscount.code || !newDiscount.amount) return;
-                  update(d => { 
-                    d.discount_codes = [...(d.discount_codes || []), { ...newDiscount, amount: parseFloat(newDiscount.amount) }]; 
-                    return d; 
-                  });
-                  setNewDiscount({ code: "", amount: "", type: "percent", active: true });
-                }}>{t.addDiscountCode}</button>
               </div>
               </>}
 
@@ -3140,7 +4201,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => setShowAddAppt(false)}>{t.cancelEdit}</button>
               </>) : (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
-                  <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color="#86efac" /></div>
+                  <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color={c.success} /></div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
                   <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{t.close}</button>
                 </div>
