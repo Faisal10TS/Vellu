@@ -773,6 +773,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {initialSalon.city && (
               <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>{initialSalon.city}</div>
             )}
+            {(initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0) && (
+              <div className="profile-hero-meta">
+                {initialSalon.reviews?.length > 0 && (
+                  <span className="profile-hero-meta-item">
+                    <NavIcon name="star2" size={13} color="#fbbf24" />
+                    <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
+                  </span>
+                )}
+                {initialSalon.reviews?.length > 0 && initialSalon.services?.length > 0 && (
+                  <span className="profile-hero-meta-sep" />
+                )}
+                {initialSalon.services?.length > 0 && (
+                  <span className="profile-hero-meta-item">
+                    <NavIcon name="scissors" size={13} color="rgba(255,255,255,0.88)" />
+                    <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -787,38 +806,45 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <h2 className="profile-section-title">{t.profileServices}</h2>
               
               {categories.length > 0 && (
-                <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14 }}>
-                  <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
-                    onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
-                  {categories.map(cat => (
-                    <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
-                      onClick={() => setProfileCategory(cat.id)}>
-                      {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
-                    </button>
-                  ))}
+                <div className="profile-cat-scroll">
+                  <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14 }}>
+                    <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
+                      onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
+                    {categories.map(cat => (
+                      <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
+                        onClick={() => setProfileCategory(cat.id)}>
+                        {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {profileFilteredServices.map(s => (
-                <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
-                  {s.photos?.length > 0 ? (
-                    <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt={svcName(s)} loading="lazy" />
-                  ) : (
-                    <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="scissors" size={20} color={c.textMuted} /></div>
-                  )}
-                  <div className="profile-service-info">
-                    <div className="profile-service-name">{svcName(s)}</div>
-                    <div className="profile-service-meta">
-                      <span>{s.duration} {t.min}</span>
-                      <span>·</span>
-                      <span style={{ color: accent, cursor: "pointer" }}>Details</span>
-                      <span>·</span>
-                      <span style={{ fontWeight: 500, color: c.text }}>€{s.variants?.length > 0 ? `${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : s.price}</span>
+              <div className="profile-services-grid">
+                {profileFilteredServices.map(s => (
+                  <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
+                    {s.photos?.length > 0 ? (
+                      <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt={svcName(s)} loading="lazy" />
+                    ) : (
+                      <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="scissors" size={20} color={c.textMuted} /></div>
+                    )}
+                    <div className="profile-service-info">
+                      <div className="profile-service-name">{svcName(s)}</div>
+                      <div className="profile-service-meta">
+                        <span className="profile-service-duration-pill">
+                          <NavIcon name="clock" size={10} color={c.textSub} />
+                          {s.duration} {t.min}
+                        </span>
+                        <span className="profile-service-details-link">Details</span>
+                      </div>
                     </div>
+                    <div className="profile-service-price">
+                      €{s.variants?.length > 0 ? `${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : s.price}
+                    </div>
+                    <svg className="profile-service-chevron" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"><path d="M7 5l5 5-5 5" /></svg>
                   </div>
-                  <svg className="profile-service-chevron" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"><path d="M7 5l5 5-5 5" /></svg>
-                </div>
-              ))}
+                ))}
+              </div>
               {profileFilteredServices.length === 0 && (
                 <div style={{ textAlign: "center", padding: "40px 16px", color: c.textMuted, fontSize: 13 }}>
                   {t.noTreatments}

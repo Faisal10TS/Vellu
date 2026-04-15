@@ -1004,15 +1004,37 @@ const makeCSS = (accent, c = THEMES.dark) => `
     font-family: 'Cormorant Garamond', serif; font-weight: 300; color: #fff;
     letter-spacing: 0.03em; text-shadow: 0 2px 16px rgba(0,0,0,0.5);
   }
+  .profile-hero-meta {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin-top: 12px; font-size: 13px; color: rgba(255,255,255,0.88);
+    text-shadow: 0 1px 8px rgba(0,0,0,0.5); flex-wrap: wrap;
+  }
+  .profile-hero-meta-item {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .profile-hero-meta-sep {
+    width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.5);
+  }
+
+  /* Category pill scroll container — fade right edge to hint scrollability */
+  .profile-cat-scroll {
+    position: relative;
+  }
+  .profile-cat-scroll::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 14px;
+    width: 32px; pointer-events: none;
+    background: linear-gradient(to right, transparent, ${c.bg});
+  }
+
 
   .profile-body {
-    max-width: 1200px; margin: 0 auto; display: flex; gap: 0;
-    padding: 0;
+    max-width: 1440px; margin: 0 auto; display: flex; gap: 0;
+    padding: 0 24px;
   }
   .profile-main {
     flex: 1; min-width: 0;
     border-right: 1px solid ${c.border};
-    padding: 0 32px;
+    padding: 0 40px 0 8px;
   }
   .profile-sidebar {
     width: 340px; flex-shrink: 0; padding: 0 28px;
@@ -1033,8 +1055,17 @@ const makeCSS = (accent, c = THEMES.dark) => `
   }
 
   /* Service rows — Setmore style */
+  .profile-services-grid {
+    display: grid; grid-template-columns: 1fr; gap: 0;
+  }
+  @media (min-width: 1024px) {
+    .profile-services-grid {
+      grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 0;
+    }
+    .profile-services-grid .profile-service-row:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+  }
   .profile-service-row {
-    display: flex; align-items: center; gap: 16px;
+    display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 16px;
     padding: 18px 0; border-bottom: 1px solid ${c.border};
     cursor: pointer; transition: background 0.2s;
   }
@@ -1044,18 +1075,33 @@ const makeCSS = (accent, c = THEMES.dark) => `
     width: 54px; height: 54px; border-radius: 10px; object-fit: cover;
     flex-shrink: 0; background: ${c.bgCard}; border: 1px solid ${c.border};
   }
-  .profile-service-info { flex: 1; min-width: 0; }
-  .profile-service-name { font-size: 15px; font-weight: 500; color: ${c.text}; margin-bottom: 4px; }
-  .profile-service-meta {
-    font-size: 13px; color: ${c.textLabel};
-    display: flex; align-items: center; gap: 6px;
+  .profile-service-info { min-width: 0; }
+  .profile-service-name {
+    font-size: 15px; font-weight: 500; color: ${c.text}; margin-bottom: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .profile-service-meta a { color: ${accent}; text-decoration: underline; cursor: pointer; }
+  .profile-service-meta {
+    font-size: 12px; color: ${c.textLabel};
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .profile-service-duration-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 100px;
+    background: ${c.inputBg}; border: 1px solid ${c.inputBorder};
+    font-size: 11px; color: ${c.textSub}; white-space: nowrap;
+  }
+  .profile-service-details-link { color: ${accent}; cursor: pointer; font-size: 11px; }
+  .profile-service-details-link:hover { text-decoration: underline; }
   .profile-service-price {
-    font-size: 15px; font-weight: 500; color: ${c.text};
-    margin-right: 8px; flex-shrink: 0;
+    font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400;
+    color: ${c.text}; text-align: right; white-space: nowrap; line-height: 1;
   }
   .profile-service-chevron { color: ${c.textMuted}; flex-shrink: 0; }
+  @media (max-width: 420px) {
+    .profile-service-row { gap: 12px; }
+    .profile-service-price { font-size: 20px; }
+    .profile-service-thumb { width: 48px; height: 48px; }
+  }
 
   /* Team card — Setmore style */
   .profile-team-row {
