@@ -712,7 +712,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const StarRow = ({ rating: r, size = 13 }) => (
     <span style={{ display: "inline-flex", gap: 1 }}>
       {[1,2,3,4,5].map(i => (
-        <svg key={i} width={size} height={size} viewBox="0 0 20 20" fill={i <= r ? "#f5c518" : c.inputBg}>
+        <svg key={i} width={size} height={size} viewBox="0 0 20 20" fill={i <= r ? accent : c.inputBg}>
           <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
         </svg>
       ))}
@@ -777,7 +777,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div className="profile-hero-meta">
                 {initialSalon.reviews?.length > 0 && (
                   <span className="profile-hero-meta-item">
-                    <NavIcon name="star2" size={13} color="#fbbf24" />
+                    <svg width={13} height={13} viewBox="0 0 20 20" fill={accent}>
+                      <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                    </svg>
                     <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
                   </span>
                 )}
