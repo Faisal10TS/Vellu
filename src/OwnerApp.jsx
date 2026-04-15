@@ -982,16 +982,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             borderRight: "1px solid " + c.border,
             display: "flex",
             flexDirection: "column",
-            height: "100dvh",
+            position: "fixed",
+            top: 0,
+            left: 0,
+            bottom: 0,
+            background: c.bg,
+            zIndex: 50,
             flexShrink: 0
           }}>
             {/* Sidebar Header */}
-            <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid " + c.border }}>
+            <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
               <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
             </div>
 
             {/* Salon Info */}
-            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border }}>
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
               <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonData.name}</div>
               <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{salonData.city}</div>
               <div style={{
@@ -1055,12 +1060,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         )}
 
         {/* Main Content Area */}
-        <main style={{ 
-          flex: 1, 
-          display: "flex", 
+        <main style={{
+          flex: 1,
+          display: "flex",
           flexDirection: "column",
           height: "100dvh",
           minWidth: 0,
+          minHeight: 0,
+          marginLeft: isMobile ? 0 : 260,
           overflow: "hidden"
         }}>
           {/* Mobile Header */}
