@@ -644,9 +644,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"]
     : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   
-  const todayDayIndex = new Date().getDay();
+  const _nowDate = new Date();
+  const todayDayIndex = _nowDate.getDay();
   const todayHoursObj = activeHours[todayDayIndex] || { closed: true };
-  const salonIsOpen = !todayHoursObj.closed;
+  // Salon is only "open now" if today is not marked closed AND the current
+  // time falls within the open/close window. Previously this only checked the
+  // closed flag, so the indicator stayed green even after closing time.
+  const salonIsOpen = (() => {
+    if (todayHoursObj.closed || !todayHoursObj.open || !todayHoursObj.close) return false;
+    const [openH, openM] = String(todayHoursObj.open).split(":").map(Number);
+    const [closeH, closeM] = String(todayHoursObj.close).split(":").map(Number);
+    if (Number.isNaN(openH) || Number.isNaN(closeH)) return false;
+    const mins = _nowDate.getHours() * 60 + _nowDate.getMinutes();
+    const openMins = openH * 60 + (openM || 0);
+    const closeMins = closeH * 60 + (closeM || 0);
+    return mins >= openMins && mins < closeMins;
+  })();
 
   const avgRating = initialSalon.reviews?.length > 0
     ? (initialSalon.reviews.reduce((s, r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)
