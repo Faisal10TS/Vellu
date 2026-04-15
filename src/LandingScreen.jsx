@@ -17,6 +17,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const [slugInput, setSlugInput] = useState("");
   const [error, setError] = useState("");
   const [faqOpen, setFaqOpen] = useState(null);
+  const [billingCycle, setBillingCycle] = useState("monthly"); // "monthly" | "yearly"
 
   const goToSlug = (slug) => {
     let clean = slug.toLowerCase().trim()
@@ -231,17 +232,72 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* ─── PRICING ─── */}
         <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {t.simplePricing}
               </h2>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
+            {/* Billing cycle toggle */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 100, padding: 4, position: "relative" }}>
+                {[
+                  { key: "monthly", label: t.billingMonthly },
+                  { key: "yearly", label: t.billingYearly }
+                ].map(opt => {
+                  const active = billingCycle === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setBillingCycle(opt.key)}
+                      style={{
+                        padding: "9px 22px",
+                        borderRadius: 100,
+                        border: "none",
+                        background: active ? ACCENT : "transparent",
+                        color: active ? c.btnOnDark : c.textSub,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        letterSpacing: "0.04em",
+                        cursor: "pointer",
+                        fontFamily: "'Jost',sans-serif",
+                        transition: "all 0.2s",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8
+                      }}
+                    >
+                      {opt.label}
+                      {opt.key === "yearly" && (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          padding: "3px 8px",
+                          borderRadius: 100,
+                          background: active ? c.btnOnDark : `${ACCENT}22`,
+                          color: active ? ACCENT : ACCENT,
+                        }}>
+                          {t.twoMonthsFree}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               {[
-                { name: "Starter", price: "19", popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Up to 3 staff members"] } },
-                { name: "Professional", price: "39", popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Eigen branding & logo", "Kortingscodes", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Custom branding & logo", "Discount codes", "Priority support"] } },
-              ].map((plan, i) => (
+                { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Up to 3 staff members"] } },
+                { name: "Professional", price: 39, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Eigen branding & logo", "Kortingscodes", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Custom branding & logo", "Discount codes", "Priority support"] } },
+              ].map((plan, i) => {
+                const yearlyTotal = plan.price * 10; // 2 months free
+                const displayPrice = billingCycle === "yearly" ? yearlyTotal : plan.price;
+                const displaySuffix = billingCycle === "yearly" ? t.perYear : t.perMonth;
+                return (
                 <div key={i} style={{
                   background: plan.popular ? `${ACCENT}08` : c.bgCard,
                   border: `1.5px solid ${plan.popular ? ACCENT : c.border}`,
@@ -255,8 +311,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{plan.name}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: ACCENT }}>
-                      €{plan.price}<span style={{ fontSize: 16, color: c.textMuted }}>{t.perMonth}</span>
+                      €{displayPrice}<span style={{ fontSize: 16, color: c.textMuted }}>{displaySuffix}</span>
                     </div>
+                    {billingCycle === "yearly" && (
+                      <div style={{ fontSize: 11, color: ACCENT, marginTop: 4, fontWeight: 500 }}>
+                        {t.twoMonthsFree}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
                     {(lang === "nl" ? plan.features.nl : plan.features.en).map((f, j) => (
@@ -270,7 +331,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     {t.getStarted}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
