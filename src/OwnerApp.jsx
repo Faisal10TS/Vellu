@@ -977,61 +977,57 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         
         {/* Desktop Sidebar */}
         {!isMobile && (
-          <aside style={{ 
-            width: 260, 
+          <aside style={{
+            width: 260,
             borderRight: "1px solid " + c.border,
             display: "flex",
             flexDirection: "column",
-            position: "sticky",
-            top: 0,
             height: "100dvh",
             flexShrink: 0
           }}>
             {/* Sidebar Header */}
-            <div style={{ padding: "28px 24px", borderBottom: "1px solid " + c.border }}>
-              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 24, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
-              <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.08em" }}>{t.ownerDashboard}</div>
+            <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid " + c.border }}>
+              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
             </div>
 
             {/* Salon Info */}
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid " + c.border }}>
-              <div style={{ fontWeight: 500, fontSize: 15, marginBottom: 4 }}>{salonData.name}</div>
-              <div style={{ fontSize: 11, color: c.textLabel }}>{salonData.city}</div>
-              <div style={{ 
-                marginTop: 12, 
-                fontSize: 11, 
-                color: accent, 
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border }}>
+              <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonData.name}</div>
+              <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{salonData.city}</div>
+              <div style={{
+                fontSize: 11,
+                color: accent,
                 background: `${accent}12`,
                 border: `1px solid ${accent}22`,
                 borderRadius: 8,
-                padding: "8px 12px"
+                padding: "7px 12px"
               }}>
                 vellu.cc/{salonData.id}
               </div>
             </div>
 
             {/* Navigation */}
-            <nav style={{ flex: 1, padding: "16px 12px" }}>
+            <nav style={{ flex: 1, minHeight: 0, padding: "12px 12px", overflowY: "auto" }}>
               {navItems.map(([k, icon, label]) => (
-                <div 
+                <div
                   key={k}
                   onClick={() => setView(k)}
-                  style={{ 
-                    display: "flex", 
-                    alignItems: "center", 
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
                     gap: 14,
-                    padding: "14px 16px",
+                    padding: "11px 16px",
                     borderRadius: 12,
                     cursor: "pointer",
-                    marginBottom: 4,
+                    marginBottom: 3,
                     background: view === k ? `${accent}12` : "transparent",
                     border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
                     transition: "all 0.2s"
                   }}
                 >
                   <NavIcon name={icon} size={18} color={view === k ? accent : c.textLabel} />
-                  <span style={{ 
-                    fontSize: 13, 
+                  <span style={{
+                    fontSize: 13,
                     fontWeight: view === k ? 600 : 400,
                     color: view === k ? accent : c.textSub,
                     letterSpacing: "0.02em"
@@ -1041,14 +1037,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </nav>
 
             {/* Sidebar Footer */}
-            <div style={{ padding: "16px 20px", borderTop: "1px solid " + c.border }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ padding: "12px 20px", borderTop: "1px solid " + c.border, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <ThemeToggle />
                 <LangToggle lang={lang} setLang={setLang} />
               </div>
-              <button 
-                className="btn-ghost" 
-                style={{ width: "100%", marginTop: 12, fontSize: 11, color: c.textLabel, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} 
+              <button
+                className="btn-ghost"
+                style={{ width: "100%", marginTop: 4, fontSize: 11, color: c.textLabel, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 onClick={onLogout}
               >
                 <NavIcon name="logout" size={14} color={c.textLabel} />

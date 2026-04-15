@@ -216,17 +216,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop sidebar */}
         {!isMobile && (
-          <div style={{ width: 240, padding: "28px 20px", borderRight: "1px solid " + c.border, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, background: c.bg, zIndex: 50 }}>
-            <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>{salonProfile.business_name}</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: accent, marginBottom: 24, display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: accent }}>{myStaff.name?.[0] || "?"}</div>
-              {myStaff.name}
+          <div style={{ width: 240, borderRight: "1px solid " + c.border, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, background: c.bg, zIndex: 50 }}>
+            <div style={{ padding: "18px 20px 14px", flexShrink: 0 }}>
+              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{salonProfile.business_name}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: accent, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 26, height: 26, borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: accent }}>{myStaff.name?.[0] || "?"}</div>
+                {myStaff.name}
+              </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 12px" }}>
               {navItems.map(([k, icon, label]) => (
                 <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12,
+                  display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12,
                   background: view === k ? `${accent}12` : "transparent",
                   border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
                   cursor: "pointer", transition: "all 0.2s"
@@ -236,7 +238,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8, paddingTop: 20, borderTop: "1px solid " + c.border }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 20px", borderTop: "1px solid " + c.border, flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ThemeToggle /><LangToggle lang={lang} setLang={setLang} />
               </div>
@@ -246,7 +248,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 240, padding: isMobile ? "16px 18px 100px" : "30px 40px", maxWidth: isMobile ? "100%" : 800, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 240, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
               <div>
@@ -543,6 +546,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               <button className="btn-ghost" style={{ width: "100%", marginTop: 16, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
             </div>
           )}
+          </div>
         </div>
 
         {/* Add Appointment Modal */}
