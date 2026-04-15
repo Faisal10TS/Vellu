@@ -1020,7 +1020,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&output=embed`}
                               width="100%"
                               height={isMobile ? 180 : 220}
-                              style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.3) contrast(1.1)" : "none" }}
+                              style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
                               loading="lazy"
                               referrerPolicy="no-referrer-when-downgrade"
                             />
@@ -1046,7 +1046,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&output=embed`}
                           width="100%"
                           height={isMobile ? 220 : 280}
-                          style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.3) contrast(1.1)" : "none" }}
+                          style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
                           loading="lazy"
                           referrerPolicy="no-referrer-when-downgrade"
                         />
