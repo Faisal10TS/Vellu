@@ -1017,7 +1017,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}` }}>
                             <iframe
                               title={`${loc.name} — map`}
-                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&output=embed`}
+                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&t=m&z=16&ie=UTF8&output=embed`}
                               width="100%"
                               height={isMobile ? 180 : 220}
                               style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
@@ -1043,7 +1043,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ marginTop: 14, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.border}` }}>
                         <iframe
                           title={`${initialSalon.name} — map`}
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&output=embed`}
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&ie=UTF8&output=embed`}
                           width="100%"
                           height={isMobile ? 220 : 280}
                           style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
