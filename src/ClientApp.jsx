@@ -647,18 +647,30 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const _nowDate = new Date();
   const todayDayIndex = _nowDate.getDay();
   const todayHoursObj = activeHours[todayDayIndex] || { closed: true };
-  // Salon is only "open now" if today is not marked closed AND the current
-  // time falls within the open/close window. Previously this only checked the
-  // closed flag, so the indicator stayed green even after closing time.
-  const salonIsOpen = (() => {
-    if (todayHoursObj.closed || !todayHoursObj.open || !todayHoursObj.close) return false;
+  // Compute both an "is open now" boolean AND a status label with the right
+  // phrasing for each case (day-closed vs before-open vs after-close vs open).
+  const { salonIsOpen, salonStatusLabel } = (() => {
+    if (todayHoursObj.closed) {
+      return { salonIsOpen: false, salonStatusLabel: t.closedToday };
+    }
+    if (!todayHoursObj.open || !todayHoursObj.close) {
+      return { salonIsOpen: false, salonStatusLabel: t.closedNow };
+    }
     const [openH, openM] = String(todayHoursObj.open).split(":").map(Number);
     const [closeH, closeM] = String(todayHoursObj.close).split(":").map(Number);
-    if (Number.isNaN(openH) || Number.isNaN(closeH)) return false;
+    if (Number.isNaN(openH) || Number.isNaN(closeH)) {
+      return { salonIsOpen: false, salonStatusLabel: t.closedNow };
+    }
     const mins = _nowDate.getHours() * 60 + _nowDate.getMinutes();
     const openMins = openH * 60 + (openM || 0);
     const closeMins = closeH * 60 + (closeM || 0);
-    return mins >= openMins && mins < closeMins;
+    if (mins < openMins) {
+      return { salonIsOpen: false, salonStatusLabel: `${t.closedNow} · ${t.opensAt} ${todayHoursObj.open}` };
+    }
+    if (mins >= closeMins) {
+      return { salonIsOpen: false, salonStatusLabel: t.closedNow };
+    }
+    return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${todayHoursObj.close}` };
   })();
 
   const avgRating = initialSalon.reviews?.length > 0
@@ -1046,7 +1058,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Open/Closed status */}
               <div className="profile-sidebar-status" style={{ cursor: "pointer" }} onClick={() => setExpandedHours(!expandedHours)}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: salonIsOpen ? "#4ade80" : "#f87171" }} />
-                <span>{salonIsOpen ? (todayHoursObj.close ? `${t.openNow} · ${t.closesAt} ${todayHoursObj.close}` : t.openNow) : t.closedToday}</span>
+                <span>{salonStatusLabel}</span>
                 <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
                   style={{ transition: "transform 0.2s", transform: expandedHours ? "rotate(180deg)" : "none", marginLeft: 2 }}><path d="M5 8l5 5 5-5" /></svg>
               </div>
