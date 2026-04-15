@@ -1007,23 +1007,41 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {hasLocations ? (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
                   {(initialSalon.locations || []).map(loc => {
-                    const locQuery = [loc.address, loc.city].filter(Boolean).join(", ");
+                    const locAddr = (loc.address || "").trim();
+                    const locCity = (loc.city || "").trim();
+                    const locQuery = locAddr
+                      ? (locCity && !locAddr.toLowerCase().includes(locCity.toLowerCase()) ? `${locAddr}, ${locCity}` : locAddr)
+                      : locCity;
+                    const locMapsHref = locQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locQuery)}` : null;
                     return (
                       <div key={loc.id} style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                         <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
                         {loc.address && <div style={{ fontSize: 13, color: c.textSub }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
                         {loc.phone && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
                         {locQuery && (
-                          <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}` }}>
+                          <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
                             <iframe
                               title={`${loc.name} — map`}
-                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&t=m&z=16&ie=UTF8&output=embed`}
+                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&t=m&z=16&hl=${lang}&output=embed`}
                               width="100%"
                               height={isMobile ? 180 : 220}
                               style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
                               loading="lazy"
                               referrerPolicy="no-referrer-when-downgrade"
                             />
+                            {locMapsHref && (
+                              <a href={locMapsHref} target="_blank" rel="noopener noreferrer"
+                                style={{
+                                  position: "absolute", top: 8, right: 8,
+                                  background: c.bg, color: c.text, fontSize: 10, fontWeight: 500,
+                                  padding: "5px 10px", borderRadius: 100,
+                                  textDecoration: "none",
+                                  border: `1px solid ${c.border}`,
+                                  boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                                }}>
+                                Maps ↗
+                              </a>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1037,19 +1055,38 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
                   </div>
                   {(() => {
-                    const mainQuery = [initialSalon.address, initialSalon.city].filter(Boolean).join(", ");
+                    // If the address already contains the city name, don't append it
+                    // again — double "Amsterdam, Amsterdam" makes Google zoom out to
+                    // the whole city instead of the exact street.
+                    const addr = (initialSalon.address || "").trim();
+                    const city = (initialSalon.city || "").trim();
+                    const mainQuery = addr
+                      ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr)
+                      : city;
                     if (!mainQuery) return null;
+                    const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mainQuery)}`;
                     return (
-                      <div style={{ marginTop: 14, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.border}` }}>
+                      <div style={{ marginTop: 14, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
                         <iframe
                           title={`${initialSalon.name} — map`}
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&ie=UTF8&output=embed`}
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&hl=${lang}&output=embed`}
                           width="100%"
                           height={isMobile ? 220 : 280}
                           style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
                           loading="lazy"
                           referrerPolicy="no-referrer-when-downgrade"
                         />
+                        <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+                          style={{
+                            position: "absolute", top: 10, right: 10,
+                            background: c.bg, color: c.text, fontSize: 11, fontWeight: 500,
+                            padding: "6px 12px", borderRadius: 100,
+                            textDecoration: "none",
+                            border: `1px solid ${c.border}`,
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                          }}>
+                          {lang === "nl" ? "Open in Maps ↗" : "Open in Maps ↗"}
+                        </a>
                       </div>
                     );
                   })()}
