@@ -1,0 +1,2306 @@
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "./supabase.js";
+import {
+  useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
+  compressImage, sendEmails, ACCENT,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
+  getToday, fmt, getDays,
+  TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
+} from "./shared.jsx";
+
+function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
+  const { colors: c } = useTheme();
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+
+  const submit = async () => {
+    if (rating === 0 || submitting) return;
+    setSubmitting(true);
+    setReviewError("");
+    try {
+      const { error } = await supabase.from("reviews").insert({
+        owner_id: salon.owner_id,
+        client_name: clientName,
+        client_email: clientEmail,
+        rating,
+        comment: comment || null
+      });
+      if (error) {
+        setReviewError(t.reviewSaveFailed);
+      } else {
+        setSubmitted(true);
+      }
+    } catch (e) {
+      console.error("Review submit error:", e);
+      setReviewError(t.somethingWrong);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div style={{ textAlign: "center", padding: "16px 0" }}>
+        <div style={{ fontSize: 13, color: "#86efac" }}>{t.reviewSubmitted}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, textAlign: "left" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>{t.writeReview}</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[1,2,3,4,5].map(s => (
+          <span key={s} onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} style={{ fontSize: 26, cursor: "pointer", color: s <= (hoverRating || rating) ? accent : c.textMuted, transition: "all 0.15s", transform: s <= (hoverRating || rating) ? "scale(1.1)" : "none" }}>★</span>
+        ))}
+      </div>
+      <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
+        style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
+      {reviewError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8, textAlign: "center" }}>{reviewError}</div>}
+      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
+        onClick={submit} disabled={rating === 0 || submitting}>{submitting ? "..." : t.submitReview}</button>
+    </div>
+  );
+}
+
+// ─── CLIENT BOOKING ───────────────────────────────────────────
+function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false, reviewEmail = "" }) {
+  const { colors: c } = useTheme();
+  const accent = initialSalon.accent || ACCENT;
+  const t = T[lang];
+  const DAY = lang === "nl" ? DAY_NL : DAY_EN;
+  const MON = lang === "nl" ? MON_NL : MON_EN;
+  const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
+
+
+
+
+
+
+  const [step, setStep] = useState(() => {
+    // If salon has multiple locations, start at step 0 (location picker)
+    const locs = initialSalon.locations || [];
+    if (locs.length > 1) return 0;
+    return 1;
+  });
+  const [selectedLocation, setSelectedLocation] = useState(() => {
+    const locs = initialSalon.locations || [];
+    return locs.length === 1 ? locs[0] : null;
+  });
+  const hasLocations = (initialSalon.locations || []).length > 1;
+  const goToStep = (s) => {
+    if (s === 2) setSlotsRefreshKey(k => k + 1); // Refresh booked slots when entering date step
+    setStep(s);
+  };
+  // Multi-service state: array of { service, variant, extras: [], staff: null }
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [activeCategory, setActiveCategory] = useState("all");
+  
+  // Location-aware business hours and break minutes
+  const activeHours = (selectedLocation?.business_hours) || initialSalon.business_hours || DEFAULT_HOURS;
+  const activeBreakMinutes = selectedLocation?.break_minutes ?? initialSalon.break_minutes ?? 0;
+  
+  // Day override helpers (blocked/exception days)
+  const dayOverrides = initialSalon.day_overrides || {};
+  const isDayBlocked = (dateStr) => {
+    const override = dayOverrides[dateStr];
+    if (!override || override.type !== "blocked") return false;
+    // If it has specific time bounds, it's a time-slot block, NOT a full-day block
+    if (override.block_time_start && override.block_time_end) return false;
+    return true;
+  };
+  const isTimeBlockedByOverride = (dateStr, timeStr) => {
+    const override = dayOverrides[dateStr];
+    if (!override || override.type !== "blocked") return false;
+    if (override.block_time_start && override.block_time_end) {
+      return timeStr >= override.block_time_start && timeStr < override.block_time_end;
+    }
+    return false; // whole-day blocks are handled by isDayBlocked
+  };
+  const isDayException = (dateStr) => dayOverrides[dateStr]?.type === "exception";
+  const getEffectiveHours = (dateStr) => {
+    if (isDayBlocked(dateStr)) return { closed: true };
+    if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
+    const dayOfWeek = new Date(dateStr).getDay();
+    return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+  };
+  
+  // Check if a staff member works on a given day
+  const isStaffAvailable = (staffMember, dateStr) => {
+    if (!staffMember?.working_hours) return true;
+    const dayOfWeek = new Date(dateStr).getDay();
+    const staffDay = staffMember.working_hours[dayOfWeek];
+    if (!staffDay) return true;
+    return !staffDay.closed;
+  };
+
+  // Get effective time window considering all selected staff members' working hours
+  const getStaffTimeWindow = (dateStr) => {
+    const assignedStaff = selectedServices.filter(item => item.staff).map(item => item.staff);
+    if (assignedStaff.length === 0) return null; // No staff constraint
+    const dayOfWeek = new Date(dateStr).getDay();
+    let latestStart = "00:00";
+    let earliestEnd = "23:59";
+    for (const staff of assignedStaff) {
+      if (!staff.working_hours) continue; // No constraints, follows salon hours
+      const staffDay = staff.working_hours[dayOfWeek];
+      if (!staffDay) continue; // Day not configured = follows salon hours
+      if (staffDay.closed) return { closed: true }; // Staff explicitly closed this day
+      if (staffDay.open && staffDay.open > latestStart) latestStart = staffDay.open;
+      if (staffDay.close && staffDay.close < earliestEnd) earliestEnd = staffDay.close;
+    }
+    if (latestStart >= earliestEnd) return { closed: true }; // No overlapping window
+    return { open: latestStart, close: earliestEnd };
+  };
+
+  // Booking window helpers (min/max advance)
+  const minAdvanceHours = initialSalon.min_advance_hours || 0;
+  const maxAdvanceDays = initialSalon.max_advance_days || 60;
+  
+  const isDayInBookingWindow = (dateStr) => {
+    const now = getToday();
+    const dayDate = new Date(dateStr + "T23:59:59");
+    const minDate = new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000);
+    const maxDate = new Date(now);
+    maxDate.setDate(maxDate.getDate() + maxAdvanceDays);
+    maxDate.setHours(23, 59, 59, 999);
+    if (dayDate < minDate) return false;
+    if (new Date(dateStr + "T00:00:00") > maxDate) return false;
+    return true;
+  };
+  
+  // Find first available (non-closed) day within booking window
+  const getFirstAvailableDate = () => {
+    const now = getToday();
+    const maxDays = Math.min(maxAdvanceDays + 1, 90);
+    for (let i = 0; i < maxDays; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      const dateStr = fmt(d);
+      const hours = getEffectiveHours(dateStr);
+      if (!hours.closed && isDayInBookingWindow(dateStr)) return dateStr;
+    }
+    return fmt(getToday()); // Fallback
+  };
+  
+  const [date, setDate] = useState(getFirstAvailableDate);
+  const [time, setTime] = useState(null);
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" });
+  const [clientNoShows, setClientNoShows] = useState(0);
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorToast, setErrorToast] = useState("");
+  const [gallery, setGallery] = useState(null);
+  const [policyAgreed, setPolicyAgreed] = useState(false);
+  const [discountCode, setDiscountCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const [discountError, setDiscountError] = useState("");
+  const [clientFound, setClientFound] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
+  const [showReviewForm, setShowReviewForm] = useState(reviewMode);
+  const [mode, setMode] = useState("profile"); // "profile" | "booking"
+  const [profileTab, setProfileTab] = useState("services");
+  const [profileCategory, setProfileCategory] = useState("all");
+  const [reviewSort, setReviewSort] = useState("recent");
+  const [expandedHours, setExpandedHours] = useState(false);
+  const [galleryExpanded, setGalleryExpanded] = useState(false);
+  const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const [expandedPolicy, setExpandedPolicy] = useState(false);
+  const [expandedTeamMember, setExpandedTeamMember] = useState(null);
+  const profileSectionRefs = useRef({});
+  const profileMainRef = useRef(null);
+  const profileTabsBarRef = useRef(null);
+  const isScrollingToTab = useRef(false);
+  const emailLookupRef = useRef(0);
+
+  // Scroll-spy: update active tab based on which section is closest to top
+  useEffect(() => {
+    if (mode !== "profile") return;
+    const HEADER_OFFSET = 80;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking || isScrollingToTab.current) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const sections = profileSectionRefs.current;
+        const sectionIds = Object.keys(sections).filter(k => sections[k]);
+        let activeId = sectionIds[0];
+        for (const id of sectionIds) {
+          const el = sections[id];
+          if (!el) continue;
+          const top = el.getBoundingClientRect().top;
+          if (top <= HEADER_OFFSET + 40) activeId = id;
+        }
+        if (activeId) setProfileTab(activeId);
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [mode]);
+
+  // Auto-scroll the tab bar so the active tab is visible
+  useEffect(() => {
+    const bar = profileTabsBarRef.current;
+    if (!bar) return;
+    const activeBtn = bar.querySelector(`[data-tab-id="${profileTab}"]`);
+    if (!activeBtn) return;
+    const scrollLeft = activeBtn.offsetLeft - bar.offsetWidth / 2 + activeBtn.offsetWidth / 2;
+    bar.scrollTo({ left: scrollLeft, behavior: "smooth" });
+  }, [profileTab]);
+  const days = getDays(Math.min(maxAdvanceDays + 1, 90));
+  
+  // Check if form is complete
+  const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
+  const policyValid = !initialSalon.booking_policy || policyAgreed;
+  const canConfirm = form.firstName && form.lastName && form.email && phoneValid && policyValid;
+
+  // Multi-service helpers
+  const getStaffForService = (serviceId) => {
+    return (initialSalon.staff || []).filter(m =>
+      (m.service_ids?.length === 0 || m.service_ids?.includes(serviceId)) &&
+      isStaffAvailable(m, date)
+    );
+  };
+
+  const isServiceSelected = (serviceId) => selectedServices.some(item => item.service.id === serviceId);
+  
+  const getServiceItem = (serviceId) => selectedServices.find(item => item.service.id === serviceId);
+
+  const toggleServiceSelection = (s) => {
+    setSelectedServices(prev => {
+      if (prev.find(item => item.service.id === s.id)) {
+        return prev.filter(item => item.service.id !== s.id);
+      }
+      return [...prev, { service: s, variant: null, extras: [], staff: null }];
+    });
+  };
+
+  const updateServiceItem = (serviceId, updates) => {
+    setSelectedServices(prev => prev.map(item =>
+      item.service.id === serviceId ? { ...item, ...updates } : item
+    ));
+  };
+
+  const toggleExtraForService = (serviceId, extra) => {
+    setSelectedServices(prev => prev.map(item => {
+      if (item.service.id !== serviceId) return item;
+      const has = item.extras.find(e => e.id === extra.id);
+      return { ...item, extras: has ? item.extras.filter(e => e.id !== extra.id) : [...item.extras, extra] };
+    }));
+  };
+
+  const canProceedStep1 = selectedServices.length > 0 && selectedServices.every(item =>
+    !item.service.variants?.length || item.variant
+  );
+  const missingVariants = selectedServices.filter(item => item.service.variants?.length > 0 && !item.variant);
+
+  // Category filtering
+  const categories = initialSalon.categories || [];
+  const filteredServices = activeCategory === "all"
+    ? initialSalon.services
+    : initialSalon.services.filter(s => s.category_id === activeCategory);
+
+  // Get active discount codes
+  const activeCodes = (initialSalon.discount_codes || []).filter(dc => dc.active);
+  
+  // Apply discount code - called on input change for instant feedback
+  const applyDiscountCode = (code = discountCode) => {
+    setDiscountError("");
+    if (!code.trim()) return;
+    const found = activeCodes.find(dc => dc.code.toUpperCase() === code.toUpperCase());
+    if (found) {
+      setAppliedDiscount(found);
+      setDiscountCode("");
+    } else {
+      setDiscountError(t.invalidCode);
+    }
+  };
+  
+  // Auto-apply discount when code matches
+  const handleDiscountInput = (value) => {
+    const upperVal = value.toUpperCase();
+    setDiscountCode(upperVal);
+    setDiscountError("");
+    // Auto-apply if exact match found
+    const found = activeCodes.find(dc => dc.code === upperVal);
+    if (found) {
+      setAppliedDiscount(found);
+      setDiscountCode("");
+    }
+  };
+
+  const getPrice = () => {
+    let total = selectedServices.reduce((sum, item) => {
+      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
+      const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+      return sum + base + extrasTotal;
+    }, 0);
+    if (appliedDiscount) {
+      if (appliedDiscount.type === "percent") {
+        total = Math.max(0, total * (1 - appliedDiscount.amount / 100));
+      } else {
+        total = Math.max(0, total - appliedDiscount.amount);
+      }
+    }
+    return total;
+  };
+  const getOriginalPrice = () => {
+    return selectedServices.reduce((sum, item) => {
+      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
+      const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
+      return sum + base + extrasTotal;
+    }, 0);
+  };
+  const getDuration = () => {
+    return selectedServices.reduce((sum, item) => {
+      return sum + (item.variant ? item.variant.duration : (item.service.duration || 0));
+    }, 0);
+  };
+  const getServiceLabel = () => {
+    return selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      if (item.staff) label += ` (${item.staff.name})`;
+      return label;
+    }).join(" + ");
+  };
+  const getAllExtrasFlat = () => {
+    return selectedServices.flatMap(item => item.extras);
+  };
+
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); };
+
+  // Enter booking mode (optionally pre-select a service)
+  const enterBooking = (service = null) => {
+    // Reset booking state
+    setStep(hasLocations ? 0 : 1);
+    setSelectedServices(service ? [{ service, variant: null, extras: [], staff: null }] : []);
+    setTime(null);
+    setDone(false);
+    setSubmitting(false);
+    setSlotsRefreshKey(k => k + 1);
+    setClientNoShows(0);
+    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" });
+    setPolicyAgreed(false);
+    setAppliedDiscount(null);
+    setDiscountCode("");
+    setActiveCategory("all");
+    if (hasLocations) setSelectedLocation(null);
+    setMode("booking");
+  };
+
+  // Responsive hook
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Client lookup (debounced) - check if returning client
+  useEffect(() => {
+    if (!form.email || form.email.length < 5 || !form.email.includes("@")) {
+      setClientFound(false);
+      return;
+    }
+    const lookupId = ++emailLookupRef.current;
+    const timer = setTimeout(async () => {
+      const { data } = await supabase.from("clients").select("first_name, last_name, phone, allergies, no_show_count").eq("email", form.email.toLowerCase()).maybeSingle();
+      // Ignore stale responses - only apply if this is still the latest lookup
+      if (lookupId !== emailLookupRef.current) return;
+      if (data) {
+        setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone, allergies: data.allergies || f.allergies }));
+        setClientNoShows(data.no_show_count || 0);
+        setClientFound(true);
+      } else {
+        setClientFound(false);
+        setClientNoShows(0);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.email]);
+
+  // Load booked time slots for selected date (include staff_id for multi-staff filtering)
+  useEffect(() => {
+    if (!date || !initialSalon.owner_id) return;
+    const loadSlots = async () => {
+      let query = supabase
+        .from("appointments")
+        .select("time, service_duration, staff_id")
+        .eq("owner_id", initialSalon.owner_id)
+        .eq("date", date)
+        .in("status", ["confirmed", "completed"]);
+      // Filter by location for multi-location salons
+      if (selectedLocation?.id) query = query.eq("location_id", selectedLocation.id);
+      const { data, error } = await query;
+      if (!error) setBookedSlots(data || []);
+    };
+    loadSlots();
+  }, [date, initialSalon.owner_id, slotsRefreshKey]);
+
+  // Check if a time slot overlaps with existing bookings (including break time)
+  // For multi-staff salons: only check slots for the same staff member(s)
+  const breakBuffer = activeBreakMinutes;
+  
+  const isTimeSlotBooked = (slotTime) => {
+    const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
+    const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
+    const selectedStaffIds = selectedServices.filter(item => item.staff).map(item => item.staff.id);
+    const hasStaffSelection = selectedStaffIds.length > 0;
+    
+    for (const booked of bookedSlots) {
+      if (!booked.time) continue;
+      // Multi-staff filtering: if staff is selected, only check overlaps with same staff
+      // If no staff selected (solo salon), check all appointments
+      if (hasStaffSelection && booked.staff_id && !selectedStaffIds.includes(booked.staff_id)) continue;
+      
+      const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
+      const bookedDuration = Math.max(booked.service_duration || 30, 30) + breakBuffer;
+      // Check overlap: two ranges [slotStart, slotEnd+break) and [bookedStart, bookedEnd+break)
+      const slotEnd = slotMinutes + myDuration + breakBuffer;
+      const bookedEnd = bookedMinutes + bookedDuration;
+      if (slotMinutes < bookedEnd && slotEnd > bookedMinutes) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Shared time-slot filter: returns available times for a given date
+  const getAvailableTimes = (forDate) => {
+    const dayHours = getEffectiveHours(forDate);
+    const staffWindow = getStaffTimeWindow(forDate);
+    const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
+    const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
+    const serviceDuration = Math.max(getDuration(), 30);
+    return TIMES.filter(tt => {
+      if (dayHours.closed || staffWindow?.closed) return false;
+      if (tt < effectiveOpen || tt >= effectiveClose) return false;
+      // Check if service fits before closing time
+      const [sh, sm] = tt.split(":").map(Number);
+      const slotEndMinutes = sh * 60 + sm + serviceDuration;
+      const [ch, cm] = effectiveClose.split(":").map(Number);
+      if (slotEndMinutes > ch * 60 + cm) return false;
+      if (isTimeBlockedByOverride(forDate, tt)) return false;
+      if (forDate === fmt(getToday())) {
+        const now = getToday();
+        const [h, m] = tt.split(":").map(Number);
+        if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+      }
+      if (minAdvanceHours > 0 && forDate === fmt(getToday())) {
+        const now = getToday();
+        const slotDate = new Date(forDate + "T" + tt + ":00");
+        if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
+      }
+      return true;
+    });
+  };
+
+  // Generate random cancellation token (cryptographically secure)
+  const generateToken = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    const values = crypto.getRandomValues(new Uint32Array(24));
+    return Array.from(values, (v) => chars[v % chars.length]).join("");
+  };
+
+  // Confirm booking - handles client save, appointment insert, cancellation token
+  const confirmBooking = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+    // 1. Save or update client
+    const clientEmail = form.email.toLowerCase();
+    let clientId = null;
+    const { data: existingClient } = await supabase.from("clients").select("id").eq("email", clientEmail).maybeSingle();
+    
+    if (existingClient) {
+      clientId = existingClient.id;
+      await supabase.from("clients").update({
+        first_name: form.firstName,
+        last_name: form.lastName,
+        phone: form.phone || null,
+        allergies: form.allergies || null,
+        last_visit: new Date().toISOString()
+      }).eq("id", clientId);
+    } else {
+      const { data: newClient } = await supabase.from("clients").insert({
+        email: clientEmail,
+        first_name: form.firstName,
+        last_name: form.lastName,
+        phone: form.phone || null,
+        allergies: form.allergies || null,
+        last_visit: new Date().toISOString()
+      }).select("id").single();
+      if (newClient) clientId = newClient.id;
+    }
+
+    // 2. Build combined service name with per-service staff and extras
+    const combinedServiceName = selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      if (item.staff) label += ` (${item.staff.name})`;
+      if (item.extras.length > 0) label += " + " + item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
+      return label;
+    }).join(" · ") + (appliedDiscount ? ` [${appliedDiscount.code}]` : "");
+
+    // Use first service's staff as primary (for staff_id column)
+    const primaryStaff = selectedServices[0]?.staff;
+    const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
+
+    const apptData = {
+      owner_id: initialSalon.owner_id, service_id: selectedServices[0]?.service?.id || null, client_id: clientId,
+      service_name: combinedServiceName,
+      service_price: getPrice(), service_duration: getDuration(), date, time,
+      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, client_phone: form.phone || null,
+      payment_method: form.payment, status: "confirmed", invoice_sent: false,
+      staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
+      client_allergies: form.allergies || null,
+      location_id: selectedLocation?.id || null
+    };
+    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("id").single();
+
+    if (apptError || !appt) {
+      throw new Error(apptError?.message || "Appointment insert failed");
+    }
+
+    // 3. Generate cancellation token (expires 24h before appointment)
+    let cancelToken = null;
+    const token = generateToken();
+    const appointmentDate = new Date(date + "T" + time + ":00");
+    const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
+
+    await supabase.from("cancellation_tokens").insert({
+      appointment_id: appt.id,
+      token: token,
+      expires_at: expiresAt.toISOString()
+    });
+    cancelToken = token;
+
+    setDone(true);
+    setSubmitting(false);
+    setSlotsRefreshKey(k => k + 1);
+    
+    // 4. Send confirmation email with cancellation link
+    await sendEmails("booking_confirmation", {
+      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
+      date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
+      cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
+    });
+
+    // 5. Notify owner + assigned staff about new booking
+    const staffEmails = selectedServices.filter(item => item.staff?.email).map(item => item.staff.email);
+    await sendEmails("booking_notification", {
+      owner_email: initialSalon.owner_email || null,
+      staff_emails: [...new Set(staffEmails)],
+      client_name: `${form.firstName} ${form.lastName}`, client_phone: form.phone || null,
+      service_name: combinedServiceName, date, time, price: getPrice(),
+      salon_name: initialSalon.name
+    });
+
+    // 6. Create Google Calendar event (if connected)
+    if (appt) {
+      supabase.functions.invoke("google-calendar", {
+        body: {
+          action: "create",
+          owner_id: initialSalon.owner_id,
+          booking: {
+            appointment_id: appt.id,
+            service_name: combinedServiceName,
+            client_name: `${form.firstName} ${form.lastName}`,
+            client_email: clientEmail,
+            client_phone: form.phone || null,
+            staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
+            date, time, duration: getDuration(), price: getPrice()
+          }
+        }
+      }).catch(e => console.error("Google Calendar error:", e));
+    }
+    
+    if (form.payment === "online") {
+      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
+        date, time, price: getPrice(), salon_name: initialSalon.name,
+        salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
+        salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "" });
+    }
+    } catch (err) {
+      console.error("Booking error:", err);
+      setErrorToast(t.bookingError);
+      setTimeout(() => setErrorToast(""), 5000);
+      setSubmitting(false);
+    }
+  };
+
+
+  // ─── SALON PROFILE VIEW ─────────────────────────────────────
+  const FULL_DAYS = lang === "nl" 
+    ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"]
+    : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  
+  const todayDayIndex = new Date().getDay();
+  const todayHoursObj = activeHours[todayDayIndex] || { closed: true };
+  const salonIsOpen = !todayHoursObj.closed;
+
+  const avgRating = initialSalon.reviews?.length > 0
+    ? (initialSalon.reviews.reduce((s, r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)
+    : null;
+  const ratingBreakdown = [5, 4, 3, 2, 1].map(r => ({
+    stars: r,
+    count: (initialSalon.reviews || []).filter(rv => rv.rating === r).length,
+  }));
+
+  const sortedReviews = [...(initialSalon.reviews || [])].sort((a, b) => {
+    if (reviewSort === "rating") return b.rating - a.rating;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
+  const getRelativeTime = (dateStr) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const dys = Math.floor(diff / 86400000);
+    if (dys < 1) return lang === "nl" ? "vandaag" : "today";
+    if (dys < 7) return `${dys} ${t.nDaysAgo}`;
+    if (dys < 30) return `${Math.floor(dys / 7)} ${t.nWeeksAgo}`;
+    return `${Math.floor(dys / 30)} ${t.nMonthsAgo}`;
+  };
+
+  const allPhotos = initialSalon.services.flatMap(s => (s.photos || []).map(p => ({ ...p, serviceName: svcName(s) })));
+
+  const profileFilteredServices = profileCategory === "all"
+    ? initialSalon.services
+    : initialSalon.services.filter(s => s.category_id === profileCategory);
+
+  const scrollToProfileSection = (tabId) => {
+    setProfileTab(tabId);
+    isScrollingToTab.current = true;
+    const el = profileSectionRefs.current[tabId];
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => { isScrollingToTab.current = false; }, 800);
+  };
+
+  const StarRow = ({ rating: r, size = 13 }) => (
+    <span style={{ display: "inline-flex", gap: 1 }}>
+      {[1,2,3,4,5].map(i => (
+        <svg key={i} width={size} height={size} viewBox="0 0 20 20" fill={i <= r ? "#f5c518" : c.inputBg}>
+          <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+        </svg>
+      ))}
+    </span>
+  );
+
+  const profileTabs = [
+    { id: "services", label: t.profileServices },
+    ...(initialSalon.staff?.length > 0 ? [{ id: "team", label: t.profileTeam }] : []),
+    ...(allPhotos.length > 0 ? [{ id: "gallery", label: t.profileGallery }] : []),
+    ...(initialSalon.reviews?.length > 0 ? [{ id: "reviews", label: t.profileReviews }] : []),
+    { id: "contact", label: t.profileContact },
+  ];
+
+  if (mode === "profile") return (
+    <Layout>
+
+      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+
+        {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
+        <div className="profile-header">
+          {initialSalon.logo_url ? (
+            <img src={initialSalon.logo_url} className="profile-header-logo" alt={`${initialSalon.name} logo`} />
+          ) : (
+            <div className="profile-header-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
+          )}
+          <div className="profile-tabs" ref={profileTabsBarRef}>
+            {profileTabs.map(tab => (
+              <button key={tab.id} data-tab-id={tab.id} className={`profile-tab ${profileTab === tab.id ? "active" : ""}`}
+                onClick={() => scrollToProfileSection(tab.id)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {(initialSalon.salon_email || initialSalon.owner_email) && (
+            <div className="profile-header-contact">
+              <NavIcon name="mail" size={14} color={c.textSub} />
+              <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            <ThemeToggle />
+            <LangToggle lang={lang} setLang={setLang} />
+          </div>
+        </div>
+
+        {/* ═══ SCROLLABLE AREA (mobile: flex-1 with overflow-y auto) ═══ */}
+        <div className="profile-scroll-area">
+
+        {/* ═══ HERO BANNER ═══ */}
+        <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
+          {initialSalon.cover_image_url && (
+            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} />
+          )}
+          <div className="profile-hero-gradient" />
+          <div className="profile-hero-content">
+            <h1 className="profile-hero-name" style={{ fontSize: isMobile ? 28 : 42 }}>{initialSalon.name}</h1>
+            {initialSalon.city && (
+              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>{initialSalon.city}</div>
+            )}
+          </div>
+        </div>
+
+        {/* ═══ BODY — main + sidebar ═══ */}
+        <div className="profile-body">
+
+          {/* ─── MAIN CONTENT ─── */}
+          <div className="profile-main">
+
+            {/* SERVICES */}
+            <section ref={el => profileSectionRefs.current.services = el} className="profile-section">
+              <h2 className="profile-section-title">{t.profileServices}</h2>
+              
+              {categories.length > 0 && (
+                <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14 }}>
+                  <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
+                    onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
+                  {categories.map(cat => (
+                    <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
+                      onClick={() => setProfileCategory(cat.id)}>
+                      {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {profileFilteredServices.map(s => (
+                <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
+                  {s.photos?.length > 0 ? (
+                    <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt={svcName(s)} loading="lazy" />
+                  ) : (
+                    <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="scissors" size={20} color={c.textMuted} /></div>
+                  )}
+                  <div className="profile-service-info">
+                    <div className="profile-service-name">{svcName(s)}</div>
+                    <div className="profile-service-meta">
+                      <span>{s.duration} {t.min}</span>
+                      <span>·</span>
+                      <span style={{ color: accent, cursor: "pointer" }}>Details</span>
+                      <span>·</span>
+                      <span style={{ fontWeight: 500, color: c.text }}>€{s.variants?.length > 0 ? `${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : s.price}</span>
+                    </div>
+                  </div>
+                  <svg className="profile-service-chevron" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"><path d="M7 5l5 5-5 5" /></svg>
+                </div>
+              ))}
+              {profileFilteredServices.length === 0 && (
+                <div style={{ textAlign: "center", padding: "40px 16px", color: c.textMuted, fontSize: 13 }}>
+                  {t.noTreatments}
+                </div>
+              )}
+            </section>
+
+            {/* TEAM / STAFF */}
+            {initialSalon.staff?.length > 0 && (
+              <section ref={el => profileSectionRefs.current.team = el} className="profile-section">
+                <h2 className="profile-section-title">{t.profileTeam}</h2>
+                {initialSalon.staff.map(member => {
+                  const isExpanded = expandedTeamMember === member.id;
+                  const memberServices = member.service_ids?.length > 0
+                    ? initialSalon.services.filter(s => member.service_ids.includes(s.id))
+                    : initialSalon.services;
+                  return (
+                    <div key={member.id}>
+                      <div className="profile-team-row" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)}>
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt={member.name} />
+                        ) : (
+                          <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, fontSize: 14, color: c.text }}>{member.name}</div>
+                          {member.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
+                        </div>
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"
+                          style={{ transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }}><path d="M7 5l5 5-5 5" /></svg>
+                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: "12px 0 16px 52px", animation: "fadeUp 0.2s ease" }}>
+                          {member.bio && <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 12 }}>{member.bio}</div>}
+                          {memberServices.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {memberServices.map(s => (
+                                  <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
+                                    {lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+
+            {/* GALLERY */}
+            {allPhotos.length > 0 && (
+              <section ref={el => profileSectionRefs.current.gallery = el} className="profile-section">
+                <h2 className="profile-section-title">{t.profileGallery}</h2>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
+                  {(galleryExpanded ? allPhotos : allPhotos.slice(0, 3)).map((photo, idx) => (
+                    <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
+                      <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
+                    </div>
+                  ))}
+                </div>
+                {allPhotos.length > 3 && (
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                    <button className="btn-ghost" onClick={() => setGalleryExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                      {galleryExpanded ? t.showLess : `${t.showMore} (${allPhotos.length - 3})`}
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* REVIEWS */}
+            {initialSalon.reviews?.length > 0 && (
+              <section ref={el => profileSectionRefs.current.reviews = el} className="profile-section">
+                <h2 className="profile-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  {t.profileReviews}
+                  <select value={reviewSort} onChange={e => setReviewSort(e.target.value)}
+                    style={{ background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: "6px 10px", color: c.textSub, fontSize: 12, fontFamily: "'Jost',sans-serif", cursor: "pointer", fontWeight: 400 }}>
+                    <option value="recent">{t.sortBy}: {t.mostRecent}</option>
+                    <option value="rating">{t.sortBy}: {t.highestRated}</option>
+                  </select>
+                </h2>
+                
+                {/* Rating summary — Setmore style: bars left, big score right */}
+                <div className="profile-reviews-summary">
+                  <div className="profile-rating-bars">
+                    {ratingBreakdown.map(rb => (
+                      <div key={rb.stars} className="profile-rating-bar-row">
+                        <StarRow rating={rb.stars} size={12} />
+                        <div className="profile-rating-bar-track">
+                          <div className="profile-rating-bar-fill" style={{ width: `${initialSalon.reviews.length > 0 ? (rb.count / initialSalon.reviews.length) * 100 : 0}%` }} />
+                        </div>
+                        <span style={{ width: 18, textAlign: "right" }}>{rb.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="profile-rating-big">
+                    <div className="profile-rating-score">{avgRating}</div>
+                    <StarRow rating={Math.round(parseFloat(avgRating))} size={16} />
+                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 6 }}>{initialSalon.reviews.length} {t.reviews.toLowerCase()}</div>
+                    <button className="profile-write-review-btn" onClick={() => setShowReviewForm(true)}>{t.writeAReview}</button>
+                  </div>
+                </div>
+
+                {/* Review list */}
+                {(reviewsExpanded ? sortedReviews : sortedReviews.slice(0, 5)).map(review => (
+                  <div key={review.id} className="profile-review-card">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: c.text }}>{review.client_name?.split(" ")[0] || "Klant"}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+                          <StarRow rating={review.rating} size={12} />
+                          <span style={{ fontSize: 12, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {review.comment && <p style={{ fontSize: 14, color: c.textSub, lineHeight: 1.5, marginTop: 6 }}>{review.comment}</p>}
+                  </div>
+                ))}
+                {sortedReviews.length > 5 && (
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                    <button className="btn-ghost" onClick={() => setReviewsExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                      {reviewsExpanded ? t.showLess : `${t.showMore} (${sortedReviews.length - 5})`}
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* CONTACT & ADDRESS */}
+            <section ref={el => profileSectionRefs.current.contact = el} className="profile-section" style={{ borderBottom: "none" }}>
+              <h2 className="profile-section-title">{t.profileContact}</h2>
+              
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 20 }}>
+                {/* Contact details */}
+                {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.contactUs}</h3>
+                    {(initialSalon.salon_email || initialSalon.owner_email) && (
+                      <div className="profile-contact-row">
+                        <NavIcon name="mail" size={14} color={c.textSub} />
+                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_phone && (
+                      <div className="profile-contact-row">
+                        <NavIcon name="phone" size={14} color={c.textSub} />
+                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_instagram && (
+                      <div className="profile-contact-row">
+                        <NavIcon name="camera" size={14} color={c.textSub} />
+                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Booking policy */}
+                {initialSalon.booking_policy && (
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.goodToKnow}</h3>
+                    <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
+                      <NavIcon name="clipboard" size={14} color={c.textSub} />
+                      <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+                        style={{ transition: "transform 0.2s", transform: expandedPolicy ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
+                    </div>
+                    {expandedPolicy && (
+                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
+                        {initialSalon.booking_policy}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Address */}
+              {hasLocations ? (
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+                  {(initialSalon.locations || []).map(loc => (
+                    <div key={loc.id} style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                      <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
+                      {loc.address && <div style={{ fontSize: 13, color: c.textSub }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                      {loc.phone && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : (initialSalon.address || initialSalon.city) ? (
+                <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.6 }}>
+                  <span style={{ marginRight: 6 }}><NavIcon name="mappin" size={12} color={c.textSub} /></span>
+                  {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
+                </div>
+              ) : null}
+            </section>
+
+            {/* Powered by */}
+            <div className="profile-footer">
+              {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span> · {t.noCommission}
+              <div style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}>
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : "Privacy"}</a>
+                {" · "}
+                <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{t.terms}</a>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── SIDEBAR (desktop only via CSS) ─── */}
+          <div className="profile-sidebar">
+            <div className="profile-sidebar-inner">
+              {/* Circular logo */}
+              {initialSalon.logo_url ? (
+                <img src={initialSalon.logo_url} className="profile-sidebar-logo" alt={`${initialSalon.name} logo`} />
+              ) : (
+                <div className="profile-sidebar-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
+              )}
+              
+              <div className="profile-sidebar-name">{initialSalon.name}</div>
+              
+              {avgRating && (
+                <div className="profile-sidebar-rating">
+                  <span style={{ fontWeight: 600, color: c.text }}>{avgRating}</span>
+                  <StarRow rating={Math.round(parseFloat(avgRating))} size={13} />
+                  <span>{initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
+                </div>
+              )}
+
+              <button className="profile-book-btn" onClick={() => enterBooking()}>{t.book}</button>
+
+              {/* Open/Closed status */}
+              <div className="profile-sidebar-status" style={{ cursor: "pointer" }} onClick={() => setExpandedHours(!expandedHours)}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: salonIsOpen ? "#4ade80" : "#f87171" }} />
+                <span>{salonIsOpen ? (todayHoursObj.close ? `${t.openNow} · ${t.closesAt} ${todayHoursObj.close}` : t.openNow) : t.closedToday}</span>
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+                  style={{ transition: "transform 0.2s", transform: expandedHours ? "rotate(180deg)" : "none", marginLeft: 2 }}><path d="M5 8l5 5 5-5" /></svg>
+              </div>
+              {expandedHours && (
+                <div style={{ marginTop: 8, padding: "8px 0" }}>
+                  {[1,2,3,4,5,6,0].map(dayIdx => {
+                    const dayHrs = activeHours[dayIdx] || { closed: true };
+                    const isToday = dayIdx === todayDayIndex;
+                    return (
+                      <div key={dayIdx} className="profile-hours-row">
+                        <span style={{ color: isToday ? c.text : c.textLabel, fontWeight: isToday ? 600 : 400 }}>{FULL_DAYS[dayIdx]}</span>
+                        <span style={{ color: dayHrs.closed ? c.textMuted : c.textSub, fontWeight: isToday ? 600 : 400 }}>{dayHrs.closed ? t.closed : `${dayHrs.open} – ${dayHrs.close}`}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Address */}
+              {(initialSalon.address || initialSalon.city) && (
+                <div className="profile-sidebar-address">
+                  <NavIcon name="mappin" size={11} color={c.textSub} /> {initialSalon.address && <>{initialSalon.address}<br /></>}{initialSalon.city}
+                </div>
+              )}
+
+              {/* Contact us */}
+              {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                <div style={{ marginTop: 4 }}>
+                  <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
+                    {t.contactUs} ↓
+                  </div>
+                  <div style={{ padding: "0 0 4px", fontSize: 12 }}>
+                    {initialSalon.salon_phone && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <NavIcon name="phone" size={13} color={c.textSub} />
+                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
+                      </div>
+                    )}
+                    {(initialSalon.salon_email || initialSalon.owner_email) && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <NavIcon name="mail" size={13} color={c.textSub} />
+                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+                      </div>
+                    )}
+                    {initialSalon.salon_instagram && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
+                        <NavIcon name="camera" size={13} color={c.textSub} />
+                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                          {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        </div> {/* close profile-scroll-area */}
+
+        {/* ═══ MOBILE BOOK BAR ═══ */}
+        <div className="profile-mobile-bar">
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{initialSalon.name}</div>
+            {avgRating && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                <StarRow rating={Math.round(parseFloat(avgRating))} size={11} />
+                <span style={{ fontSize: 12, color: c.textLabel }}>{avgRating}</span>
+              </div>
+            )}
+          </div>
+          <button className="profile-book-btn" style={{ width: "auto", padding: "11px 28px", marginTop: 0 }} onClick={() => enterBooking()}>{t.book}</button>
+        </div>
+
+        {/* Gallery overlay */}
+        {gallery && (
+          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
+            <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 40, height: 40, borderRadius: "50%", fontSize: 20, cursor: "pointer", zIndex: 10 }}>&times;</button>
+            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={t.galleryPhoto} />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              {gallery.photos.map((p, i) => (
+                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5 }} loading="lazy" alt="" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Review overlay */}
+        {showReviewForm && (
+          <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowReviewForm(false)}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
+                  {t.howWasAppt}
+                </div>
+              </div>
+              <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
+                {t.close}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+  // ─── END PROFILE VIEW ──────────────────────────────────────
+
+  // Step titles
+  const stepTitles = hasLocations 
+    ? [t.selectLocation, t.selectService, t.selectDate, t.yourDetails, t.confirmBooking]
+    : [t.selectService, t.selectDate, t.yourDetails, t.confirmBooking];
+
+  // Summary component
+  const Summary = () => (
+    <div style={{ 
+      background: c.bgCard, 
+      border: "1px solid " + c.border, 
+      borderRadius: 16, 
+      padding: 20,
+      marginTop: isMobile ? 0 : 20
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
+        {t.yourBooking}
+        {selectedServices.length > 0 && <span style={{ color: accent, marginLeft: 6 }}>({selectedServices.length})</span>}
+      </div>
+      {selectedLocation && (
+        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
+          <div style={{ fontSize: 11, color: c.textSub }}><NavIcon name="mappin" size={11} color={c.textSub} /> {selectedLocation.name}</div>
+          {selectedLocation.address && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{selectedLocation.address}</div>}
+        </div>
+      )}
+      {selectedServices.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          {selectedServices.map((item, idx) => (
+            <div key={item.service.id} style={{ marginBottom: idx < selectedServices.length - 1 ? 10 : 0, paddingBottom: idx < selectedServices.length - 1 ? 10 : 0, borderBottom: idx < selectedServices.length - 1 ? "1px solid " + c.border : "none" }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>
+                {svcName(item.service)}
+                {item.variant && <span style={{ fontWeight: 400, color: c.textSub }}> — {lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}</span>}
+              </div>
+              <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
+                <span>{item.variant ? item.variant.duration : item.service.duration} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
+                <span style={{ color: accent }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+              </div>
+              {item.extras.length > 0 && item.extras.map(e => (
+                <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+                  <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
+                  <span>+€{e.price}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {date && time && (
+        <div style={{ marginBottom: 16, paddingTop: selectedServices.length > 0 ? 16 : 0, borderTop: selectedServices.length > 0 ? "1px solid " + c.border : "none" }}>
+          <div style={{ fontSize: 12, color: c.textSub }}>
+            {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
+          {selectedServices.length > 0 && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
+        </div>
+      )}
+      {selectedServices.length > 0 && (
+        <div style={{ paddingTop: 16, borderTop: "1px solid " + c.border }}>
+          {appliedDiscount && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: "#4ade80" }}>
+                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})
+              </span>
+              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>€{getOriginalPrice().toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent }}>€{getPrice().toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <Layout>
+
+      <div style={{ 
+        minHeight: "100dvh", 
+        background: c.bg,
+        backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -10%, ${accent}08 0%, transparent 60%)`,
+        fontFamily: "'Jost',sans-serif", 
+        color: c.text
+      }}>
+        
+        {/* Desktop Layout */}
+        {!isMobile ? (
+          <div style={{ display: "flex", minHeight: "100dvh" }}>
+            {/* Left Sidebar */}
+            <div style={{ 
+              width: 340, 
+              background: c.bgCard, 
+              borderRight: "1px solid " + c.border,
+              padding: "0",
+              display: "flex",
+              flexDirection: "column",
+              position: "sticky",
+              top: 0,
+              height: "100dvh",
+              overflow: "hidden"
+            }}>
+              {/* Cover Image */}
+              {initialSalon.cover_image_url && (
+                <div style={{ 
+                  width: "100%", 
+                  height: 120, 
+                  backgroundImage: `url(${initialSalon.cover_image_url})`, 
+                  backgroundSize: "cover", 
+                  backgroundPosition: "center",
+                  flexShrink: 0
+                }} />
+              )}
+              
+              <div style={{ padding: "24px 30px", flex: 1, overflow: "auto" }}>
+                {/* Salon Info */}
+                <div style={{ marginBottom: 30 }}>
+                  <button onClick={done ? reset : () => setMode("profile")} className="btn-ghost" style={{ marginBottom: 20, padding: "8px 14px", fontSize: 11 }}>
+                      {t.backToProfile}
+                    </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {initialSalon.logo_url && (
+                      <img src={initialSalon.logo_url} style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
+                    )}
+                    <div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: initialSalon.logo_url ? 22 : 28, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>
+                        {initialSalon.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: c.textLabel, marginTop: 4, letterSpacing: "0.04em" }}>
+                        {initialSalon.city}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              {/* Progress Steps */}
+              {!done && (
+                <div style={{ marginBottom: 30 }}>
+                  {(hasLocations ? [0,1,2,3,4] : [1,2,3,4]).map((s, idx) => (
+                    <div key={s} style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 12, 
+                      padding: "12px 0",
+                      opacity: step >= s ? 1 : 0.3,
+                      transition: "opacity 0.3s"
+                    }}>
+                      <div style={{ 
+                        width: 28, 
+                        height: 28, 
+                        borderRadius: "50%", 
+                        background: step >= s ? accent : "transparent",
+                        border: `2px solid ${step >= s ? accent : c.textMuted}`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: step >= s ? c.btnOnDark : c.textLabel,
+                        transition: "all 0.3s"
+                      }}>
+                        {step > s ? <NavIcon name="check" size={12} color={accent} /> : (hasLocations ? s : s)}
+                      </div>
+                      <span style={{ fontSize: 13, color: step >= s ? c.text : c.textLabel }}>
+                        {stepTitles[idx]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Summary */}
+              <Summary />
+
+              {/* Lang Toggle */}
+              <div style={{ marginTop: "auto", paddingTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
+                <ThemeToggle />
+                <LangToggle lang={lang} setLang={setLang} />
+              </div>
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700 }}>
+              {!done ? (
+                <div key={step} className="fade-up">
+
+              {/* Step 0 — Location selection (desktop, only if multiple) */}
+              {step === 0 && hasLocations && <>
+                <PTitle sub={t.selectLocationSub}>{t.selectLocation}</PTitle>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {(initialSalon.locations || []).map(loc => (
+                    <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); setDate(fmt(getToday())); setTime(null); }}>
+                      <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
+                      {loc.address && <div style={{ fontSize: 11, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                      {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
+                    </div>
+                  ))}
+                </div>
+                <button className="btn-primary" disabled={!selectedLocation} onClick={() => setStep(1)} style={{ marginTop: 20 }}>{t.next}</button>
+              </>}
+
+              {/* Step 1 — Service selection (multi-select) */}
+              {step === 1 && <>
+                <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
+                
+                {/* Category tabs */}
+                {categories.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 8 }}>
+                    <div 
+                      onClick={() => setActiveCategory("all")}
+                      style={{ 
+                        padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                        background: activeCategory === "all" ? accent : c.inputBg,
+                        border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                        color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                        fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                      }}
+                    >{t.allCategories}</div>
+                    {categories.map(cat => (
+                      <div 
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        style={{ 
+                          padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                          background: activeCategory === cat.id ? accent : c.inputBg,
+                          border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                          color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
+                          fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                        }}
+                      >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected services counter */}
+                {selectedServices.length > 0 && (
+                  <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
+                      <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                    </span>
+                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</span>
+                  </div>
+                )}
+
+                {filteredServices.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: c.textMuted }}>
+                    <div style={{ marginBottom: 12 }}><NavIcon name="beauty" size={36} color={ACCENT} /></div>
+                    <div style={{ fontSize: 13 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                  </div>
+                )}
+                {filteredServices.map(s => {
+                  const isSel = isServiceSelected(s.id);
+                  const item = getServiceItem(s.id);
+                  const staffForService = getStaffForService(s.id);
+                  return (
+                  <div key={s.id}>
+                    <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {/* Checkbox */}
+                          <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${isSel ? accent : c.textMuted}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                            {isSel && <NavIcon name="check" size={13} color={c.btnOnDark} />}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
+                            <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
+                              {s.duration} {t.min}
+                              {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                              {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
+                          {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                        </div>
+                      </div>
+                      {(s.photos || []).length > 0 && (
+                        <div className="photo-grid" style={{ marginLeft: 34 }}>
+                          {s.photos.map((p, i) => (
+                            <img key={p.id || i} src={p.url || p} className="photo-thumb" loading="lazy" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Variants — per selected service */}
+                    {isSel && s.variants?.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
+                        <SL>{t.selectVariant}</SL>
+                        {s.variants.map(v => (
+                          <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
+                                {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
+                              </div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Extras — per selected service */}
+                    {isSel && s.extras?.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
+                        <SL>{t.selectExtras}</SL>
+                        {s.extras.map(e => (
+                          <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Staff selection — per selected service, filtered */}
+                    {isSel && staffForService.length > 0 && (
+                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
+                        <SL>{t.selectStaff}</SL>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
+                            <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                          </div>
+                          {staffForService.map(m => (
+                            <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
+                              <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
+                              {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  );
+                })}
+                <div style={{ marginTop: 14 }}>
+                  {selectedServices.length > 0 && missingVariants.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
+                      <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                    </div>
+                  )}
+                  {selectedServices.length === 0 && (
+                    <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, textAlign: "center" }}>
+                      {t.noServicesSelected}
+                    </div>
+                  )}
+                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
+                </div>
+                
+                {/* Reviews */}
+                {initialSalon.reviews?.length > 0 && (
+                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
+                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                    {initialSalon.reviews.slice(0, 3).map(r => (
+                      <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
+                          <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                        </div>
+                        {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>}
+
+              {/* Step 2 — Date & Time */}
+              {step === 2 && <>
+                <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
+                  {days.map((d, i) => {
+                    const ds = fmt(d); 
+                    const isSel = date === ds;
+                    const dayHours = getEffectiveHours(ds);
+                    const staffWindow = getStaffTimeWindow(ds);
+                    const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                    return (
+                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                        <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
+                        <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <SL>{t.selectTime}</SL>
+                {(() => {
+                  const availableTimes = getAvailableTimes(date);
+                  return availableTimes.length > 0 ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
+                      {availableTimes.map(tt => {
+                        const booked = isTimeSlotBooked(tt);
+                        return (
+                          <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} role="button" tabIndex={booked ? -1 : 0} aria-label={tt} aria-disabled={booked}
+                            onClick={() => { if (!booked) setTime(tt); }}
+                            onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !booked) { e.preventDefault(); setTime(tt); } }}
+                            style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
+                          >{tt}</div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
+                      {t.noTimesAvailable}
+                    </div>
+                  );
+                })()}
+                <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+              </>}
+
+              {/* Step 3 — Details */}
+              {step === 3 && <>
+                <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                  {/* Email first for client lookup */}
+                  <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                  
+                  {/* Client found indicator */}
+                  {clientFound && (
+                    <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <NavIcon name="wave" size={18} color={accent} />
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
+                        <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                    <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                  </div>
+                  <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                  <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
+                </div>
+                
+                {/* No-show warning */}
+                {clientNoShows > 0 && (
+                  <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                    <NavIcon name="alerttri" size={16} color="#fb923c" />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: "#f87171" }}>{t.noShowWarning}</div>
+                      <div style={{ fontSize: 10, color: "rgba(248,113,113,0.6)" }}>{clientNoShows}x {t.noShowCount}</div>
+                    </div>
+                  </div>
+                )}
+
+                <SL>{t.payMethod}</SL>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                  {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
+                    <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
+                      <div className={`radio ${form.payment === v ? "on" : ""}`} />
+                      <NavIcon name={icon} size={15} color={c.textSub} />
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Discount Code Input */}
+                {activeCodes.length > 0 && !appliedDiscount && (
+                  <div style={{ marginBottom: 20 }}>
+                    <SL>{t.enterDiscountCode}</SL>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
+                      <button className="btn-ghost" style={{ padding: "0 20px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
+                    </div>
+                    {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
+                  </div>
+                )}
+                {appliedDiscount && (
+                  <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
+                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                    </div>
+                    <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
+                  </div>
+                )}
+
+                {/* Booking Policy */}
+                {initialSalon.booking_policy && (
+                  <div style={{ marginBottom: 20, padding: "16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
+                    <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                      <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                        {policyAgreed && <NavIcon name="check" size={14} color={c.btnOnDark} />}
+                      </div>
+                      <span style={{ fontSize: 13, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
+                    </label>
+                  </div>
+                )}
+
+                <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+              </>}
+
+              {/* Step 4 — Confirm */}
+              {step === 4 && <>
+                <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
+                <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
+                  {/* Services list */}
+                  <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
+                    {selectedServices.map((item, idx) => (
+                      <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                          {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
+                          {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
+                        </div>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                    ...(form.allergies ? [[t.allergies, form.allergies]] : []),
+                    [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                    <div key={l} className="confirm-row">
+                      <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
+                    </div>
+                  ))}
+                  {appliedDiscount && (
+                    <div className="confirm-row">
+                      <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
+                    <div>
+                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>€{getOriginalPrice().toFixed(2)}</span>}
+                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+              </>}
+            </div>
+          ) : (
+            <div className="fade-up" style={{ textAlign: "center", paddingTop: 60 }}>
+              <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${accent}18`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", fontSize: 28 }}><NavIcon name="beauty" size={28} color={accent} /></div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 6 }}>{t.confirmedSub} <strong style={{ color: accent }}>{date}</strong> {t.at} <strong style={{ color: accent }}>{time}</strong></div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{t.confirmationSent} {form.email}</div>
+
+              {/* Calendar sync buttons */}
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                    const dur = getDuration();
+                    const [h, m] = time.split(":").map(Number);
+                    const start = new Date(date + "T" + time + ":00");
+                    const end = new Date(start.getTime() + dur * 60000);
+                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                    const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
+                    const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: €${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
+                    const loc = encodeURIComponent(initialSalon.name + ", " + initialSalon.city);
+                    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}&details=${details}&location=${loc}`, "_blank");
+                  }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                    const dur = getDuration();
+                    const start = new Date(date + "T" + time + ":00");
+                    const end = new Date(start.getTime() + dur * 60000);
+                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                    const ics = [
+                      "BEGIN:VCALENDAR",
+                      "VERSION:2.0",
+                      "PRODID:-//Vellu//Beauty Booking//EN",
+                      "BEGIN:VEVENT",
+                      `DTSTART:${fmt2(start)}`,
+                      `DTEND:${fmt2(end)}`,
+                      `SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,
+                      `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: €${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
+                      `LOCATION:${initialSalon.name}, ${initialSalon.city}`,
+                      "STATUS:CONFIRMED",
+                      "END:VEVENT",
+                      "END:VCALENDAR"
+                    ].join("\r\n");
+                    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
+                    a.click(); URL.revokeObjectURL(url);
+                  }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.appleCalendar}</button>
+                </div>
+              </div>
+
+              {/* WhatsApp confirmation */}
+              {initialSalon.whatsapp_number && (
+                <div style={{ marginBottom: 32 }}>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 20px", color: "#25d366", borderColor: "rgba(37,211,102,0.3)" }} onClick={() => {
+                    const msg = getWhatsAppBookingMsg(lang, {
+                      clientName: form.firstName,
+                      salonName: initialSalon.name,
+                      date: new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                      time, serviceName: getServiceLabel(), price: getPrice().toFixed(2)
+                    });
+                    window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
+                  }}><NavIcon name="chat" size={13} color="currentColor" /> {t.whatsappBookingConfirm}</button>
+                </div>
+              )}
+
+              <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+
+              {/* Write a review */}
+              <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+            </div>
+          )}
+
+          </div>
+        </div>
+      ) : (
+          <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
+            {/* Mobile Cover Image */}
+            {initialSalon.cover_image_url && (
+              <div style={{ 
+                width: "100%", 
+                height: 140, 
+                backgroundImage: `url(${initialSalon.cover_image_url})`, 
+                backgroundSize: "cover", 
+                backgroundPosition: "center",
+                position: "relative"
+              }}>
+                {/* Back button on cover */}
+                <button onClick={done ? reset : (step > (hasLocations ? 0 : 1) ? () => setStep(s => s-1) : () => setMode("profile"))} style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, padding: "8px 14px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+                    ←
+                  </button>
+                <div style={{ position: "absolute", top: 12, right: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                  <ThemeToggle />
+                  <LangToggle lang={lang} setLang={setLang} />
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Header with Logo */}
+            {!initialSalon.cover_image_url ? (
+              <Header
+                title={initialSalon.name}
+                subtitle={initialSalon.city}
+                onBack={done ? reset : (step > (hasLocations ? 0 : 1) ? () => setStep(s => s-1) : () => setMode("profile"))}
+                right={<div style={{ display: "flex", alignItems: "center", gap: 6 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>}
+                accent={accent}
+              />
+            ) : (
+              <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid " + c.border }}>
+                {initialSalon.logo_url && (
+                  <img src={initialSalon.logo_url} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
+                )}
+                <div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: c.text }}>{initialSalon.name}</div>
+                  <div style={{ fontSize: 11, color: c.textLabel }}>{initialSalon.city}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Content */}
+            <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 120px" }}>
+              {!done ? (
+                <div key={step} className="fade-up">
+                  {/* Progress bar */}
+                  <div style={{ display: "flex", gap: 5, margin: "12px 0 22px" }}>
+                    {(hasLocations ? [0,1,2,3,4] : [1,2,3,4]).map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : c.border, transition:"background 0.4s" }} />)}
+                  </div>
+
+                  {/* Step 0 — Location selection (only if multiple locations) */}
+                  {step === 0 && hasLocations && <>
+                    <PTitle sub={t.selectLocationSub}>{t.selectLocation}</PTitle>
+                    {(initialSalon.locations || []).map(loc => (
+                      <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); setDate(fmt(getToday())); setTime(null); }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontWeight: 500, fontSize: 14 }}>{loc.name}</div>
+                            {loc.address && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
+                            {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
+                          </div>
+                          <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${selectedLocation?.id === loc.id ? accent : c.textMuted}`, background: selectedLocation?.id === loc.id ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            {selectedLocation?.id === loc.id && <NavIcon name="check" size={10} color={c.btnOnDark} />}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button className="btn-primary" disabled={!selectedLocation} onClick={() => setStep(1)} style={{ marginTop: 10 }}>{t.next}</button>
+                  </>}
+
+                  {/* Step 1 — Service selection (multi-select) */}
+                  {step === 1 && <>
+                    <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
+                    
+                    {/* Category tabs */}
+                    {categories.length > 0 && (
+                      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6 }}>
+                        <div 
+                          onClick={() => setActiveCategory("all")}
+                          style={{ 
+                            padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                            background: activeCategory === "all" ? accent : c.inputBg,
+                            border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                            color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                            fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                          }}
+                        >{t.allCategories}</div>
+                        {categories.map(cat => (
+                          <div 
+                            key={cat.id}
+                            onClick={() => setActiveCategory(cat.id)}
+                            style={{ 
+                              padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                              background: activeCategory === cat.id ? accent : c.inputBg,
+                              border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                              color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
+                              fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                            }}
+                          >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Selected services counter */}
+                    {selectedServices.length > 0 && (
+                      <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 11, color: accent, fontWeight: 500 }}>
+                          <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                        </span>
+                        <span style={{ fontSize: 11, color: c.textSub }}>{getDuration()} {t.min}</span>
+                      </div>
+                    )}
+
+                    {filteredServices.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "30px 16px", color: c.textMuted }}>
+                        <div style={{ marginBottom: 10 }}><NavIcon name="beauty" size={32} color={accent} /></div>
+                        <div style={{ fontSize: 12 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                      </div>
+                    )}
+                    {filteredServices.map(s => {
+                      const isSel = isServiceSelected(s.id);
+                      const item = getServiceItem(s.id);
+                      const staffForService = getStaffForService(s.id);
+                      return (
+                      <div key={s.id}>
+                        <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              {/* Checkbox */}
+                              <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${isSel ? accent : c.textMuted}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                                {isSel && <NavIcon name="check" size={12} color={c.btnOnDark} />}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
+                                <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
+                                  {s.duration} {t.min}
+                                  {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                                  {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
+                              {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                            </div>
+                          </div>
+                          {(s.photos || []).length > 0 && (
+                            <div className="photo-grid" style={{ marginLeft: 30 }}>
+                              {s.photos.map((p, i) => (
+                                <img key={p.id || i} src={p.url || p} className="photo-thumb" loading="lazy" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Variants — per selected service */}
+                        {isSel && s.variants?.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
+                            <SL>{t.selectVariant}</SL>
+                            {s.variants.map(v => (
+                              <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div>
+                                    <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                    <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
+                                  </div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Extras — per selected service */}
+                        {isSel && s.extras?.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
+                            <SL>{t.selectExtras}</SL>
+                            {s.extras.map(e => (
+                              <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Staff selection — per selected service, filtered */}
+                        {isSel && staffForService.length > 0 && (
+                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
+                            <SL>{t.selectStaff}</SL>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
+                                <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                              </div>
+                              {staffForService.map(m => (
+                                <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
+                                  <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
+                                  {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
+                    <div style={{ marginTop: 14 }}>
+                      {selectedServices.length > 0 && missingVariants.length > 0 && (
+                        <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
+                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                        </div>
+                      )}
+                      {selectedServices.length === 0 && (
+                        <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, textAlign: "center" }}>
+                          {t.noServicesSelected}
+                        </div>
+                      )}
+                      <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
+                    </div>
+                  </>}
+
+                  {/* Step 2 — Date & Time (mobile) */}
+                  {step === 2 && <>
+                    <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
+                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
+                      {days.map((d, i) => {
+                        const ds = fmt(d); 
+                        const isSel = date === ds;
+                        const dayHours = getEffectiveHours(ds);
+                        const staffWindow = getStaffTimeWindow(ds);
+                        const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                        return (
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
+                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <SL>{t.selectTime}</SL>
+                    {(() => {
+                      const availableTimes = getAvailableTimes(date);
+                      return availableTimes.length > 0 ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
+                          {availableTimes.map(tt => {
+                            const booked = isTimeSlotBooked(tt);
+                            return (
+                              <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} 
+                                onClick={() => { if (!booked) setTime(tt); }}
+                                style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
+                              >{tt}</div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
+                          {t.noTimesAvailable}
+                        </div>
+                      );
+                    })()}
+                    <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                  </>}
+
+                  {/* Step 3 — Details (mobile) */}
+                  {step === 3 && <>
+                    <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                      {/* Email first for client lookup */}
+                      <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                      
+                      {/* Client found indicator */}
+                      {clientFound && (
+                        <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                          <NavIcon name="wave" size={18} color={accent} />
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
+                            <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                        <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                      </div>
+                      <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                      <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
+                    </div>
+                    
+                    {/* No-show warning */}
+                    {clientNoShows > 0 && (
+                      <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                        <NavIcon name="alerttri" size={16} color="#fb923c" />
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "#f87171" }}>{t.noShowWarning}</div>
+                          <div style={{ fontSize: 10, color: "rgba(248,113,113,0.6)" }}>{clientNoShows}x {t.noShowCount}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <SL>{t.payMethod}</SL>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                      {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
+                        <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
+                          <div className={`radio ${form.payment === v ? "on" : ""}`} />
+                          <NavIcon name={icon} size={15} color={c.textSub} />
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Discount Code Input (mobile) */}
+                    {activeCodes.length > 0 && !appliedDiscount && (
+                      <div style={{ marginBottom: 20 }}>
+                        <SL>{t.enterDiscountCode}</SL>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
+                          <button className="btn-ghost" style={{ padding: "0 16px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
+                        </div>
+                        {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
+                      </div>
+                    )}
+                    {appliedDiscount && (
+                      <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
+                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                        </div>
+                        <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
+                      </div>
+                    )}
+
+                    {/* Booking Policy (mobile) */}
+                    {initialSalon.booking_policy && (
+                      <div style={{ marginBottom: 20, padding: "14px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
+                        <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
+                        <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                          <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            {policyAgreed && <NavIcon name="check" size={12} color={c.btnOnDark} />}
+                          </div>
+                          <span style={{ fontSize: 12, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
+                        </label>
+                      </div>
+                    )}
+
+                    <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                  </>}
+
+                  {/* Step 4 — Confirm (mobile) */}
+                  {step === 4 && <>
+                    <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
+                    <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
+                      {/* Services list */}
+                      <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
+                        {selectedServices.map((item) => (
+                          <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                              {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
+                              {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
+                            </div>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                        ...(form.allergies ? [[t.allergies, form.allergies]] : []),
+                        [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                        <div key={l} className="confirm-row">
+                          <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
+                        </div>
+                      ))}
+                      {appliedDiscount && (
+                        <div className="confirm-row">
+                          <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
+                        <div>
+                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>€{getOriginalPrice().toFixed(2)}</span>}
+                          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+                  </>}
+
+                  {/* Reviews on mobile step 1 */}
+                  {step === 1 && initialSalon.reviews?.length > 0 && (
+                    <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
+                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                      {initialSalon.reviews.slice(0, 3).map(r => (
+                        <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                            <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
+                            <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                          </div>
+                          {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Done screen mobile */
+                <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
+                  <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+                  <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
+                    {t.confirmedSub} {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                  </p>
+                  <p style={{ fontSize: 12, color: c.textLabel, marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
+                  <div style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
+                        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}`, "_blank");
+                      }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
+                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
+                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                        const ics = ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT",`DTSTART:${fmt2(start)}`,`DTEND:${fmt2(end)}`,`SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,"END:VEVENT","END:VCALENDAR"].join("\r\n");
+                        const blob = new Blob([ics], { type: "text/calendar" }); const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a"); a.href = url; a.download = `booking.ics`; a.click();
+                      }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.appleCalendar}</button>
+                    </div>
+                  </div>
+                  <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
+
+                                    
+                  <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+                </div>
+              )}
+            </div>
+
+            {/* Mobile bottom bar with action button */}
+            {!done && selectedServices.length > 0 && (
+              <div style={{ 
+                position: "fixed", bottom: 0, left: 0, right: 0, 
+                background: c.bg, 
+                borderTop: "1px solid " + c.border, padding: "12px 22px",
+                paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+                display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 100,
+                gap: 12
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: c.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
+                    {time && ` · ${time}`}
+                  </div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{getPrice().toFixed(2)}</div>
+                </div>
+                {step === 1 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
+                )}
+                {step === 2 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                )}
+                {step === 3 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                )}
+                {step === 4 && (
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                    disabled={submitting} onClick={confirmBooking}>{submitting ? "..." : t.confirm}</button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+
+                {/* Review mode overlay (from follow-up email link) */}
+        {showReviewForm && (
+          <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowReviewForm(false)}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
+                  {t.howWasAppt}
+                </div>
+                <div style={{ fontSize: 12, color: c.textSub, marginTop: 4 }}>{initialSalon.name}</div>
+              </div>
+              <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
+                {t.close}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Gallery overlay */}
+        {gallery && (
+          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
+            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              {gallery.photos.map((p, i) => (
+                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s" }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Error toast */}
+        {errorToast && (
+          <div style={{
+            position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+            background: "#991b1b", color: "#fef2f2", padding: "12px 24px", borderRadius: 14,
+            fontSize: 12, fontWeight: 500, fontFamily: "'Jost',sans-serif",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 9999,
+            animation: "fadeUp 0.3s ease", maxWidth: "90vw", textAlign: "center"
+          }}>
+            {errorToast}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+// ─── VARIANT & EXTRA ADDERS ─────────────────────────────────
+
+export { ClientApp, ReviewForm };
+export default ClientApp;

@@ -26,3 +26,9 @@ supabase.exe
 
 .vercel
 .env*.local
+
+# Claude Code local state
+.claude/
+
+# Local backups
+*.bak

@@ -1,0 +1,273 @@
+import { useNavigate } from "react-router-dom";
+import { useTheme, useSEO, ACCENT, T, Layout, NavIcon, LangToggle, ThemeToggle, Header } from "./shared.jsx";
+
+function PrivacyPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const t = T[lang];
+  useSEO({ title: lang === "nl" ? "Privacybeleid | Vellu" : "Privacy Policy | Vellu", url: "https://vellu.cc/privacy" });
+  const content = lang === "nl" ? {
+    title: "Privacybeleid",
+    updated: "Laatst bijgewerkt: maart 2026",
+    sections: [
+      ["Wie zijn wij?", "Vellu is een online boekingsplatform voor beautysalons. Wij verwerken persoonsgegevens namens de salons die ons platform gebruiken."],
+      ["Welke gegevens verzamelen wij?", "Bij het boeken van een afspraak: naam, e-mailadres, telefoonnummer (optioneel). Bij het aanmaken van een salonaccount: bedrijfsnaam, e-mailadres, wachtwoord, vestigingsgegevens."],
+      ["Waarvoor gebruiken wij je gegevens?", "Het verwerken en bevestigen van boekingen (grondslag: uitvoering overeenkomst, Art. 6(1)(b) AVG), het versturen van herinneringen (grondslag: gerechtvaardigd belang, Art. 6(1)(f) AVG), het beheren van je salonaccount en het verbeteren van onze dienstverlening."],
+      ["Hoe lang bewaren wij je gegevens?", "Boekingsgegevens: zolang het salonaccount actief is, plus 30 dagen na verwijdering. Financiële gegevens: 7 jaar (wettelijke bewaarplicht). Na verwijdering van je account worden alle persoonsgegevens binnen 30 dagen gewist."],
+      ["Delen wij je gegevens?", "Wij delen je gegevens alleen met: Supabase (database hosting, EU Frankfurt), Resend (email verzending), Vercel (website hosting, EU). Alle verwerkers zijn gebonden aan verwerkingsovereenkomsten. Gegevens worden primair in de EU verwerkt. Wij verkopen nooit je gegevens aan derden."],
+      ["Cookies", "Wij gebruiken alleen functionele cookies die noodzakelijk zijn voor het functioneren van het platform (inlogsessie, taalvoorkeur, thema). Wij gebruiken geen tracking cookies of analytics van derden. Functionele cookies vallen onder de uitzondering van de ePrivacy-richtlijn en vereisen geen toestemming."],
+      ["Je rechten", "Onder de AVG heb je recht op: inzage (Art. 15), correctie (Art. 16), verwijdering (Art. 17), beperking van verwerking (Art. 18), gegevensoverdraagbaarheid (Art. 20), en bezwaar (Art. 21). Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl). Neem contact op via info@vellu.cc voor het uitoefenen van je rechten."],
+      ["Contact", "Voor vragen over dit privacybeleid: info@vellu.cc"]
+    ]
+  } : {
+    title: "Privacy Policy",
+    updated: "Last updated: March 2026",
+    sections: [
+      ["Who are we?", "Vellu is an online booking platform for beauty salons. We process personal data on behalf of the salons that use our platform."],
+      ["What data do we collect?", "When booking an appointment: name, email address, phone number (optional). When creating a salon account: business name, email address, password, location details."],
+      ["What do we use your data for?", "Processing and confirming bookings (legal basis: performance of contract, Art. 6(1)(b) GDPR), sending reminders (legal basis: legitimate interest, Art. 6(1)(f) GDPR), managing your salon account, and improving our services."],
+      ["How long do we store your data?", "Booking data: as long as the salon account is active, plus 30 days after deletion. Financial records: 7 years (legal retention requirement). After account deletion, all personal data is erased within 30 days."],
+      ["Do we share your data?", "We only share your data with: Supabase (database hosting, EU Frankfurt), Resend (email delivery), Vercel (website hosting, EU). All processors are bound by data processing agreements. Data is primarily processed within the EU. We never sell your data to third parties."],
+      ["Cookies", "We only use functional cookies necessary for the platform to work (login session, language preference, theme). We do not use tracking cookies or third-party analytics. Functional cookies fall under the ePrivacy Directive exemption and do not require consent."],
+      ["Your rights", "Under GDPR you have the right to: access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20), and objection (Art. 21). You may also lodge a complaint with the Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl). Contact info@vellu.cc to exercise your rights."],
+      ["Contact", "For questions about this privacy policy: info@vellu.cc"]
+    ]
+  };
+
+  return (
+    <Layout>
+
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+// ─── TERMS OF SERVICE ────────────────────────────────────────
+function TermsPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const t = T[lang];
+  useSEO({ title: lang === "nl" ? "Voorwaarden | Vellu" : "Terms of Service | Vellu", url: "https://vellu.cc/terms" });
+  const content = lang === "nl" ? {
+    title: "Algemene Voorwaarden",
+    updated: "Laatst bijgewerkt: maart 2026",
+    sections: [
+      ["1. Aanvaarding van de voorwaarden", "Door gebruik te maken van het Vellu-platform (vellu.cc) ga je akkoord met deze Algemene Voorwaarden. Als je niet akkoord gaat, verzoeken wij je het platform niet te gebruiken. Vellu behoudt zich het recht voor deze voorwaarden op elk moment te wijzigen. Wijzigingen worden via het platform gecommuniceerd."],
+      ["2. Beschrijving van de dienst", "Vellu is een online boekingsplatform voor beautyprofessionals in Nederland, waaronder nagelsalons, wimperspecialisten, kappers en schoonheidsspecialisten. Het platform biedt saloneigenaren een eigen boekingspagina (vellu.cc/jouw-naam), agendabeheer, teamaccounts, e-mailnotificaties en een klantbeheersysteem. Vellu werkt met een vast maandelijks abonnement zonder commissie op boekingen."],
+      ["3. Accountregistratie", "Om het platform te gebruiken als saloneigenaar dien je een account aan te maken met een geldig e-mailadres en wachtwoord. Je bent verantwoordelijk voor het vertrouwelijk houden van je inloggegevens en voor alle activiteiten die onder je account plaatsvinden. Vellu mag accounts opschorten of beëindigen bij vermoeden van misbruik of schending van deze voorwaarden."],
+      ["4. Abonnementen en betaling", "Vellu biedt twee abonnementsvormen: Starter (€19/maand) en Professional (€39/maand). Beide plannen hanteren 0% commissie op boekingen — je betaalt uitsluitend het vaste maandbedrag. Abonnementen worden maandelijks gefactureerd. Je kunt je abonnement op elk moment opzeggen; het blijft actief tot het einde van de betaalde periode. Vellu behoudt zich het recht voor prijzen te wijzigen, met een kennisgeving van minimaal 30 dagen."],
+      ["5. Verplichtingen van de saloneigenaar", "Als saloneigenaar ben je verantwoordelijk voor: het correct en actueel houden van je salongegevens, diensten en prijzen; het nakomen van afspraken die via het platform worden geboekt; het voldoen aan alle toepasselijke wet- en regelgeving met betrekking tot je bedrijfsvoering, waaronder de AVG (GDPR) voor het verwerken van klantgegevens; het correct vermelden van je KVK-nummer, BTW-id en overige bedrijfsgegevens indien van toepassing."],
+      ["6. Klanten en eindgebruikers", "Klanten die een afspraak boeken via Vellu gaan een overeenkomst aan met de betreffende salon, niet met Vellu. Vellu treedt uitsluitend op als bemiddelaar en is geen partij bij de behandelovereenkomst. Klanten ontvangen een bevestigingsmail met de mogelijkheid om de afspraak te annuleren via een unieke link. Het annuleringsbeleid wordt bepaald door de individuele salon."],
+      ["7. Intellectueel eigendom", "Alle rechten op het Vellu-platform, inclusief de software, het ontwerp, de logo's en de content, berusten bij Vellu. Saloneigenaren behouden de rechten op hun eigen content, zoals foto's, beschrijvingen en logo's die zij uploaden. Door content te uploaden verleen je Vellu een beperkte licentie om deze content weer te geven op jouw boekingspagina."],
+      ["8. Privacy en gegevensverwerking", "Vellu verwerkt persoonsgegevens in overeenstemming met de Algemene Verordening Gegevensbescherming (AVG). Zie ons Privacybeleid op vellu.cc/privacy voor volledige informatie over hoe wij gegevens verzamelen, gebruiken en beschermen. Vellu treedt op als verwerker namens de saloneigenaar, die de verwerkingsverantwoordelijke is voor de gegevens van zijn of haar klanten."],
+      ["9. Beschikbaarheid", "Vellu streeft naar een zo hoog mogelijke beschikbaarheid van het platform, maar kan geen 100% uptime garanderen. Vellu is niet aansprakelijk voor schade als gevolg van tijdelijke onbeschikbaarheid, storingen of onderhoud. Gepland onderhoud wordt waar mogelijk vooraf gecommuniceerd."],
+      ["10. Aansprakelijkheid", "Vellu is niet aansprakelijk voor: schade voortvloeiend uit het gebruik van het platform of de onmogelijkheid daarvan; gemiste afspraken, no-shows of geschillen tussen salons en klanten; indirecte schade, gevolgschade of gederfde winst. De totale aansprakelijkheid van Vellu is beperkt tot het bedrag dat je in de afgelopen 3 maanden aan abonnementskosten hebt betaald."],
+      ["11. Beëindiging", "Je kunt je account op elk moment beëindigen door contact op te nemen met Vellu. Na beëindiging wordt je boekingspagina gedeactiveerd en worden je gegevens verwijderd conform ons Privacybeleid. Vellu kan je account beëindigen bij schending van deze voorwaarden, met een kennisgeving per e-mail."],
+      ["12. Toepasselijk recht", "Op deze voorwaarden is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechter in Den Haag, Nederland."],
+      ["13. Contact", "Voor vragen over deze Algemene Voorwaarden kun je contact opnemen via info@vellu.cc."]
+    ]
+  } : {
+    title: "Terms of Service",
+    updated: "Last updated: March 2026",
+    sections: [
+      ["1. Acceptance of terms", "By using the Vellu platform (vellu.cc), you agree to these Terms of Service. If you do not agree, please do not use the platform. Vellu reserves the right to modify these terms at any time. Changes will be communicated through the platform."],
+      ["2. Description of service", "Vellu is an online booking platform for beauty professionals in the Netherlands, including nail technicians, lash artists, hairdressers, and beauticians. The platform offers salon owners their own booking page (vellu.cc/your-name), calendar management, team accounts, email notifications, and a client management system. Vellu operates on a flat monthly subscription with no commission on bookings."],
+      ["3. Account registration", "To use the platform as a salon owner, you must create an account with a valid email address and password. You are responsible for keeping your login credentials confidential and for all activities that occur under your account. Vellu may suspend or terminate accounts if abuse or violation of these terms is suspected."],
+      ["4. Subscriptions and payment", "Vellu offers two subscription plans: Starter (€19/month) and Professional (€39/month). Both plans charge 0% commission on bookings — you only pay the flat monthly fee. Subscriptions are billed monthly. You may cancel your subscription at any time; it remains active until the end of the paid period. Vellu reserves the right to change prices with at least 30 days' notice."],
+      ["5. Salon owner obligations", "As a salon owner, you are responsible for: keeping your salon details, services, and prices accurate and up to date; honoring appointments booked through the platform; complying with all applicable laws and regulations regarding your business operations, including GDPR for processing client data; correctly listing your Chamber of Commerce number, VAT ID, and other business details where applicable."],
+      ["6. Clients and end users", "Clients who book an appointment through Vellu enter into an agreement with the respective salon, not with Vellu. Vellu acts solely as an intermediary and is not a party to the treatment agreement. Clients receive a confirmation email with the option to cancel via a unique link. Cancellation policies are determined by each individual salon."],
+      ["7. Intellectual property", "All rights to the Vellu platform, including the software, design, logos, and content, belong to Vellu. Salon owners retain the rights to their own content, such as photos, descriptions, and logos they upload. By uploading content, you grant Vellu a limited license to display this content on your booking page."],
+      ["8. Privacy and data processing", "Vellu processes personal data in accordance with the General Data Protection Regulation (GDPR). See our Privacy Policy at vellu.cc/privacy for full information on how we collect, use, and protect data. Vellu acts as a processor on behalf of the salon owner, who is the data controller for their clients' data."],
+      ["9. Availability", "Vellu strives for the highest possible platform availability but cannot guarantee 100% uptime. Vellu is not liable for damages resulting from temporary unavailability, outages, or maintenance. Planned maintenance will be communicated in advance where possible."],
+      ["10. Liability", "Vellu is not liable for: damages arising from the use of the platform or the inability to use it; missed appointments, no-shows, or disputes between salons and clients; indirect damages, consequential damages, or lost profits. Vellu's total liability is limited to the amount you have paid in subscription fees over the past 3 months."],
+      ["11. Termination", "You may terminate your account at any time by contacting Vellu. Upon termination, your booking page will be deactivated and your data will be deleted in accordance with our Privacy Policy. Vellu may terminate your account for violation of these terms, with notification by email."],
+      ["12. Governing law", "These terms are governed by Dutch law. Disputes shall be submitted to the competent court in The Hague, the Netherlands."],
+      ["13. Contact", "For questions about these Terms of Service, please contact us at info@vellu.cc."]
+    ]
+  };
+
+  return (
+    <Layout>
+
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{body}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+// ─── CONTACT / ABOUT PAGE ────────────────────────────────────
+function ContactPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const t = T[lang];
+  useSEO({ title: lang === "nl" ? "Contact | Vellu" : "Contact | Vellu", url: "https://vellu.cc/contact" });
+  const content = lang === "nl" ? {
+    title: "Over Vellu", subtitle: "Het verhaal achter het platform",
+    mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
+    why: "Waarom Vellu?", whyText: "Te veel nagelsalons, kappers en wimperspecialisten zijn afhankelijk van platforms die een flink percentage van elke boeking pakken. Of ze werken met WhatsApp en DM's — prima, maar niet schaalbaar. Vellu geeft je je eigen professionele boekingspagina met jouw naam, jouw kleuren en jouw diensten. Klanten boeken direct, jij houdt 100% van je omzet.",
+    who: "Wie zit erachter?", whoText: "Vellu is gebouwd door een solo developer uit Nederland met een passie voor technologie en ondernemerschap. Het platform is van de grond af opgebouwd met de focus op wat beauty professionals echt nodig hebben — niet meer, niet minder.",
+    contact: "Contact", contactText: "Heb je vragen, feedback of wil je samenwerken? Neem gerust contact op.",
+    emailLabel: "E-mail", responseTime: "We reageren meestal binnen 24 uur.",
+    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen →"
+  } : {
+    title: "About Vellu", subtitle: "The story behind the platform",
+    mission: "Vellu was built with one mission: give beauty professionals their own online booking platform, without commission and without hassle. No 10% per booking, no expensive subscriptions with hidden costs. Just a flat rate and your brand front and center.",
+    why: "Why Vellu?", whyText: "Too many nail salons, hairdressers, and lash artists depend on platforms that take a significant percentage of every booking. Or they work with WhatsApp and DMs — fine, but not scalable. Vellu gives you your own professional booking page with your name, your colors, and your services. Clients book directly, you keep 100% of your revenue.",
+    who: "Who's behind it?", whoText: "Vellu is built by a solo developer from the Netherlands with a passion for technology and entrepreneurship. The platform is built from the ground up with a focus on what beauty professionals actually need — nothing more, nothing less.",
+    contact: "Contact", contactText: "Got questions, feedback, or want to collaborate? Don't hesitate to reach out.",
+    emailLabel: "Email", responseTime: "We usually respond within 24 hours.",
+    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free →"
+  };
+  return (
+    <Layout>
+
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 13, color: c.textSub, marginBottom: 40 }}>{content.subtitle}</div>
+          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.8, marginBottom: 32, padding: "20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>{content.mission}</div>
+          <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.why}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whyText}</div></div>
+          <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.who}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whoText}</div></div>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.contact}</div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 16 }}>{content.contactText}</div>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: "20px" }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{content.emailLabel}</div>
+              <a href="mailto:info@vellu.cc" style={{ fontSize: 15, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>info@vellu.cc</a>
+              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>{content.responseTime}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "center", padding: "28px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 20, marginBottom: 32 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
+            <button className="btn-primary" onClick={() => navigate("/owner")}>{content.ctaBtn}</button>
+          </div>
+          <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+// ─── DATA PROCESSING AGREEMENT (VERWERKINGSOVEREENKOMST) ─────
+function DpaPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const t = T[lang];
+  useSEO({ title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : "Data Processing Agreement | Vellu", url: "https://vellu.cc/dpa" });
+  const content = lang === "nl" ? {
+    title: "Verwerkingsovereenkomst",
+    updated: "Laatst bijgewerkt: maart 2026",
+    intro: "Deze verwerkingsovereenkomst (\"Overeenkomst\") is van toepassing op de verwerking van persoonsgegevens door Vellu (\"Verwerker\") namens de saloneigenaar die het Vellu-platform gebruikt (\"Verwerkingsverantwoordelijke\"). Deze overeenkomst maakt integraal onderdeel uit van de Algemene Voorwaarden van Vellu en wordt automatisch geaccepteerd bij het aanmaken van een account.",
+    sections: [
+      ["1. Definities", "Persoonsgegevens: alle gegevens die betrekking hebben op een geïdentificeerde of identificeerbare natuurlijke persoon. Verwerking: elke bewerking of geheel van bewerkingen met betrekking tot persoonsgegevens, waaronder het verzamelen, vastleggen, ordenen, structureren, opslaan, bijwerken, wijzigen, opvragen, raadplegen, gebruiken, verstrekken, verspreiden, wissen of vernietigen van gegevens. AVG: de Algemene Verordening Gegevensbescherming (EU) 2016/679."],
+      ["2. Onderwerp en duur", "De Verwerker verwerkt persoonsgegevens ten behoeve van het aanbieden van het online boekingsplatform Vellu. De verwerking vindt plaats gedurende de looptijd van het abonnement van de Verwerkingsverantwoordelijke. Na beëindiging van het abonnement worden de gegevens verwijderd conform artikel 12 van deze overeenkomst."],
+      ["3. Aard en doel van de verwerking", "De verwerking omvat: het opslaan en beheren van afspraken en boekingen; het versturen van e-mailbevestigingen, herinneringen en follow-ups; het beheren van klantgegevens namens de salon; het genereren van facturen en omzetoverzichten; het faciliteren van reviews en beoordelingen. Het doel is het aanbieden van een volledig boekings- en beheersysteem voor beautyprofessionals."],
+      ["4. Soorten persoonsgegevens", "De volgende categorieën persoonsgegevens worden verwerkt: naam (voor- en achternaam) van klanten; e-mailadres van klanten; telefoonnummer (indien verstrekt); afspraakgegevens (datum, tijd, behandeling, prijs); allergie-informatie (indien verstrekt door de klant); reviewteksten en beoordelingen; bedrijfsgegevens van de saloneigenaar (naam, adres, KVK, BTW-id, IBAN)."],
+      ["5. Categorieën betrokkenen", "De persoonsgegevens hebben betrekking op: klanten die een afspraak boeken via het Vellu-platform; saloneigenaren en hun medewerkers die het platform gebruiken."],
+      ["6. Verplichtingen van de Verwerker", "De Verwerker verbindt zich ertoe: persoonsgegevens uitsluitend te verwerken in opdracht van en volgens de instructies van de Verwerkingsverantwoordelijke, tenzij een wettelijke verplichting anders vereist; te waarborgen dat personen die toegang hebben tot de persoonsgegevens zich tot geheimhouding hebben verbonden; passende technische en organisatorische maatregelen te nemen om een op het risico afgestemd beveiligingsniveau te waarborgen; geen persoonsgegevens te verwerken voor eigen commerciële doeleinden; de Verwerkingsverantwoordelijke onverwijld te informeren indien een instructie naar het oordeel van de Verwerker in strijd is met de AVG."],
+      ["7. Sub-verwerkers", "De Verwerkingsverantwoordelijke geeft de Verwerker algemene toestemming om sub-verwerkers in te schakelen. De huidige sub-verwerkers zijn:\n\n• Supabase Inc. (San Francisco, VS) — database hosting en opslag. Data wordt verwerkt in de EU (Frankfurt). Supabase is SOC2 Type II gecertificeerd.\n• Resend Inc. (San Francisco, VS) — e-mailverzending voor bevestigingen, herinneringen en facturen. Verwerkt via Amazon SES (EU-West-1, Ierland).\n• Vercel Inc. (San Francisco, VS) — website hosting en content delivery. Edge netwerk met nodes in de EU.\n\nDe Verwerker informeert de Verwerkingsverantwoordelijke over wijzigingen in sub-verwerkers. De Verwerkingsverantwoordelijke kan bezwaar maken tegen een nieuwe sub-verwerker."],
+      ["8. Beveiligingsmaatregelen", "De Verwerker heeft de volgende technische en organisatorische maatregelen getroffen: versleuteling van gegevens in transit (TLS/SSL) en at rest; toegangscontrole op basis van Row Level Security (RLS) in de database; authenticatie via Supabase Auth met veilige wachtwoordopslag (bcrypt); geen opslag van betaalgegevens — betalingen worden afgehandeld door derden; regelmatige back-ups van de database; beperkte toegang tot productiedata."],
+      ["9. Meldplicht datalekken", "De Verwerker informeert de Verwerkingsverantwoordelijke zonder onredelijke vertraging, en waar mogelijk binnen 48 uur, nadat hij kennis heeft genomen van een inbreuk in verband met persoonsgegevens (datalek). De melding bevat ten minste: de aard van het datalek; de categorieën en het aantal betrokkenen; de waarschijnlijke gevolgen; de maatregelen die zijn genomen of voorgesteld om het datalek aan te pakken."],
+      ["10. Bijstand", "De Verwerker verleent de Verwerkingsverantwoordelijke bijstand bij: het nakomen van verzoeken van betrokkenen (inzage, correctie, verwijdering); het uitvoeren van een gegevensbeschermingseffectbeoordeling (DPIA) indien nodig; het melden van datalekken aan de Autoriteit Persoonsgegevens."],
+      ["11. Controle en audit", "De Verwerkingsverantwoordelijke heeft het recht om audits uit te voeren of te laten uitvoeren om de naleving van deze overeenkomst te controleren. De Verwerker verleent hieraan medewerking en stelt alle relevante informatie beschikbaar. De kosten van een audit zijn voor rekening van de Verwerkingsverantwoordelijke, tenzij uit de audit blijkt dat de Verwerker zijn verplichtingen niet nakomt."],
+      ["12. Teruggave en verwijdering", "Na beëindiging van het abonnement verwijdert de Verwerker alle persoonsgegevens binnen 30 dagen, tenzij bewaring wettelijk verplicht is. De Verwerkingsverantwoordelijke kan voorafgaand aan de verwijdering een kopie van de gegevens opvragen. Reeds geanonimiseerde of geaggregeerde gegevens (zoals omzetstatistieken) vallen buiten deze verplichting."],
+      ["13. Aansprakelijkheid", "De aansprakelijkheid van de Verwerker is beperkt overeenkomstig de bepalingen in de Algemene Voorwaarden van Vellu. Beide partijen vrijwaren elkaar voor claims van derden die voortvloeien uit het niet nakomen van de verplichtingen uit deze overeenkomst."],
+      ["14. Toepasselijk recht", "Op deze verwerkingsovereenkomst is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechter in Den Haag, Nederland."],
+      ["15. Contact", "Voor vragen over deze verwerkingsovereenkomst kun je contact opnemen via info@vellu.cc."]
+    ]
+  } : {
+    title: "Data Processing Agreement",
+    updated: "Last updated: March 2026",
+    intro: "This Data Processing Agreement (\"Agreement\") applies to the processing of personal data by Vellu (\"Processor\") on behalf of the salon owner using the Vellu platform (\"Controller\"). This agreement is an integral part of the Vellu Terms of Service and is automatically accepted upon account creation.",
+    sections: [
+      ["1. Definitions", "Personal data: any data relating to an identified or identifiable natural person. Processing: any operation or set of operations performed on personal data, including collecting, recording, organizing, structuring, storing, adapting, altering, retrieving, consulting, using, disclosing, disseminating, erasing, or destroying data. GDPR: the General Data Protection Regulation (EU) 2016/679."],
+      ["2. Subject matter and duration", "The Processor processes personal data for the purpose of providing the Vellu online booking platform. Processing takes place for the duration of the Controller's subscription. After termination of the subscription, data will be deleted in accordance with Article 12 of this agreement."],
+      ["3. Nature and purpose of processing", "Processing includes: storing and managing appointments and bookings; sending email confirmations, reminders, and follow-ups; managing client data on behalf of the salon; generating invoices and revenue overviews; facilitating reviews and ratings. The purpose is to provide a complete booking and management system for beauty professionals."],
+      ["4. Types of personal data", "The following categories of personal data are processed: name (first and last name) of clients; email address of clients; phone number (if provided); appointment data (date, time, treatment, price); allergy information (if provided by the client); review texts and ratings; business data of the salon owner (name, address, CoC, VAT ID, IBAN)."],
+      ["5. Categories of data subjects", "The personal data relates to: clients who book an appointment through the Vellu platform; salon owners and their staff who use the platform."],
+      ["6. Obligations of the Processor", "The Processor commits to: processing personal data solely on behalf of and in accordance with the instructions of the Controller, unless required otherwise by law; ensuring that persons authorized to process personal data have committed to confidentiality; implementing appropriate technical and organizational measures to ensure a level of security appropriate to the risk; not processing personal data for its own commercial purposes; informing the Controller without delay if an instruction, in the Processor's opinion, violates the GDPR."],
+      ["7. Sub-processors", "The Controller grants the Processor general authorization to engage sub-processors. The current sub-processors are:\n\n• Supabase Inc. (San Francisco, US) — database hosting and storage. Data is processed in the EU (Frankfurt). Supabase is SOC2 Type II certified.\n• Resend Inc. (San Francisco, US) — email delivery for confirmations, reminders, and invoices. Processed via Amazon SES (EU-West-1, Ireland).\n• Vercel Inc. (San Francisco, US) — website hosting and content delivery. Edge network with nodes in the EU.\n\nThe Processor will inform the Controller of changes to sub-processors. The Controller may object to a new sub-processor."],
+      ["8. Security measures", "The Processor has implemented the following technical and organizational measures: encryption of data in transit (TLS/SSL) and at rest; access control based on Row Level Security (RLS) in the database; authentication via Supabase Auth with secure password storage (bcrypt); no storage of payment data — payments are handled by third parties; regular database backups; limited access to production data."],
+      ["9. Data breach notification", "The Processor will inform the Controller without undue delay, and where possible within 48 hours, after becoming aware of a personal data breach. The notification will include at minimum: the nature of the breach; the categories and number of data subjects affected; the likely consequences; the measures taken or proposed to address the breach."],
+      ["10. Assistance", "The Processor will assist the Controller with: fulfilling data subject requests (access, correction, deletion); conducting a Data Protection Impact Assessment (DPIA) if necessary; reporting data breaches to the Data Protection Authority."],
+      ["11. Audit and inspection", "The Controller has the right to conduct or commission audits to verify compliance with this agreement. The Processor will cooperate and make all relevant information available. Audit costs are borne by the Controller, unless the audit reveals non-compliance by the Processor."],
+      ["12. Return and deletion", "After termination of the subscription, the Processor will delete all personal data within 30 days, unless retention is legally required. The Controller may request a copy of the data prior to deletion. Already anonymized or aggregated data (such as revenue statistics) is excluded from this obligation."],
+      ["13. Liability", "The Processor's liability is limited in accordance with the provisions in the Vellu Terms of Service. Both parties indemnify each other against third-party claims arising from non-compliance with the obligations under this agreement."],
+      ["14. Governing law", "This data processing agreement is governed by Dutch law. Disputes shall be submitted to the competent court in The Hague, the Netherlands."],
+      ["15. Contact", "For questions about this data processing agreement, please contact us at info@vellu.cc."]
+    ]
+  };
+  return (
+    <Layout>
+
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 20 }}>{content.updated}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 32, padding: "16px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 14 }}>{content.intro}</div>
+          {content.sections.map(([title, body], i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{body}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+
+export { PrivacyPage, TermsPage, ContactPage, DpaPage };
+export default PrivacyPage;
