@@ -979,9 +979,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         background: c.bg,
         height: "100dvh",
         overflow: "hidden",
-        display: "flex", 
-        fontFamily: "'Jost',sans-serif", 
-        color: c.text 
+        display: "flex",
+        fontFamily: "'Jost',sans-serif",
+        color: c.text,
+        maxWidth: "100vw"
       }}>
         
         {/* Desktop Sidebar */}
@@ -1149,7 +1150,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
-            padding: isMobile ? "14px 16px 80px" : "32px 40px 32px",
+            minWidth: 0,
+            padding: isMobile ? "14px 14px 80px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 

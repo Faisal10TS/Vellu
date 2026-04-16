@@ -940,9 +940,10 @@ const makeCSS = (accent, c = THEMES.dark) => `
 
   @media (max-width: 520px) {
     .service-card { border-radius: 16px; padding: 15px 16px; }
-    .btn-primary { padding: 16px 28px; font-size: 14px; }
-    .btn-ghost { font-size: 12px; }
-    .input-field { padding: 15px 17px; font-size: 16px; }
+    .appt-card { padding: 14px 14px; border-radius: 16px; }
+    .btn-primary { padding: 14px 20px; font-size: 13px; }
+    .btn-ghost { font-size: 11px; }
+    .input-field { padding: 14px 14px; font-size: 16px; }
     .nav-item { padding: 8px 4px; }
   }
 
