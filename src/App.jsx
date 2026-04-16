@@ -64,9 +64,9 @@ function OwnerEntryPage({ lang, setLang }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       // Check staff FIRST
-      const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).single();
+      const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
       if (staffMember) {
-        const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).single();
+        const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
         if (salonProfile) {
           setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
           return;
@@ -128,7 +128,8 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
         }
       }
       // Not a staff member — redirect to /owner
-      navigate("/owner");
+      setLoading(false);
+      navigate("/owner", { replace: true });
     };
     checkSession();
   }, []);

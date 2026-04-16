@@ -18,6 +18,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = salonProfile.accent_color || ACCENT;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
+  const toast = useToast();
 
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
@@ -120,7 +121,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id).eq("owner_id", salonProfile.id);
-      if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : "Error completing", "error"); return; }
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
+      toast.show(lang === "nl" ? "Afspraak voltooid" : "Appointment completed");
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -128,7 +131,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id);
-      if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+      if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : "Error marking no-show", "error"); return; }
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
     } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
@@ -202,6 +206,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const staffSendInvoice = async (id) => {
+    if (processingApptId) return;
+    setProcessingApptId(id);
+    try {
     const a = appointments.find(x => x.id === id);
     if (a) {
       const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}`;
@@ -221,7 +228,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id);
       setInvoiceForm(f => ({ ...f, next_invoice_number: nextNum }));
       setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
+      toast.show(lang === "nl" ? "Factuur verstuurd" : "Invoice sent");
     }
+    } finally { setProcessingApptId(null); }
   };
 
   const ApptCard = ({ a }) => (
@@ -265,6 +274,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   return (
     <Layout accent={accent}>
 
+      <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop Sidebar */}
@@ -1566,6 +1576,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     };
                     const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
                     if (apptError || !appt) {
+                      toast.show(lang === "nl" ? "Fout bij het toevoegen van afspraak" : "Error adding appointment", "error");
                       setAddApptLoading(false);
                       return;
                     }
