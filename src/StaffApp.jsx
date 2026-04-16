@@ -50,6 +50,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [svcError, setSvcError] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [staffSettingsTab, setStaffSettingsTab] = useState("werktijden");
+  const [calViewMode, setCalViewMode] = useState("week");
   const [expandedStaffSvc, setExpandedStaffSvc] = useState(null);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -132,6 +133,39 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (error) return;
     setMyStaff(s => ({...s, working_hours: whForm}));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  const exportCalendar = (apptList) => {
+    const events = apptList.map(a => {
+      const start = new Date(a.date + "T" + a.time + ":00");
+      const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
+      const pad = (n) => String(n).padStart(2, "0");
+      const fmt2 = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+      return [
+        "BEGIN:VEVENT",
+        `DTSTART:${fmt2(start)}`,
+        `DTEND:${fmt2(end)}`,
+        `SUMMARY:${a.client_name} — ${a.service_name}`,
+        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
+        `LOCATION:${salonProfile.business_name}`,
+        `STATUS:${a.status === "confirmed" ? "CONFIRMED" : "COMPLETED"}`,
+        `UID:${a.id}@vellu.cc`,
+        "END:VEVENT"
+      ].join("\r\n");
+    });
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Vellu//Beauty Booking//EN",
+      "X-WR-CALNAME:Vellu - " + myStaff.name,
+      ...events,
+      "END:VCALENDAR"
+    ].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `vellu-${myStaff.name.toLowerCase().replace(/\s+/g, "-")}-agenda.ics`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const [staffPhotoUploading, setStaffPhotoUploading] = useState(null);
@@ -221,41 +255,60 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
-        {/* Desktop sidebar */}
+        {/* Desktop Sidebar */}
         {!isMobile && (
-          <div style={{ width: 240, borderRight: "1px solid " + c.border, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, background: c.bg, zIndex: 50 }}>
-            <div style={{ padding: "18px 20px 14px", flexShrink: 0 }}>
-              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 4 }}>vellu</div>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{salonProfile.business_name}</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: accent, display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: accent }}>{myStaff.name?.[0] || "?"}</div>
-                {myStaff.name}
-              </div>
+          <aside style={{
+            width: 260,
+            borderRight: "1px solid " + c.border,
+            display: "flex",
+            flexDirection: "column",
+            position: "fixed",
+            top: 0, left: 0, bottom: 0,
+            background: c.bg,
+            zIndex: 50,
+            flexShrink: 0
+          }}>
+            {/* Sidebar Header */}
+            <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
+              <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 12px" }}>
+
+            {/* Staff Info */}
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
+              <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonProfile.business_name}</div>
+              <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{myStaff.name}</div>
+            </div>
+
+            {/* Navigation */}
+            <nav style={{ flex: 1, minHeight: 0, padding: "12px 12px", overflowY: "auto" }}>
               {navItems.map(([k, icon, label]) => (
                 <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12,
+                  display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", borderRadius: 12,
+                  cursor: "pointer", marginBottom: 3,
                   background: view === k ? `${accent}12` : "transparent",
                   border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
-                  cursor: "pointer", transition: "all 0.2s"
+                  transition: "all 0.2s"
                 }}>
                   <NavIcon name={icon} size={18} color={view === k ? accent : c.textLabel} />
-                  <span style={{ fontSize: 13, fontWeight: view === k ? 600 : 400, color: view === k ? accent : c.textSub }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: view === k ? 600 : 400, color: view === k ? accent : c.textSub, letterSpacing: "0.02em" }}>{label}</span>
                 </div>
               ))}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 20px", borderTop: "1px solid " + c.border, flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            </nav>
+
+            {/* Sidebar Footer */}
+            <div style={{ padding: "12px 20px", borderTop: "1px solid " + c.border, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <ThemeToggle /><LangToggle lang={lang} setLang={setLang} />
               </div>
-              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={onLogout}><NavIcon name="logout" size={14} color={c.textLabel} />{t.logout}</button>
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 4, fontSize: 11, color: c.textLabel, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={onLogout}>
+                <NavIcon name="logout" size={14} color={c.textLabel} />{t.logout}
+              </button>
             </div>
-          </div>
+          </aside>
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 240, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
@@ -601,60 +654,92 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {/* AGENDA */}
           {view === "agenda" && (() => {
             const MON_SHORT = lang === "nl" ? MON_NL : MON_EN;
+            const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+            const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
             const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
             const todayFmt = fmt(getToday());
-            const base = getToday();
-            base.setDate(base.getDate() + staffWeekOffset * 7);
-            const dayOfWeek = (base.getDay() + 6) % 7;
-            const weekStart = new Date(base);
-            weekStart.setDate(base.getDate() - dayOfWeek);
-            const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
+            const todayDate = getToday();
 
-            const firstDay = weekDays[0]; const lastDay = weekDays[6];
-            const sameMonth = firstDay.getMonth() === lastDay.getMonth();
-            const periodLabel = sameMonth
-              ? `${firstDay.getDate()} – ${lastDay.getDate()} ${MON_SHORT[lastDay.getMonth()]} ${lastDay.getFullYear()}`
-              : `${firstDay.getDate()} ${MON_SHORT[firstDay.getMonth()]} – ${lastDay.getDate()} ${MON_SHORT[lastDay.getMonth()]}`;
+            const filteredAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
 
-            const periodAppts = appointments.filter(a => {
-              const ds = a.date;
-              return ds >= fmt(weekDays[0]) && ds <= fmt(weekDays[6]) && a.status !== "cancelled" && a.status !== "no_show";
-            });
+            let periodAppts = [];
+            let periodLabel = "";
+
+            if (calViewMode === "week") {
+              const base = new Date(todayDate);
+              base.setDate(base.getDate() + staffWeekOffset * 7);
+              const weekStart = new Date(base);
+              weekStart.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekStart.getDate() + 6);
+              const ws = fmt(weekStart);
+              const we = fmt(weekEnd);
+              periodAppts = filteredAppts.filter(a => a.date >= ws && a.date <= we);
+              const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+              periodLabel = sameMonth
+                ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
+                : `${weekStart.getDate()} ${MON_SHORT[weekStart.getMonth()]} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
+            } else if (calViewMode === "month") {
+              const target = new Date(todayDate.getFullYear(), todayDate.getMonth() + staffWeekOffset, 1);
+              const prefix = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}`;
+              periodAppts = filteredAppts.filter(a => a.date?.startsWith(prefix));
+              periodLabel = `${MON_FULL[target.getMonth()]} ${target.getFullYear()}`;
+            } else {
+              const yr = todayDate.getFullYear() + staffWeekOffset;
+              periodAppts = filteredAppts.filter(a => a.date?.startsWith(String(yr)));
+              periodLabel = String(yr);
+            }
             const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const periodDone = periodAppts.filter(a => a.status === "completed").length;
 
             return (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
 
-              {/* Navigation */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {staffWeekOffset !== 0 && (
-                    <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}33` }}>
-                      {lang === "nl" ? "Vandaag" : "Today"}
-                    </div>
-                  )}
+              {/* Top toolbar — view toggle + period navigator */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  {["week", "month", "year"].map(mode => (
+                    <div key={mode} onClick={() => { setCalViewMode(mode); setStaffWeekOffset(0); }} style={{
+                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                      background: calViewMode === mode ? accent : "transparent",
+                      color: calViewMode === mode ? c.btnOnDark : c.textSub,
+                    }}>{mode === "week" ? (lang === "nl" ? "Week" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : "Month") : (lang === "nl" ? "Jaar" : "Year")}</div>
+                  ))}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div onClick={() => setStaffWeekOffset(w => w - 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                  {staffWeekOffset !== 0 && (
+                    <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
+                      padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
+                    }}>{lang === "nl" ? "Vandaag" : "Today"}</div>
+                  )}
+                  <div onClick={() => setStaffWeekOffset(o => o - 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
-                  <div onClick={() => setStaffWeekOffset(w => w + 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                  <div onClick={() => setStaffWeekOffset(o => o + 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                   </div>
                 </div>
               </div>
 
-              {/* Period summary */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+              {/* Period summary strip */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
                 <div>
-                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Afspraken" : "Appointments"}</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal" : "Total"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
                 </div>
                 <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Bevestigd" : "Confirmed"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.filter(a => a.status === "confirmed").length}</div>
+                </div>
+                <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : "Completed"}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.filter(a => a.status === "completed").length}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodDone}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
@@ -662,66 +747,224 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
               </div>
 
-              {/* Week calendar grid with appointment previews */}
-              <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
-                  {weekDays.map((d, i) => {
-                    const ds = fmt(d);
-                    const isToday = ds === todayFmt;
-                    return (
-                      <div key={i} style={{ textAlign: "center", padding: "10px 4px", borderRight: i < 6 ? `1px solid ${c.border}` : "none", background: isToday ? `${accent}10` : "transparent" }}>
-                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
-                        <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-                  {weekDays.map((d, i) => {
-                    const ds = fmt(d);
-                    const isSel = calDate === ds;
-                    const dayAppts = appointments.filter(a => a.date === ds && a.status !== "cancelled" && a.status !== "no_show").sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-                    const visibleAppts = dayAppts.slice(0, 4);
-                    const moreCount = dayAppts.length - visibleAppts.length;
-                    return (
-                      <div key={i} onClick={() => setCalDate(ds)} style={{
-                        minHeight: 140, padding: "8px 6px 10px", cursor: "pointer",
-                        background: isSel ? `${accent}22` : "transparent",
-                        borderRight: i < 6 ? `1px solid ${c.border}` : "none",
-                        display: "flex", flexDirection: "column", gap: 3
-                      }}>
-                        {dayAppts.length === 0 ? (
-                          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
-                        ) : (
-                          <>
-                            {visibleAppts.map((a, ai) => {
-                              const isCancelled = a.status === "cancelled" || a.status === "no_show";
-                              const statusColor = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
-                              return (
-                                <div key={ai} style={{ padding: "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden", opacity: isCancelled ? 0.5 : 1 }}>
-                                  <div style={{ fontSize: 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
-                                  <div style={{ fontSize: 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
-                                </div>
-                              );
-                            })}
-                            {moreCount > 0 && <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* WEEK VIEW */}
+              {calViewMode === "week" && (() => {
+                const base = getToday();
+                base.setDate(base.getDate() + staffWeekOffset * 7);
+                const dayOfWeek = (base.getDay() + 6) % 7;
+                const weekStart = new Date(base);
+                weekStart.setDate(base.getDate() - dayOfWeek);
+                const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
+                return (
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                      {weekDays.map((d, i) => {
+                        const ds = fmt(d);
+                        const isToday = ds === todayFmt;
+                        return (
+                          <div key={i} style={{ textAlign: "center", padding: "10px 4px", borderRight: i < 6 ? `1px solid ${c.border}` : "none", background: isToday ? `${accent}10` : "transparent" }}>
+                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
+                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                      {weekDays.map((d, i) => {
+                        const ds = fmt(d);
+                        const isSel = calDate === ds;
+                        const dayAppts = filteredAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                        const visibleAppts = dayAppts.slice(0, 4);
+                        const moreCount = dayAppts.length - visibleAppts.length;
+                        return (
+                          <div key={i} onClick={() => setCalDate(ds)} style={{
+                            minHeight: 140, padding: "8px 6px 10px", cursor: "pointer",
+                            background: isSel ? `${accent}22` : "transparent",
+                            borderRight: i < 6 ? `1px solid ${c.border}` : "none",
+                            display: "flex", flexDirection: "column", gap: 3
+                          }}>
+                            {dayAppts.length === 0 ? (
+                              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
+                            ) : (
+                              <>
+                                {visibleAppts.map((a, ai) => {
+                                  const statusColor = a.status === "completed" ? c.success : accent;
+                                  return (
+                                    <div key={ai} style={{ padding: "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden" }}>
+                                      <div style={{ fontSize: 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
+                                      <div style={{ fontSize: 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
+                                    </div>
+                                  );
+                                })}
+                                {moreCount > 0 && <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
-              {/* Selected day appointments */}
-              {calAppts.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
-                  <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
-                  <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}</div>
-                </div>
-              ) : (
-                calAppts.map(a => <ApptCard key={a.id} a={a} />)
-              )}
+              {/* MONTH VIEW */}
+              {calViewMode === "month" && (() => {
+                const base = getToday();
+                const targetMonth = new Date(base.getFullYear(), base.getMonth() + staffWeekOffset, 1);
+                const year = targetMonth.getFullYear();
+                const month = targetMonth.getMonth();
+                const firstOfMonth = new Date(year, month, 1);
+                const lastOfMonth = new Date(year, month + 1, 0);
+                const startDay = (firstOfMonth.getDay() + 6) % 7;
+                const daysInMonth = lastOfMonth.getDate();
+                const cells = [];
+                const prevMonthLast = new Date(year, month, 0).getDate();
+                for (let i = startDay - 1; i >= 0; i--) {
+                  const d = prevMonthLast - i;
+                  const prevMonth = month === 0 ? 11 : month - 1;
+                  const prevYear = month === 0 ? year - 1 : year;
+                  cells.push({ day: d, month: prevMonth, year: prevYear, muted: true });
+                }
+                for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, month, year, muted: false });
+                const totalCells = Math.ceil(cells.length / 7) * 7;
+                const needed = totalCells - cells.length;
+                for (let d = 1; d <= needed; d++) {
+                  const nextMonth = month === 11 ? 0 : month + 1;
+                  const nextYear = month === 11 ? year + 1 : year;
+                  cells.push({ day: d, month: nextMonth, year: nextYear, muted: true });
+                }
+                const rows = cells.length / 7;
+                return (
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                      {DAY_HEADERS.map((dh, i) => (
+                        <div key={dh} style={{ textAlign: "center", fontSize: 10, fontWeight: 600, color: c.textLabel, padding: "10px 0", letterSpacing: "0.12em", textTransform: "uppercase", borderRight: i < 6 ? `1px solid ${c.border}` : "none" }}>{dh}</div>
+                      ))}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                      {cells.map((cell, i) => {
+                        const ds = `${cell.year}-${String(cell.month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
+                        const isSel = calDate === ds;
+                        const isToday = ds === todayFmt;
+                        const count = filteredAppts.filter(a => a.date === ds).length;
+                        const dayAppts = filteredAppts.filter(a => a.date === ds).slice(0, 3);
+                        const col = i % 7;
+                        const row = Math.floor(i / 7);
+                        return (
+                          <div key={i} onClick={() => {
+                            setCalDate(ds);
+                            setCalViewMode("week");
+                            const clickedDate = new Date(ds);
+                            const today = getToday();
+                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
+                            setStaffWeekOffset(Math.floor(diffDays / 7));
+                          }} style={{
+                            minHeight: 92, padding: "8px 8px 6px", cursor: "pointer", position: "relative",
+                            background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
+                            borderRight: col < 6 ? `1px solid ${c.border}` : "none",
+                            borderBottom: row < rows - 1 ? `1px solid ${c.border}` : "none",
+                            transition: "background 0.15s",
+                            opacity: cell.muted ? 0.35 : 1,
+                            display: "flex", flexDirection: "column", gap: 4
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{
+                                fontSize: 12, fontWeight: isToday ? 700 : 500,
+                                color: isToday ? accent : isSel ? accent : c.text,
+                                width: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
+                                borderRadius: isToday ? "50%" : 0,
+                                background: isToday ? accent : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                ...(isToday ? { color: c.btnOnDark, fontSize: 11 } : {})
+                              }}>{cell.day}</div>
+                              {count > 0 && !cell.muted && (
+                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent }}>{count}</div>
+                              )}
+                            </div>
+                            {!cell.muted && dayAppts.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+                                {dayAppts.map((a, ai) => (
+                                  <div key={ai} style={{
+                                    fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                                    background: `${accent}1a`, color: c.textSub,
+                                    borderLeft: `2px solid ${accent}`,
+                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                                  }}>
+                                    {a.time} {a.client_name?.split(" ")[0] || ""}
+                                  </div>
+                                ))}
+                                {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* YEAR VIEW */}
+              {calViewMode === "year" && (() => {
+                const baseYear = getToday().getFullYear() + staffWeekOffset;
+                const currentMonth = getToday().getMonth();
+                const currentYear = getToday().getFullYear();
+                const monthCounts = Array.from({ length: 12 }, (_, mi) => {
+                  const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
+                  return filteredAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
+                });
+                const maxMonthCount = Math.max(...monthCounts, 1);
+                return (
+                  <div style={{ marginBottom: 20, display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 10 }}>
+                    {MON_FULL.map((monthName, mi) => {
+                      const isCurrent = baseYear === currentYear && mi === currentMonth;
+                      const count = monthCounts[mi];
+                      const pct = (count / maxMonthCount) * 100;
+                      return (
+                        <div key={mi} onClick={() => {
+                          setCalViewMode("month");
+                          const now = getToday();
+                          setStaffWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
+                        }} style={{
+                          padding: "16px 18px", borderRadius: 14, cursor: "pointer",
+                          background: isCurrent ? `${accent}12` : c.bgCard,
+                          border: `1px solid ${isCurrent ? `${accent}55` : c.border}`,
+                          transition: "all 0.2s",
+                          display: "flex", flexDirection: "column", gap: 10
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, color: c.text }}>{monthName}</div>
+                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : "Now"}</div>}
+                          </div>
+                          <div>
+                            <div style={{ height: 4, borderRadius: 3, background: c.inputBg, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: count > 0 ? c.textSub : c.textMuted, marginTop: 6 }}>
+                              {count > 0 ? `${count} ${lang === "nl" ? "afspraken" : "appointments"}` : (lang === "nl" ? "Geen afspraken" : "No appointments")}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Appointments list + export (week/month views) */}
+              {calViewMode !== "year" && (<>
+                {calAppts.length === 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}</div>
+                  </div>
+                ) : (<>
+                  {calAppts.map(a => <ApptCard key={a.id} a={a} />)}
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
+                    <NavIcon name="download" size={14} color={c.textSub} /> {lang === "nl" ? "Exporteer naar agenda" : "Export to calendar"}
+                  </button>
+                </>)}
+              </>)}
             </div>
             );
           })()}
