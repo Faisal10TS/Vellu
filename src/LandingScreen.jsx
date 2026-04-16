@@ -55,7 +55,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         fontFamily: "'Jost',sans-serif",
         color: c.text,
         position: "relative",
-        overflowX: "hidden"
+        overflow: "clip"
       }}>
         {/* Ambient glow */}
         <div style={{ position: "absolute", top: "-20%", left: "20%", width: "60%", height: "60%", background: `radial-gradient(ellipse at center, ${ACCENT}0a 0%, transparent 70%)`, pointerEvents: "none" }} />
