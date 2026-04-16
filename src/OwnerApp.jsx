@@ -2578,9 +2578,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{
                 maxWidth: 960,
                 margin: "0 auto",
-                padding: isMobile ? "0 22px" : "0 40px",
+                padding: isMobile ? "0 14px" : "0 40px",
                 display: "flex", gap: 6, overflowX: "auto",
-                justifyContent: "center"
+                WebkitOverflowScrolling: "touch"
               }}>
                 {[
                   ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
