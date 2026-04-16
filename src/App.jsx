@@ -1,5 +1,5 @@
 import { useState, useEffect, Component, lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, useParams, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails
@@ -89,10 +89,7 @@ function OwnerEntryPage({ lang, setLang }) {
   );
 
   // Staff member — redirect to /staff
-  useEffect(() => {
-    if (staffUser) navigate("/staff", { replace: true });
-  }, [staffUser]);
-  if (staffUser) return null;
+  if (staffUser) return <Navigate to="/staff" replace />;
 
   // Check if plan is active
   const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
