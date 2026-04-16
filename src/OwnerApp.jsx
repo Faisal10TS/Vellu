@@ -1079,27 +1079,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           marginLeft: isMobile ? 0 : 260,
           overflow: "hidden"
         }}>
-          {/* Mobile Header */}
-          {isMobile && (
-            <div style={{
-              padding: "8px 14px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              background: c.bg,
-              borderBottom: `1px solid ${c.border}`,
-              gap: 8,
-              flexShrink: 0
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                <ThemeToggle />
-                <LangToggle lang={lang} setLang={setLang} />
-              </div>
-            </div>
-          )}
+          {/* Mobile Header — no separate bar, toggles are in the content area */}
 
           {/* Desktop Header */}
           {!isMobile && (
@@ -1159,7 +1139,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* DASHBOARD */}
           {view === "dashboard" && (
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflow: "hidden" }}>
-              {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
+              {isMobile && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, paddingTop: 4 }}>
+                    <ThemeToggle />
+                    <LangToggle lang={lang} setLang={setLang} />
+                  </div>
+                </div>
+              )}
 
               {/* Onboarding checklist for new salons */}
               {appts.length === 0 && (
