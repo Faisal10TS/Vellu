@@ -237,7 +237,7 @@ async function sendEmails(type, booking) {
   }
 }
 
-const ACCENT = "#c9a96e";
+const ACCENT = "#e8c547";
 
 // ─── GOOGLE CALENDAR HELPER ──────────────────────────────────
 function getGoogleCalUrl({ title, date, time, duration, description, location }) {
