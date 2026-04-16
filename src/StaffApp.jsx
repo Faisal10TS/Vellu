@@ -237,6 +237,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textLabel }} onClick={() => {
+            const dur = parseInt(a.service_duration || a.duration || 60);
+            window.open(getGoogleCalUrl({
+              title: `${a.client_name} — ${a.service_name}`,
+              date: a.date, time: a.time, duration: dur,
+              description: `${a.service_name}\n${a.client_name}\n€${a.service_price}`,
+              location: salonProfile.business_name || ""
+            }), "_blank");
+          }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
         </div>
       )}
@@ -710,11 +719,6 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       }}>{mode === "week" ? (lang === "nl" ? "Week" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : "Month") : (lang === "nl" ? "Jaar" : "Year")}</div>
                     ))}
                   </div>
-                  {periodAppts.length > 0 && (
-                    <div onClick={() => exportCalendar(periodAppts)} style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}>
-                      <NavIcon name="download" size={12} color={c.textSub} /> {lang === "nl" ? "Exporteer" : "Export"}
-                    </div>
-                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {staffWeekOffset !== 0 && (
