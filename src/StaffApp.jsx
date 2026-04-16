@@ -104,11 +104,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const days = getDays();
 
   const [processingApptId, setProcessingApptId] = useState(null);
+  // Scope all mutations to this salon's owner_id — defense-in-depth on top of
+  // the RLS policy that already enforces staff can only update their employer's
+  // appointments. Without the .eq("owner_id", ...) a compromised client-side
+  // could attempt to flip appointments belonging to other salons.
   const markComplete = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id).eq("owner_id", salonProfile.id);
       if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
     } finally { setProcessingApptId(null); }
   };
@@ -116,7 +120,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id);
       if (!error) setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
     } finally { setProcessingApptId(null); }
   };
@@ -196,7 +200,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#f87171", borderColor: "rgba(248,113,113,0.2)", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
         </div>
       )}
     </div>
@@ -332,7 +336,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
                       <div style={{ marginTop: 5 }}>
                         {a.invoice_sent
-                          ? <span style={{ fontSize: 10, color: "#86efac", display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color="#86efac" /> {t.sent}</span>
+                          ? <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color={c.success} /> {t.sent}</span>
                           : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => staffSendInvoice(a.id)}>{t.send}</button>
                         }
                       </div>
@@ -494,7 +498,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               <div style={{ display: "flex", gap: 3 }}>
                                 <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: accent, borderColor: `${accent}33` }}
                                   onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}><NavIcon name="edit" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                                <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: c.danger, borderColor: `${c.danger}26` }}
                                   onClick={async () => { await supabase.from("service_variants").delete().eq("id", v.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}>×</button>
                               </div>
                             </div>
@@ -511,7 +515,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       {(s.extras || []).map(e => (
                         <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2, fontSize: 10 }}>
                           <span style={{ color: c.textMuted }}>{e.name_nl} +€{e.price}</span>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: "#f87171", borderColor: "rgba(248,113,113,0.15)" }}
+                          <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: c.danger, borderColor: `${c.danger}26` }}
                             onClick={async () => { await supabase.from("service_extras").delete().eq("id", e.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}>×</button>
                         </div>
                       ))}
@@ -649,7 +653,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => setShowAddAppt(false)}>{t.cancelEdit}</button>
               </>) : (
                 <div style={{ textAlign: "center", padding: "20px 0" }}>
-                  <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color="#86efac" /></div>
+                  <div style={{ marginBottom: 16 }}><NavIcon name="check" size={48} color={c.success} /></div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{t.appointmentAdded}</div>
                   <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowAddAppt(false)}>{t.close}</button>
                 </div>

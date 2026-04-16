@@ -1,13 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = ["https://vellu.cc","https://www.vellu.cc","https://vellu.io","https://www.vellu.io","http://localhost:5173","http://localhost:5174","http://localhost:5175","http://localhost:5176"];
+function corsHeaders(origin: string | null) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";
+  return { "Access-Control-Allow-Origin": allow, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
+}
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const origin = req.headers.get("origin");
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
 
   try {
     const { staff_id, email, password, owner_id } = await req.json();
@@ -15,7 +17,7 @@ serve(async (req) => {
     if (!staff_id || !email || !password || !owner_id) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
@@ -35,7 +37,7 @@ serve(async (req) => {
     if (!profile || profile.account_type !== "team") {
       return new Response(JSON.stringify({ error: "Not a team account" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
@@ -51,7 +53,7 @@ serve(async (req) => {
       const isDuplicate = createError.message?.toLowerCase().includes("already") || createError.message?.toLowerCase().includes("exists");
       return new Response(JSON.stringify({ error: isDuplicate ? "email_taken" : createError.message }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
@@ -65,18 +67,18 @@ serve(async (req) => {
     if (updateError) {
       return new Response(JSON.stringify({ error: updateError.message }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
 
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   }
 });

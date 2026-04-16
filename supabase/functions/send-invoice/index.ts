@@ -3,14 +3,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const FROM_EMAIL = "noreply@vellu.cc";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = ["https://vellu.cc","https://www.vellu.cc","https://vellu.io","https://www.vellu.io","http://localhost:5173","http://localhost:5174","http://localhost:5175","http://localhost:5176"];
+function corsHeaders(origin: string | null) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";
+  return { "Access-Control-Allow-Origin": allow, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
+}
 
 serve(async (req) => {
+  const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(origin) });
   }
 
   try {
@@ -31,7 +33,7 @@ serve(async (req) => {
     // Input validation
     if (!clientEmail || !serviceName || servicePrice === undefined) {
       return new Response(JSON.stringify({ error: "Missing required fields: clientEmail, serviceName, servicePrice" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
@@ -140,20 +142,18 @@ serve(async (req) => {
     if (!res.ok) {
       console.error("Resend API error:", data);
       return new Response(JSON.stringify({ success: false, error: data?.message || "Email send failed" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ success: true, data }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error("send-invoice error:", error);
+    return new Response(JSON.stringify({ error: "invoice_send_failed" }), {
       status: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   }
 });
