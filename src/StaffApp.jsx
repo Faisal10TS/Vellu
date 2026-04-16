@@ -49,6 +49,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
   const [svcError, setSvcError] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [staffSettingsTab, setStaffSettingsTab] = useState("werktijden");
+  const [expandedStaffSvc, setExpandedStaffSvc] = useState(null);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
@@ -505,223 +507,312 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
           )}
 
-          {/* SETTINGS */}
+          {/* SETTINGS — tabbed like owner dashboard */}
           {view === "instellingen" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.mySettings}>{t.settings}</PTitle>}
 
-              {/* Working hours — same style as owner planning */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
-                {[0,1,2,3,4,5,6].map(day => {
-                  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
-                  const staffDay = whForm[day];
-                  const isOn = staffDay ? !staffDay.closed : true;
-                  const openTime = staffDay?.open || "09:00";
-                  const closeTime = staffDay?.close || "17:30";
-                  return (
-                    <div key={day} style={{
-                      display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "10px 12px",
-                      background: isOn ? `${accent}08` : c.bgCard,
-                      border: `1px solid ${isOn ? `${accent}22` : c.border}`,
-                      borderRadius: 12, opacity: isOn ? 1 : 0.6, transition: "all 0.2s"
+              {/* Tab bar */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  {[
+                    ["werktijden", "planning", lang === "nl" ? "Werktijden" : "Hours"],
+                    ["facturatie", "facturen", lang === "nl" ? "Facturatie" : "Invoicing"],
+                    ["diensten", "diensten", lang === "nl" ? "Diensten" : "Services"],
+                  ].map(([key, icon, label]) => (
+                    <div key={key} onClick={() => setStaffSettingsTab(key)} style={{
+                      padding: "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                      background: staffSettingsTab === key ? accent : "transparent",
+                      color: staffSettingsTab === key ? c.btnOnDark : c.textSub,
+                      display: "flex", alignItems: "center", gap: 6
                     }}>
-                      <div style={{ width: 85, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
-                      <div onClick={() => {
-                        setWhForm(wh => {
-                          const next = {...wh};
-                          if (isOn) next[day] = { closed: true };
-                          else next[day] = { closed: false, open: openTime, close: closeTime };
-                          return next;
-                        });
-                      }} style={{ width: 36, height: 20, borderRadius: 10, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                        <div style={{ position: "absolute", top: 2, left: isOn ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
-                      </div>
-                      {isOn ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                          <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                            {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                          </select>
-                          <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
-                          <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                            {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                          </select>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: c.textLabel, fontStyle: "italic" }}>{t.closed}</div>
-                      )}
+                      <NavIcon name={icon} size={14} color={staffSettingsTab === key ? c.btnOnDark : c.textSub} /> {label}
                     </div>
-                  );
-                })}
-                <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={saveWorkingHours}>
-                  {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}
-                </button>
-              </div>
-
-              {/* Invoice details — labeled inputs like owner settings */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
-                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
-                    <input className="input-field" placeholder="Haarlemmerdijk 95, Amsterdam" value={invoiceForm.address} onChange={e => setInvoiceForm(f => ({...f, address: e.target.value}))} style={{ width: "100%" }} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
-                      <input className="input-field" placeholder="12345678" value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ width: "100%" }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
-                      <input className="input-field" placeholder="NL123456789B01" value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ width: "100%" }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
-                    <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
-                      <input className="input-field" value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: c.inputBg, borderRadius: 14, border: `1px solid ${c.inputBorder}` }}>
-                        <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-                <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
-                  await supabase.from("staff_members").update({
-                    address: invoiceForm.address || null,
-                    kvk_number: invoiceForm.kvk_number || null,
-                    btw_id: invoiceForm.btw_id || null,
-                    iban: invoiceForm.iban || null,
-                    invoice_prefix: invoiceForm.invoice_prefix || "INV",
-                    next_invoice_number: invoiceForm.next_invoice_number || 1
-                  }).eq("id", staffMember.id);
-                  setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
-                }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}</button>
               </div>
 
-              {/* My services (full editing) */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
-                <SL>{t.myServices}</SL>
-                {services.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noServices}</div>}
-                {services.map(s => (
-                  <div key={s.id} style={{ padding: "10px 0", borderBottom: "1px solid " + c.border }}>
-                    {/* Service header */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {editingSvc === s.id ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                              <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Naam (NL)" />
-                              <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="Name (EN)" />
-                              <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="€" />
-                              <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 10, padding: "6px 8px" }} placeholder="min" />
+              {/* WERKTIJDEN TAB */}
+              {staffSettingsTab === "werktijden" && (
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
+                  {[0,1,2,3,4,5,6].map(day => {
+                    const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                    const staffDay = whForm[day];
+                    const isOn = staffDay ? !staffDay.closed : true;
+                    const openTime = staffDay?.open || "09:00";
+                    const closeTime = staffDay?.close || "17:30";
+                    return (
+                      <div key={day} style={{
+                        display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "10px 12px",
+                        background: isOn ? `${accent}08` : c.bgCard,
+                        border: `1px solid ${isOn ? `${accent}22` : c.border}`,
+                        borderRadius: 12, opacity: isOn ? 1 : 0.6, transition: "all 0.2s"
+                      }}>
+                        <div style={{ width: 85, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
+                        <div onClick={() => {
+                          setWhForm(wh => {
+                            const next = {...wh};
+                            if (isOn) next[day] = { closed: true };
+                            else next[day] = { closed: false, open: openTime, close: closeTime };
+                            return next;
+                          });
+                        }} style={{ width: 36, height: 20, borderRadius: 10, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                          <div style={{ position: "absolute", top: 2, left: isOn ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                        </div>
+                        {isOn ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                            <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
+                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                            </select>
+                            <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
+                            <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
+                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                            </select>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: c.textLabel, fontStyle: "italic" }}>{t.closed}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={saveWorkingHours}>
+                    {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}
+                  </button>
+                </div>
+              )}
+
+              {/* FACTURATIE TAB */}
+              {staffSettingsTab === "facturatie" && (
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                      <input className="input-field" placeholder="Haarlemmerdijk 95, Amsterdam" value={invoiceForm.address} onChange={e => setInvoiceForm(f => ({...f, address: e.target.value}))} style={{ width: "100%" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
+                        <input className="input-field" placeholder="12345678" value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
+                        <input className="input-field" placeholder="NL123456789B01" value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ width: "100%" }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
+                      <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
+                        <input className="input-field" value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: c.inputBg, borderRadius: 14, border: `1px solid ${c.inputBorder}` }}>
+                          <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
+                    await supabase.from("staff_members").update({
+                      address: invoiceForm.address || null, kvk_number: invoiceForm.kvk_number || null,
+                      btw_id: invoiceForm.btw_id || null, iban: invoiceForm.iban || null,
+                      invoice_prefix: invoiceForm.invoice_prefix || "INV", next_invoice_number: invoiceForm.next_invoice_number || 1
+                    }).eq("id", staffMember.id);
+                    setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
+                  }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}</button>
+                </div>
+              )}
+
+              {/* DIENSTEN TAB — collapsible cards like owner */}
+              {staffSettingsTab === "diensten" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.myServices}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted }}>{services.length} {lang === "nl" ? "diensten" : "services"}</div>
+                  </div>
+                  {services.length === 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                      <div style={{ opacity: 0.4 }}><NavIcon name="diensten" size={32} color={c.textMuted} /></div>
+                      <div style={{ fontSize: 12, color: c.textSub }}>{t.noServices}</div>
+                    </div>
+                  )}
+                  {services.map(s => {
+                    const isExp = expandedStaffSvc === s.id;
+                    const isEdit = editingSvc === s.id;
+                    const heroPhoto = s.photos?.[0]?.url;
+                    const varCount = (s.variants || []).length;
+                    const extCount = (s.extras || []).length;
+                    const photoCount = (s.photos || []).length;
+                    return (
+                      <div key={s.id} style={{ background: c.bgCard, border: `1px solid ${isExp ? `${accent}44` : c.border}`, borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s" }}>
+                        {isEdit ? (
+                          <div style={{ padding: 18 }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : "Edit service"}</div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                                <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                                <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                                <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</div>
+                                <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
+                              </div>
                             </div>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "4px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button className="btn-primary" style={{ flex: 1, padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => {
                                 await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
                                 setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
                                 setEditingSvc(null);
-                              }}><NavIcon name="check" size={12} /></button>
-                              <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setEditingSvc(null)}><NavIcon name="xmark" size={12} /></button>
+                              }}><NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}</button>
+                              <button className="btn-ghost" style={{ padding: "11px 18px" }} onClick={() => setEditingSvc(null)}><NavIcon name="xmark" size={12} /></button>
                             </div>
                           </div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{lang === "nl" ? s.name_nl : s.name_en}</div>
-                            <div style={{ fontSize: 11, color: c.textLabel }}>€{s.price} · {s.duration} {t.min}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, cursor: "pointer", background: isExp ? `${accent}08` : "transparent", transition: "background 0.15s" }}
+                              onClick={() => setExpandedStaffSvc(isExp ? null : s.id)}>
+                              {heroPhoto ? (
+                                <img src={heroPhoto} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
+                              ) : (
+                                <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <NavIcon name="scissors" size={18} color={c.textMuted} />
+                                </div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
+                                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8 }}>
+                                  <span>{s.duration} {t.min}</span>
+                                  {varCount > 0 && <><span>·</span><span>{varCount} {lang === "nl" ? "varianten" : "variants"}</span></>}
+                                  {extCount > 0 && <><span>·</span><span>{extCount} extras</span></>}
+                                  {photoCount > 0 && <><span>·</span><span>{photoCount} {lang === "nl" ? "foto's" : "photos"}</span></>}
+                                </div>
+                              </div>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>
+                                {varCount > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                              </div>
+                              <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                                <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
+                                  style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <NavIcon name="edit" size={13} color="currentColor" />
+                                </button>
+                                <div style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+                                </div>
+                              </div>
+                            </div>
+
+                            {isExp && (
+                              <div style={{ padding: "0 16px 18px", borderTop: `1px solid ${c.border}` }}>
+                                {/* Variants */}
+                                <div style={{ marginTop: 18 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.variants}</div>
+                                    <div style={{ fontSize: 10, color: c.textMuted }}>{varCount}</div>
+                                  </div>
+                                  {(s.variants || []).map(v => (
+                                    <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
+                                        <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
+                                      </div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                      <div style={{ display: "flex", gap: 4 }}>
+                                        <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
+                                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                          <NavIcon name="edit" size={11} color="currentColor" />
+                                        </button>
+                                        <button onClick={async () => { await supabase.from("service_variants").delete().eq("id", v.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
+                                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                          <NavIcon name="xmark" size={11} color="currentColor" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                                    setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: [...(sv.variants||[]), variant]} : sv));
+                                  }} />
+                                </div>
+
+                                {/* Extras */}
+                                <div style={{ marginTop: 18 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.extras}</div>
+                                    <div style={{ fontSize: 10, color: c.textMuted }}>{extCount}</div>
+                                  </div>
+                                  {(s.extras || []).map(e => (
+                                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
+                                      <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                                      <button onClick={async () => { await supabase.from("service_extras").delete().eq("id", e.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
+                                        style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <NavIcon name="xmark" size={11} color="currentColor" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                                    setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: [...(sv.extras||[]), extra]} : sv));
+                                  }} />
+                                </div>
+
+                                {/* Photos */}
+                                <div style={{ marginTop: 18 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{lang === "nl" ? "Foto's" : "Photos"}</div>
+                                    <div style={{ fontSize: 10, color: c.textMuted }}>{photoCount}</div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                    {(s.photos || []).map(p => (
+                                      <div key={p.id} style={{ position: "relative", flexShrink: 0 }}>
+                                        <img src={p.url} loading="lazy" style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", border: `1px solid ${c.border}` }} />
+                                        <button onClick={() => staffDeletePhoto(s.id, p.id, p.url)}
+                                          style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+                                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <label style={{ width: 72, height: 72, borderRadius: 10, border: `1.5px dashed ${accent}55`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 2, flexShrink: 0, opacity: staffPhotoUploading === s.id ? 0.5 : 1 }}>
+                                      {staffPhotoUploading === s.id ? (
+                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
+                                          <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                        </svg>
+                                      ) : (
+                                        <>
+                                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                                          <span style={{ fontSize: 8, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "nl" ? "Foto" : "Photo"}</span>
+                                        </>
+                                      )}
+                                      <input accept="image/*" multiple type="file" style={{ display: "none" }}
+                                        onChange={e => Array.from(e.target.files).forEach(f => staffAddPhoto(s.id, f))} />
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
-                      {editingSvc !== s.id && (
-                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
-                            onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); }}><NavIcon name="edit" size={12} /></button>
-                          {/* Service deletion restricted to salon owner */}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Variants */}
-                    <div style={{ marginTop: 6, marginLeft: 10, paddingLeft: 8, borderLeft: `2px solid ${accent}22` }}>
-                      {(s.variants || []).map(v => (
-                        <div key={v.id} style={{ marginBottom: 3, fontSize: 10 }}>
-                          {editingVar === v.id ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
-                                <input className="input-field" value={editVarForm.name_nl} onChange={e => setEditVarForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 10, padding: "4px 6px" }} />
-                                <input className="input-field" type="number" value={editVarForm.price} onChange={e => setEditVarForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 10, padding: "4px 6px" }} placeholder="€" />
-                              </div>
-                              <div style={{ display: "flex", gap: 3 }}>
-                                <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "3px", color: accent, borderColor: `${accent}44` }} onClick={async () => {
-                                  await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration) }).eq("id", v.id);
-                                  setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, ...editVarForm, price: parseFloat(editVarForm.price), duration: parseInt(editVarForm.duration)} : vr)} : sv));
-                                  setEditingVar(null);
-                                }}><NavIcon name="check" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 6px" }} onClick={() => setEditingVar(null)}><NavIcon name="xmark" size={12} /></button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ color: c.textMuted }}>{v.name_nl} — €{v.price} · {v.duration} min</span>
-                              <div style={{ display: "flex", gap: 3 }}>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: accent, borderColor: `${accent}33` }}
-                                  onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}><NavIcon name="edit" size={12} /></button>
-                                <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: c.danger, borderColor: `${c.danger}26` }}
-                                  onClick={async () => { await supabase.from("service_variants").delete().eq("id", v.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}>×</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
-                        setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: [...(sv.variants||[]), variant]} : sv));
-                      }} />
-                    </div>
-
-                    {/* Extras */}
-                    <div style={{ marginTop: 4, marginLeft: 10, paddingLeft: 8, borderLeft: `2px solid ${accent}22` }}>
-                      {(s.extras || []).map(e => (
-                        <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2, fontSize: 10 }}>
-                          <span style={{ color: c.textMuted }}>{e.name_nl} +€{e.price}</span>
-                          <button className="btn-ghost" style={{ fontSize: 10, padding: "2px 6px", color: c.danger, borderColor: `${c.danger}26` }}
-                            onClick={async () => { await supabase.from("service_extras").delete().eq("id", e.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}>×</button>
-                        </div>
-                      ))}
-                      <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
-                        setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: [...(sv.extras||[]), extra]} : sv));
-                      }} />
-                    </div>
-
-                    {/* Photos */}
-                    <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                      {(s.photos || []).map(p => (
-                        <div key={p.id} style={{ position: "relative", width: 50, height: 50, borderRadius: 8, overflow: "hidden" }}>
-                          <img src={p.url} alt={lang === "nl" ? "Service foto" : "Service photo"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          <button onClick={() => staffDeletePhoto(s.id, p.id, p.url)} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                        </div>
-                      ))}
-                      <label style={{ width: 50, height: 50, borderRadius: 8, border: `1px dashed ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                        <span style={{ fontSize: 16, color: `${accent}66` }}>+</span>
-                        <input accept="image/*" multiple type="file" style={{ display: "none" }}
-                          onChange={e => Array.from(e.target.files).forEach(f => staffAddPhoto(s.id, f))} />
-                      </label>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Service creation restricted to salon owner */}
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: c.textMuted }}>{t.contactOwnerServices}</div>
+                    );
+                  })}
+                  <div style={{ marginTop: 12, textAlign: "center", fontSize: 11, color: c.textMuted, padding: "12px 0" }}>{t.contactOwnerServices}</div>
                 </div>
-              </div>
+              )}
 
               <button className="btn-ghost" style={{ width: "100%", marginTop: 16, display: isMobile ? "block" : "none" }} onClick={onLogout}>{t.logout}</button>
             </div>
