@@ -259,8 +259,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (!bar) return;
     const activeBtn = bar.querySelector(`[data-tab-id="${profileTab}"]`);
     if (!activeBtn) return;
+    // First tab — always snap to start
+    const allBtns = bar.querySelectorAll("[data-tab-id]");
+    if (allBtns.length > 0 && allBtns[0] === activeBtn) {
+      bar.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+    // If the tab is already fully visible, don't scroll
+    const btnLeft = activeBtn.offsetLeft;
+    const btnRight = btnLeft + activeBtn.offsetWidth;
+    if (btnLeft >= bar.scrollLeft && btnRight <= bar.scrollLeft + bar.offsetWidth) return;
     const scrollLeft = activeBtn.offsetLeft - bar.offsetWidth / 2 + activeBtn.offsetWidth / 2;
-    bar.scrollTo({ left: scrollLeft, behavior: "smooth" });
+    bar.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
   }, [profileTab]);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
@@ -685,7 +695,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return `${Math.floor(dys / 30)} ${t.nMonthsAgo}`;
   };
 
-  const allPhotos = initialSalon.services.flatMap(s => (s.photos || []).map(p => ({ ...p, serviceName: svcName(s) })));
+  const allPhotos = initialSalon.services.flatMap(s => (s.photos || []).map(p => {
+    const obj = typeof p === "string" ? { url: p } : p;
+    return { ...obj, serviceName: svcName(s) };
+  }));
 
   const profileFilteredServices = profileCategory === "all"
     ? initialSalon.services
@@ -815,11 +828,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div className="profile-services-grid">
                 {profileFilteredServices.map(s => (
                   <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
-                    {s.photos?.length > 0 ? (
-                      <img src={s.photos[0].url || s.photos[0]} className="profile-service-thumb" alt={svcName(s)} loading="lazy" />
-                    ) : (
-                      <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="scissors" size={20} color={c.textMuted} /></div>
-                    )}
+                    <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
+                      {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                      <NavIcon name="scissors" size={20} color={c.textMuted} />
+                    </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
                       <div className="profile-service-meta">
@@ -896,20 +908,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {allPhotos.length > 0 && (
               <section ref={el => profileSectionRefs.current.gallery = el} className="profile-section">
                 <h2 className="profile-section-title">{t.profileGallery}</h2>
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
-                  {(galleryExpanded ? allPhotos : allPhotos.slice(0, 3)).map((photo, idx) => (
-                    <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
-                      <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
-                    </div>
-                  ))}
-                </div>
-                {allPhotos.length > 3 && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
-                    <button className="btn-ghost" onClick={() => setGalleryExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
-                      {galleryExpanded ? t.showLess : `${t.showMore} (${allPhotos.length - 3})`}
-                    </button>
-                  </div>
-                )}
+                {(() => {
+                  const initialCount = isMobile ? 4 : 3;
+                  return (
+                    <>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
+                        {(galleryExpanded ? allPhotos : allPhotos.slice(0, initialCount)).map((photo, idx) => (
+                          <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
+                            <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
+                          </div>
+                        ))}
+                      </div>
+                      {allPhotos.length > initialCount && (
+                        <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                          <button className="btn-ghost" onClick={() => setGalleryExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                            {galleryExpanded ? t.showLess : `${t.showMore} (${allPhotos.length - initialCount})`}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </section>
             )}
 
@@ -1574,14 +1593,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       }}
                     >
                       {/* Thumbnail or placeholder */}
-                      {heroThumb ? (
-                        <img src={heroThumb} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }}
-                          onClick={e => { if (s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }} />
-                      ) : (
-                        <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <NavIcon name="scissors" size={18} color={c.textMuted} />
-                        </div>
-                      )}
+                      <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}
+                        onClick={e => { if (heroThumb && s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }}>
+                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
+                        <NavIcon name="scissors" size={18} color={c.textMuted} />
+                      </div>
                       {/* Name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500, fontSize: 14, color: c.text, marginBottom: 4 }}>{svcName(s)}</div>
@@ -2149,7 +2165,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             )}
 
             {/* Mobile Content */}
-            <div style={{ flex: 1, overflow: "auto", padding: "14px 22px 120px" }}>
+            <div style={{ flex: 1, overflow: "auto", padding: `14px 22px ${!done && selectedServices.length > 0 ? 120 : 24}px` }}>
               {!done ? (
                 <div key={step} className="fade-up">
                   {/* Progress bar */}
@@ -2616,10 +2632,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {gallery && (
           <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
             <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 16, overflowX: "auto", maxWidth: "100%", paddingBottom: 4 }}>
               {gallery.photos.map((p, i) => (
                 <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
-                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s" }} />
+                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s", flexShrink: 0 }} />
               ))}
             </div>
           </div>

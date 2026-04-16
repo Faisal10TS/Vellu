@@ -1086,7 +1086,9 @@ const makeCSS = (accent, c = THEMES.dark) => `
     cursor: pointer; transition: background 0.2s;
   }
   .profile-service-row:last-child { border-bottom: none; }
-  .profile-service-row:hover { background: ${c.bgCard}; margin: 0 -12px; padding: 18px 12px; border-radius: 12px; }
+  @media (hover: hover) {
+    .profile-service-row:hover { background: ${c.bgCard}; margin: 0 -12px; padding: 18px 12px; border-radius: 12px; }
+  }
   .profile-service-thumb {
     width: 54px; height: 54px; border-radius: 10px; object-fit: cover;
     flex-shrink: 0; background: ${c.bgCard}; border: 1px solid ${c.border};
@@ -1275,6 +1277,9 @@ const makeCSS = (accent, c = THEMES.dark) => `
     .profile-body { flex-direction: column; }
     .profile-mobile-bar { display: flex; position: static; flex-shrink: 0; }
     .profile-section { scroll-margin-top: 52px; }
+    .profile-reviews-summary { flex-direction: column-reverse; gap: 16px; }
+    .profile-rating-big { min-width: 0; width: 100%; flex-direction: row; padding: 14px 18px; gap: 14px; justify-content: center; }
+    .profile-rating-score { font-size: 28px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
