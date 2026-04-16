@@ -872,10 +872,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div key={i} onClick={() => {
                             setCalDate(ds);
                             setCalViewMode("week");
-                            const clickedDate = new Date(ds);
+                            // Calculate week offset: find Monday of clicked week vs Monday of current week
+                            const clickedDate = new Date(ds + "T12:00:00");
                             const today = getToday();
-                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
-                            setStaffWeekOffset(Math.floor(diffDays / 7));
+                            const clickedMonday = new Date(clickedDate);
+                            clickedMonday.setDate(clickedDate.getDate() - ((clickedDate.getDay() + 6) % 7));
+                            const todayMonday = new Date(today);
+                            todayMonday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+                            const weekDiff = Math.round((clickedMonday - todayMonday) / (7 * 24 * 60 * 60 * 1000));
+                            setStaffWeekOffset(weekDiff);
                           }} style={{
                             minHeight: isMobile ? 48 : 92, padding: isMobile ? "6px 4px" : "8px 8px 6px", cursor: "pointer", position: "relative",
                             background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
