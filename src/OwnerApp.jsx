@@ -1145,8 +1145,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{
             flex: 1,
             minHeight: 0,
-            overflow: "auto",
+            overflowX: "hidden",
+            overflowY: "auto",
             WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
             padding: isMobile ? "14px 22px 80px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
@@ -1544,13 +1546,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
                           return (
                             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              {thumb ? (
-                                <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
-                              ) : (
-                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  <NavIcon name="scissors" size={16} color={c.textMuted} />
-                                </div>
-                              )}
+                              <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                                {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
+                                <NavIcon name="scissors" size={16} color={c.textMuted} />
+                              </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
@@ -1694,105 +1693,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {calViewMode === "week" && (() => {
                 const base = getToday();
                 base.setDate(base.getDate() + calWeekOffset * 7);
-                // Align to Monday as week start
-                const dayOfWeek = (base.getDay() + 6) % 7; // 0 = Monday
+                const dayOfWeek = (base.getDay() + 6) % 7;
                 const weekStart = new Date(base);
                 weekStart.setDate(base.getDate() - dayOfWeek);
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
                 const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
-                    {/* Day headers */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
-                      {weekDays.map((d, i) => {
-                        const ds = fmt(d);
-                        const isToday = ds === fmt(getToday());
-                        return (
-                          <div key={i} style={{
-                            textAlign: "center", padding: "10px 4px",
-                            borderRight: i < 6 ? `1px solid ${c.border}` : "none",
-                            background: isToday ? `${accent}10` : "transparent"
-                          }}>
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                    {weekDays.map((d, i) => {
+                      const ds = fmt(d);
+                      const isToday = ds === fmt(getToday());
+                      const isSel = calDate === ds;
+                      const dayAppts = filteredAgendaAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                      const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 5);
+                      const moreCount = dayAppts.length - visibleAppts.length;
+                      return (
+                        <div key={i} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
+                          style={{ borderRight: i < 6 ? `1px solid ${c.border}` : "none", cursor: "pointer", display: "flex", flexDirection: "column", background: isSel ? `${accent}22` : isToday ? `${accent}08` : "transparent" }}>
+                          {/* Day header */}
+                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}` }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
-                            <div style={{
-                              fontSize: 13, fontWeight: isToday ? 700 : 500,
-                              color: isToday ? c.btnOnDark : c.text,
-                              width: isToday ? 24 : "auto", height: isToday ? 24 : "auto",
-                              borderRadius: isToday ? "50%" : 0,
-                              background: isToday ? accent : "transparent",
-                              display: "inline-flex", alignItems: "center", justifyContent: "center",
-                              minWidth: isToday ? 24 : "auto"
-                            }}>{d.getDate()}</div>
+                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
                           </div>
-                        );
-                      })}
-                    </div>
-                    {/* Day cells with appointments */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-                      {weekDays.map((d, i) => {
-                        const ds = fmt(d);
-                        const isSel = calDate === ds;
-                        const dayAppts = filteredAgendaAppts
-                          .filter(a => a.date === ds)
-                          .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-                        const visibleAppts = dayAppts.slice(0, 5);
-                        const moreCount = dayAppts.length - visibleAppts.length;
-                        return (
-                          <div key={i} role="button" tabIndex={0}
-                            onClick={() => setCalDate(ds)}
-                            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
-                            style={{
-                              minHeight: 180, padding: "8px 8px 10px", cursor: "pointer",
-                              background: isSel ? `${accent}22` : "transparent",
-                              borderRight: i < 6 ? `1px solid ${c.border}` : "none",
-                              transition: "background 0.15s",
-                              display: "flex", flexDirection: "column", gap: 4
-                            }}>
+                          {/* Day content */}
+                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
                             {dayAppts.length === 0 ? (
-                              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3 }}>
-                                <div style={{ fontSize: 11, color: c.textMuted }}>—</div>
-                              </div>
+                              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
                             ) : (
                               <>
                                 {visibleAppts.map((a, ai) => {
                                   const isCancelled = a.status === "cancelled" || a.status === "no_show";
                                   const statusColor = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
                                   return (
-                                    <div key={ai} style={{
-                                      padding: "4px 6px", borderRadius: 4,
-                                      background: `${statusColor}14`,
-                                      borderLeft: `2.5px solid ${statusColor}`,
-                                      overflow: "hidden",
-                                      opacity: isCancelled ? 0.5 : 1
-                                    }}>
-                                      <div style={{
-                                        fontSize: 10, fontWeight: 600, color: statusColor,
-                                        fontVariantNumeric: "tabular-nums",
-                                        textDecoration: isCancelled ? "line-through" : "none"
-                                      }}>{a.time}</div>
-                                      <div style={{
-                                        fontSize: 10, color: c.textSub,
-                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                                        textDecoration: isCancelled ? "line-through" : "none"
-                                      }}>{a.client_name?.split(" ")[0] || ""}</div>
-                                      <div style={{
-                                        fontSize: 9, color: c.textMuted,
-                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                                      }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>
+                                    <div key={ai} style={{ padding: isMobile ? "2px 3px" : "4px 6px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden", opacity: isCancelled ? 0.5 : 1 }}>
+                                      <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none" }}>{a.time}</div>
+                                      <div style={{ fontSize: isMobile ? 8 : 10, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: isCancelled ? "line-through" : "none" }}>{a.client_name?.split(" ")[0] || ""}</div>
+                                      {!isMobile && <div style={{ fontSize: 9, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>}
                                     </div>
                                   );
                                 })}
-                                {moreCount > 0 && (
-                                  <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center", padding: "2px 0" }}>
-                                    +{moreCount} {lang === "nl" ? "meer" : "more"}
-                                  </div>
-                                )}
+                                {moreCount > 0 && <div style={{ fontSize: isMobile ? 8 : 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
                               </>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -1855,54 +1801,54 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div key={i} onClick={() => {
                             setCalDate(ds);
                             setCalViewMode("week");
-                            const clickedDate = new Date(ds);
+                            const clickedDate = new Date(ds + "T12:00:00");
                             const today = getToday();
-                            const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
-                            setCalWeekOffset(Math.floor(diffDays / 7));
+                            const clickedMonday = new Date(clickedDate);
+                            clickedMonday.setDate(clickedDate.getDate() - ((clickedDate.getDay() + 6) % 7));
+                            const todayMonday = new Date(today);
+                            todayMonday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+                            const weekDiff = Math.round((clickedMonday - todayMonday) / (7 * 24 * 60 * 60 * 1000));
+                            setCalWeekOffset(weekDiff);
                           }} style={{
-                            minHeight: 92, padding: "8px 8px 6px", cursor: "pointer", position: "relative",
+                            minHeight: isMobile ? 48 : 92, padding: isMobile ? "6px 4px" : "8px 8px 6px", cursor: "pointer", position: "relative",
                             background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
                             borderRight: col < 6 ? `1px solid ${c.border}` : "none",
                             borderBottom: row < rows - 1 ? `1px solid ${c.border}` : "none",
                             transition: "background 0.15s",
                             opacity: cell.muted ? 0.35 : 1,
-                            display: "flex", flexDirection: "column", gap: 4
+                            display: "flex", flexDirection: "column", gap: 3, alignItems: isMobile ? "center" : "stretch"
                           }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{
-                                fontSize: 12, fontWeight: isToday ? 700 : 500,
-                                color: isToday ? accent : isSel ? accent : c.text,
-                                width: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
-                                borderRadius: isToday ? "50%" : 0,
-                                background: isToday ? accent : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                ...(isToday ? { color: c.btnOnDark, fontSize: 11 } : {})
-                              }}>{cell.day}</div>
-                              {count > 0 && !cell.muted && (
-                                <div style={{
-                                  fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100,
-                                  background: `${accent}22`, color: accent
-                                }}>{count}</div>
-                              )}
-                            </div>
-                            {/* Mini appt previews */}
-                            {!cell.muted && dayAppts.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
-                                {dayAppts.map((a, ai) => (
-                                  <div key={ai} style={{
-                                    fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                                    background: `${accent}1a`, color: c.textSub,
-                                    borderLeft: `2px solid ${accent}`,
-                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                                  }}>
-                                    {a.time} {a.client_name?.split(" ")[0] || ""}
-                                  </div>
+                            <div style={{
+                              fontSize: 12, fontWeight: isToday ? 700 : 500,
+                              color: isToday ? c.btnOnDark : isSel ? accent : c.text,
+                              width: isToday ? 24 : "auto", height: isToday ? 24 : "auto",
+                              borderRadius: isToday ? "50%" : 0,
+                              background: isToday ? accent : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center"
+                            }}>{cell.day}</div>
+                            {!cell.muted && count > 0 && isMobile && (
+                              <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
+                                {Array.from({ length: Math.min(count, 3) }).map((_, di) => (
+                                  <div key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: accent }} />
                                 ))}
-                                {count > 3 && (
-                                  <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>
-                                )}
+                                {count > 3 && <div style={{ fontSize: 8, color: accent, fontWeight: 700, lineHeight: "5px" }}>+</div>}
                               </div>
                             )}
+                            {!cell.muted && !isMobile && (<>
+                              {dayAppts.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+                                  {dayAppts.map((a, ai) => (
+                                    <div key={ai} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: `${accent}1a`, color: c.textSub, borderLeft: `2px solid ${accent}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      {a.time} {a.client_name?.split(" ")[0] || ""}
+                                    </div>
+                                  ))}
+                                  {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
+                                </div>
+                              )}
+                              {count > 0 && (
+                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
+                              )}
+                            </>)}
                           </div>
                         );
                       })}
@@ -2475,13 +2421,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
                     return (
                       <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
-                        {thumb ? (
-                          <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
-                        ) : (
-                          <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <NavIcon name="scissors" size={16} color={c.textMuted} />
-                          </div>
-                        )}
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                          {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
+                          <NavIcon name="scissors" size={16} color={c.textMuted} />
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
@@ -2980,13 +2923,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             transition: "background 0.15s"
                           }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
                             {/* Thumb */}
-                            {heroPhoto ? (
-                              <img src={heroPhoto} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
-                            ) : (
-                              <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <NavIcon name="scissors" size={18} color={c.textMuted} />
-                              </div>
-                            )}
+                            <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                              {heroPhoto ? <img src={heroPhoto} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
+                              <NavIcon name="scissors" size={18} color={c.textMuted} />
+                            </div>
                             {/* Name + meta */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
