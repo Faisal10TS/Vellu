@@ -977,14 +977,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{
         background: c.bg,
-        height: isMobile ? "auto" : "100dvh",
-        minHeight: isMobile ? "100dvh" : undefined,
-        overflow: isMobile ? "visible" : "hidden",
+        height: "100dvh",
+        overflow: "hidden",
         display: "flex",
-        flexDirection: isMobile ? "column" : "row",
         fontFamily: "'Jost',sans-serif",
-        color: c.text,
-        maxWidth: "100vw"
+        color: c.text
       }}>
         
         {/* Desktop Sidebar */}
@@ -1076,10 +1073,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           flex: 1,
           display: "flex",
           flexDirection: "column",
+          height: "100dvh",
           minWidth: 0,
           minHeight: 0,
           marginLeft: isMobile ? 0 : 260,
-          overflow: isMobile ? "visible" : "hidden"
+          overflow: "hidden"
         }}>
           {/* Mobile Header */}
           {isMobile && (
@@ -1148,9 +1146,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view !== "instellingen" ? (
           <div style={{
             flex: 1,
-            minHeight: isMobile ? undefined : 0,
+            minHeight: 0,
             overflowX: "hidden",
-            overflowY: isMobile ? "visible" : "auto",
+            overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
