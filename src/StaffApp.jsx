@@ -330,7 +330,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
@@ -642,13 +642,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           const thumb = svc?.photos?.[0]?.url;
                           return (
                             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              {thumb ? (
-                                <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
-                              ) : (
-                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                  <NavIcon name="scissors" size={16} color={c.textMuted} />
-                                </div>
-                              )}
+                              <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                                {thumb ? (
+                                  <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} />
+                                ) : null}
+                                <NavIcon name="scissors" size={16} color={c.textMuted} />
+                              </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
@@ -1367,23 +1366,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <>
                             <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, cursor: "pointer", background: isExp ? `${accent}08` : "transparent", transition: "background 0.15s" }}
                               onClick={() => setExpandedStaffSvc(isExp ? null : s.id)}>
-                              {heroPhoto ? (
-                                <img src={heroPhoto} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
-                              ) : (
-                                <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <div style={{ width: 48, height: 48, borderRadius: 12, background: heroPhoto ? "transparent" : c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                                {heroPhoto ? (
+                                  <img src={heroPhoto} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                ) : null}
+                                <div style={{ position: heroPhoto ? "absolute" : "static", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: c.inputBg, zIndex: heroPhoto ? -1 : 0 }}>
                                   <NavIcon name="scissors" size={18} color={c.textMuted} />
                                 </div>
-                              )}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
-                                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8 }}>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
+                                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
                                   <span>{s.duration} {t.min}</span>
                                   {varCount > 0 && <><span>·</span><span>{varCount} {lang === "nl" ? "varianten" : "variants"}</span></>}
                                   {extCount > 0 && <><span>·</span><span>{extCount} extras</span></>}
                                   {photoCount > 0 && <><span>·</span><span>{photoCount} {lang === "nl" ? "foto's" : "photos"}</span></>}
                                 </div>
                               </div>
-                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>
+                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
                                 {varCount > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
