@@ -330,7 +330,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflow: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflowX: "hidden", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
@@ -801,7 +801,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         const moreCount = dayAppts.length - visibleAppts.length;
                         return (
                           <div key={i} onClick={() => setCalDate(ds)} style={{
-                            minHeight: 140, padding: "8px 6px 10px", cursor: "pointer",
+                            minHeight: isMobile ? 100 : 140, padding: "8px 6px 10px", cursor: "pointer",
                             background: isSel ? `${accent}22` : "transparent",
                             borderRight: i < 6 ? `1px solid ${c.border}` : "none",
                             display: "flex", flexDirection: "column", gap: 3
@@ -1193,20 +1193,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* Tab bar */}
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}`, maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {[
                     ["werktijden", "planning", lang === "nl" ? "Werktijden" : "Hours"],
                     ["facturatie", "facturen", lang === "nl" ? "Facturatie" : "Invoicing"],
                     ["diensten", "diensten", lang === "nl" ? "Diensten" : "Services"],
                   ].map(([key, icon, label]) => (
                     <div key={key} onClick={() => setStaffSettingsTab(key)} style={{
-                      padding: "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                      padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: isMobile ? 10 : 11, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                       background: staffSettingsTab === key ? accent : "transparent",
                       color: staffSettingsTab === key ? c.btnOnDark : c.textSub,
-                      display: "flex", alignItems: "center", gap: 6
+                      display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0
                     }}>
-                      <NavIcon name={icon} size={14} color={staffSettingsTab === key ? c.btnOnDark : c.textSub} /> {label}
+                      <NavIcon name={icon} size={13} color={staffSettingsTab === key ? c.btnOnDark : c.textSub} /> {label}
                     </div>
                   ))}
                 </div>
