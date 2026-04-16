@@ -1502,8 +1502,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
 
             {/* Main Content */}
-            <div style={{ flex: 1, maxWidth: 700, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-            <div style={{ flex: 1, overflowY: "auto", padding: "50px 60px 24px" }}>
+            <div style={{ flex: 1, height: "100dvh", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "50px 60px 24px", maxWidth: 700, margin: "0 auto", width: "100%" }}>
               {!done ? (
                 <div key={step} className="fade-up">
 
@@ -2091,7 +2091,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
           {/* Fixed bottom action bar — outside scroll area */}
           {!done && (
-            <div style={{ padding: "16px 60px", borderTop: `1px solid ${c.border}`, background: c.bg, flexShrink: 0 }}>
+            <div style={{ borderTop: `1px solid ${c.border}`, background: c.bg, flexShrink: 0 }}>
+            <div style={{ padding: "16px 60px", maxWidth: 700, margin: "0 auto" }}>
               {step === 1 && <>
                 {selectedServices.length > 0 && missingVariants.length > 0 && (
                   <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
@@ -2121,6 +2122,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 4 && (
                 <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
               )}
+            </div>
             </div>
           )}
 
