@@ -941,7 +941,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
     .service-card { border-radius: 16px; padding: 15px 16px; }
     .btn-primary { padding: 16px 28px; font-size: 14px; }
     .btn-ghost { font-size: 12px; }
-    .input-field { padding: 15px 17px; font-size: 14px; }
+    .input-field { padding: 15px 17px; font-size: 16px; }
     .nav-item { padding: 8px 4px; }
   }
 
