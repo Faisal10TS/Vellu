@@ -591,7 +591,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             ...s,
             name_nl: s.name_nl || s.name || "",
             name_en: s.name_en || s.name || "",
-            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path })),
+            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: s.service_extras || []
           })),
@@ -818,10 +818,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
     // Update local state
     update(d => {
-      d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl }]} : s); 
-      return d; 
+      d.services = d.services.map(s => s.id === serviceId ? {...s, photos: [...(s.photos || []), { id: photoData.id, url: publicUrl, focal_x: 50, focal_y: 50 }]} : s);
+      return d;
     });
     setPhotoUploading(null);
+  };
+
+  const [focalPicker, setFocalPicker] = useState(null); // { serviceId, photoId, url, focal_x, focal_y }
+  const setFocalPoint = async (serviceId, photoId, x, y) => {
+    const fx = Math.round(x);
+    const fy = Math.round(y);
+    const { error } = await supabase.from("service_photos").update({ focal_x: fx, focal_y: fy }).eq("id", photoId);
+    if (error) { toast.show(t.somethingWrong, "error"); return; }
+    update(d => {
+      d.services = d.services.map(s => s.id === serviceId ? {...s, photos: (s.photos || []).map(p => p.id === photoId ? {...p, focal_x: fx, focal_y: fy} : p)} : s);
+      return d;
+    });
+    setFocalPicker(fp => fp ? {...fp, focal_x: fx, focal_y: fy} : null);
   };
 
   const deletePhoto = async (serviceId, photoId, photoUrl) => {
@@ -3100,9 +3113,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                   {(s.photos || []).map((p, i) => (
                                     <div key={p.id || i} style={{ position: "relative", flexShrink: 0 }}>
-                                      <img src={p.url || p} loading="lazy" onClick={() => setGallery({ photos: s.photos, idx: i })}
-                                        style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", cursor: "pointer", border: `1px solid ${c.border}` }} />
-                                      <button onClick={() => deletePhoto(s.id, p.id, p.url || p)}
+                                      <img src={p.url || p} loading="lazy"
+                                        onClick={() => setFocalPicker({ serviceId: s.id, photoId: p.id, url: p.url || p, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })}
+                                        style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", objectPosition: `${p.focal_x ?? 50}% ${p.focal_y ?? 50}%`, cursor: "pointer", border: `1px solid ${c.border}` }} />
+                                      {(p.focal_x != null && (p.focal_x !== 50 || p.focal_y !== 50)) && (
+                                        <div style={{ position: "absolute", left: `${(p.focal_x ?? 50) * 0.72}px`, top: `${(p.focal_y ?? 50) * 0.72}px`, width: 6, height: 6, borderRadius: "50%", background: accent, border: "1px solid #fff", transform: "translate(-50%,-50%)", pointerEvents: "none" }} />
+                                      )}
+                                      <button onClick={(e) => { e.stopPropagation(); deletePhoto(s.id, p.id, p.url || p); }}
                                         style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                                       </button>
@@ -4186,6 +4203,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Focal point picker overlay */}
+        {focalPicker && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)", zIndex: 10000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}
+            onClick={() => setFocalPicker(null)}>
+            <div style={{ fontSize: 12, color: "#fff", marginBottom: 12, textAlign: "center", opacity: 0.8 }}>
+              {lang === "nl" ? "Klik op het belangrijkste deel van de foto" : "Click on the most important part of the photo"}
+            </div>
+            <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "70vh", borderRadius: 16, overflow: "hidden", cursor: "crosshair" }}
+              onClick={e => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                setFocalPoint(focalPicker.serviceId, focalPicker.photoId, x, y);
+              }}>
+              <img src={focalPicker.url} style={{ display: "block", maxWidth: "90vw", maxHeight: "70vh", objectFit: "contain" }} />
+              <div style={{
+                position: "absolute",
+                left: `${focalPicker.focal_x}%`, top: `${focalPicker.focal_y}%`,
+                width: 20, height: 20, borderRadius: "50%",
+                border: `2px solid #fff`, background: `${accent}88`,
+                transform: "translate(-50%,-50%)", pointerEvents: "none",
+                boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4)"
+              }} />
+            </div>
+            <button className="btn-ghost" style={{ marginTop: 16, color: "#fff", borderColor: "rgba(255,255,255,0.3)" }}
+              onClick={() => setFocalPicker(null)}>
+              {lang === "nl" ? "Sluiten" : "Close"}
+            </button>
           </div>
         )}
 

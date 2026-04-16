@@ -833,7 +833,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {profileFilteredServices.map(s => (
                   <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
                     <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
-                      {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                      {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
                       <NavIcon name="scissors" size={20} color={c.textMuted} />
                     </div>
                     <div className="profile-service-info">
@@ -1600,7 +1600,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {/* Thumbnail or placeholder */}
                       <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}
                         onClick={e => { if (heroThumb && s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }}>
-                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos?.[0]?.focal_x ?? 50}% ${s.photos?.[0]?.focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
                         {!heroThumb && <NavIcon name="scissors" size={18} color={c.textMuted} />}
                       </div>
                       {/* Name + meta */}
