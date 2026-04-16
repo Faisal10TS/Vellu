@@ -814,7 +814,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     </div>
                                   );
                                 })}
-                                {moreCount > 0 && <div style={{ fontSize: 8, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
+                                {moreCount > 0 && <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
                               </>
                             )}
                           </div>
@@ -903,7 +903,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 {Array.from({ length: Math.min(count, 3) }).map((_, di) => (
                                   <div key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: accent }} />
                                 ))}
-                                {count > 3 && <div style={{ fontSize: 8, color: accent, fontWeight: 700, lineHeight: "5px" }}>+</div>}
+                                {count > 3 && <div style={{ fontSize: 9, color: accent, fontWeight: 700, lineHeight: "5px" }}>+</div>}
                               </div>
                             )}
                             {!cell.muted && !isMobile && (<>
@@ -1133,7 +1133,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
                             {!a.invoice_sent && (
-                              <span style={{ fontSize: 8, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Open" : "Unsent"}
                               </span>
                             )}
@@ -1482,7 +1482,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       ) : (
                                         <>
                                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
-                                          <span style={{ fontSize: 8, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "nl" ? "Foto" : "Photo"}</span>
+                                          <span style={{ fontSize: 9, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "nl" ? "Foto" : "Photo"}</span>
                                         </>
                                       )}
                                       <input accept="image/*" multiple type="file" style={{ display: "none" }}
