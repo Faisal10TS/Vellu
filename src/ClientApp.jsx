@@ -287,7 +287,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const getStaffForService = (serviceId) => {
     return (initialSalon.staff || []).filter(m =>
       (m.service_ids?.length === 0 || m.service_ids?.includes(serviceId)) &&
-      isStaffAvailable(m, date)
+      (step <= 1 || isStaffAvailable(m, date))
     );
   };
 
@@ -1600,8 +1600,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {/* Thumbnail or placeholder */}
                       <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}
                         onClick={e => { if (heroThumb && s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }}>
-                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
-                        <NavIcon name="scissors" size={18} color={c.textMuted} />
+                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                        {!heroThumb && <NavIcon name="scissors" size={18} color={c.textMuted} />}
                       </div>
                       {/* Name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
