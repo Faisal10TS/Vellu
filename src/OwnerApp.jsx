@@ -200,6 +200,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const { colors: c } = useTheme();
   const t = T[lang];
   const accent = ACCENT;
+  const toast = useToast();
 
   const plans = [
     {
@@ -222,25 +223,26 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
   return (
     <Layout>
-      <div style={{ 
+      <ToastContainer toasts={toast.toasts} />
+      <div style={{
         background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", padding: "40px 24px",
+        alignItems: "center", padding: "0 24px 40px",
         fontFamily: "'Jost',sans-serif", color: c.text, position: "relative"
       }}>
-  
+
         <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)", width: "80%", maxWidth: 600, height: "50%", background: `radial-gradient(ellipse at center, ${accent}08 0%, transparent 70%)`, pointerEvents: "none" }} />
-        
+
         {/* Header */}
-        <div style={{ position: "absolute", top: 24, left: 24, right: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ width: "100%", maxWidth: 720, padding: "24px 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={onLogout}>{t.logout}</button>
           </div>
         </div>
 
-        <div style={{ maxWidth: 720, width: "100%", position: "relative", zIndex: 10 }} className="fade-up">
+        <div style={{ maxWidth: 720, width: "100%", position: "relative", zIndex: 10, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 40 }}>
             <div style={{ marginBottom: 16 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{t.choosePlan}</div>
@@ -1079,7 +1081,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           marginLeft: isMobile ? 0 : 260,
           overflow: "hidden"
         }}>
-          {/* Mobile Header — no separate bar, toggles are in the content area */}
+          {/* Mobile Header */}
+          {isMobile && (
+            <div style={{
+              padding: "8px 14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: c.bg,
+              borderBottom: `1px solid ${c.border}`,
+              gap: 8,
+              flexShrink: 0
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <ThemeToggle />
+                <LangToggle lang={lang} setLang={setLang} />
+              </div>
+            </div>
+          )}
 
           {/* Desktop Header */}
           {!isMobile && (
@@ -1132,22 +1154,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
-            padding: isMobile ? "44px 14px 100px" : "32px 40px 32px",
+            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflow: "hidden" }}>
-              {isMobile && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                  <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, paddingTop: 4 }}>
-                    <ThemeToggle />
-                    <LangToggle lang={lang} setLang={setLang} />
-                  </div>
-                </div>
-              )}
+              {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
 
               {/* Onboarding checklist for new salons */}
               {appts.length === 0 && (
