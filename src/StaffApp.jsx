@@ -330,7 +330,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "16px 18px 100px" : "30px 40px", overflowX: "hidden", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>

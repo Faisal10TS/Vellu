@@ -1083,12 +1083,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              padding: "16px 16px 0",
+              paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
+              padding: "max(12px, env(safe-area-inset-top, 12px)) 14px 8px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
               background: c.bg,
-              gap: 8
+              gap: 8,
+              flexShrink: 0
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
