@@ -51,6 +51,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [staffSettingsTab, setStaffSettingsTab] = useState("werktijden");
   const [calViewMode, setCalViewMode] = useState("week");
+  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("all");
+  const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [expandedStaffSvc, setExpandedStaffSvc] = useState(null);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -978,38 +981,201 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           })()}
 
           {/* FACTUREN */}
-          {view === "facturen" && (
-            <div className="fade-up" style={{ maxWidth: 960 }}>
+          {view === "facturen" && (() => {
+            const unsent = completedAppts.filter(a => !a.invoice_sent);
+            const sent = completedAppts.filter(a => a.invoice_sent);
+            const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            const thisMonthAppts = completedAppts.filter(a => a.date?.startsWith(thisMonthPrefix));
+            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+
+            const formatDate = (ds) => {
+              if (!ds) return "";
+              const d = new Date(ds);
+              const MON = lang === "nl" ? MON_NL : MON_EN;
+              return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+            };
+            const initials = (name) => {
+              if (!name) return "?";
+              const parts = name.trim().split(/\s+/);
+              return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+            };
+
+            return (
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
-              {completedAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Nog geen voltooide afspraken" : "No completed appointments yet"}</div>
-                : completedAppts.map(a => (
-                  <div key={a.id} className="appt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
-                      <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.date} · {a.service_name}</div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
-                      <div style={{ marginTop: 5 }}>
-                        {a.invoice_sent
-                          ? <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 3 }}><NavIcon name="check" size={10} color={c.success} /> {t.sent}</span>
-                          : <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 10px" }} onClick={() => staffSendInvoice(a.id)}>{t.send}</button>
-                        }
-                      </div>
-                    </div>
+
+              {completedAppts.length > 0 && (<>
+                {/* Stat cards */}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
                   </div>
-                ))
-              }
-              {completedAppts.length > 0 && (
-                <div style={{ marginTop: 14, background: `${accent}08`, border: `1px solid ${accent}1a`, borderRadius: 20, padding: "18px 22px" }}>
-                  <SL>{t.totalEarnings}</SL>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 38, fontWeight: 300, color: accent }}>€{totalEarnings.toFixed(2)}</div>
-                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{completedAppts.length} {t.treatments}</div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{thisMonthTotal.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>€{unsentTotal.toFixed(0)}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
+                  </div>
                 </div>
-              )}
+
+                {/* Search + filter toolbar */}
+                <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                  <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+                    <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: c.textMuted, pointerEvents: "none", display: "flex" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                    </div>
+                    <input className="input-field" placeholder={t.searchPlaceholder || (lang === "nl" ? "Zoek op naam of dienst..." : "Search by name or service...")} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
+                      style={{ width: "100%", fontSize: 12, padding: "11px 14px 11px 38px" }} />
+                    {invoiceSearch && (
+                      <button onClick={() => setInvoiceSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%", background: c.inputBorder, border: "none", color: c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                    {[
+                      ["all", lang === "nl" ? "Alles" : "All", completedAppts.length],
+                      ["unsent", lang === "nl" ? "Open" : "Unsent", unsent.length],
+                      ["sent", lang === "nl" ? "Verstuurd" : "Sent", sent.length]
+                    ].map(([key, label, count]) => (
+                      <div key={key} onClick={() => setInvoiceFilter(key)} style={{
+                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                        background: invoiceFilter === key ? accent : "transparent",
+                        color: invoiceFilter === key ? c.btnOnDark : c.textSub,
+                        display: "inline-flex", alignItems: "center", gap: 6
+                      }}>
+                        {label}
+                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700 }}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>)}
+
+              {/* Invoice list */}
+              {(() => {
+                const searchLower = invoiceSearch.toLowerCase();
+                const filtered = completedAppts.filter(a => {
+                  if (invoiceFilter === "sent" && !a.invoice_sent) return false;
+                  if (invoiceFilter === "unsent" && a.invoice_sent) return false;
+                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
+                  return true;
+                });
+                if (completedAppts.length === 0) return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen voltooide afspraken" : "No completed appointments yet"}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : "Invoices appear here once you mark an appointment as completed."}</div>
+                  </div>
+                );
+                if (filtered.length === 0) return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : "No results for this filter"}</div>
+                    {(invoiceSearch || invoiceFilter !== "all") && (
+                      <button className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => { setInvoiceSearch(""); setInvoiceFilter("all"); }}>
+                        {lang === "nl" ? "Filter wissen" : "Clear filter"}
+                      </button>
+                    )}
+                  </div>
+                );
+                const visible = invoicesExpanded ? filtered : filtered.slice(0, 10);
+                return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {visible.map(a => {
+                    const isSending = processingApptId === a.id;
+                    return (
+                      <div key={a.id} style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: "14px 18px", background: c.bgCard,
+                        border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
+                        borderRadius: 14, transition: "border-color 0.15s"
+                      }}>
+                        {/* Avatar */}
+                        <div style={{
+                          width: 42, height: 42, borderRadius: "50%",
+                          background: `${accent}14`, border: `1px solid ${accent}22`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 600, color: accent, flexShrink: 0,
+                          letterSpacing: "0.04em"
+                        }}>{initials(a.client_name)}</div>
+
+                        {/* Client + service */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
+                            {!a.invoice_sent && (
+                              <span style={{ fontSize: 8, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                {lang === "nl" ? "Open" : "Unsent"}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>{formatDate(a.date)}</span>
+                            <span>·</span>
+                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>
+                          </div>
+                        </div>
+
+                        {/* Price */}
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+
+                        {/* Action */}
+                        <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
+                          {a.invoice_sent ? (
+                            <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                              <NavIcon name="check" size={10} color={c.success} /> {t.sent}
+                            </span>
+                          ) : (
+                            <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => staffSendInvoice(a.id)}>
+                              {isSending ? (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
+                                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                </svg>
+                              ) : (
+                                <NavIcon name="send" size={11} color="currentColor" />
+                              )}
+                              {isSending ? "..." : t.send}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filtered.length > 10 && (
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
+                      <button className="btn-ghost" onClick={() => setInvoicesExpanded(v => !v)} style={{ padding: "10px 22px", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {invoicesExpanded ? (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                            {t.showLess || (lang === "nl" ? "Minder tonen" : "Show less")}
+                          </>
+                        ) : (
+                          <>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            {t.showMore || (lang === "nl" ? "Meer laden" : "Show more")} ({filtered.length - 10})
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>;
+              })()}
             </div>
-          )}
+            );
+          })()}
 
           {/* SETTINGS — tabbed like owner dashboard */}
           {view === "instellingen" && (
