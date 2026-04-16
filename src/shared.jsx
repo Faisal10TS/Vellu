@@ -1066,9 +1066,16 @@ const makeCSS = (accent, c = THEMES.dark) => `
   }
   @media (min-width: 1024px) {
     .profile-services-grid {
-      grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 0;
+      grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 8px;
     }
-    .profile-services-grid .profile-service-row:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+    .profile-services-grid .profile-service-row {
+      border-bottom: none; background: ${c.bgCard}; border: 1px solid ${c.border};
+      border-radius: 14px; padding: 16px;
+    }
+    .profile-services-grid .profile-service-row:hover {
+      margin: 0; padding: 16px; border-color: ${accent}44;
+      box-shadow: 0 4px 20px ${accent}12;
+    }
   }
   .profile-service-row {
     display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 16px;
@@ -1102,6 +1109,14 @@ const makeCSS = (accent, c = THEMES.dark) => `
     font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400;
     color: ${c.text}; text-align: right; white-space: nowrap; line-height: 1;
   }
+  .profile-service-book-btn {
+    padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+    background: ${accent}; color: ${c.btnOnDark}; border: none;
+    transition: all 0.2s; flex-shrink: 0; white-space: nowrap;
+    font-family: 'Jost', sans-serif;
+  }
+  .profile-service-book-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px ${accent}44; }
   .profile-service-chevron { color: ${c.textMuted}; flex-shrink: 0; }
   @media (max-width: 420px) {
     .profile-service-row { gap: 12px; }

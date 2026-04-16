@@ -821,13 +821,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <NavIcon name="clock" size={10} color={c.textSub} />
                           {s.duration} {t.min}
                         </span>
-                        <span className="profile-service-details-link">Details</span>
                       </div>
                     </div>
                     <div className="profile-service-price">
                       €{s.variants?.length > 0 ? `${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : s.price}
                     </div>
-                    <svg className="profile-service-chevron" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"><path d="M7 5l5 5-5 5" /></svg>
+                    <div className="profile-service-book-btn" onClick={e => { e.stopPropagation(); enterBooking(s); }}>
+                      {t.book}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1139,27 +1140,68 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               <button className="profile-book-btn" onClick={() => enterBooking()}>{t.book}</button>
 
-              {/* Open/Closed status */}
-              <div className="profile-sidebar-status" style={{ cursor: "pointer" }} onClick={() => setExpandedHours(!expandedHours)}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: salonIsOpen ? "#4ade80" : "#f87171" }} />
-                <span>{salonStatusLabel}</span>
-                <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
-                  style={{ transition: "transform 0.2s", transform: expandedHours ? "rotate(180deg)" : "none", marginLeft: 2 }}><path d="M5 8l5 5 5-5" /></svg>
-              </div>
-              {expandedHours && (
-                <div style={{ marginTop: 8, padding: "8px 0" }}>
-                  {[1,2,3,4,5,6,0].map(dayIdx => {
-                    const dayHrs = activeHours[dayIdx] || { closed: true };
-                    const isToday = dayIdx === todayDayIndex;
-                    return (
-                      <div key={dayIdx} className="profile-hours-row">
-                        <span style={{ color: isToday ? c.text : c.textLabel, fontWeight: isToday ? 600 : 400 }}>{FULL_DAYS[dayIdx]}</span>
-                        <span style={{ color: dayHrs.closed ? c.textMuted : c.textSub, fontWeight: isToday ? 600 : 400 }}>{dayHrs.closed ? t.closed : `${dayHrs.open} – ${dayHrs.close}`}</span>
+              {/* Next availability hint */}
+              {(() => {
+                // Find next day with open hours (today or future)
+                const now = new Date();
+                for (let offset = 0; offset < 14; offset++) {
+                  const checkDate = new Date(now);
+                  checkDate.setDate(now.getDate() + offset);
+                  const dayIdx = checkDate.getDay();
+                  const dayHrs = activeHours[dayIdx] || { closed: true };
+                  const override = initialSalon.day_overrides?.[fmt(checkDate)];
+                  if (override?.type === "blocked") continue;
+                  const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
+                  if (hrs.closed) continue;
+                  // Found an open day
+                  const isToday = offset === 0;
+                  const isTomorrow = offset === 1;
+                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "short" });
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 12 }}>
+                      <NavIcon name="calendar" size={13} color={accent} />
+                      <div style={{ fontSize: 12, color: c.text }}>
+                        <span style={{ fontWeight: 600, color: accent }}>{dayLabel}</span>
+                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : "available"} · {hrs.open} – {hrs.close}</span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Open/Closed status + hours — always show today, expand for full week */}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                <div className="profile-sidebar-status" style={{ cursor: "pointer", justifyContent: "flex-start", marginTop: 0 }} onClick={() => setExpandedHours(!expandedHours)}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: salonIsOpen ? c.success : c.danger, flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{salonStatusLabel}</span>
+                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+                    style={{ transition: "transform 0.2s", transform: expandedHours ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
                 </div>
-              )}
+                {/* Always show today's hours */}
+                {(() => {
+                  const todayHrs = activeHours[todayDayIndex] || { closed: true };
+                  return (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 2px", fontSize: 12 }}>
+                      <span style={{ color: c.text, fontWeight: 600 }}>{FULL_DAYS[todayDayIndex]}</span>
+                      <span style={{ color: todayHrs.closed ? c.textMuted : accent, fontWeight: 600 }}>{todayHrs.closed ? t.closed : `${todayHrs.open} – ${todayHrs.close}`}</span>
+                    </div>
+                  );
+                })()}
+                {expandedHours && (
+                  <div style={{ paddingTop: 4 }}>
+                    {[1,2,3,4,5,6,0].filter(d => d !== todayDayIndex).map(dayIdx => {
+                      const dayHrs = activeHours[dayIdx] || { closed: true };
+                      return (
+                        <div key={dayIdx} className="profile-hours-row">
+                          <span style={{ color: c.textLabel }}>{FULL_DAYS[dayIdx]}</span>
+                          <span style={{ color: dayHrs.closed ? c.textMuted : c.textSub }}>{dayHrs.closed ? t.closed : `${dayHrs.open} – ${dayHrs.close}`}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* Address */}
               {(initialSalon.address || initialSalon.city) && (
