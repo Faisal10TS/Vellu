@@ -1075,7 +1075,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          height: "100dvh",
           minWidth: 0,
           minHeight: 0,
           marginLeft: isMobile ? 0 : 260,
