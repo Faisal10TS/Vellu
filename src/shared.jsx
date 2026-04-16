@@ -1270,8 +1270,8 @@ const makeCSS = (accent, c = THEMES.dark) => `
   @media (max-width: 900px) {
     .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
     .profile-header-contact { display: none; }
-    .profile-root { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-    .profile-scroll-area { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 72px; }
+    .profile-root { display: block; height: auto; overflow: visible; }
+    .profile-scroll-area { padding-bottom: 72px; }
     .profile-main { border-right: none; padding: 0 18px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
