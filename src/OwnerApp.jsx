@@ -1132,7 +1132,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
-            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
+            padding: isMobile ? "44px 14px 100px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -2550,7 +2550,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // No horizontal padding on the scroll container — the sticky tab bar
             // spans edge-to-edge so its border-bottom can match the desktop header's
             // full-width line. Content underneath (fade-up) applies its own padding.
-            padding: isMobile ? "0 0 160px" : "0 0 100px",
+            padding: isMobile ? "30px 0 160px" : "0 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
