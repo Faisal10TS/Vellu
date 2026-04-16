@@ -226,14 +226,17 @@ async function compressImage(file, maxDim = 1600) {
 // ─── EMAIL HELPER ─────────────────────────────────────────────
 async function sendEmails(type, booking) {
   try {
-    // Use supabase.functions.invoke which handles auth automatically
     const { data, error } = await supabase.functions.invoke("send-emails", {
       body: { type, booking }
     });
-    if (error) console.error("Email error:", error);
-    return data;
+    if (error) {
+      console.error("Email error:", error);
+      return { success: false, error };
+    }
+    return { success: true, data };
   } catch (e) {
     console.error("Email error:", e);
+    return { success: false, error: e };
   }
 }
 

@@ -142,7 +142,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (!staffMember?.working_hours) return true;
     const dayOfWeek = new Date(dateStr).getDay();
     const staffDay = staffMember.working_hours[dayOfWeek];
-    if (!staffDay) return true;
+    if (!staffDay) {
+      // Day not configured for this staff member — follow salon hours
+      const salonDay = activeHours[dayOfWeek];
+      return salonDay ? !salonDay.closed : false;
+    }
     return !staffDay.closed;
   };
 

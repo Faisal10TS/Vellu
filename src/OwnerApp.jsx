@@ -772,11 +772,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
 
   const deleteService = async (id) => {
-    // Delete related records first to avoid orphaned data
     await supabase.from("service_photos").delete().eq("service_id", id);
     await supabase.from("service_extras").delete().eq("service_id", id);
     await supabase.from("service_variants").delete().eq("service_id", id);
-    await supabase.from("services").delete().eq("id", id);
+    const { error } = await supabase.from("services").delete().eq("id", id);
+    if (error) { toast.show(t.somethingWrong, "error"); return; }
     update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
   };
 
@@ -2909,8 +2909,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                             <button className="btn-primary" style={{ padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", flex: 1 }} onClick={async () => {
-                              await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
-                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv); return d; });
+                              const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration)} : sv); return d; });
                               setEditingService(null);
                             }}>
                               <NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}
@@ -3011,7 +3012,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 <NavIcon name="edit" size={11} color="currentColor" />
                                               </button>
                                               <button onClick={async () => {
-                                                await supabase.from("service_variants").delete().eq("id", v.id);
+                                                const { error } = await supabase.from("service_variants").delete().eq("id", v.id);
+                                                if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
                                               }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="xmark" size={11} color="currentColor" />
@@ -3050,8 +3052,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             </div>
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                                                await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price) }).eq("id", e.id);
-                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, price: editExtraForm.price} : ex)} : svc); return d; });
+                                                const { error } = await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price) }).eq("id", e.id);
+                                                if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price)} : ex)} : svc); return d; });
                                                 setEditingExtra(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                                               <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -3068,7 +3071,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 <NavIcon name="edit" size={11} color="currentColor" />
                                               </button>
                                               <button onClick={async () => {
-                                                await supabase.from("service_extras").delete().eq("id", e.id);
+                                                const { error } = await supabase.from("service_extras").delete().eq("id", e.id);
+                                                if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: (svc.extras||[]).filter(x => x.id !== e.id)} : svc); return d; });
                                               }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="xmark" size={11} color="currentColor" />
@@ -3259,7 +3263,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {editingStaff === m.id ? (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
-                              await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
+                              const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               if (editStaffForm.service_ids.length > 0) {
                                 await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
@@ -3276,7 +3281,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
-                              await supabase.from("staff_members").delete().eq("id", m.id);
+                              const { error } = await supabase.from("staff_members").delete().eq("id", m.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
                               update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
                               toast.show(lang === "nl" ? `${m.name} verwijderd` : `${m.name} deleted`);
                             }}>×</button>

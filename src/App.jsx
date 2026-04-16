@@ -92,7 +92,7 @@ function OwnerEntryPage({ lang, setLang }) {
   if (staffUser) return <Navigate to="/staff" replace />;
 
   // Check if plan is active
-  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
+  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at + (owner.plan_expires_at.length === 10 ? "T23:59:59" : "")) > new Date());
 
   if (owner && !hasPlan) {
     return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
@@ -449,7 +449,7 @@ function AppInner({ lang, setLang }) {
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
       {screen === "owner" && (() => {
-        const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
+        const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at + (owner.plan_expires_at.length === 10 ? "T23:59:59" : "")) > new Date());
         if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
         return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}

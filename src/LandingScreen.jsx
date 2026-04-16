@@ -441,7 +441,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       });
       if (error) { setError(error.message); setLoading(false); return; }
       // Also upsert directly in case trigger doesn't fire
-      await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         email: form.email,
         business_name: form.businessName,
@@ -450,6 +450,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         accent_color: "#c9a96e",
         account_type: form.accountType || "joint"
       });
+      if (profileError) { setError(profileError.message); setLoading(false); return; }
       onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
