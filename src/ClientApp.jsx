@@ -406,46 +406,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Client lookup (debounced) - check if returning client
-  useEffect(() => {
-    if (!form.email || form.email.length < 5 || !form.email.includes("@")) {
-      setClientFound(false);
-      return;
-    }
-    const lookupId = ++emailLookupRef.current;
-    const timer = setTimeout(async () => {
-      const { data } = await supabase.from("clients").select("first_name, last_name, phone, allergies, no_show_count").eq("email", form.email.toLowerCase()).maybeSingle();
-      // Ignore stale responses - only apply if this is still the latest lookup
-      if (lookupId !== emailLookupRef.current) return;
-      if (data) {
-        setForm(f => ({ ...f, firstName: data.first_name || f.firstName, lastName: data.last_name || f.lastName, phone: data.phone || f.phone, allergies: data.allergies || f.allergies }));
-        setClientNoShows(data.no_show_count || 0);
-        setClientFound(true);
-      } else {
-        setClientFound(false);
-        setClientNoShows(0);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [form.email]);
+  // Client email autofill has been REMOVED for privacy/security reasons.
+  // Previously we did an unauthenticated SELECT on the `clients` table keyed
+  // by email to prefill the booking form for returning clients. That also
+  // leaked name/phone/allergies to anyone who entered an email, allowing
+  // enumeration of the customer base. Clients now type their info each time.
+  // The server-side upsert in book-appointment still keeps one row per email.
 
-  // Load booked time slots for selected date (include staff_id for multi-staff filtering)
+  // Load booked time slots for selected date. Goes through the RPC
+  // `get_booked_slots` (SECURITY DEFINER) which only returns the non-PII
+  // fields — time, service_duration, staff_id — so the appointments table
+  // itself can stay locked down to owner/client access only.
   useEffect(() => {
-    if (!date || !initialSalon.owner_id) return;
+    if (!date || !initialSalon.id) return;
     const loadSlots = async () => {
-      let query = supabase
-        .from("appointments")
-        .select("time, service_duration, staff_id")
-        .eq("owner_id", initialSalon.owner_id)
-        .eq("date", date)
-        .in("status", ["confirmed", "completed"]);
-      // Filter by location for multi-location salons
-      if (selectedLocation?.id) query = query.eq("location_id", selectedLocation.id);
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc("get_booked_slots", {
+        p_slug: initialSalon.id,
+        p_date: date,
+        p_location_id: selectedLocation?.id || null,
+      });
       if (!error) setBookedSlots(data || []);
     };
     loadSlots();
-  }, [date, initialSalon.owner_id, slotsRefreshKey]);
+  }, [date, initialSalon.id, slotsRefreshKey, selectedLocation?.id]);
 
   // Check if a time slot overlaps with existing bookings (including break time)
   // For multi-staff salons: only check slots for the same staff member(s)
@@ -505,135 +488,135 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     });
   };
 
-  // Generate random cancellation token (cryptographically secure)
-  const generateToken = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    const values = crypto.getRandomValues(new Uint32Array(24));
-    return Array.from(values, (v) => chars[v % chars.length]).join("");
-  };
-
-  // Confirm booking - handles client save, appointment insert, cancellation token
+  // Confirm booking — calls the book-appointment edge function which validates
+  // everything server-side (price, discount, business hours, slot conflict,
+  // staff assignment) with service_role. Client code NEVER inserts directly.
   const confirmBooking = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-    // 1. Save or update client
-    const clientEmail = form.email.toLowerCase();
-    let clientId = null;
-    const { data: existingClient } = await supabase.from("clients").select("id").eq("email", clientEmail).maybeSingle();
-    
-    if (existingClient) {
-      clientId = existingClient.id;
-      await supabase.from("clients").update({
-        first_name: form.firstName,
-        last_name: form.lastName,
-        phone: form.phone || null,
-        allergies: form.allergies || null,
-        last_visit: new Date().toISOString()
-      }).eq("id", clientId);
-    } else {
-      const { data: newClient } = await supabase.from("clients").insert({
-        email: clientEmail,
-        first_name: form.firstName,
-        last_name: form.lastName,
-        phone: form.phone || null,
-        allergies: form.allergies || null,
-        last_visit: new Date().toISOString()
-      }).select("id").single();
-      if (newClient) clientId = newClient.id;
-    }
+      // Build the payload. The server recomputes price/duration — we don't
+      // trust any client numbers. We just tell it what was selected.
+      const clientEmail = form.email.toLowerCase();
 
-    // 2. Build combined service name with per-service staff and extras
-    const combinedServiceName = selectedServices.map(item => {
-      let label = svcName(item.service);
-      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
-      if (item.staff) label += ` (${item.staff.name})`;
-      if (item.extras.length > 0) label += " + " + item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
-      return label;
-    }).join(" · ") + (appliedDiscount ? ` [${appliedDiscount.code}]` : "");
+      const variant_ids = {};
+      const extra_ids = {};
+      const staff_ids_per_service = {};
+      const service_ids = selectedServices.map(item => {
+        const sid = item.service.id;
+        if (item.variant) variant_ids[sid] = item.variant.id;
+        if (item.extras && item.extras.length > 0) extra_ids[sid] = item.extras.map(e => e.id);
+        if (item.staff) staff_ids_per_service[sid] = item.staff.id;
+        return sid;
+      });
 
-    // Use first service's staff as primary (for staff_id column)
-    const primaryStaff = selectedServices[0]?.staff;
-    const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
+      const { data: result, error: fnErr } = await supabase.functions.invoke("book-appointment", {
+        body: {
+          salon_slug: initialSalon.id, // salon slug (routed as /:slug)
+          service_ids,
+          variant_ids,
+          extra_ids,
+          staff_ids_per_service,
+          discount_code: appliedDiscount?.code || null,
+          date,
+          time,
+          client: {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            email: clientEmail,
+            phone: form.phone || null,
+            allergies: form.allergies || null,
+          },
+          payment_method: form.payment,
+          location_id: selectedLocation?.id || null,
+          policy_agreed: !!policyAgreed,
+          lang,
+        },
+      });
 
-    const apptData = {
-      owner_id: initialSalon.owner_id, service_id: selectedServices[0]?.service?.id || null, client_id: clientId,
-      service_name: combinedServiceName,
-      service_price: getPrice(), service_duration: getDuration(), date, time,
-      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, client_phone: form.phone || null,
-      payment_method: form.payment, status: "confirmed", invoice_sent: false,
-      staff_id: primaryStaff?.id || null, staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
-      client_allergies: form.allergies || null,
-      location_id: selectedLocation?.id || null
-    };
-    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("id").single();
+      if (fnErr) {
+        // functions.invoke returns error object on non-2xx too — try to read body
+        const msg = fnErr.context?.body?.error || fnErr.message || "booking_failed";
+        throw new Error(msg);
+      }
+      if (!result?.success) throw new Error(result?.error || "booking_failed");
 
-    if (apptError || !appt) {
-      throw new Error(apptError?.message || "Appointment insert failed");
-    }
+      const appointmentId = result.appointment_id;
+      const cancelToken = result.cancel_token;
+      const combinedServiceName = result.service_name;
+      const serverPrice = result.service_price;
+      const serverDuration = result.service_duration;
 
-    // 3. Generate cancellation token (expires 24h before appointment)
-    let cancelToken = null;
-    const token = generateToken();
-    const appointmentDate = new Date(date + "T" + time + ":00");
-    const expiresAt = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
+      setDone(true);
+      setSubmitting(false);
+      setSlotsRefreshKey(k => k + 1);
 
-    await supabase.from("cancellation_tokens").insert({
-      appointment_id: appt.id,
-      token: token,
-      expires_at: expiresAt.toISOString()
-    });
-    cancelToken = token;
+      // Fire-and-forget: confirmation email + owner notification + google cal.
+      // If any of these fail the booking itself is already safe in the DB.
+      const clientFullName = `${form.firstName} ${form.lastName}`;
+      const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
 
-    setDone(true);
-    setSubmitting(false);
-    setSlotsRefreshKey(k => k + 1);
-    
-    // 4. Send confirmation email with cancellation link
-    await sendEmails("booking_confirmation", {
-      client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
-      date, time, payment: form.payment, price: getPrice(), salon_name: initialSalon.name, owner_email: initialSalon.owner_email || "info@vellu.cc",
-      cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null
-    });
+      sendEmails("booking_confirmation", {
+        client_name: clientFullName,
+        client_email: clientEmail,
+        service_name: combinedServiceName,
+        date, time,
+        payment: form.payment,
+        price: serverPrice,
+        salon_name: result.salon_name || initialSalon.name,
+        owner_email: result.owner_email || initialSalon.owner_email || "info@vellu.cc",
+        cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
+      }).catch(e => console.error("confirmation email failed:", e));
 
-    // 5. Notify owner + assigned staff about new booking
-    const staffEmails = selectedServices.filter(item => item.staff?.email).map(item => item.staff.email);
-    await sendEmails("booking_notification", {
-      owner_email: initialSalon.owner_email || null,
-      staff_emails: [...new Set(staffEmails)],
-      client_name: `${form.firstName} ${form.lastName}`, client_phone: form.phone || null,
-      service_name: combinedServiceName, date, time, price: getPrice(),
-      salon_name: initialSalon.name
-    });
+      sendEmails("booking_notification", {
+        owner_email: result.owner_email || initialSalon.owner_email || null,
+        staff_emails: result.staff_emails || [],
+        client_name: clientFullName,
+        client_phone: form.phone || null,
+        service_name: combinedServiceName,
+        date, time,
+        price: serverPrice,
+        salon_name: result.salon_name || initialSalon.name,
+      }).catch(e => console.error("notification email failed:", e));
 
-    // 6. Create Google Calendar event (if connected)
-    if (appt) {
       supabase.functions.invoke("google-calendar", {
         body: {
           action: "create",
           owner_id: initialSalon.owner_id,
           booking: {
-            appointment_id: appt.id,
+            appointment_id: appointmentId,
             service_name: combinedServiceName,
-            client_name: `${form.firstName} ${form.lastName}`,
+            client_name: clientFullName,
             client_email: clientEmail,
             client_phone: form.phone || null,
             staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
-            date, time, duration: getDuration(), price: getPrice()
-          }
-        }
+            date, time,
+            duration: serverDuration,
+            price: serverPrice,
+          },
+        },
       }).catch(e => console.error("Google Calendar error:", e));
-    }
-    
-    if (form.payment === "online") {
-      await sendEmails("invoice", { client_name: `${form.firstName} ${form.lastName}`, client_email: clientEmail, service_name: combinedServiceName,
-        date, time, price: getPrice(), salon_name: initialSalon.name,
-        salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
-        salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "" });
-    }
+
+      if (form.payment === "online") {
+        sendEmails("invoice", {
+          client_name: clientFullName, client_email: clientEmail, service_name: combinedServiceName,
+          date, time, price: serverPrice, salon_name: result.salon_name || initialSalon.name,
+          salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
+          salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "",
+        }).catch(e => console.error("invoice email failed:", e));
+      }
     } catch (err) {
       console.error("Booking error:", err);
-      setErrorToast(t.bookingError);
+      // Map known server error codes to friendly messages
+      const code = (err?.message || "").toLowerCase();
+      let msg = t.bookingError;
+      if (code.includes("slot_conflict")) msg = lang === "nl" ? "Dit tijdslot is net geboekt — kies een ander." : "This slot was just taken — please pick another.";
+      else if (code.includes("closed") || code.includes("outside_hours") || code.includes("day_blocked") || code.includes("slot_blocked")) msg = lang === "nl" ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.";
+      else if (code.includes("too_soon")) msg = lang === "nl" ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.";
+      else if (code.includes("too_far")) msg = lang === "nl" ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.";
+      else if (code.includes("invalid_discount")) msg = lang === "nl" ? "Ongeldige kortingscode." : "Invalid discount code.";
+      else if (code.includes("rate_limited")) msg = lang === "nl" ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.";
+      setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
     }

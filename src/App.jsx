@@ -224,85 +224,65 @@ function CancelRoute({ lang }) {
 
   useEffect(() => {
     const checkToken = async () => {
-      const { data: tokenData, error } = await supabase
-        .from("cancellation_tokens")
-        .select("*, appointments(*)")
-        .eq("token", token)
-        .single();
-      
-      if (error || !tokenData) {
+      // Look up token via edge function — cancellation_tokens table is
+      // locked down to service_role only, no direct client access.
+      const { data, error } = await supabase.functions.invoke("cancel-appointment", {
+        body: { action: "check", token },
+      });
+      if (error || !data) {
         setStatus("error");
         return;
       }
-      
-      if (tokenData.used) {
-        setStatus("cancelled");
+      if (data.status === "already_cancelled") { setStatus("cancelled"); return; }
+      if (data.status === "expired") { setStatus("expired"); return; }
+      if (data.status === "valid" && data.appointment) {
+        setAppointment(data.appointment);
+        setStatus("confirm");
         return;
       }
-      
-      if (new Date(tokenData.expires_at) < new Date()) {
-        setStatus("expired");
-        return;
-      }
-      
-      if (tokenData.appointments?.status === "cancelled") {
-        setStatus("cancelled");
-        return;
-      }
-      
-      setAppointment(tokenData.appointments);
-      setStatus("confirm");
+      setStatus("error");
     };
     checkToken();
   }, [token]);
 
   const handleCancel = async () => {
     try {
-      const { error: apptError } = await supabase.from("appointments").update({
-        status: "cancelled",
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason: reason || null
-      }).eq("id", appointment.id);
+      const { data, error } = await supabase.functions.invoke("cancel-appointment", {
+        body: { action: "cancel", token, reason: reason || null },
+      });
+      if (error || !data || data.status !== "cancelled") {
+        throw new Error(data?.error || error?.message || "cancel_failed");
+      }
 
-      if (apptError) throw apptError;
-
-      await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
+      const a = data.appointment;
+      const notify = data.notify || {};
 
       await sendEmails("booking_cancelled", {
-        client_name: appointment.client_name,
-        client_email: appointment.client_email,
-        service_name: appointment.service_name,
-        date: appointment.date,
-        time: appointment.time
+        client_name: a.client_name,
+        client_email: a.client_email,
+        service_name: a.service_name,
+        date: a.date,
+        time: a.time,
       });
 
       // Notify owner + staff about cancellation
-      const notifyEmails = [];
-      let salonName = "";
-      if (appointment.owner_id) {
-        const { data: ownerProfile } = await supabase.from("profiles").select("email, business_name").eq("id", appointment.owner_id).single();
-        if (ownerProfile?.email) notifyEmails.push(ownerProfile.email);
-        if (ownerProfile?.business_name) salonName = ownerProfile.business_name;
-      }
-      if (appointment.staff_id) {
-        const { data: staffData } = await supabase.from("staff_members").select("email").eq("id", appointment.staff_id).single();
-        if (staffData?.email) notifyEmails.push(staffData.email);
-      }
-      if (notifyEmails.length > 0) {
+      if (notify.owner_email) {
+        const staffEmails = notify.staff_email ? [notify.staff_email] : [];
         await sendEmails("booking_notification", {
-          owner_email: notifyEmails[0] || null,
-          staff_emails: notifyEmails.slice(1),
-          client_name: appointment.client_name, client_phone: null,
-          service_name: `GEANNULEERD: ${appointment.service_name}`,
-          date: appointment.date, time: appointment.time,
-          price: appointment.service_price || 0, salon_name: salonName
+          owner_email: notify.owner_email,
+          staff_emails: staffEmails,
+          client_name: a.client_name, client_phone: null,
+          service_name: `GEANNULEERD: ${a.service_name}`,
+          date: a.date, time: a.time,
+          price: a.service_price || 0,
+          salon_name: notify.salon_name || "",
         });
       }
 
-      // Delete Google Calendar event if it exists
-      if (appointment.google_event_id && appointment.owner_id) {
+      // Delete Google Calendar event if it exists (best effort)
+      if (a.owner_id) {
         supabase.functions.invoke("google-calendar", {
-          body: { action: "delete", owner_id: appointment.owner_id, event_id: appointment.google_event_id }
+          body: { action: "delete", owner_id: a.owner_id, appointment_id: a.id }
         }).catch(e => console.error("Google Calendar delete error:", e));
       }
 
