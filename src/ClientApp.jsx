@@ -1720,6 +1720,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   );
                 })}
 
+                {/* Reviews */}
+                {initialSalon.reviews?.length > 0 && (
+                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
+                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                    {initialSalon.reviews.slice(0, 3).map(r => (
+                      <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
+                          <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                        </div>
+                        {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Sticky bottom action bar */}
                 <div style={{
                   position: "sticky", bottom: 0, left: 0, right: 0,
@@ -1741,22 +1757,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     )}
                   </button>
                 </div>
-                
-                {/* Reviews */}
-                {initialSalon.reviews?.length > 0 && (
-                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
-                    {initialSalon.reviews.slice(0, 3).map(r => (
-                      <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                          <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
-                          <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
-                        </div>
-                        {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </>}
 
               {/* Step 2 — Date & Time */}
