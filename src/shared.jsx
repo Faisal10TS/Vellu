@@ -818,6 +818,7 @@ const T = {
 const makeCSS = (accent, c = THEMES.dark) => `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { overflow: hidden; height: 100%; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  #root, #root > div { max-width: 100vw; overflow-x: hidden; }
   ::-webkit-scrollbar { width: 0; height: 0; }
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
