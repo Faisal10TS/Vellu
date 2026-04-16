@@ -49,32 +49,32 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   return (
     <Layout>
-      <div style={{ 
-        background: c.bg, 
-        minHeight: "100dvh", 
-        fontFamily: "'Jost',sans-serif", 
+      <div style={{
+        background: c.bg,
+        minHeight: "100dvh",
+        fontFamily: "'Jost',sans-serif",
         color: c.text,
         position: "relative",
-        overflow: "hidden"
+        overflowX: "hidden"
       }}>
         {/* Ambient glow */}
         <div style={{ position: "absolute", top: "-20%", left: "20%", width: "60%", height: "60%", background: `radial-gradient(ellipse at center, ${ACCENT}0a 0%, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "10%", right: "-10%", width: "40%", height: "40%", background: `radial-gradient(ellipse at center, ${ACCENT}06 0%, transparent 60%)`, pointerEvents: "none" }} />
 
         {/* Navigation */}
-        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 32px", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
-          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 26, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px clamp(16px, 4vw, 32px)", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
-            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => navigate("/owner")}>
+            <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 12px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
               <NavIcon name="crown" size={12} color={ACCENT} /> {t.signIn}
             </button>
           </div>
         </nav>
 
         {/* ─── HERO ─── */}
-        <div style={{ padding: "80px 24px 60px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
+        <div style={{ padding: "clamp(32px, 8vw, 80px) 24px 40px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
           <div className="fade-up">
             <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 28 }}>
               <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
