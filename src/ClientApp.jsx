@@ -1502,7 +1502,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
 
             {/* Main Content */}
-            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700, margin: "0 auto" }}>
+            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700, margin: "0 auto", height: "100dvh", overflowY: "auto" }}>
               {!done ? (
                 <div key={step} className="fade-up">
 
