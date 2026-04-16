@@ -1755,8 +1755,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             ) : (
                               <>
                                 {visibleAppts.map((a, ai) => {
-                                  const statusColor = a.status === "completed" ? c.success : a.status === "cancelled" || a.status === "no_show" ? c.danger : accent;
                                   const isCancelled = a.status === "cancelled" || a.status === "no_show";
+                                  const statusColor = isCancelled ? c.danger : accent;
                                   return (
                                     <div key={ai} style={{
                                       padding: "4px 6px", borderRadius: 4,
