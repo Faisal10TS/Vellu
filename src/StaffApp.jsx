@@ -779,33 +779,28 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 weekStart.setDate(base.getDate() - dayOfWeek);
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
-                      {weekDays.map((d, i) => {
-                        const ds = fmt(d);
-                        const isToday = ds === todayFmt;
-                        return (
-                          <div key={i} style={{ textAlign: "center", padding: "10px 4px", borderRight: i < 6 ? `1px solid ${c.border}` : "none", background: isToday ? `${accent}10` : "transparent" }}>
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                    {/* Header + body in one grid */}
+                    {weekDays.map((d, i) => {
+                      const ds = fmt(d);
+                      const isToday = ds === todayFmt;
+                      const isSel = calDate === ds;
+                      const dayAppts = filteredAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                      const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 4);
+                      const moreCount = dayAppts.length - visibleAppts.length;
+                      return (
+                        <div key={i} onClick={() => setCalDate(ds)} style={{
+                          borderRight: i < 6 ? `1px solid ${c.border}` : "none",
+                          cursor: "pointer", display: "flex", flexDirection: "column",
+                          background: isSel ? `${accent}22` : isToday ? `${accent}08` : "transparent"
+                        }}>
+                          {/* Day header */}
+                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}` }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
                             <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
                           </div>
-                        );
-                      })}
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-                      {weekDays.map((d, i) => {
-                        const ds = fmt(d);
-                        const isSel = calDate === ds;
-                        const dayAppts = filteredAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-                        const visibleAppts = dayAppts.slice(0, 4);
-                        const moreCount = dayAppts.length - visibleAppts.length;
-                        return (
-                          <div key={i} onClick={() => setCalDate(ds)} style={{
-                            minHeight: isMobile ? 100 : 140, padding: "8px 6px 10px", cursor: "pointer",
-                            background: isSel ? `${accent}22` : "transparent",
-                            borderRight: i < 6 ? `1px solid ${c.border}` : "none",
-                            display: "flex", flexDirection: "column", gap: 3
-                          }}>
+                          {/* Day content */}
+                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 120, padding: isMobile ? "6px 3px 8px" : "8px 6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
                             {dayAppts.length === 0 ? (
                               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
                             ) : (
@@ -813,19 +808,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 {visibleAppts.map((a, ai) => {
                                   const statusColor = a.status === "completed" ? c.success : accent;
                                   return (
-                                    <div key={ai} style={{ padding: "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden" }}>
-                                      <div style={{ fontSize: 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
-                                      <div style={{ fontSize: 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
+                                    <div key={ai} style={{ padding: isMobile ? "2px 3px" : "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden" }}>
+                                      <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
+                                      <div style={{ fontSize: isMobile ? 8 : 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
                                     </div>
                                   );
                                 })}
-                                {moreCount > 0 && <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
+                                {moreCount > 0 && <div style={{ fontSize: 8, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
                               </>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
