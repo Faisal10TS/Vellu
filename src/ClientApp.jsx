@@ -1502,7 +1502,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
 
             {/* Main Content */}
-            <div style={{ flex: 1, padding: "50px 60px 80px", maxWidth: 700, margin: "0 auto", height: "100dvh", overflowY: "auto", boxSizing: "border-box" }}>
+            <div style={{ flex: 1, maxWidth: 700, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "50px 60px 24px" }}>
               {!done ? (
                 <div key={step} className="fade-up">
 
@@ -1736,27 +1737,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 )}
 
-                {/* Sticky bottom action bar */}
-                <div style={{
-                  position: "sticky", bottom: 0, left: 0, right: 0,
-                  padding: "20px 0 8px",
-                  background: c.bg,
-                  borderTop: `1px solid ${c.border}`,
-                  zIndex: 10
-                }}>
-                  {selectedServices.length > 0 && missingVariants.length > 0 && (
-                    <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
-                      <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
-                    </div>
-                  )}
-                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                    {selectedServices.length > 0 ? (
-                      <>{t.next} · {getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</>
-                    ) : (
-                      <>{t.noServicesSelected}</>
-                    )}
-                  </button>
-                </div>
               </>}
 
               {/* Step 2 — Date & Time */}
@@ -1889,16 +1869,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   );
                 })()}
 
-                {/* Sticky bottom */}
-                <div style={{ position: "sticky", bottom: 0, padding: "20px 0 8px", background: c.bg, borderTop: `1px solid ${c.border}`, zIndex: 10 }}>
-                  <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                    {time ? (
-                      <>{t.next} · {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
-                    ) : (
-                      <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
-                    )}
-                  </button>
-                </div>
               </>}
 
               {/* Step 3 — Details */}
@@ -1993,7 +1963,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 )}
 
-                <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
               </>}
 
               {/* Step 4 — Confirm */}
@@ -2044,7 +2013,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                   </div>
                 </div>
-                <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
               </>}
             </div>
           ) : (
@@ -2119,7 +2087,44 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
           )}
 
-          </div>
+          </div> {/* close scroll area */}
+
+          {/* Fixed bottom action bar — outside scroll area */}
+          {!done && (
+            <div style={{ padding: "16px 60px", borderTop: `1px solid ${c.border}`, background: c.bg, flexShrink: 0 }}>
+              {step === 1 && <>
+                {selectedServices.length > 0 && missingVariants.length > 0 && (
+                  <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
+                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                  </div>
+                )}
+                <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                  {selectedServices.length > 0 ? (
+                    <>{t.next} · {getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</>
+                  ) : (
+                    <>{t.noServicesSelected}</>
+                  )}
+                </button>
+              </>}
+              {step === 2 && (
+                <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                  {time ? (
+                    <>{t.next} · {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
+                  ) : (
+                    <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
+                  )}
+                </button>
+              )}
+              {step === 3 && (
+                <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+              )}
+              {step === 4 && (
+                <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+              )}
+            </div>
+          )}
+
+          </div> {/* close flex column */}
         </div>
       ) : (
           <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
