@@ -1081,18 +1081,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         }}>
           {/* Mobile Header */}
           {isMobile && (
-            <div style={{ 
-              padding: "20px 22px 0", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "flex-start",
-              background: c.bg
+            <div style={{
+              padding: "16px 16px 0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: c.bg,
+              gap: 8
             }}>
-              <div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, fontWeight: 400, letterSpacing: "0.06em" }}>{salonData.name}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.1em", textTransform: "uppercase" }}>{t.owner}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                 <ThemeToggle />
                 <LangToggle lang={lang} setLang={setLang} />
               </div>
@@ -1149,13 +1149,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
-            padding: isMobile ? "14px 22px 80px" : "32px 40px 32px",
+            padding: isMobile ? "14px 16px 80px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflow: "hidden" }}>
               {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
 
               {/* Onboarding checklist for new salons */}
@@ -3965,9 +3965,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             zIndex: 100
           }}>
             {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3 }}>
+              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3, flex: 1, minWidth: 0 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
+                <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
               </div>
             ))}
           </div>
