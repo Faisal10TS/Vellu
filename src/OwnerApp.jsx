@@ -977,9 +977,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{
         background: c.bg,
-        height: "100vh",
-        overflow: "hidden",
+        height: isMobile ? "auto" : "100dvh",
+        minHeight: isMobile ? "100dvh" : undefined,
+        overflow: isMobile ? "visible" : "hidden",
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         fontFamily: "'Jost',sans-serif",
         color: c.text,
         maxWidth: "100vw"
@@ -1077,7 +1079,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           minWidth: 0,
           minHeight: 0,
           marginLeft: isMobile ? 0 : 260,
-          overflow: "hidden"
+          overflow: isMobile ? "visible" : "hidden"
         }}>
           {/* Mobile Header */}
           {isMobile && (
@@ -1146,13 +1148,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view !== "instellingen" ? (
           <div style={{
             flex: 1,
-            minHeight: 0,
+            minHeight: isMobile ? undefined : 0,
             overflowX: "hidden",
-            overflowY: "auto",
+            overflowY: isMobile ? "visible" : "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
-            padding: isMobile ? "14px 14px 80px" : "32px 40px 32px",
+            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 

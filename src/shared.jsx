@@ -817,7 +817,8 @@ const T = {
 // ─── CSS ─────────────────────────────────────────────────────
 const makeCSS = (accent, c = THEMES.dark) => `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { overflow: hidden; height: 100%; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  @media (min-width: 769px) { html, body { overflow: hidden; height: 100%; } }
   #root, #root > div { max-width: 100vw; overflow-x: hidden; }
   ::-webkit-scrollbar { width: 0; height: 0; }
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
