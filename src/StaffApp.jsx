@@ -9,6 +9,7 @@ import {
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
+import { VariantAdder, ExtraAdder } from "./OwnerApp.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { colors: c } = useTheme();
