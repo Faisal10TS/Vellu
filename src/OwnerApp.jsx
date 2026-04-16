@@ -577,6 +577,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
+          cover_focal_y: data.cover_focal_y ?? 50,
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
           account_type: data.account_type || "joint",
@@ -1567,8 +1568,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           return (
                             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
                               <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
-                                {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
-                                <NavIcon name="scissors" size={16} color={c.textMuted} />
+                                {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                                {!thumb && <NavIcon name="scissors" size={16} color={c.textMuted} />}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
@@ -2442,8 +2443,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     return (
                       <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
-                          {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
-                          <NavIcon name="scissors" size={16} color={c.textMuted} />
+                          {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                          {!thumb && <NavIcon name="scissors" size={16} color={c.textMuted} />}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
@@ -2945,8 +2946,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
                             {/* Thumb */}
                             <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
-                              {heroPhoto ? <img src={heroPhoto} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} /> : null}
-                              <NavIcon name="scissors" size={18} color={c.textMuted} />
+                              {heroPhoto ? <img src={heroPhoto} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                              {!heroPhoto && <NavIcon name="scissors" size={18} color={c.textMuted} />}
                             </div>
                             {/* Name + meta */}
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -3746,8 +3747,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.coverDesc}</div>
                   {salonData.cover_image_url ? (
                     <div style={{ position: "relative" }}>
-                      <img src={salonData.cover_image_url} style={{ width: "100%", height: 120, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}`, display: "block" }} />
-                      <button onClick={() => update(d => { d.cover_image_url = ""; return d; })}
+                      <div style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative" }}>
+                        <img src={salonData.cover_image_url} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block" }} />
+                      </div>
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{lang === "nl" ? "Positie" : "Position"}</span>
+                        <input type="range" min="0" max="100" value={salonData.cover_focal_y ?? 50}
+                          onChange={e => update(d => { d.cover_focal_y = parseInt(e.target.value); return d; })}
+                          style={{ flex: 1, accentColor: accent, height: 4 }} />
+                      </div>
+                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; return d; })}
                         style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </button>
@@ -3956,6 +3965,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
+                  cover_focal_y: salonData.cover_focal_y ?? 50,
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",

@@ -206,6 +206,7 @@ function SalonRoute({ lang, setLang }) {
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
+        cover_focal_y: data.cover_focal_y ?? 50,
         discount_codes: (data.discount_codes || []).filter(d => d.active),
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,

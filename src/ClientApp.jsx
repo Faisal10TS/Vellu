@@ -772,7 +772,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {/* ═══ HERO BANNER ═══ */}
         <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
           {initialSalon.cover_image_url && (
-            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} />
+            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} style={{ objectPosition: `center ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
           <div className="profile-hero-gradient" />
           <div className="profile-hero-content">
@@ -1430,9 +1430,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <div style={{ 
                   width: "100%", 
                   height: 120, 
-                  backgroundImage: `url(${initialSalon.cover_image_url})`, 
-                  backgroundSize: "cover", 
-                  backgroundPosition: "center",
+                  backgroundImage: `url(${initialSalon.cover_image_url})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: `center ${initialSalon.cover_focal_y ?? 50}%`,
                   flexShrink: 0
                 }} />
               )}
@@ -2139,9 +2139,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div style={{ 
                 width: "100%", 
                 height: 140, 
-                backgroundImage: `url(${initialSalon.cover_image_url})`, 
-                backgroundSize: "cover", 
-                backgroundPosition: "center",
+                backgroundImage: `url(${initialSalon.cover_image_url})`,
+                backgroundSize: "cover",
+                backgroundPosition: `center ${initialSalon.cover_focal_y ?? 50}%`,
                 position: "relative"
               }}>
                 {/* Back button on cover */}
