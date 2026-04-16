@@ -95,8 +95,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const hasLocations = (initialSalon.locations || []).length > 1;
   const hasAnyLocation = (initialSalon.locations || []).length > 0;
   const goToStep = (s) => {
-    if (s === 2) setSlotsRefreshKey(k => k + 1); // Refresh booked slots when entering date step
+    if (s === 2) setSlotsRefreshKey(k => k + 1);
     setStep(s);
+  };
+  const goBack = () => {
+    if (step <= (hasLocations ? 0 : 1)) { setMode("profile"); return; }
+    const prev = step - 1;
+    if (prev === 2) setSlotsRefreshKey(k => k + 1);
+    setStep(prev);
   };
   // Multi-service state: array of { service, variant, extras: [], staff: null }
   const [selectedServices, setSelectedServices] = useState([]);
@@ -1477,7 +1483,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
 
             {/* Main Content */}
-            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700 }}>
+            <div style={{ flex: 1, padding: "50px 60px", maxWidth: 700, margin: "0 auto" }}>
               {!done ? (
                 <div key={step} className="fade-up">
 
@@ -1549,103 +1555,174 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const isSel = isServiceSelected(s.id);
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
+                  const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
+                  const displayPrice = s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`;
                   return (
-                  <div key={s.id}>
-                    <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          {/* Checkbox */}
-                          <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${isSel ? accent : c.textMuted}`, background: isSel ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
-                            {isSel && <NavIcon name="check" size={13} color={c.btnOnDark} />}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
-                            <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
-                              {s.duration} {t.min}
-                              {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
-                              {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
-                          {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
-                        </div>
-                      </div>
-                      {(s.photos || []).length > 0 && (
-                        <div className="photo-grid" style={{ marginLeft: 34 }}>
-                          {s.photos.map((p, i) => (
-                            <img key={p.id || i} src={p.url || p} className="photo-thumb" loading="lazy" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
-                          ))}
+                  <div key={s.id} style={{ marginBottom: 8 }}>
+                    {/* Service card — clean, thumbnail-based */}
+                    <div
+                      role="checkbox" tabIndex={0} aria-checked={isSel}
+                      onClick={() => toggleServiceSelection(s)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: "14px 16px",
+                        background: isSel ? `${accent}10` : c.bgCard,
+                        border: `1.5px solid ${isSel ? accent : c.border}`,
+                        borderRadius: 16, cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {/* Thumbnail or placeholder */}
+                      {heroThumb ? (
+                        <img src={heroThumb} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }}
+                          onClick={e => { if (s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }} />
+                      ) : (
+                        <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <NavIcon name="scissors" size={18} color={c.textMuted} />
                         </div>
                       )}
+                      {/* Name + meta */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 14, color: c.text, marginBottom: 4 }}>{svcName(s)}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <NavIcon name="clock" size={10} color={c.textLabel} /> {s.duration} {t.min}
+                          </span>
+                          {s.variants?.length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{s.variants.length} {t.variants?.toLowerCase()}</span>}
+                          {s.photos?.length > 1 && <span style={{ fontSize: 10, color: c.textMuted }}>{s.photos.length} {t.photos?.toLowerCase()}</span>}
+                        </div>
+                      </div>
+                      {/* Price */}
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent, flexShrink: 0, lineHeight: 1 }}>
+                        {displayPrice}
+                      </div>
+                      {/* Selection indicator */}
+                      <div style={{
+                        width: 26, height: 26, borderRadius: 8,
+                        border: `2px solid ${isSel ? accent : c.inputBorder}`,
+                        background: isSel ? accent : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 0.2s", flexShrink: 0
+                      }}>
+                        {isSel && <NavIcon name="check" size={14} color={c.btnOnDark} />}
+                      </div>
                     </div>
 
-                    {/* Variants — per selected service */}
-                    {isSel && s.variants?.length > 0 && (
-                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
-                        <SL>{t.selectVariant}</SL>
-                        {s.variants.map(v => (
-                          <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div>
-                                <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
-                                {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
-                                <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
-                              </div>
-                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                    {/* Expanded options — variants, extras, staff (contained within card) */}
+                    {isSel && (s.variants?.length > 0 || s.extras?.length > 0 || staffForService.length > 0) && (
+                      <div className="fade-up" style={{
+                        marginTop: -8, marginLeft: 20, marginRight: 20, marginBottom: 4,
+                        padding: "16px 18px",
+                        background: c.bgCard,
+                        border: `1px solid ${accent}30`,
+                        borderTop: "none",
+                        borderRadius: "0 0 14px 14px",
+                      }}>
+                        {/* Variants */}
+                        {s.variants?.length > 0 && (
+                          <div style={{ marginBottom: s.extras?.length > 0 || staffForService.length > 0 ? 14 : 0 }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectVariant}</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {s.variants.map(v => (
+                                <div key={v.id} onClick={() => updateServiceItem(s.id, { variant: v })}
+                                  style={{
+                                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                                    padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                                    background: item?.variant?.id === v.id ? `${accent}14` : "transparent",
+                                    border: `1px solid ${item?.variant?.id === v.id ? accent : c.border}`,
+                                    transition: "all 0.15s"
+                                  }}>
+                                  <div>
+                                    <div style={{ fontWeight: 500, fontSize: 13, color: c.text }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                    <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
+                                  </div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )}
 
-                    {/* Extras — per selected service */}
-                    {isSel && s.extras?.length > 0 && (
-                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
-                        <SL>{t.selectExtras}</SL>
-                        {s.extras.map(e => (
-                          <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
-                              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                        {/* Extras */}
+                        {s.extras?.length > 0 && (
+                          <div style={{ marginBottom: staffForService.length > 0 ? 14 : 0 }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectExtras}</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {s.extras.map(e => {
+                                const extraSel = item?.extras?.find(x => x.id === e.id);
+                                return (
+                                  <div key={e.id} onClick={() => toggleExtraForService(s.id, e)}
+                                    style={{
+                                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                                      background: extraSel ? `${accent}14` : "transparent",
+                                      border: `1px solid ${extraSel ? accent : c.border}`,
+                                      fontSize: 12, fontWeight: 500, color: extraSel ? accent : c.textSub,
+                                      transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
+                                    }}>
+                                    <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
+                                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 14, color: accent }}>+€{e.price}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )}
 
-                    {/* Staff selection — per selected service, filtered */}
-                    {isSel && staffForService.length > 0 && (
-                      <div style={{ marginLeft: 34, marginBottom: 10 }}>
-                        <SL>{t.selectStaff}</SL>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
-                            <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
-                          </div>
-                          {staffForService.map(m => (
-                            <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
-                              <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
-                              {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
+                        {/* Staff */}
+                        {staffForService.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectStaff}</div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <div onClick={() => updateServiceItem(s.id, { staff: null })}
+                                style={{
+                                  padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                                  background: !item?.staff ? `${accent}14` : "transparent",
+                                  border: `1px solid ${!item?.staff ? accent : c.border}`,
+                                  fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
+                                  transition: "all 0.15s"
+                                }}>{t.anyStaff}</div>
+                              {staffForService.map(m => (
+                                <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
+                                  style={{
+                                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                                    background: item?.staff?.id === m.id ? `${accent}14` : "transparent",
+                                    border: `1px solid ${item?.staff?.id === m.id ? accent : c.border}`,
+                                    transition: "all 0.15s", textAlign: "center"
+                                  }}>
+                                  <div style={{ fontSize: 12, fontWeight: 500, color: item?.staff?.id === m.id ? accent : c.text }}>{m.name}</div>
+                                  {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                   );
                 })}
-                <div style={{ marginTop: 14 }}>
+
+                {/* Sticky bottom action bar */}
+                <div style={{
+                  position: "sticky", bottom: 0, left: 0, right: 0,
+                  padding: "16px 0 4px",
+                  background: `linear-gradient(to bottom, transparent, ${c.bg} 20%)`,
+                  zIndex: 10
+                }}>
                   {selectedServices.length > 0 && missingVariants.length > 0 && (
-                    <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
-                      <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                    <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
+                      <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
                     </div>
                   )}
-                  {selectedServices.length === 0 && (
-                    <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, textAlign: "center" }}>
-                      {t.noServicesSelected}
-                    </div>
-                  )}
-                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
+                  <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    {selectedServices.length > 0 ? (
+                      <>{t.next} · {getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</>
+                    ) : (
+                      <>{t.noServicesSelected}</>
+                    )}
+                  </button>
                 </div>
                 
                 {/* Reviews */}
@@ -1667,51 +1744,157 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               {/* Step 2 — Date & Time */}
               {step === 2 && <>
-                <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
-                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
-                  {days.map((d, i) => {
-                    const ds = fmt(d); 
-                    const isSel = date === ds;
-                    const dayHours = getEffectiveHours(ds);
-                    const staffWindow = getStaffTimeWindow(ds);
-                    const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
-                    return (
-                      <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
-                        <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                        <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.selectDate}</div>
+                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.selectDateSub}</div>
+                  </div>
                 </div>
-                <SL>{t.selectTime}</SL>
+
+                {/* Date picker — scrollable with arrows outside */}
                 {(() => {
-                  const availableTimes = getAvailableTimes(date);
-                  return availableTimes.length > 0 ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
-                      {availableTimes.map(tt => {
-                        const booked = isTimeSlotBooked(tt);
-                        return (
-                          <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} role="button" tabIndex={booked ? -1 : 0} aria-label={tt} aria-disabled={booked}
-                            onClick={() => { if (!booked) setTime(tt); }}
-                            onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !booked) { e.preventDefault(); setTime(tt); } }}
-                            style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
-                          >{tt}</div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
-                      {t.noTimesAvailable}
+                  const scrollRef = { current: null };
+                  const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" }); };
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+                      <button onClick={() => scrollBy(-1)} style={{ width: 32, height: 32, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                      </button>
+                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4 }}>
+                        {days.map((d, i) => {
+                          const ds = fmt(d);
+                          const isSel = date === ds;
+                          const dayHours = getEffectiveHours(ds);
+                          const staffWindow = getStaffTimeWindow(ds);
+                          const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                          const isToday = ds === fmt(getToday());
+                          return (
+                            <div key={i} role="button" tabIndex={isClosed ? -1 : 0}
+                              onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
+                              style={{
+                                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                                padding: "10px 14px", borderRadius: 12, cursor: isClosed ? "not-allowed" : "pointer",
+                                background: isSel ? accent : c.bgCard,
+                                border: `1.5px solid ${isSel ? accent : isToday ? `${accent}55` : c.border}`,
+                                opacity: isClosed ? 0.3 : 1,
+                                transition: "all 0.2s", flexShrink: 0, minWidth: 52, position: "relative"
+                              }}>
+                              {isToday && !isSel && <div style={{ position: "absolute", top: 5, right: 5, width: 4, height: 4, borderRadius: "50%", background: accent }} />}
+                              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
+                              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: isSel ? c.btnOnDark : c.text, lineHeight: 1 }}>{d.getDate()}</span>
+                              {!isClosed && (
+                                <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}bb` : c.textMuted, fontWeight: 500, marginTop: 1 }}>
+                                  {dayHours.open?.slice(0,5)}–{dayHours.close?.slice(0,5)}
+                                </span>
+                              )}
+                              {isClosed && <span style={{ fontSize: 8, color: c.textMuted }}>—</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button onClick={() => scrollBy(1)} style={{ width: 32, height: 32, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                      </button>
                     </div>
                   );
                 })()}
-                <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+
+                {/* Time slots — grouped by period */}
+                {(() => {
+                  const availableTimes = getAvailableTimes(date);
+                  const totalSlots = availableTimes.length;
+                  const bookedCount = availableTimes.filter(tt => isTimeSlotBooked(tt)).length;
+                  const freeCount = totalSlots - bookedCount;
+
+                  if (totalSlots === 0) return (
+                    <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
+                      <div style={{ marginBottom: 8, opacity: 0.4 }}><NavIcon name="clock" size={28} color={c.textMuted} /></div>
+                      <div style={{ fontSize: 13 }}>{t.noTimesAvailable}</div>
+                    </div>
+                  );
+                  if (freeCount === 0) return (
+                    <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                      <div style={{ marginBottom: 10, opacity: 0.4 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
+                      <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5 }}>
+                        {lang === "nl"
+                          ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt. Kies een andere datum.`
+                          : `All ${totalSlots} time slots on this day are booked. Please pick another date.`}
+                      </div>
+                    </div>
+                  );
+                  // Group into morning / afternoon / evening
+                  const morning = availableTimes.filter(tt => { const h = parseInt(tt); return h < 12; });
+                  const afternoon = availableTimes.filter(tt => { const h = parseInt(tt); return h >= 12 && h < 17; });
+                  const evening = availableTimes.filter(tt => { const h = parseInt(tt); return h >= 17; });
+                  const groups = [
+                    { label: lang === "nl" ? "Ochtend" : "Morning", icon: "sun", times: morning },
+                    { label: lang === "nl" ? "Middag" : "Afternoon", icon: "clock", times: afternoon },
+                    { label: lang === "nl" ? "Avond" : "Evening", icon: "moon", times: evening },
+                  ].filter(g => g.times.some(tt => !isTimeSlotBooked(tt)));
+
+                  return (
+                    <div style={{ marginBottom: 20 }}>
+                      {groups.map(group => (
+                        <div key={group.label} style={{ marginBottom: 20 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                            <NavIcon name={group.icon} size={14} color={c.textLabel} />
+                            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{group.label}</span>
+                            <span style={{ fontSize: 10, color: accent }}>({group.times.filter(tt => !isTimeSlotBooked(tt)).length})</span>
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {group.times.map(tt => {
+                              const booked = isTimeSlotBooked(tt);
+                              if (booked) return null; // Hide booked slots entirely
+                              const isSel = time === tt;
+                              return (
+                                <div key={tt} role="button" tabIndex={0}
+                                  onClick={() => setTime(tt)}
+                                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTime(tt); } }}
+                                  style={{
+                                    padding: "10px 20px", borderRadius: 10, cursor: "pointer",
+                                    background: isSel ? accent : c.bgCard,
+                                    border: `1.5px solid ${isSel ? accent : c.border}`,
+                                    color: isSel ? c.btnOnDark : c.text,
+                                    fontSize: 13, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+                                    transition: "all 0.15s",
+                                  }}
+                                >{tt}</div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Sticky bottom */}
+                <div style={{ position: "sticky", bottom: 0, padding: "16px 0 4px", background: `linear-gradient(to bottom, transparent, ${c.bg} 20%)`, zIndex: 10 }}>
+                  <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    {time ? (
+                      <>{t.next} · {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
+                    ) : (
+                      <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
+                    )}
+                  </button>
+                </div>
               </>}
 
               {/* Step 3 — Details */}
               {step === 3 && <>
-                <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.yourDetails}</div>
+                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.yourDetailsSub}</div>
+                  </div>
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                   {/* Email first for client lookup */}
                   <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
@@ -1798,7 +1981,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               {/* Step 4 — Confirm */}
               {step === 4 && <>
-                <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.confirmBooking}</div>
+                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.confirmSub}</div>
+                  </div>
+                </div>
                 <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
                   {/* Services list */}
                   <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
