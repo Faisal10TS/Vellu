@@ -1723,8 +1723,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {/* Sticky bottom action bar */}
                 <div style={{
                   position: "sticky", bottom: 0, left: 0, right: 0,
-                  padding: "16px 0 4px",
-                  background: `linear-gradient(to bottom, transparent, ${c.bg} 20%)`,
+                  padding: "20px 0 8px",
+                  background: c.bg,
+                  borderTop: `1px solid ${c.border}`,
                   zIndex: 10
                 }}>
                   {selectedServices.length > 0 && missingVariants.length > 0 && (
@@ -1889,7 +1890,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 })()}
 
                 {/* Sticky bottom */}
-                <div style={{ position: "sticky", bottom: 0, padding: "16px 0 4px", background: `linear-gradient(to bottom, transparent, ${c.bg} 20%)`, zIndex: 10 }}>
+                <div style={{ position: "sticky", bottom: 0, padding: "20px 0 8px", background: c.bg, borderTop: `1px solid ${c.border}`, zIndex: 10 }}>
                   <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                     {time ? (
                       <>{t.next} · {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
