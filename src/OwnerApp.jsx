@@ -980,6 +980,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         height: "100dvh",
         overflow: "hidden",
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         fontFamily: "'Jost',sans-serif",
         color: c.text
       }}>
