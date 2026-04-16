@@ -1270,12 +1270,12 @@ const makeCSS = (accent, c = THEMES.dark) => `
   @media (max-width: 900px) {
     .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
     .profile-header-contact { display: none; }
-    .profile-root { display: flex; flex-direction: column; height: 100svh; height: -webkit-fill-available; overflow: hidden; }
-    .profile-scroll-area { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .profile-root { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    .profile-scroll-area { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 72px; }
     .profile-main { border-right: none; padding: 0 18px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
-    .profile-mobile-bar { display: flex; position: static; flex-shrink: 0; }
+    .profile-mobile-bar { display: flex; }
     .profile-section { scroll-margin-top: 52px; }
     .profile-reviews-summary { flex-direction: column-reverse; gap: 16px; }
     .profile-rating-big { min-width: 0; width: 100%; flex-direction: row; padding: 14px 18px; gap: 14px; justify-content: center; }
