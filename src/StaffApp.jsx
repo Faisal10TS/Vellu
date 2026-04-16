@@ -16,7 +16,6 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
-  console.log("[StaffApp debug] salonProfile:", salonProfile?.business_name, "accent_color:", salonProfile?.accent_color);
   const accent = salonProfile.accent_color || ACCENT;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
 
@@ -216,7 +215,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   ];
 
   return (
-    <Layout>
+    <Layout accent={accent}>
 
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
