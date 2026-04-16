@@ -264,61 +264,211 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           )}
 
           {/* DASHBOARD */}
-          {view === "dashboard" && (
+          {view === "dashboard" && (() => {
+            const now = new Date();
+            const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+            const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
+            const weekRevenue = completedAppts.filter(a => new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const monthRevenue = completedAppts.filter(a => new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+
+            return (
             <div className="fade-up">
               {isMobile && <PTitle sub={`${t.staffWelcome}, ${myStaff.name}`}>{t.dashboard}</PTitle>}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-                <div className="stat-card">
-                  <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.today}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>{todayAppts.length}</div>
-                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "afspraken" : "appointments"}</div>
+
+              {/* Today hero + KPI cards */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 20 }}>
+                {/* Today hero */}
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 22, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
+                    <div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.today}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.15 }}>
+                        {todayAppts.length} {todayAppts.length === 1 ? (lang === "nl" ? "afspraak" : "appointment") : (lang === "nl" ? "afspraken" : "appointments")}
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, textTransform: "capitalize" }}>{todayDate}</div>
+                    </div>
+                    {todayAppts.length > 0 && (
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : "Expected"}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>€{todayRevenue.toFixed(0)}</div>
+                      </div>
+                    )}
+                  </div>
+                  {todayAppts.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative" }}>
+                      <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
+                      <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
+                      <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : "View agenda →"}</div>
+                    </div>
+                  ) : (
+                    <div style={{ position: "relative" }}>
+                      {todayAppts.slice(0, 3).map(a => <ApptCard key={a.id} a={a} />)}
+                      {todayAppts.length > 3 && (
+                        <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
+                          + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles →" : "more · View all →"}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="stat-card">
-                  <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, color: accent }}>€{appointments.filter(a => a.status === "completed").reduce((s,a) => s + parseFloat(a.service_price||0), 0).toFixed(0)}</div>
-                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "totaal" : "total"}</div>
+
+                {/* KPI cards stacked */}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr", gap: 10 }}>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze week" : "This week"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{monthRevenue.toFixed(0)}</div>
+                  </div>
+                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : "treatments"}</div>
+                  </div>
                 </div>
               </div>
-              <button className="btn-ghost" style={{ width: "100%", marginBottom: 16, fontSize: 11, borderStyle: "dashed", borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+
+              {/* Primary CTA */}
+              <button className="btn-primary" style={{ width: "100%", marginBottom: 16, padding: "14px 24px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); }}>
-                <NavIcon name="plus" size={14} color={accent} /> {t.addAppointment}
+                <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
               </button>
-              <SL>{t.todayAppts}</SL>
-              {todayAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "30px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
-                : todayAppts.map(a => <ApptCard key={a.id} a={a} />)
-              }
             </div>
-          )}
+            );
+          })()}
 
           {/* AGENDA */}
-          {view === "agenda" && (
+          {view === "agenda" && (() => {
+            const MON_SHORT = lang === "nl" ? MON_NL : MON_EN;
+            const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+            const todayFmt = fmt(getToday());
+            const base = getToday();
+            base.setDate(base.getDate() + staffWeekOffset * 7);
+            const dayOfWeek = (base.getDay() + 6) % 7;
+            const weekStart = new Date(base);
+            weekStart.setDate(base.getDate() - dayOfWeek);
+            const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
+
+            const firstDay = weekDays[0]; const lastDay = weekDays[6];
+            const sameMonth = firstDay.getMonth() === lastDay.getMonth();
+            const periodLabel = sameMonth
+              ? `${firstDay.getDate()} – ${lastDay.getDate()} ${MON_SHORT[lastDay.getMonth()]} ${lastDay.getFullYear()}`
+              : `${firstDay.getDate()} ${MON_SHORT[firstDay.getMonth()]} – ${lastDay.getDate()} ${MON_SHORT[lastDay.getMonth()]}`;
+
+            const periodAppts = appointments.filter(a => {
+              const ds = a.date;
+              return ds >= fmt(weekDays[0]) && ds <= fmt(weekDays[6]) && a.status !== "cancelled" && a.status !== "no_show";
+            });
+            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+
+            return (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setStaffWeekOffset(w => w - 1)}>←</button>
-                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 10 }} onClick={() => setStaffWeekOffset(0)}>{lang === "nl" ? "Vandaag" : "Today"}</button>
-                <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 11 }} onClick={() => setStaffWeekOffset(w => w + 1)}>→</button>
-              </div>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20 }}>
-                {days.slice(staffWeekOffset * 7, staffWeekOffset * 7 + 7).map((d, i) => {
-                  const ds = fmt(d); const isSel = calDate === ds;
-                  const has = appointments.filter(a => a.status !== "cancelled" && a.date === ds).length > 0;
-                  return (
-                    <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}>
-                      <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                      {has && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: accent, marginTop: 2 }} />}
+
+              {/* Navigation */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {staffWeekOffset !== 0 && (
+                    <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}33` }}>
+                      {lang === "nl" ? "Vandaag" : "Today"}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div onClick={() => setStaffWeekOffset(w => w - 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
+                  <div onClick={() => setStaffWeekOffset(w => w + 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </div>
+                </div>
               </div>
-              {calAppts.length === 0
-                ? <div style={{ textAlign: "center", padding: "40px 0", color: c.textMuted, fontSize: 12 }}>{t.noTodayAppts}</div>
-                : calAppts.map(a => <ApptCard key={a.id} a={a} />)
-              }
+
+              {/* Period summary */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Afspraken" : "Appointments"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : "Completed"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.filter(a => a.status === "completed").length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>€{periodRevenue.toFixed(0)}</div>
+                </div>
+              </div>
+
+              {/* Week calendar grid with appointment previews */}
+              <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                  {weekDays.map((d, i) => {
+                    const ds = fmt(d);
+                    const isToday = ds === todayFmt;
+                    return (
+                      <div key={i} style={{ textAlign: "center", padding: "10px 4px", borderRight: i < 6 ? `1px solid ${c.border}` : "none", background: isToday ? `${accent}10` : "transparent" }}>
+                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
+                        <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                  {weekDays.map((d, i) => {
+                    const ds = fmt(d);
+                    const isSel = calDate === ds;
+                    const dayAppts = appointments.filter(a => a.date === ds && a.status !== "cancelled" && a.status !== "no_show").sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                    const visibleAppts = dayAppts.slice(0, 4);
+                    const moreCount = dayAppts.length - visibleAppts.length;
+                    return (
+                      <div key={i} onClick={() => setCalDate(ds)} style={{
+                        minHeight: 140, padding: "8px 6px 10px", cursor: "pointer",
+                        background: isSel ? `${accent}22` : "transparent",
+                        borderRight: i < 6 ? `1px solid ${c.border}` : "none",
+                        display: "flex", flexDirection: "column", gap: 3
+                      }}>
+                        {dayAppts.length === 0 ? (
+                          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
+                        ) : (
+                          <>
+                            {visibleAppts.map((a, ai) => {
+                              const isCancelled = a.status === "cancelled" || a.status === "no_show";
+                              const statusColor = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
+                              return (
+                                <div key={ai} style={{ padding: "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden", opacity: isCancelled ? 0.5 : 1 }}>
+                                  <div style={{ fontSize: 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
+                                  <div style={{ fontSize: 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
+                                </div>
+                              );
+                            })}
+                            {moreCount > 0 && <div style={{ fontSize: 9, color: accent, fontWeight: 600, textAlign: "center" }}>+{moreCount}</div>}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Selected day appointments */}
+              {calAppts.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                  <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
+                  <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}</div>
+                </div>
+              ) : (
+                calAppts.map(a => <ApptCard key={a.id} a={a} />)
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* FACTUREN */}
           {view === "facturen" && (
