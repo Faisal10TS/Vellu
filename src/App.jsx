@@ -88,10 +88,11 @@ function OwnerEntryPage({ lang, setLang }) {
     </div>
   );
 
-  // Staff member view
-  if (staffUser) {
-    return <StaffApp staffUser={staffUser} lang={lang} setLang={setLang} onLogout={handleLogout} />;
-  }
+  // Staff member — redirect to /staff
+  useEffect(() => {
+    if (staffUser) navigate("/staff", { replace: true });
+  }, [staffUser]);
+  if (staffUser) return null;
 
   // Check if plan is active
   const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at) > new Date());
@@ -107,12 +108,56 @@ function OwnerEntryPage({ lang, setLang }) {
   return <OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} />;
 }
 
+// ─── STAFF ENTRY PAGE (vellu.cc/staff) ──────────────────────
+function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: propOnLogout }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const [staffUser, setStaffUser] = useState(propStaffUser || null);
+  const [loading, setLoading] = useState(!propStaffUser);
+
+  useEffect(() => {
+    if (propStaffUser) return;
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
+        if (staffMember) {
+          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
+          if (salonProfile) {
+            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      // Not a staff member — redirect to /owner
+      navigate("/owner");
+    };
+    checkSession();
+  }, []);
+
+  const handleLogout = propOnLogout || (async () => {
+    await supabase.auth.signOut();
+    navigate("/owner");
+  });
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg }}>
+      <div style={{ width: 40, height: 40, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
+
+  if (!staffUser) return null;
+
+  return <StaffApp staffUser={staffUser} lang={lang} setLang={setLang} onLogout={handleLogout} />;
+}
+
 // ─── SALON ROUTE WRAPPER ─────────────────────────────────────
 function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
   // Reserved routes go to main app
-  if (slug === "owner" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact" || slug === "dpa") {
+  if (slug === "owner" || slug === "staff" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact" || slug === "dpa") {
     return <AppInner />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
@@ -486,6 +531,7 @@ export default function VelluApp() {
             <Routes>
               <Route path="/" element={<AppInner lang={lang} setLang={setLang} />} />
               <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
+              <Route path="/staff" element={<StaffEntryPage lang={lang} setLang={setLang} />} />
               <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
               <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
               <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
