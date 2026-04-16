@@ -956,7 +956,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   .profile-header {
     position: sticky; top: 0; z-index: 50; background: ${c.bg};
     border-bottom: 1px solid ${c.border};
-    display: flex; align-items: center; padding: 0 28px; height: 52px;
+    display: flex; align-items: center; padding: 0 28px; padding-top: env(safe-area-inset-top, 0px); height: calc(52px + env(safe-area-inset-top, 0px));
     gap: 24px;
   }
   .profile-header-logo {

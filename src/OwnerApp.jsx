@@ -1083,7 +1083,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              padding: "8px 14px",
+              paddingTop: "max(8px, env(safe-area-inset-top, 8px))",
+              paddingBottom: 8,
+              paddingLeft: 14,
+              paddingRight: 14,
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
