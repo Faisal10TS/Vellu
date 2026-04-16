@@ -509,10 +509,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {view === "instellingen" && (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.mySettings}>{t.settings}</PTitle>}
-              
-              {/* Working hours */}
+
+              {/* Working hours — same style as owner planning */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-                <SL>{t.myWorkingHours}</SL>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
                 {[0,1,2,3,4,5,6].map(day => {
                   const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
                   const staffDay = whForm[day];
@@ -520,8 +520,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   const openTime = staffDay?.open || "09:00";
                   const closeTime = staffDay?.close || "17:30";
                   return (
-                    <div key={day} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "4px 0" }}>
-                      <div style={{ width: 28, fontSize: 10, fontWeight: 500, color: c.textSub, flexShrink: 0 }}>{DAY_FULL[day].slice(0,2)}</div>
+                    <div key={day} style={{
+                      display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "10px 12px",
+                      background: isOn ? `${accent}08` : c.bgCard,
+                      border: `1px solid ${isOn ? `${accent}22` : c.border}`,
+                      borderRadius: 12, opacity: isOn ? 1 : 0.6, transition: "all 0.2s"
+                    }}>
+                      <div style={{ width: 85, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
                       <div onClick={() => {
                         setWhForm(wh => {
                           const next = {...wh};
@@ -529,47 +534,67 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           else next[day] = { closed: false, open: openTime, close: closeTime };
                           return next;
                         });
-                      }} style={{ width: 28, height: 16, borderRadius: 8, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                        <div style={{ position: "absolute", top: 2, left: isOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                      }} style={{ width: 36, height: 20, borderRadius: 10, background: isOn ? accent : c.toggleInactive, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: 2, left: isOn ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
                       </div>
                       {isOn ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                          <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
                             {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                           </select>
-                          <span style={{ fontSize: 10, color: c.textMuted }}>—</span>
-                          <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                          <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
+                          <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
                             {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                           </select>
                         </div>
                       ) : (
-                        <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>
+                        <div style={{ fontSize: 11, color: c.textLabel, fontStyle: "italic" }}>{t.closed}</div>
                       )}
                     </div>
                   );
                 })}
-                <button className="btn-primary" style={{ marginTop: 12 }} onClick={saveWorkingHours}>{saved ? <NavIcon name="check" size={12} /> : t.saveChanges}</button>
+                <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={saveWorkingHours}>
+                  {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}
+                </button>
               </div>
 
-              {/* Invoice details */}
+              {/* Invoice details — labeled inputs like owner settings */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-                <SL>{t.invoiceDetails}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.invoiceSettings}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <input className="input-field" placeholder={t.address} value={invoiceForm.address} onChange={e => setInvoiceForm(f => ({...f, address: e.target.value}))} style={{ fontSize: 12 }} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input className="input-field" placeholder={t.kvkNumber} value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ fontSize: 12 }} />
-                    <input className="input-field" placeholder={t.btwId} value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ fontSize: 12 }} />
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                    <input className="input-field" placeholder="Haarlemmerdijk 95, Amsterdam" value={invoiceForm.address} onChange={e => setInvoiceForm(f => ({...f, address: e.target.value}))} style={{ width: "100%" }} />
                   </div>
-                  <input className="input-field" placeholder={t.ibanNumber} value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ fontSize: 12 }} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input className="input-field" placeholder={t.invoicePrefix} value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ fontSize: 12 }} />
-                    <div style={{ fontSize: 11, color: c.textMuted, display: "flex", alignItems: "center" }}>
-                      {lang === "nl" ? "Volgende" : "Next"}: {invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
+                      <input className="input-field" placeholder="12345678" value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ width: "100%" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
+                      <input className="input-field" placeholder="NL123456789B01" value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
+                    <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
+                      <input className="input-field" value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: c.inputBg, borderRadius: 14, border: `1px solid ${c.inputBorder}` }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <button className="btn-primary" style={{ marginTop: 12 }} onClick={async () => {
+                <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
                   await supabase.from("staff_members").update({
                     address: invoiceForm.address || null,
                     kvk_number: invoiceForm.kvk_number || null,
@@ -579,7 +604,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     next_invoice_number: invoiceForm.next_invoice_number || 1
                   }).eq("id", staffMember.id);
                   setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
-                }}>{invoiceSaved ? <NavIcon name="check" size={12} /> : t.saveChanges}</button>
+                }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}</button>
               </div>
 
               {/* My services (full editing) */}
