@@ -980,7 +980,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         height: "100dvh",
         overflow: "hidden",
         display: "flex",
-        flexDirection: isMobile ? "column" : "row",
         fontFamily: "'Jost',sans-serif",
         color: c.text
       }}>
@@ -1069,40 +1068,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </aside>
         )}
 
-        {/* Mobile Header — OUTSIDE main so it flows below Safari's URL bar */}
-        {isMobile && (
-          <div style={{
-            padding: "8px 14px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: c.bg,
-            borderBottom: `1px solid ${c.border}`,
-            gap: 8,
-            flexShrink: 0,
-            marginLeft: 0
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              <ThemeToggle />
-              <LangToggle lang={lang} setLang={setLang} />
-            </div>
-          </div>
-        )}
-
         {/* Main Content Area */}
         <main style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
+          height: "100dvh",
           minWidth: 0,
           minHeight: 0,
           marginLeft: isMobile ? 0 : 260,
-          overflow: "hidden",
-          ...(isMobile ? {} : { height: "100dvh" })
+          overflow: "hidden"
         }}>
+          {/* Mobile Header */}
+          {isMobile && (
+            <div style={{
+              padding: "8px 14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: c.bg,
+              borderBottom: `1px solid ${c.border}`,
+              gap: 8,
+              flexShrink: 0
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <ThemeToggle />
+                <LangToggle lang={lang} setLang={setLang} />
+              </div>
+            </div>
+          )}
 
           {/* Desktop Header */}
           {!isMobile && (
