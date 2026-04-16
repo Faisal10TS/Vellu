@@ -16,6 +16,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
+  console.log("[StaffApp debug] salonProfile:", salonProfile?.business_name, "accent_color:", salonProfile?.accent_color);
   const accent = salonProfile.accent_color || ACCENT;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
 
