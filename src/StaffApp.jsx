@@ -271,10 +271,68 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const now = new Date();
             const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
             const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
+            const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
             const weekRevenue = completedAppts.filter(a => new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const prevWeekRevenue = completedAppts.filter(a => new Date(a.date) >= prevWeekStart && new Date(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const monthRevenue = completedAppts.filter(a => new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
             const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+
+            // Daily revenue for sparklines
+            const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            const revByDay = {};
+            completedAppts.forEach(a => {
+              const d = new Date(a.date);
+              revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+            });
+            const weekDaily = [];
+            for (let i = 6; i >= 0; i--) {
+              const d = new Date(now); d.setDate(now.getDate() - i);
+              weekDaily.push(revByDay[dayKey(d)] || 0);
+            }
+            const monthDaily = [];
+            for (let i = 29; i >= 0; i--) {
+              const d = new Date(now); d.setDate(now.getDate() - i);
+              monthDaily.push(revByDay[dayKey(d)] || 0);
+            }
+            const sparkline = (data, color) => {
+              if (!data || data.length < 2) return null;
+              const W = 200, H = 80, pad = 4;
+              const max = Math.max(...data, 1);
+              const min = Math.min(...data);
+              const range = max - min || 1;
+              const pts = data.map((v, i) => {
+                const x = pad + (i / (data.length - 1)) * (W - pad * 2);
+                const y = pad + (H - pad * 2) - ((v - min) / range) * (H - pad * 2);
+                return { x, y };
+              });
+              const linePath = pts.reduce((acc, p, i) => {
+                if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                const prev = pts[i - 1];
+                const cx1 = prev.x + (p.x - prev.x) / 2;
+                const cy1 = prev.y;
+                const cx2 = prev.x + (p.x - prev.x) / 2;
+                const cy2 = p.y;
+                return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+              }, "");
+              const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${H - pad} L${pts[0].x.toFixed(1)},${H - pad} Z`;
+              const lastPt = pts[pts.length - 1];
+              const gradId = "staff-spark-" + color.replace(/[^a-z0-9]/gi, "") + "-" + data.length;
+              return (
+                <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
+                  <defs>
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                      <stop offset="100%" stopColor={color} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d={areaPath} fill={`url(#${gradId})`} />
+                  <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                  <circle cx={lastPt.x} cy={lastPt.y} r="3" fill={color} vectorEffect="non-scaling-stroke" />
+                </svg>
+              );
+            };
 
             return (
             <div className="fade-up">
@@ -318,19 +376,43 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   )}
                 </div>
 
-                {/* KPI cards stacked */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr", gap: 10 }}>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze week" : "This week"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                {/* KPI cards stacked — with sparklines */}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
+                  {/* WEEK REVENUE */}
+                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze week" : "This week"}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : "7 days"}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                      {weekChange !== 0 && (
+                        <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                          {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
+                      {sparkline(weekDaily, accent)}
+                    </div>
                   </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{monthRevenue.toFixed(0)}</div>
+
+                  {/* MONTH REVENUE */}
+                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
+                    </div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                    <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
+                      {sparkline(monthDaily, accent)}
+                    </div>
                   </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
+
+                  {/* TOTAL EARNINGS */}
+                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalEarnings}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>€{totalEarnings.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : "treatments"}</div>
                   </div>
                 </div>
@@ -341,6 +423,177 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); }}>
                 <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
               </button>
+
+              {/* Revenue Chart + Popular Services */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
+                {/* Revenue area chart — 8 weeks */}
+                {(() => {
+                  const weeks = [];
+                  for (let w = 7; w >= 0; w--) {
+                    const weekStart = new Date(now);
+                    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+                    weekStart.setHours(0,0,0,0);
+                    const weekEnd = new Date(weekStart);
+                    weekEnd.setDate(weekStart.getDate() + 7);
+                    const rev = completedAppts
+                      .filter(a => new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                      .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                    const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                    weeks.push({ label, revenue: rev });
+                  }
+                  const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
+                  const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
+                  const avgWeek = total8w / weeks.length;
+                  const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
+                  const firstHalfAvg = weeks.slice(0, 4).reduce((s, w) => s + w.revenue, 0) / 4;
+                  const secondHalfAvg = weeks.slice(4).reduce((s, w) => s + w.revenue, 0) / 4;
+                  const trendPct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : 0;
+                  const W = 560, H = 220, PAD_L = 16, PAD_R = 16, PAD_TOP = 32, PAD_BOT = 30;
+                  const innerW = W - PAD_L - PAD_R;
+                  const innerH = H - PAD_TOP - PAD_BOT;
+                  const pts = weeks.map((w, i) => {
+                    const x = PAD_L + (i / (weeks.length - 1)) * innerW;
+                    const y = PAD_TOP + innerH - (w.revenue / maxRev) * innerH;
+                    return { x, y, ...w };
+                  });
+                  const smoothPath = pts.reduce((acc, p, i) => {
+                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                    const prev = pts[i - 1];
+                    const cx1 = prev.x + (p.x - prev.x) / 2;
+                    const cy1 = prev.y;
+                    const cx2 = prev.x + (p.x - prev.x) / 2;
+                    const cy2 = p.y;
+                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                  }, "");
+                  const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
+                  const gradId = "staff-rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
+                  return (
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : "Revenue over time")}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, display: "flex", alignItems: "stretch", marginTop: 14, minHeight: 180 }}>
+                        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
+                          <defs>
+                            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
+                              <stop offset="100%" stopColor={accent} stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          {[0.25, 0.5, 0.75].map(pct => (
+                            <line key={pct} x1={PAD_L} y1={PAD_TOP + innerH * pct} x2={W - PAD_R} y2={PAD_TOP + innerH * pct} stroke={c.border} strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
+                          ))}
+                          <line x1={PAD_L} y1={PAD_TOP + innerH} x2={W - PAD_R} y2={PAD_TOP + innerH} stroke={c.border} strokeWidth="1" />
+                          {maxRev > 0 && <path d={areaPath} fill={`url(#${gradId})`} />}
+                          {maxRev > 0 && <path d={smoothPath} fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                          {pts[peakIdx].revenue > 0 && (
+                            <g>
+                              <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
+                              <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
+                                €{pts[peakIdx].revenue.toFixed(0)}
+                              </text>
+                            </g>
+                          )}
+                          {pts.map((p, i) => (
+                            <g key={i}>
+                              <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
+                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                              </circle>
+                              {i === pts.length - 1 && (
+                                <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
+                                  <animate attributeName="r" values="8;14;8" dur="2s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.25;0;0.25" dur="2s" repeatCount="indefinite" />
+                                </circle>
+                              )}
+                            </g>
+                          ))}
+                          {[0, Math.floor(pts.length / 2), pts.length - 1].map(i => (
+                            <text key={i} x={pts[i].x} y={H - 10} fontSize="11" fill={c.textMuted} textAnchor={i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"} fontFamily="'Jost',sans-serif">
+                              {pts[i].label}
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>Trend</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text }}>
+                            {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "—"} {Math.abs(trendPct)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Popular services — thumbnails + revenue */}
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : "Popular services")}</div>
+                    <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
+                  </div>
+                  {(() => {
+                    const svcStats = {};
+                    completedAppts.forEach(a => {
+                      const n = a.service_name?.split(" — ")[0] || "?";
+                      if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
+                      svcStats[n].count += 1;
+                      svcStats[n].revenue += parseFloat(a.service_price || 0);
+                    });
+                    const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                    if (sorted.length === 0) return (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
+                        <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
+                        <div style={{ fontSize: 12 }}>{t.noAppts}</div>
+                      </div>
+                    );
+                    const max = sorted[0][1].count;
+                    return (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                        {sorted.map(([name, stats]) => {
+                          const svc = services.find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                          const thumb = svc?.photos?.[0]?.url;
+                          return (
+                            <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              {thumb ? (
+                                <img src={thumb} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: `1px solid ${c.border}` }} />
+                              ) : (
+                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <NavIcon name="scissors" size={16} color={c.textMuted} />
+                                </div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                                  </div>
+                                  <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
             );
           })()}
