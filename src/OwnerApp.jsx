@@ -1083,6 +1083,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {isMobile && (
             <div style={{
               padding: "8px 14px",
+              paddingTop: "max(8px, env(safe-area-inset-top))",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
