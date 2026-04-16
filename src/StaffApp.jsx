@@ -697,17 +697,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
 
-              {/* Top toolbar — view toggle + period navigator */}
+              {/* Top toolbar — view toggle + export + period navigator */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
-                  {["week", "month", "year"].map(mode => (
-                    <div key={mode} onClick={() => { setCalViewMode(mode); setStaffWeekOffset(0); }} style={{
-                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
-                      background: calViewMode === mode ? accent : "transparent",
-                      color: calViewMode === mode ? c.btnOnDark : c.textSub,
-                    }}>{mode === "week" ? (lang === "nl" ? "Week" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : "Month") : (lang === "nl" ? "Jaar" : "Year")}</div>
-                  ))}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                    {["week", "month", "year"].map(mode => (
+                      <div key={mode} onClick={() => { setCalViewMode(mode); setStaffWeekOffset(0); }} style={{
+                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                        background: calViewMode === mode ? accent : "transparent",
+                        color: calViewMode === mode ? c.btnOnDark : c.textSub,
+                      }}>{mode === "week" ? (lang === "nl" ? "Week" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : "Month") : (lang === "nl" ? "Jaar" : "Year")}</div>
+                    ))}
+                  </div>
+                  {periodAppts.length > 0 && (
+                    <div onClick={() => exportCalendar(periodAppts)} style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}>
+                      <NavIcon name="download" size={12} color={c.textSub} /> {lang === "nl" ? "Exporteer" : "Export"}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {staffWeekOffset !== 0 && (
@@ -958,12 +965,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}</div>
                   </div>
-                ) : (<>
-                  {calAppts.map(a => <ApptCard key={a.id} a={a} />)}
-                  <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
-                    <NavIcon name="download" size={14} color={c.textSub} /> {lang === "nl" ? "Exporteer naar agenda" : "Export to calendar"}
-                  </button>
-                </>)}
+                ) : (
+                  calAppts.map(a => <ApptCard key={a.id} a={a} />)
+                )}
               </>)}
             </div>
             );
