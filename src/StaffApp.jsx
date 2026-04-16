@@ -861,7 +861,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
                       {DAY_HEADERS.map((dh, i) => (
-                        <div key={dh} style={{ textAlign: "center", fontSize: 10, fontWeight: 600, color: c.textLabel, padding: "10px 0", letterSpacing: "0.12em", textTransform: "uppercase", borderRight: i < 6 ? `1px solid ${c.border}` : "none" }}>{dh}</div>
+                        <div key={dh} style={{ textAlign: "center", fontSize: isMobile ? 9 : 10, fontWeight: 600, color: c.textLabel, padding: isMobile ? "8px 0" : "10px 0", letterSpacing: "0.12em", textTransform: "uppercase", borderRight: i < 6 ? `1px solid ${c.border}` : "none" }}>{dh}</div>
                       ))}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
@@ -870,7 +870,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         const isSel = calDate === ds;
                         const isToday = ds === todayFmt;
                         const count = filteredAppts.filter(a => a.date === ds).length;
-                        const dayAppts = filteredAppts.filter(a => a.date === ds).slice(0, 3);
+                        const dayAppts = filteredAppts.filter(a => a.date === ds).slice(0, isMobile ? 1 : 3);
                         const col = i % 7;
                         const row = Math.floor(i / 7);
                         return (
@@ -882,43 +882,50 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             const diffDays = Math.floor((clickedDate - today) / (1000 * 60 * 60 * 24));
                             setStaffWeekOffset(Math.floor(diffDays / 7));
                           }} style={{
-                            minHeight: 92, padding: "8px 8px 6px", cursor: "pointer", position: "relative",
+                            minHeight: isMobile ? 48 : 92, padding: isMobile ? "6px 4px" : "8px 8px 6px", cursor: "pointer", position: "relative",
                             background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
                             borderRight: col < 6 ? `1px solid ${c.border}` : "none",
                             borderBottom: row < rows - 1 ? `1px solid ${c.border}` : "none",
                             transition: "background 0.15s",
                             opacity: cell.muted ? 0.35 : 1,
-                            display: "flex", flexDirection: "column", gap: 4
+                            display: "flex", flexDirection: "column", gap: 3, alignItems: isMobile ? "center" : "stretch"
                           }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{
-                                fontSize: 12, fontWeight: isToday ? 700 : 500,
-                                color: isToday ? accent : isSel ? accent : c.text,
-                                width: isToday ? 22 : "auto", height: isToday ? 22 : "auto",
-                                borderRadius: isToday ? "50%" : 0,
-                                background: isToday ? accent : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                ...(isToday ? { color: c.btnOnDark, fontSize: 11 } : {})
-                              }}>{cell.day}</div>
-                              {count > 0 && !cell.muted && (
-                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent }}>{count}</div>
-                              )}
-                            </div>
-                            {!cell.muted && dayAppts.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
-                                {dayAppts.map((a, ai) => (
-                                  <div key={ai} style={{
-                                    fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                                    background: `${accent}1a`, color: c.textSub,
-                                    borderLeft: `2px solid ${accent}`,
-                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                                  }}>
-                                    {a.time} {a.client_name?.split(" ")[0] || ""}
-                                  </div>
+                            <div style={{
+                              fontSize: isMobile ? 12 : 12, fontWeight: isToday ? 700 : 500,
+                              color: isToday ? c.btnOnDark : isSel ? accent : c.text,
+                              width: isToday ? 24 : "auto", height: isToday ? 24 : "auto",
+                              borderRadius: isToday ? "50%" : 0,
+                              background: isToday ? accent : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center"
+                            }}>{cell.day}</div>
+                            {!cell.muted && count > 0 && isMobile && (
+                              <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
+                                {Array.from({ length: Math.min(count, 3) }).map((_, di) => (
+                                  <div key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: accent }} />
                                 ))}
-                                {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
+                                {count > 3 && <div style={{ fontSize: 8, color: accent, fontWeight: 700, lineHeight: "5px" }}>+</div>}
                               </div>
                             )}
+                            {!cell.muted && !isMobile && (<>
+                              {dayAppts.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+                                  {dayAppts.map((a, ai) => (
+                                    <div key={ai} style={{
+                                      fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                                      background: `${accent}1a`, color: c.textSub,
+                                      borderLeft: `2px solid ${accent}`,
+                                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                                    }}>
+                                      {a.time} {a.client_name?.split(" ")[0] || ""}
+                                    </div>
+                                  ))}
+                                  {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
+                                </div>
+                              )}
+                              {count > 0 && (
+                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
+                              )}
+                            </>)}
                           </div>
                         );
                       })}
