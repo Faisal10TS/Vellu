@@ -501,7 +501,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const measure = () => {
       const invisible = window.screen.height - vv.height;
       // Expanded URL bar takes ~100-150px more than the collapsed pill. Threshold 100 separates them.
-      setUrlBarOffset(invisible > 100 ? 80 : 0);
+      setUrlBarOffset(invisible > 100 ? 130 : 0);
     };
     measure();
     vv.addEventListener("resize", measure);
