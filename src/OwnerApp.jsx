@@ -1190,7 +1190,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
-            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
+            padding: isMobile ? "14px 14px 80px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -2630,7 +2630,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             minHeight: 0,
             overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "16px 0 160px" : "16px 0 100px",
+            padding: isMobile ? "16px 0 140px" : "16px 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
