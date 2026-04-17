@@ -1114,6 +1114,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           marginLeft: isMobile ? 0 : 260,
           overflow: "hidden"
         }}>
+          {/* Mobile Header */}
+          {isMobile && (
+            <div style={{
+              paddingTop: `calc(max(8px, env(safe-area-inset-top, 8px)) + ${urlBarOffset}px)`,
+              paddingBottom: 8,
+              paddingLeft: 14,
+              paddingRight: 14,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: c.bg,
+              borderBottom: `1px solid ${c.border}`,
+              gap: 8,
+              flexShrink: 0
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <ThemeToggle />
+                <LangToggle lang={lang} setLang={setLang} />
+              </div>
+            </div>
+          )}
+
           {/* Desktop Header */}
           {!isMobile && (
             <div style={{
@@ -1165,10 +1190,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
             minWidth: 0,
-            paddingTop: isMobile ? `calc(14px + max(8px, env(safe-area-inset-top, 8px)) + ${urlBarOffset}px)` : 32,
-            paddingRight: isMobile ? 14 : 40,
-            paddingBottom: isMobile ? 100 : 32,
-            paddingLeft: isMobile ? 14 : 40,
+            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -2575,8 +2597,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             flexShrink: 0,
             background: c.bg,
             borderBottom: "1px solid " + c.border,
-            paddingTop: isMobile ? `calc(10px + max(8px, env(safe-area-inset-top, 8px)) + ${urlBarOffset}px)` : 20,
-            paddingBottom: 12
+            paddingTop: isMobile ? 10 : 20, paddingBottom: 12
           }}>
             <div style={{
               maxWidth: 960,
@@ -3927,14 +3948,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
-              {/* Mobile: theme + language toggles + logout (sidebar/top bar hidden on mobile) */}
+              {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
               {isMobile && (
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{t.account || (lang === "nl" ? "Account" : "Account")}</div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <ThemeToggle />
-                    <LangToggle lang={lang} setLang={setLang} />
-                  </div>
                   <button
                     className="btn-ghost"
                     style={{ width: "100%", padding: "12px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", color: c.textLabel }}
