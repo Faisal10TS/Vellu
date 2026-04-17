@@ -828,7 +828,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 </div>
               ); })()}
-              )}
 
               <div className="profile-services-grid">
                 {profileFilteredServices.map(s => (
