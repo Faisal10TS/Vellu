@@ -489,20 +489,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   });
   const [saved, setSaved] = useState(false);
 
-  // iOS Safari: on initial load the URL bar is expanded and overlaps the viewport.
-  // visualViewport.offsetTop returns 0 in Safari browser mode (Safari draws the URL bar
-  // over content without shifting the visual viewport), so JS can't detect the overlap.
-  // Hardcode 60px initial offset — enough to clear the URL bar — and clear it on the
-  // first scroll/touch, which is also when iOS collapses the URL bar to a pill.
-  const [urlBarOffset, setUrlBarOffset] = useState(60);
+  // iOS Safari: URL bar is expanded on initial load and overlaps content. Safari doesn't
+  // shift the visual viewport (offsetTop stays 0), so JS can't measure the overlap directly.
+  // BUT visualViewport.height DOES grow when the URL bar collapses — watch for that instead.
+  // Start with a generous 160px offset (big enough to clear the expanded URL bar on iPhones),
+  // then zero it out the moment visualViewport.height increases, which is exactly when the
+  // URL bar collapses to a pill.
+  const [urlBarOffset, setUrlBarOffset] = useState(160);
   useEffect(() => {
-    const clear = () => setUrlBarOffset(0);
-    window.addEventListener("scroll", clear, { once: true, passive: true });
-    window.addEventListener("touchstart", clear, { once: true, passive: true });
-    return () => {
-      window.removeEventListener("scroll", clear);
-      window.removeEventListener("touchstart", clear);
+    const vv = window.visualViewport;
+    if (!vv) { setUrlBarOffset(0); return; }
+    let initialHeight = vv.height;
+    const onResize = () => {
+      if (vv.height > initialHeight + 20) setUrlBarOffset(0);
     };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
   }, []);
 
   const toast = useToast();
