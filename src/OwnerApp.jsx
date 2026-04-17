@@ -1097,7 +1097,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              paddingTop: "max(8px, env(safe-area-inset-top, 8px))",
+              // iOS Safari viewport-fit=cover puts document top at device top (behind URL bar).
+              // `100lvh - 100dvh` equals the hidden browser chrome height (URL bar when shown, 0 when collapsed).
+              // Add it on top of safe-area-inset so the header clears the URL bar on initial load.
+              paddingTop: "calc(max(8px, env(safe-area-inset-top, 8px)) + (100lvh - 100dvh))",
               paddingBottom: 8,
               paddingLeft: 14,
               paddingRight: 14,
@@ -3927,6 +3930,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </button>
                 </div>
               </div>
+
+              {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
+              {isMobile && (
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{t.account || (lang === "nl" ? "Account" : "Account")}</div>
+                  <button
+                    className="btn-ghost"
+                    style={{ width: "100%", padding: "12px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", color: c.textLabel }}
+                    onClick={onLogout}
+                  >
+                    <NavIcon name="logout" size={14} color={c.textLabel} />
+                    {t.logout}
+                  </button>
+                </div>
+              )}
               </>}
 
             </div>
