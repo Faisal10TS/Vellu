@@ -499,9 +499,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const vv = window.visualViewport;
     if (!vv) return;
     const measure = () => {
-      const invisible = window.screen.height - vv.height;
-      // Expanded URL bar takes ~100-150px more than the collapsed pill. Threshold 100 separates them.
-      setUrlBarOffset(invisible > 100 ? 130 : 0);
+      // Ratio of visible viewport to full screen. With URL bar expanded this drops below
+      // ~0.78 on iPhones; pill-state stays above. Threshold on ratio instead of absolute
+      // pixels so it works across device sizes.
+      const ratio = vv.height / (window.screen.height || vv.height);
+      setUrlBarOffset(ratio < 0.78 ? 80 : 0);
     };
     measure();
     vv.addEventListener("resize", measure);
