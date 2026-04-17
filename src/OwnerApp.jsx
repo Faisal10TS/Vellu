@@ -488,6 +488,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     };
   });
   const [saved, setSaved] = useState(false);
+
+  // iOS Safari: on initial load the URL bar is expanded and overlaps the layout viewport.
+  // `visualViewport.offsetTop` equals that overlap in px. Read it once after first paint,
+  // apply as extra paddingTop on the mobile header, then clear on the first user interaction
+  // (scroll or touchstart) since that collapses the URL bar. Continuous tracking caused
+  // bugs before — one-shot is stable.
+  const [urlBarOffset, setUrlBarOffset] = useState(0);
+  useEffect(() => {
+    if (!window.visualViewport) return;
+    const raf = requestAnimationFrame(() => {
+      const offset = window.visualViewport.offsetTop || 0;
+      if (offset > 0) setUrlBarOffset(offset);
+    });
+    const clear = () => setUrlBarOffset(0);
+    window.addEventListener("scroll", clear, { once: true, passive: true });
+    window.addEventListener("touchstart", clear, { once: true, passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", clear);
+      window.removeEventListener("touchstart", clear);
+    };
+  }, []);
+
   const toast = useToast();
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -1097,7 +1120,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              paddingTop: "max(8px, env(safe-area-inset-top, 8px))",
+              paddingTop: `calc(max(8px, env(safe-area-inset-top, 8px)) + ${urlBarOffset}px)`,
               paddingBottom: 8,
               paddingLeft: 14,
               paddingRight: 14,
