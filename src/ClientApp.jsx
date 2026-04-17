@@ -228,6 +228,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
   const profileTabsBarRef = useRef(null);
+  const mobileBarRef = useRef(null);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
 
@@ -256,6 +257,30 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
+  }, [mode]);
+
+  // Pin mobile Boeken bar to the VISUAL viewport bottom (iOS Safari)
+  // position:fixed is relative to layout viewport, which disagrees with the
+  // visual viewport while the URL/tab bar shows/hides. Manually compensate.
+  useEffect(() => {
+    if (mode !== "profile") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const bar = mobileBarRef.current;
+      if (!bar) return;
+      const offset = window.innerHeight - vv.height - vv.offsetTop;
+      bar.style.transform = offset > 0 ? `translateY(-${offset}px)` : "";
+    };
+    vv.addEventListener("scroll", update);
+    vv.addEventListener("resize", update);
+    window.addEventListener("scroll", update, { passive: true });
+    update();
+    return () => {
+      vv.removeEventListener("scroll", update);
+      vv.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update);
+    };
   }, [mode]);
 
   // Auto-scroll the tab bar so the active tab is visible
@@ -1275,9 +1300,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         </div>
         </div> {/* close profile-scroll-area */}
 
-        {/* ═══ MOBILE BOOK BAR — portaled to body so no ancestor can break position:fixed ═══ */}
+        {/* ═══ MOBILE BOOK BAR — portaled to body + pinned via visualViewport API ═══ */}
         {createPortal(
-          <div className="profile-mobile-bar">
+          <div className="profile-mobile-bar" ref={mobileBarRef}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{initialSalon.name}</div>
               {avgRating && (
