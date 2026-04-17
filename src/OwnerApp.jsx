@@ -495,7 +495,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Start with a generous 160px offset (big enough to clear the expanded URL bar on iPhones),
   // then zero it out the moment visualViewport.height increases, which is exactly when the
   // URL bar collapses to a pill.
-  const [urlBarOffset, setUrlBarOffset] = useState(130);
+  const [urlBarOffset, setUrlBarOffset] = useState(70);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) { setUrlBarOffset(0); return; }
