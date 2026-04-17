@@ -494,22 +494,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // comparing visualViewport.height to the device screen height. Large gap = expanded =
   // apply a buffer so the header sits below the URL bar. When the user taps/scrolls and
   // the URL bar collapses, visualViewport.resize fires and we re-measure → buffer goes to 0.
-  const [urlBarOffset, setUrlBarOffset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const measure = () => {
-      // Ratio of visible viewport to full screen. With URL bar expanded this drops below
-      // ~0.78 on iPhones; pill-state stays above. Threshold on ratio instead of absolute
-      // pixels so it works across device sizes.
-      const ratio = vv.height / (window.screen.height || vv.height);
-      setUrlBarOffset(ratio < 0.78 ? 40 : 0);
-    };
-    measure();
-    vv.addEventListener("resize", measure);
-    return () => vv.removeEventListener("resize", measure);
-  }, []);
-
   const toast = useToast();
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -1015,8 +999,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{
         background: c.bg,
-        height: "100dvh",
-        overflow: "hidden",
+        minHeight: "100dvh",
         display: "flex",
         fontFamily: "'Jost',sans-serif",
         color: c.text
@@ -1112,14 +1095,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
-          minHeight: 0,
-          marginLeft: isMobile ? 0 : 260,
-          overflow: "hidden"
+          marginLeft: isMobile ? 0 : 260
         }}>
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              paddingTop: `calc(max(8px, env(safe-area-inset-top, 8px)) + ${urlBarOffset}px)`,
+              position: "sticky",
+              top: 0,
+              zIndex: 50,
+              paddingTop: "max(8px, env(safe-area-inset-top, 8px))",
               paddingBottom: 8,
               paddingLeft: 14,
               paddingRight: 14,
@@ -1128,8 +1112,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               alignItems: "center",
               background: c.bg,
               borderBottom: `1px solid ${c.border}`,
-              gap: 8,
-              flexShrink: 0
+              gap: 8
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, letterSpacing: "0.06em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
@@ -1182,17 +1165,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
           )}
 
-          {/* Scrollable Content (settings has its own scroll -- see below) */}
+          {/* Content — flows with natural body scroll (settings has its own structure below) */}
           {view !== "instellingen" ? (
           <div style={{
-            flex: 1,
-            minHeight: 0,
-            overflowX: "hidden",
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
-            overscrollBehavior: "contain",
             minWidth: 0,
-            padding: isMobile ? "14px 14px 80px" : "32px 40px 32px",
+            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -2628,11 +2605,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
 
           <div style={{
-            flex: 1,
-            minHeight: 0,
-            overflow: "auto",
-            WebkitOverflowScrolling: "touch",
-            padding: isMobile ? "16px 0 140px" : "16px 0 100px",
+            padding: isMobile ? "16px 0 160px" : "16px 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
