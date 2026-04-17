@@ -1193,13 +1193,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             overscrollBehavior: "contain",
             minWidth: 0,
             padding: isMobile ? "14px 14px 80px" : "32px 40px 32px",
-            backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`,
-            // Make inner content fill the scroll area so there's no visible empty space
-            // between the last card and the fixed bottom nav when content is short.
-            display: "flex",
-            flexDirection: "column"
+            backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
-          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
@@ -2595,7 +2590,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
           )}
 
-          </div>
           </div>
           ) : (
           /* INSTELLINGEN -- own scroll area with pinned save button */
