@@ -4030,7 +4030,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             left: 0,
             right: 0,
             background: c.bg,
-            borderTop: "1px solid " + c.border,
             display: "flex",
             padding: "12px 4px 8px",
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
