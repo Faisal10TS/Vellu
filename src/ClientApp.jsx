@@ -228,7 +228,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
   const profileTabsBarRef = useRef(null);
-  const mobileBarRef = useRef(null);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
 
@@ -259,40 +258,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return () => window.removeEventListener("scroll", onScroll);
   }, [mode]);
 
-  // Pin mobile Boeken bar to the VISUAL viewport bottom (iOS Safari).
-  // position:fixed is relative to the LAYOUT viewport, which disagrees with
-  // the visual viewport while Safari's URL/tab chrome animates. We directly
-  // compute the bar's top from visualViewport so it always sits at the
-  // actual visible bottom.
-  useEffect(() => {
-    if (mode !== "profile") return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let rafId = 0;
-    const apply = () => {
-      const bar = mobileBarRef.current;
-      if (!bar) return;
-      const h = bar.offsetHeight;
-      bar.style.top = `${vv.offsetTop + vv.height - h}px`;
-      bar.style.left = `${vv.offsetLeft}px`;
-      bar.style.width = `${vv.width}px`;
-      bar.style.bottom = "auto";
-    };
-    const schedule = () => {
-      if (rafId) return;
-      rafId = requestAnimationFrame(() => { rafId = 0; apply(); });
-    };
-    vv.addEventListener("scroll", schedule);
-    vv.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, { passive: true });
-    apply();
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      vv.removeEventListener("scroll", schedule);
-      vv.removeEventListener("resize", schedule);
-      window.removeEventListener("scroll", schedule);
-    };
-  }, [mode]);
 
   // Auto-scroll the tab bar so the active tab is visible
   useEffect(() => {
@@ -1311,19 +1276,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         </div>
         </div> {/* close profile-scroll-area */}
 
-        {/* ═══ MOBILE BOOK BAR — portaled to body + pinned via visualViewport API ═══ */}
+        {/* ═══ MOBILE FLOATING BOEKEN PILL — same pattern as settings save pill ═══ */}
         {createPortal(
-          <div className="profile-mobile-bar" ref={mobileBarRef}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{initialSalon.name}</div>
-              {avgRating && (
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-                  <StarRow rating={Math.round(parseFloat(avgRating))} size={11} />
-                  <span style={{ fontSize: 12, color: c.textLabel }}>{avgRating}</span>
-                </div>
-              )}
-            </div>
-            <button className="profile-book-btn" style={{ width: "auto", padding: "11px 28px", marginTop: 0 }} onClick={() => enterBooking()}>{t.book}</button>
+          <div className="profile-mobile-pill-wrap">
+            <button className="profile-mobile-pill" onClick={() => enterBooking()}>{t.book}</button>
           </div>,
           document.body
         )}

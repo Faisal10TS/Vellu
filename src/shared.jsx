@@ -1240,14 +1240,21 @@ const makeCSS = (accent, c = THEMES.dark) => `
   }
   .profile-contact-row a { color: ${c.textSub}; text-decoration: underline; }
 
-  /* Mobile bottom bar */
-  .profile-mobile-bar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom));
-    background: ${c.bg};
-    border-top: 1px solid ${c.border}; z-index: 100;
-    display: none; gap: 12px; align-items: center;
+  /* Mobile floating Boeken pill — same pattern as settings save pill */
+  .profile-mobile-pill-wrap {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    display: none; justify-content: center; z-index: 100;
+    pointer-events: none;
   }
+  .profile-mobile-pill {
+    background: ${accent}; color: ${c.btnOnDark}; border: none; border-radius: 100px;
+    padding: 14px 40px; font-family: 'Jost',sans-serif; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+    pointer-events: auto;
+    box-shadow: 0 4px 20px ${accent}55, 0 10px 32px rgba(0,0,0,0.55);
+  }
+  .profile-mobile-pill:active { transform: scale(0.97); }
 
   /* Category pills */
   .profile-cat-pill {
@@ -1278,7 +1285,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
     .profile-main { border-right: none; padding: 0 18px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
-    .profile-mobile-bar { display: flex; }
+    .profile-mobile-pill-wrap { display: flex; }
     .profile-section { scroll-margin-top: 52px; }
     .profile-reviews-summary { flex-direction: column-reverse; gap: 16px; }
     .profile-rating-big { min-width: 0; width: 100%; flex-direction: row; padding: 14px 18px; gap: 14px; justify-content: center; }
