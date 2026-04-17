@@ -64,6 +64,10 @@ function ThemeProvider({ children }) {
     document.body.style.background = bg;
     const root = document.getElementById("root");
     if (root) root.style.background = bg;
+    // Keep Safari's URL-bar tint in sync with the current theme so the URL bar area
+    // blends with the page instead of showing as a dark bar on top of a light page.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", bg);
   }, [theme]);
   return (
     <ThemeContext.Provider value={{ theme, colors: THEMES[theme], toggle }}>
