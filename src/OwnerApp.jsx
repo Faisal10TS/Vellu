@@ -503,7 +503,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // ~0.78 on iPhones; pill-state stays above. Threshold on ratio instead of absolute
       // pixels so it works across device sizes.
       const ratio = vv.height / (window.screen.height || vv.height);
-      setUrlBarOffset(ratio < 0.78 ? 80 : 0);
+      setUrlBarOffset(ratio < 0.78 ? 40 : 0);
     };
     measure();
     vv.addEventListener("resize", measure);
