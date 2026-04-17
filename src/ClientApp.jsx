@@ -259,27 +259,38 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return () => window.removeEventListener("scroll", onScroll);
   }, [mode]);
 
-  // Pin mobile Boeken bar to the VISUAL viewport bottom (iOS Safari)
-  // position:fixed is relative to layout viewport, which disagrees with the
-  // visual viewport while the URL/tab bar shows/hides. Manually compensate.
+  // Pin mobile Boeken bar to the VISUAL viewport bottom (iOS Safari).
+  // position:fixed is relative to the LAYOUT viewport, which disagrees with
+  // the visual viewport while Safari's URL/tab chrome animates. We directly
+  // compute the bar's top from visualViewport so it always sits at the
+  // actual visible bottom.
   useEffect(() => {
     if (mode !== "profile") return;
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => {
+    let rafId = 0;
+    const apply = () => {
       const bar = mobileBarRef.current;
       if (!bar) return;
-      const offset = window.innerHeight - vv.height - vv.offsetTop;
-      bar.style.transform = offset > 0 ? `translateY(-${offset}px)` : "";
+      const h = bar.offsetHeight;
+      bar.style.top = `${vv.offsetTop + vv.height - h}px`;
+      bar.style.left = `${vv.offsetLeft}px`;
+      bar.style.width = `${vv.width}px`;
+      bar.style.bottom = "auto";
     };
-    vv.addEventListener("scroll", update);
-    vv.addEventListener("resize", update);
-    window.addEventListener("scroll", update, { passive: true });
-    update();
+    const schedule = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => { rafId = 0; apply(); });
+    };
+    vv.addEventListener("scroll", schedule);
+    vv.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, { passive: true });
+    apply();
     return () => {
-      vv.removeEventListener("scroll", update);
-      vv.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update);
+      if (rafId) cancelAnimationFrame(rafId);
+      vv.removeEventListener("scroll", schedule);
+      vv.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule);
     };
   }, [mode]);
 
