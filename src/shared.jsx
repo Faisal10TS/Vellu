@@ -1281,7 +1281,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
     .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
     .profile-header-contact { display: none; }
     .profile-root { display: block; height: auto; overflow: visible; }
-    .profile-scroll-area { padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+    .profile-scroll-area { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
     .profile-main { border-right: none; padding: 0 18px; }
     .profile-sidebar { display: none; }
     .profile-body { flex-direction: column; }
