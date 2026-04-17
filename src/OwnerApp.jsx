@@ -1097,10 +1097,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
-              // iOS Safari viewport-fit=cover puts document top at device top (behind URL bar).
-              // `100lvh - 100dvh` measures chrome overlap; clamp to 0–50px to avoid picking up
-              // bottom-toolbar height and overshooting on tall iPhones.
-              paddingTop: "calc(max(8px, env(safe-area-inset-top, 8px)) + clamp(0px, (100lvh - 100dvh), 50px))",
+              paddingTop: "max(8px, env(safe-area-inset-top, 8px))",
               paddingBottom: 8,
               paddingLeft: 14,
               paddingRight: 14,
