@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
@@ -1274,19 +1275,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         </div>
         </div> {/* close profile-scroll-area */}
 
-        {/* ═══ MOBILE BOOK BAR ═══ */}
-        <div className="profile-mobile-bar">
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{initialSalon.name}</div>
-            {avgRating && (
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-                <StarRow rating={Math.round(parseFloat(avgRating))} size={11} />
-                <span style={{ fontSize: 12, color: c.textLabel }}>{avgRating}</span>
-              </div>
-            )}
-          </div>
-          <button className="profile-book-btn" style={{ width: "auto", padding: "11px 28px", marginTop: 0 }} onClick={() => enterBooking()}>{t.book}</button>
-        </div>
+        {/* ═══ MOBILE BOOK BAR — portaled to body so no ancestor can break position:fixed ═══ */}
+        {createPortal(
+          <div className="profile-mobile-bar">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{initialSalon.name}</div>
+              {avgRating && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                  <StarRow rating={Math.round(parseFloat(avgRating))} size={11} />
+                  <span style={{ fontSize: 12, color: c.textLabel }}>{avgRating}</span>
+                </div>
+              )}
+            </div>
+            <button className="profile-book-btn" style={{ width: "auto", padding: "11px 28px", marginTop: 0 }} onClick={() => enterBooking()}>{t.book}</button>
+          </div>,
+          document.body
+        )}
 
         {/* Gallery overlay */}
         {gallery && (
