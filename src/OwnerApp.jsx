@@ -489,23 +489,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   });
   const [saved, setSaved] = useState(false);
 
-  // iOS Safari: on initial load the URL bar is expanded and overlaps the layout viewport.
-  // `visualViewport.offsetTop` equals that overlap in px. Read it once after first paint,
-  // apply as extra paddingTop on the mobile header, then clear on the first user interaction
-  // (scroll or touchstart) since that collapses the URL bar. Continuous tracking caused
-  // bugs before — one-shot is stable.
-  const [urlBarOffset, setUrlBarOffset] = useState(0);
+  // iOS Safari: on initial load the URL bar is expanded and overlaps the viewport.
+  // visualViewport.offsetTop returns 0 in Safari browser mode (Safari draws the URL bar
+  // over content without shifting the visual viewport), so JS can't detect the overlap.
+  // Hardcode 60px initial offset — enough to clear the URL bar — and clear it on the
+  // first scroll/touch, which is also when iOS collapses the URL bar to a pill.
+  const [urlBarOffset, setUrlBarOffset] = useState(60);
   useEffect(() => {
-    if (!window.visualViewport) return;
-    const raf = requestAnimationFrame(() => {
-      const offset = window.visualViewport.offsetTop || 0;
-      if (offset > 0) setUrlBarOffset(offset);
-    });
     const clear = () => setUrlBarOffset(0);
     window.addEventListener("scroll", clear, { once: true, passive: true });
     window.addEventListener("touchstart", clear, { once: true, passive: true });
     return () => {
-      cancelAnimationFrame(raf);
       window.removeEventListener("scroll", clear);
       window.removeEventListener("touchstart", clear);
     };
