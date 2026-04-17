@@ -1098,9 +1098,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {isMobile && (
             <div style={{
               // iOS Safari viewport-fit=cover puts document top at device top (behind URL bar).
-              // `100lvh - 100dvh` equals the hidden browser chrome height (URL bar when shown, 0 when collapsed).
-              // Add it on top of safe-area-inset so the header clears the URL bar on initial load.
-              paddingTop: "calc(max(8px, env(safe-area-inset-top, 8px)) + (100lvh - 100dvh))",
+              // `100lvh - 100dvh` measures chrome overlap; clamp to 0–50px to avoid picking up
+              // bottom-toolbar height and overshooting on tall iPhones.
+              paddingTop: "calc(max(8px, env(safe-area-inset-top, 8px)) + clamp(0px, (100lvh - 100dvh), 50px))",
               paddingBottom: 8,
               paddingLeft: 14,
               paddingRight: 14,
