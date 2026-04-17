@@ -814,12 +814,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <section ref={el => profileSectionRefs.current.services = el} className="profile-section">
               <h2 className="profile-section-title">{t.profileServices}</h2>
               
-              {categories.length > 0 && (
+              {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
                 <div className="profile-cat-scroll">
                   <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14 }}>
                     <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
                       onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
-                    {categories.map(cat => (
+                    {usedCats.map(cat => (
                       <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
                         onClick={() => setProfileCategory(cat.id)}>
                         {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
@@ -827,6 +827,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     ))}
                   </div>
                 </div>
+              ); })()}
               )}
 
               <div className="profile-services-grid">
@@ -1531,11 +1532,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                 
                 {/* Category tabs */}
-                {categories.length > 0 && (
+                {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
                   <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 8 }}>
-                    <div 
+                    <div
                       onClick={() => setActiveCategory("all")}
-                      style={{ 
+                      style={{
                         padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
                         background: activeCategory === "all" ? accent : c.inputBg,
                         border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
@@ -1543,7 +1544,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         fontSize: 12, fontWeight: 500, transition: "all 0.2s"
                       }}
                     >{t.allCategories}</div>
-                    {categories.map(cat => (
+                    {usedCats.map(cat => (
                       <div 
                         key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
@@ -1557,7 +1558,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                     ))}
                   </div>
-                )}
+                ); })()}
 
                 {/* Selected services counter */}
                 {selectedServices.length > 0 && (
@@ -2210,11 +2211,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                     
                     {/* Category tabs */}
-                    {categories.length > 0 && (
+                    {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
                       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6 }}>
-                        <div 
+                        <div
                           onClick={() => setActiveCategory("all")}
-                          style={{ 
+                          style={{
                             padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
                             background: activeCategory === "all" ? accent : c.inputBg,
                             border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
@@ -2222,11 +2223,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             fontSize: 11, fontWeight: 500, transition: "all 0.2s"
                           }}
                         >{t.allCategories}</div>
-                        {categories.map(cat => (
-                          <div 
+                        {usedCats.map(cat => (
+                          <div
                             key={cat.id}
                             onClick={() => setActiveCategory(cat.id)}
-                            style={{ 
+                            style={{
                               padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
                               background: activeCategory === cat.id ? accent : c.inputBg,
                               border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
@@ -2236,7 +2237,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                         ))}
                       </div>
-                    )}
+                    ); })()}
 
                     {/* Selected services counter */}
                     {selectedServices.length > 0 && (
