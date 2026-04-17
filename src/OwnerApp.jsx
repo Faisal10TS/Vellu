@@ -2572,52 +2572,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           ) : (
           /* INSTELLINGEN -- own scroll area with pinned save button */
           <>
+          {/* Settings tabs — pinned above scroll area (flex sibling), always visible under the header */}
+          <div style={{
+            flexShrink: 0,
+            background: c.bg,
+            borderBottom: "1px solid " + c.border,
+            paddingTop: isMobile ? 10 : 20, paddingBottom: 12
+          }}>
+            <div style={{
+              maxWidth: 960,
+              margin: "0 auto",
+              padding: isMobile ? "0 14px" : "0 40px",
+              display: "flex", gap: 6, overflowX: "auto",
+              WebkitOverflowScrolling: "touch"
+            }}>
+              {[
+                ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
+                ["diensten", "diensten", t.services],
+                ["team", "team", lang === "nl" ? "Team" : "Team"],
+                ["planning", "planning", lang === "nl" ? "Planning" : "Schedule"],
+                ["facturatie", "overig", lang === "nl" ? "Overig" : "Other"],
+              ].map(([key, icon, label]) => (
+                <div key={key} onClick={() => setSettingsTab(key)} style={{
+                  padding: "8px 16px", borderRadius: 12, cursor: "pointer", whiteSpace: "nowrap",
+                  fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", transition: "all 0.2s",
+                  background: settingsTab === key ? `${accent}15` : "transparent",
+                  color: settingsTab === key ? accent : c.textSub,
+                  border: `1px solid ${settingsTab === key ? `${accent}33` : "transparent"}`,
+                  display: "flex", alignItems: "center", gap: 6
+                }}><NavIcon name={icon} size={14} color={settingsTab === key ? accent : c.textSub} /> {label}</div>
+              ))}
+            </div>
+          </div>
+
           <div style={{
             flex: 1,
             minHeight: 0,
             overflow: "auto",
             WebkitOverflowScrolling: "touch",
-            // No horizontal padding on the scroll container — the sticky tab bar
-            // spans edge-to-edge so its border-bottom can match the desktop header's
-            // full-width line. Content underneath (fade-up) applies its own padding.
-            padding: isMobile ? "30px 0 160px" : "0 0 100px",
+            padding: isMobile ? "16px 0 160px" : "16px 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
-
-            {/* Settings tabs — sticky + full-width border to match Instellingen header */}
-            <div style={{
-              position: "sticky", top: 0, zIndex: 20,
-              background: c.bg,
-              borderBottom: "1px solid " + c.border,
-              paddingTop: isMobile ? 14 : 20, paddingBottom: 12,
-              boxShadow: `0 16px 0 0 ${c.bg}`,
-              marginBottom: 16
-            }}>
-              <div style={{
-                maxWidth: 960,
-                margin: "0 auto",
-                padding: isMobile ? "0 14px" : "0 40px",
-                display: "flex", gap: 6, overflowX: "auto",
-                WebkitOverflowScrolling: "touch"
-              }}>
-                {[
-                  ["salon", "salon", lang === "nl" ? "Salon" : "Salon"],
-                  ["diensten", "diensten", t.services],
-                  ["team", "team", lang === "nl" ? "Team" : "Team"],
-                  ["planning", "planning", lang === "nl" ? "Planning" : "Schedule"],
-                  ["facturatie", "overig", lang === "nl" ? "Overig" : "Other"],
-                ].map(([key, icon, label]) => (
-                  <div key={key} onClick={() => setSettingsTab(key)} style={{
-                    padding: "8px 16px", borderRadius: 12, cursor: "pointer", whiteSpace: "nowrap",
-                    fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", transition: "all 0.2s",
-                    background: settingsTab === key ? `${accent}15` : "transparent",
-                    color: settingsTab === key ? accent : c.textSub,
-                    border: `1px solid ${settingsTab === key ? `${accent}33` : "transparent"}`,
-                    display: "flex", alignItems: "center", gap: 6
-                  }}><NavIcon name={icon} size={14} color={settingsTab === key ? accent : c.textSub} /> {label}</div>
-                ))}
-              </div>
-            </div>
 
             <div className="fade-up" style={{
               maxWidth: 960,
