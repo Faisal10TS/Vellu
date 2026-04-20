@@ -686,10 +686,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             };
           }
         });
-        // Also try to get full client records for these emails for most up-to-date info
+        // Also try to get full client records for these emails for most up-to-date info.
+        // Security: scope by owner_id so we only pull OUR salon's client records, not
+        // rows belonging to another salon whose client shares an email.
         const emails = Object.keys(uniqueClients);
         if (emails.length > 0) {
-          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails);
+          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails).eq("owner_id", salonData.owner_id);
           if (fullClients) {
             fullClients.forEach(cl => {
               uniqueClients[cl.email] = { ...uniqueClients[cl.email], ...cl };
@@ -4160,20 +4162,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "") + (staffMember ? ` (${staffMember.name})` : "") : "";
                     const price = variant ? variant.price : (svc?.price || 0);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
-                    // Save client
-                    const email = addApptForm.client_email.toLowerCase();
+                    // Save client — scope by owner_id so we don't pull another salon's client row.
+                    const email = addApptForm.client_email.toLowerCase().trim();
+                    const nameTrim = addApptForm.client_name.trim();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).eq("owner_id", salonData.owner_id).maybeSingle();
                     if (existing) { clientId = existing.id; }
                     else {
-                      const nameParts = addApptForm.client_name.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0], last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      const nameParts = nameTrim.split(" ");
+                      const { data: nc } = await supabase.from("clients").insert({ owner_id: salonData.owner_id, email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
                       if (nc) clientId = nc.id;
+                    }
+                    // Data integrity: abort if the selected service disappeared between pick and submit.
+                    // Never fall back to client_name — that corrupts invoices and analytics.
+                    if (!svc || !svcLabel) {
+                      toast.show(lang === "nl" ? "Dienst niet gevonden — herlaad de pagina" : "Service not found — please reload", "error");
+                      return;
                     }
                     // Insert appointment
                     const apptData = {
-                      owner_id: salonData.owner_id, service_id: svc?.id, client_id: clientId,
-                      service_name: svcLabel || addApptForm.client_name,
+                      owner_id: salonData.owner_id, service_id: svc.id, client_id: clientId,
+                      service_name: svcLabel,
                       service_price: price, service_duration: duration,
                       date: addApptForm.date, time: addApptForm.time,
                       client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,

@@ -136,8 +136,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
-    const { error } = await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id);
-    if (error) return;
+    const { error } = await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
     setMyStaff(s => ({...s, working_hours: whForm}));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
@@ -199,7 +199,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const staffDeletePhoto = async (serviceId, photoId, photoUrl) => {
-    await supabase.from("service_photos").delete().eq("id", photoId);
+    const { error } = await supabase.from("service_photos").delete().eq("id", photoId).eq("owner_id", salonProfile.id);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
     const urlParts = photoUrl.split("/service-photos/");
     if (urlParts[1]) await supabase.storage.from("service-photos").remove([urlParts[1]]);
     setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: (s.photos||[]).filter(p => p.id !== photoId)} : s));
@@ -222,10 +223,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_btw: invoiceForm.btw_id || salonProfile.btw_id || "",
         salon_iban: invoiceForm.iban || salonProfile.iban || ""
       });
-      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id).eq("owner_id", salonProfile.id);
       // Auto-increment invoice number
       const nextNum = (invoiceForm.next_invoice_number || 1) + 1;
-      await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id);
+      await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
       setInvoiceForm(f => ({ ...f, next_invoice_number: nextNum }));
       setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
       toast.show(lang === "nl" ? "Factuur verstuurd" : "Invoice sent");
@@ -1307,11 +1308,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </div>
                   <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
-                    await supabase.from("staff_members").update({
+                    const { error } = await supabase.from("staff_members").update({
                       address: invoiceForm.address || null, kvk_number: invoiceForm.kvk_number || null,
                       btw_id: invoiceForm.btw_id || null, iban: invoiceForm.iban || null,
                       invoice_prefix: invoiceForm.invoice_prefix || "INV", next_invoice_number: invoiceForm.next_invoice_number || 1
-                    }).eq("id", staffMember.id);
+                    }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
+                    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
                     setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
                   }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}</button>
                 </div>
@@ -1362,7 +1364,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
                               <button className="btn-primary" style={{ flex: 1, padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => {
-                                await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                                const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id).eq("owner_id", salonProfile.id);
+                                if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
                                 setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
                                 setEditingSvc(null);
                               }}><NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}</button>
@@ -1424,7 +1427,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
-                                        <button onClick={async () => { await supabase.from("service_variants").delete().eq("id", v.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
+                                        <button onClick={async () => { const { error } = await supabase.from("service_variants").delete().eq("id", v.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="xmark" size={11} color="currentColor" />
                                         </button>
@@ -1447,7 +1450,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                       <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
                                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
-                                      <button onClick={async () => { await supabase.from("service_extras").delete().eq("id", e.id); setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
+                                      <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
                                         style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         <NavIcon name="xmark" size={11} color="currentColor" />
                                       </button>
@@ -1564,13 +1567,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + variant.name_nl : "") + ` (${myStaff.name})` : "";
                     const price = variant ? variant.price : (svc?.price || 0);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
-                    const email = addApptForm.client_email.toLowerCase();
+                    const email = addApptForm.client_email.toLowerCase().trim();
+                    const nameTrim = addApptForm.client_name.trim();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
+                    // Security: scope client lookups/inserts by owner_id so we don't pull
+                    // or create rows for another salon's client with the same email.
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).eq("owner_id", salonProfile.id).maybeSingle();
                     if (existing) clientId = existing.id;
                     else {
-                      const nameParts = addApptForm.client_name.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0], last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      const nameParts = nameTrim.split(" ");
+                      const { data: nc } = await supabase.from("clients").insert({ owner_id: salonProfile.id, email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
                       if (nc) clientId = nc.id;
                     }
                     const apptData = {

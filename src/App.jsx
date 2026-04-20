@@ -63,7 +63,14 @@ function OwnerEntryPage({ lang, setLang }) {
   const handleLogin = async (u) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      // Check staff FIRST
+      // Prefer OWNER role when the user is both. An owner whose email is also linked as
+      // staff at another salon should land on their own dashboard, not be forced into
+      // that other salon's staff view where they could edit its data.
+      const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
+      if (ownerProfile) {
+        setOwner(u);
+        return;
+      }
       const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
       if (staffMember) {
         const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
@@ -92,7 +99,9 @@ function OwnerEntryPage({ lang, setLang }) {
   if (staffUser) return <Navigate to="/staff" replace />;
 
   // Check if plan is active
-  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at + (owner.plan_expires_at.length === 10 ? "T23:59:59" : "")) > new Date());
+  // If plan_expires_at is a date-only string (YYYY-MM-DD) the plan is valid through the END of that day.
+  // If it's a full timestamp, use it as-is — do NOT special-case only length===10.
+  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(typeof owner.plan_expires_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(owner.plan_expires_at) ? owner.plan_expires_at + "T23:59:59" : owner.plan_expires_at) > new Date());
 
   if (owner && !hasPlan) {
     return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
@@ -253,7 +262,9 @@ function SalonRoute({ lang, setLang }) {
     </div>
   );
 
-  return <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} reviewEmail={new URLSearchParams(window.location.search).get("email") || ""} />;
+  // Security: never trust an ?email= URL param for reviews — anyone can craft a URL to
+  // impersonate a victim. If we want pre-fill, it must come from a signed token later.
+  return <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} reviewEmail="" />;
 }
 
 // ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────
@@ -450,7 +461,9 @@ function AppInner({ lang, setLang }) {
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
       {screen === "owner" && (() => {
-        const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(owner.plan_expires_at + (owner.plan_expires_at.length === 10 ? "T23:59:59" : "")) > new Date());
+        // If plan_expires_at is a date-only string (YYYY-MM-DD) the plan is valid through the END of that day.
+  // If it's a full timestamp, use it as-is — do NOT special-case only length===10.
+  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(typeof owner.plan_expires_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(owner.plan_expires_at) ? owner.plan_expires_at + "T23:59:59" : owner.plan_expires_at) > new Date());
         if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
         return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}

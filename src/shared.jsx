@@ -822,7 +822,12 @@ const T = {
 
 
 // ─── CSS ─────────────────────────────────────────────────────
-const makeCSS = (accent, c = THEMES.dark) => `
+// Security: accent is interpolated directly into a CSS template literal. A malicious
+// value like `#fff;}body{display:none` would break out of declarations and inject
+// arbitrary rules. Strictly validate as a hex color (3/4/6/8 digits) before use, and
+// fall back to the default accent if anything else is passed.
+const _sanitizeAccent = (a) => (typeof a === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.trim())) ? a.trim() : ACCENT;
+const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent(rawAccent); return `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; }
   body { overscroll-behavior: none; overflow-x: clip; }
@@ -1298,7 +1303,7 @@ const makeCSS = (accent, c = THEMES.dark) => `
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
-`;
+`; };
 
 // ─── SHARED ───────────────────────────────────────────────────
 // Layout wrapper - full-screen responsive (replaces old Phone component)
