@@ -163,9 +163,10 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
 function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
-  // Reserved routes go to main app
-  if (slug === "owner" || slug === "staff" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "contact" || slug === "dpa") {
-    return <AppInner />;
+  // Reserved routes go to main app — pass lang/setLang down so the Landing/Legal pages
+  // inside AppInner don't receive undefined and crash on T[lang].
+  if (slug === "owner" || slug === "staff" || slug === "login" || slug === "admin" || slug === "privacy" || slug === "terms" || slug === "voorwaarden" || slug === "contact" || slug === "dpa") {
+    return <AppInner lang={lang} setLang={setLang} />;
   }
   return <SalonRoute lang={lang} setLang={setLang} />;
 }
@@ -547,6 +548,8 @@ export default function VelluApp() {
               <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
               <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
               <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
+              {/* Dutch alias — Vellu is NL-first so /voorwaarden must work */}
+              <Route path="/voorwaarden" element={<TermsPage lang={lang} setLang={setLang} />} />
               <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
               <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
               <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />

@@ -403,7 +403,10 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const handleReset = async () => {
     if (!form.email) { setError(t.fillEmail); return; }
     setLoading(true); setError("");
-    const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo: "https://vellu.cc/owner" });
+    // Use the current origin so password-reset links work from localhost/staging too,
+    // not only from production.
+    const redirectTo = `${window.location.origin}/owner`;
+    const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo });
     if (error) { setError(error.message); } else { setResetSent(true); }
     setLoading(false);
   };
@@ -450,7 +453,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         accent_color: "#c9a96e",
         account_type: form.accountType || "joint"
       });
-      if (profileError) { setError(profileError.message); setLoading(false); return; }
+      if (profileError) {
+        // Profile insert failed — sign the half-registered auth user out so they aren't
+        // stranded in a state where OwnerEntryPage can never find their profile.
+        await supabase.auth.signOut();
+        setError(lang === "nl" ? "Profiel aanmaken mislukt. Probeer het opnieuw." : "Could not create profile. Please try again.");
+        setLoading(false);
+        return;
+      }
       onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });

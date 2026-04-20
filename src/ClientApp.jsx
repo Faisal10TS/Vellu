@@ -60,7 +60,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
           <span key={s} onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} style={{ fontSize: 26, cursor: "pointer", color: s <= (hoverRating || rating) ? accent : c.textMuted, transition: "all 0.15s", transform: s <= (hoverRating || rating) ? "scale(1.1)" : "none" }}>★</span>
         ))}
       </div>
-      <textarea className="input-field" placeholder={t.reviewComment} value={comment} onChange={e => setComment(e.target.value)}
+      <textarea className="input-field" placeholder={t.reviewComment} value={comment} maxLength={1000} onChange={e => setComment(e.target.value.slice(0, 1000))}
         style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
       {reviewError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8, textAlign: "center" }}>{reviewError}</div>}
       <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
@@ -78,8 +78,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const MON = lang === "nl" ? MON_NL : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
 
-
-
+  // Security: salon_instagram is owner-controlled text. Before interpolating it into an
+  // href, strip to the charset Instagram allows for handles (alphanumeric, ., _). This
+  // prevents the owner from injecting `javascript:` URLs or path traversal against their
+  // own customers.
+  const igHandle = (raw) => {
+    if (!raw || typeof raw !== "string") return "";
+    const stripped = raw.replace(/^@/, "").match(/^[a-zA-Z0-9._]{1,30}/);
+    return stripped ? stripped[0] : "";
+  };
 
 
 
@@ -141,10 +148,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Check if a staff member works on a given day
   const isStaffAvailable = (staffMember, dateStr) => {
     if (!staffMember?.working_hours) return true;
-    const dayOfWeek = new Date(dateStr).getDay();
+    // Parse as local-date to match the rest of the app (avoid UTC-shifted getDay()).
+    const [y, m, d] = (dateStr || "").split("-").map(Number);
+    const dayOfWeek = (y && m && d) ? new Date(y, m - 1, d).getDay() : new Date(dateStr).getDay();
     const staffDay = staffMember.working_hours[dayOfWeek];
     if (!staffDay) {
-      // Day not configured for this staff member — follow salon hours
+      // Day not configured for this staff member — follow salon hours.
       const salonDay = activeHours[dayOfWeek];
       return salonDay ? !salonDay.closed : false;
     }
@@ -228,6 +237,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
   const profileTabsBarRef = useRef(null);
+
+  // When date changes, drop any assigned staff member who isn't available that day and
+  // clear the chosen time. Otherwise the booking could be submitted against a staff
+  // member who doesn't work on the new date.
+  useEffect(() => {
+    setSelectedServices(prev => prev.map(item => item.staff && !isStaffAvailable(item.staff, date) ? { ...item, staff: null } : item));
+    setTime(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
 
@@ -283,7 +301,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Check if form is complete
   const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
   const policyValid = !initialSalon.booking_policy || policyAgreed;
-  const canConfirm = form.firstName && form.lastName && form.email && phoneValid && policyValid;
+  // Basic email validation — lets the UI block submit with an invalid address instead of
+  // sending to the server and silently failing the confirmation email.
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const canConfirm = form.firstName.trim() && form.lastName.trim() && emailValid && phoneValid && policyValid;
+  // Show the user WHY the next button is disabled.
+  const invalidReason = !form.firstName.trim() ? (lang === "nl" ? "Vul je voornaam in" : "Enter your first name")
+    : !form.lastName.trim() ? (lang === "nl" ? "Vul je achternaam in" : "Enter your last name")
+    : !emailValid ? (lang === "nl" ? "Vul een geldig e-mailadres in" : "Enter a valid email address")
+    : !phoneValid ? (lang === "nl" ? "Vul een geldig telefoonnummer in" : "Enter a valid phone number")
+    : !policyValid ? (lang === "nl" ? "Accepteer de voorwaarden" : "Please accept the terms")
+    : "";
 
   // Multi-service helpers
   const getStaffForService = (serviceId) => {
@@ -469,11 +497,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (hasStaffSelection && booked.staff_id && !selectedStaffIds.includes(booked.staff_id)) continue;
       
       const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
-      const bookedDuration = Math.max(booked.service_duration || 30, 30) + breakBuffer;
-      // Check overlap: two ranges [slotStart, slotEnd+break) and [bookedStart, bookedEnd+break)
-      const slotEnd = slotMinutes + myDuration + breakBuffer;
+      const bookedDuration = Math.max(booked.service_duration || 30, 30);
+      // Overlap check with symmetric break buffer on BOTH sides so the break applies
+      // whether the new slot precedes or follows the existing booking. Previously the
+      // buffer was only added to the trailing side, letting back-to-back slots squeak
+      // through the UI that the server would then reject.
+      const slotEnd = slotMinutes + myDuration;
       const bookedEnd = bookedMinutes + bookedDuration;
-      if (slotMinutes < bookedEnd && slotEnd > bookedMinutes) {
+      if (slotMinutes - breakBuffer < bookedEnd && slotEnd + breakBuffer > bookedMinutes) {
         return true;
       }
     }
@@ -513,8 +544,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Confirm booking — calls the book-appointment edge function which validates
   // everything server-side (price, discount, business hours, slot conflict,
   // staff assignment) with service_role. Client code NEVER inserts directly.
+  const submittingRef = useRef(false);
   const confirmBooking = async () => {
-    if (submitting) return;
+    // Synchronous guard via ref — React state updates are batched, so a rapid
+    // double-tap can fire confirmBooking twice before `submitting` flips to true.
+    if (submittingRef.current || submitting) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       // Build the payload. The server recomputes price/duration — we don't
@@ -571,6 +606,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
       setDone(true);
       setSubmitting(false);
+      submittingRef.current = false;
       setSlotsRefreshKey(k => k + 1);
 
       // Fire-and-forget: confirmation email + owner notification + google cal.
@@ -641,6 +677,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -1020,7 +1057,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {initialSalon.salon_instagram && (
                       <div className="profile-contact-row">
                         <NavIcon name="camera" size={14} color={c.textSub} />
-                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                        <a href={`https://instagram.com/${igHandle(initialSalon.salon_instagram)}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
                           {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
                         </a>
                       </div>
@@ -1263,7 +1300,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {initialSalon.salon_instagram && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
                         <NavIcon name="camera" size={13} color={c.textSub} />
-                        <a href={`https://instagram.com/${initialSalon.salon_instagram.replace("@", "")}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
+                        <a href={`https://instagram.com/${igHandle(initialSalon.salon_instagram)}`} target="_blank" rel="noopener noreferrer" style={{ color: c.textSub, textDecoration: "none" }}>
                           {initialSalon.salon_instagram.startsWith("@") ? initialSalon.salon_instagram : "@" + initialSalon.salon_instagram}
                         </a>
                       </div>
@@ -1898,8 +1935,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   )}
                   
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                    <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                    <input className="input-field" type="text" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                    <input className="input-field" type="text" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
                   <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                   <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
@@ -2117,7 +2154,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </button>
               )}
               {step === 3 && (
+                <>
+                {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
                 <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                </>
               )}
               {step === 4 && (
                 <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
@@ -2416,8 +2456,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       )}
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        <input className="input-field" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                        <input className="input-field" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                        <input className="input-field" type="text" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                        <input className="input-field" type="text" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
                       <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                       <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
@@ -2481,6 +2521,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     )}
 
+                    {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
                     <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
                   </>}
 
@@ -2604,8 +2645,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
                 )}
                 {step === 3 && (
-                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
-                    disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    {invalidReason && <div style={{ fontSize: 11, color: c.danger }}>{invalidReason}</div>}
+                    <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
+                      disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                  </div>
                 )}
                 {step === 4 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
