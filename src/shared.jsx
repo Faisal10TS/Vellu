@@ -276,7 +276,15 @@ function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, servi
 }
 
 const getToday = () => new Date();
-const fmt = (d) => d.toISOString().split("T")[0];
+// IMPORTANT: use LOCAL date components. `d.toISOString()` converts to UTC which can
+// shift the date by a day for users east of UTC in the early hours and west of UTC
+// in the late hours — causing bookings to save on the wrong day.
+const fmt = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
 const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];

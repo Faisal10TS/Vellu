@@ -719,15 +719,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
       if (error) return;
-      // Increment client no-show count atomically using rpc or direct SQL
+      // Increment client no-show count. supabase.rpc() always resolves (errors come back
+      // as {error}), so the old .catch() never fired and the fallback was dead. Check
+      // .error explicitly and only fall back if the RPC is missing.
       const appt = salonData.appointments.find(a => a.id === id);
       if (appt?.client_id) {
-        await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id }).catch(() => {
-          // Fallback to non-atomic increment if RPC doesn't exist
-          supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single().then(({ data: client }) => {
-            if (client) supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
-          });
-        });
+        const { error: rpcErr } = await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id });
+        if (rpcErr) {
+          const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).eq("owner_id", salonData.owner_id).single();
+          if (client) await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id).eq("owner_id", salonData.owner_id);
+        }
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
     } finally { setProcessingApptId(null); }
@@ -876,19 +877,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
 
   const exportCalendar = (apptList) => {
+    // Emit UTC times (Z suffix). Previously DTSTART/DTEND were "floating" (no timezone),
+    // which Google/Apple Calendar interpret in the importing device's local time —
+    // an owner traveling abroad would see appointments on wrong hours. UTC is unambiguous.
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmtUTC = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+    const icsStatus = (s) => s === "completed" ? "CONFIRMED" : (s === "cancelled" || s === "no_show" ? "CANCELLED" : "CONFIRMED");
     const events = apptList.map(a => {
       const start = new Date(a.date + "T" + a.time + ":00");
       const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
-      const pad = (n) => String(n).padStart(2, "0");
-      const fmt2 = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
       return [
         "BEGIN:VEVENT",
-        `DTSTART:${fmt2(start)}`,
-        `DTEND:${fmt2(end)}`,
+        `DTSTART:${fmtUTC(start)}`,
+        `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
         `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
         `LOCATION:${salonData.name}, ${salonData.city}`,
-        `STATUS:${a.status === "confirmed" ? "CONFIRMED" : "COMPLETED"}`,
+        `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
         "END:VEVENT"
       ].join("\r\n");
@@ -1204,32 +1209,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* TODAY HERO — the first thing owners want to know */}
               {(() => {
                 const now = new Date();
-                const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-                const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
-                const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
-                const weekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const prevWeekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= prevWeekStart && new Date(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                // Compare date strings, not Date objects. `new Date("2026-04-20")` parses as
+                // UTC midnight, which misclassifies rows at the day boundary for non-UTC users.
+                const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
+                const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+                const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
+                const weekRevenue = appts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const prevWeekRevenue = appts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const monthRevenue = appts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
 
-                // Daily revenue for sparklines
-                const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                // Daily revenue for sparklines — key by the LOCAL-time date string to match a.date.
                 const revByDay = {};
                 appts.forEach(a => {
                   if (a.status !== "completed") return;
-                  const d = new Date(a.date);
-                  revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+                  revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
                 });
                 const weekDaily = [];
                 for (let i = 6; i >= 0; i--) {
-                  const d = new Date(now); d.setDate(now.getDate() - i);
-                  weekDaily.push(revByDay[dayKey(d)] || 0);
+                  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                  weekDaily.push(revByDay[fmt(d)] || 0);
                 }
                 const monthDaily = [];
                 for (let i = 29; i >= 0; i--) {
-                  const d = new Date(now); d.setDate(now.getDate() - i);
-                  monthDaily.push(revByDay[dayKey(d)] || 0);
+                  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                  monthDaily.push(revByDay[fmt(d)] || 0);
                 }
                 const sparkline = (data, color) => {
                   if (!data || data.length < 2) return null;
@@ -1415,25 +1420,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {(() => {
                   const weeks = [];
                   const now = new Date();
+                  // Monday-start weeks to match the agenda (getDay() returns 0=Sun; shift so Monday=0).
+                  const dowMon = (now.getDay() + 6) % 7;
                   for (let w = 7; w >= 0; w--) {
-                    const weekStart = new Date(now);
-                    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
-                    weekStart.setHours(0,0,0,0);
-                    const weekEnd = new Date(weekStart);
-                    weekEnd.setDate(weekStart.getDate() + 7);
+                    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (w * 7 + dowMon));
+                    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
+                    const wsStr = fmt(weekStart); const weStr = fmt(weekEnd);
                     const rev = appts
-                      .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                      .filter(a => a.status === "completed" && a.date >= wsStr && a.date < weStr)
                       .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                     const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                     weeks.push({ label, revenue: rev });
                   }
                   const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
                   const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
-                  const avgWeek = total8w / weeks.length;
-                  const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
+                  // Trend compares halves using only non-zero weeks to avoid flat "—" for new salons.
                   const nonZero = weeks.filter(w => w.revenue > 0);
-                  const firstHalfAvg = weeks.slice(0, 4).reduce((s, w) => s + w.revenue, 0) / 4;
-                  const secondHalfAvg = weeks.slice(4).reduce((s, w) => s + w.revenue, 0) / 4;
+                  const avgWeek = nonZero.length ? (total8w / nonZero.length) : 0;
+                  const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
+                  const nzFirst = weeks.slice(0, 4).filter(w => w.revenue > 0);
+                  const firstHalfAvg = nzFirst.length ? nzFirst.reduce((s, w) => s + w.revenue, 0) / nzFirst.length : 0;
+                  const nzSecond = weeks.slice(4).filter(w => w.revenue > 0);
+                  const secondHalfAvg = nzSecond.length ? nzSecond.reduce((s, w) => s + w.revenue, 0) / nzSecond.length : 0;
                   const trendPct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : 0;
                   // Chart dimensions — viewBox matches intended pixel size to minimize distortion
                   const W = 560, H = 220, PAD_L = 16, PAD_R = 16, PAD_TOP = 32, PAD_BOT = 30;
@@ -2158,27 +2166,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Key metrics + Revenue chart — combined IIFE to share computed data */}
               {(() => {
                 const now = new Date();
-                const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-                const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
-                const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
-                const weekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const prevWeekRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= prevWeekStart && new Date(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const monthRevenue = appts.filter(a => a.status === "completed" && new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                // Compare date strings to avoid UTC/local mismatch at day boundaries.
+                const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
+                const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+                const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
+                const weekRevenue = appts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const prevWeekRevenue = appts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const monthRevenue = appts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
 
-                // Daily revenue for sparklines
-                const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                // Daily revenue for sparklines — key by the stored a.date string directly.
                 const revByDay = {};
                 appts.forEach(a => {
                   if (a.status !== "completed") return;
-                  const d = new Date(a.date);
-                  revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+                  revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
                 });
                 const weekDaily = [];
-                for (let i = 6; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); weekDaily.push(revByDay[dayKey(d)] || 0); }
+                for (let i = 6; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); weekDaily.push(revByDay[fmt(d)] || 0); }
                 const monthDaily = [];
-                for (let i = 29; i >= 0; i--) { const d = new Date(now); d.setDate(now.getDate() - i); monthDaily.push(revByDay[dayKey(d)] || 0); }
+                for (let i = 29; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); monthDaily.push(revByDay[fmt(d)] || 0); }
 
                 const sparkline = (data, color) => {
                   if (!data || data.length < 2) return null;
@@ -2225,26 +2232,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   return { rating: r, count, pct };
                 });
 
-                // Weekly revenue for the big area chart
+                // Weekly revenue for the big area chart — Monday-start weeks, string-compare dates.
                 const weeks = [];
+                const dowMon = (now.getDay() + 6) % 7;
                 for (let w = 7; w >= 0; w--) {
-                  const weekStart = new Date(now);
-                  weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
-                  weekStart.setHours(0,0,0,0);
-                  const weekEnd = new Date(weekStart);
-                  weekEnd.setDate(weekStart.getDate() + 7);
+                  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (w * 7 + dowMon));
+                  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
+                  const wsStr = fmt(weekStart); const weStr = fmt(weekEnd);
                   const rev = appts
-                    .filter(a => a.status === "completed" && new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                    .filter(a => a.status === "completed" && a.date >= wsStr && a.date < weStr)
                     .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                   const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                   weeks.push({ label, revenue: rev });
                 }
                 const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
                 const maxRev = Math.max(...weeks.map(w => w.revenue), 1);
-                const avgWeek = total8w / weeks.length;
+                const nonZero = weeks.filter(w => w.revenue > 0);
+                const avgWeek = nonZero.length ? (total8w / nonZero.length) : 0;
                 const peakIdx = weeks.reduce((best, w, i) => w.revenue > weeks[best].revenue ? i : best, 0);
-                const firstHalfAvg = weeks.slice(0, 4).reduce((s, w) => s + w.revenue, 0) / 4;
-                const secondHalfAvg = weeks.slice(4).reduce((s, w) => s + w.revenue, 0) / 4;
+                const nzFirst = weeks.slice(0, 4).filter(w => w.revenue > 0);
+                const firstHalfAvg = nzFirst.length ? nzFirst.reduce((s, w) => s + w.revenue, 0) / nzFirst.length : 0;
+                const nzSecond = weeks.slice(4).filter(w => w.revenue > 0);
+                const secondHalfAvg = nzSecond.length ? nzSecond.reduce((s, w) => s + w.revenue, 0) / nzSecond.length : 0;
                 const trendPct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : 0;
                 const W = 560, H = 220, PAD_L = 16, PAD_R = 16, PAD_TOP = 32, PAD_BOT = 30;
                 const innerW = W - PAD_L - PAD_R;
@@ -2471,7 +2480,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {(() => {
                   const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
                   const dayCounts = [0,0,0,0,0,0,0];
-                  appts.forEach(a => { const d = new Date(a.date); dayCounts[d.getDay()]++; });
+                  appts.forEach(a => {
+                    // Parse local-date from YYYY-MM-DD so getDay() reflects the salon's local day,
+                    // not a UTC-shifted one.
+                    if (!a.date) return;
+                    const [y, m, day] = a.date.split("-").map(Number);
+                    if (!y) return;
+                    dayCounts[new Date(y, m - 1, day).getDay()]++;
+                  });
                   const max = Math.max(...dayCounts, 1);
                   return dayNames.map((name, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -2849,7 +2865,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
-                      <input className="input-field" placeholder="1" type="number" value={salonData.next_invoice_number || 1} onChange={e => update(d => { d.next_invoice_number = parseInt(e.target.value) || 1; return d; })} style={{ width: "100%", fontVariantNumeric: "tabular-nums" }} />
+                      <div className="input-field" style={{ width: "100%", fontVariantNumeric: "tabular-nums", opacity: 0.7, display: "flex", alignItems: "center" }} title={lang === "nl" ? "Automatisch bijgewerkt wanneer je een factuur verstuurt" : "Updated automatically when you send an invoice"}>
+                        {salonData.next_invoice_number || 1}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3961,7 +3979,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   btw_id: salonData.btw_id || null,
                   iban: salonData.iban || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
-                  next_invoice_number: salonData.next_invoice_number || 1,
+                  // NOTE: next_invoice_number is intentionally excluded from this save.
+                  // It's owned by sendInvoice() exclusively — saving settings after an
+                  // invoice was sent would otherwise roll the counter back to the stale
+                  // local value, producing duplicate invoice numbers.
                   business_hours: salonData.business_hours || DEFAULT_HOURS,
                   booking_policy: salonData.booking_policy || null,
                   salon_phone: salonData.salon_phone || null,

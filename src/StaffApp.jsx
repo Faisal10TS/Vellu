@@ -143,19 +143,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const exportCalendar = (apptList) => {
+    // Emit UTC — floating-time DTSTART was interpreted in device-local tz by calendar apps.
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmtUTC = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+    const icsStatus = (s) => s === "completed" ? "CONFIRMED" : (s === "cancelled" || s === "no_show" ? "CANCELLED" : "CONFIRMED");
     const events = apptList.map(a => {
       const start = new Date(a.date + "T" + a.time + ":00");
       const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
-      const pad = (n) => String(n).padStart(2, "0");
-      const fmt2 = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
       return [
         "BEGIN:VEVENT",
-        `DTSTART:${fmt2(start)}`,
-        `DTEND:${fmt2(end)}`,
+        `DTSTART:${fmtUTC(start)}`,
+        `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
         `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
         `LOCATION:${salonProfile.business_name}`,
-        `STATUS:${a.status === "confirmed" ? "CONFIRMED" : "COMPLETED"}`,
+        `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
         "END:VEVENT"
       ].join("\r\n");
