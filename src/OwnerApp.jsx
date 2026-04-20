@@ -714,12 +714,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             };
           }
         });
-        // Also try to get full client records for these emails for most up-to-date info.
-        // Security: scope by owner_id so we only pull OUR salon's client records, not
-        // rows belonging to another salon whose client shares an email.
+        // Pull full client records for these emails. NOTE: clients.email is currently a
+        // globally-unique column — the data model shares a single client row across
+        // salons. A proper fix requires a (owner_id, email) unique constraint + a
+        // migration to split shared rows. Until then, RLS is the only barrier here.
         const emails = Object.keys(uniqueClients);
         if (emails.length > 0) {
-          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails).eq("owner_id", salonData.owner_id);
+          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails);
           if (fullClients) {
             fullClients.forEach(cl => {
               uniqueClients[cl.email] = { ...uniqueClients[cl.email], ...cl };
@@ -754,8 +755,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (appt?.client_id) {
         const { error: rpcErr } = await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id });
         if (rpcErr) {
-          const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).eq("owner_id", salonData.owner_id).single();
-          if (client) await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id).eq("owner_id", salonData.owner_id);
+          const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
+          if (client) await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
         }
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
@@ -4236,15 +4237,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "") + (staffMember ? ` (${staffMember.name})` : "") : "";
                     const price = variant ? variant.price : (svc?.price || 0);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
-                    // Save client — scope by owner_id so we don't pull another salon's client row.
+                    // Save client. NOTE: clients.email is globally unique right now, so we
+                    // don't scope by owner_id. See TODO on the data model in book-appointment.
                     const email = addApptForm.client_email.toLowerCase().trim();
                     const nameTrim = addApptForm.client_name.trim();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).eq("owner_id", salonData.owner_id).maybeSingle();
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
                     if (existing) { clientId = existing.id; }
                     else {
                       const nameParts = nameTrim.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ owner_id: salonData.owner_id, email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
                       if (nc) clientId = nc.id;
                     }
                     // Data integrity: abort if the selected service disappeared between pick and submit.

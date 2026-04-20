@@ -1572,13 +1572,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const email = addApptForm.client_email.toLowerCase().trim();
                     const nameTrim = addApptForm.client_name.trim();
                     let clientId = null;
-                    // Security: scope client lookups/inserts by owner_id so we don't pull
-                    // or create rows for another salon's client with the same email.
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).eq("owner_id", salonProfile.id).maybeSingle();
+                    // NOTE: clients.email is globally unique right now so we don't scope by
+                    // owner_id. Cross-salon client-row sharing is a data-model issue tracked
+                    // for a future migration (see book-appointment for context).
+                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
                     if (existing) clientId = existing.id;
                     else {
                       const nameParts = nameTrim.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ owner_id: salonProfile.id, email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
                       if (nc) clientId = nc.id;
                     }
                     const apptData = {
