@@ -106,13 +106,21 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", role: "" });
+  const [form, setForm] = useState({ name: "", role: "", email: "" });
   const [selServices, setSelServices] = useState([]);
 
   const add = async () => {
     if (!form.name.trim()) return;
+    const email = form.email.trim().toLowerCase();
+    // Basic email check if provided. Email is what lets the staff member log in — when
+    // they sign up or log in with this address, our auth flow will link their user_id
+    // to this staff_members row automatically.
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.show(lang === "nl" ? "Ongeldig e-mailadres" : "Invalid email address", "error");
+      return;
+    }
     const { data, error } = await supabase.from("staff_members").insert({
-      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null
+      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null, email: email || null
     }).select().single();
     if (error || !data) {
       toast.show(lang === "nl" ? "Medewerker toevoegen mislukt" : "Failed to add staff", "error");
@@ -125,7 +133,7 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
       );
     }
     onAdd({ ...data, service_ids: selServices });
-    setForm({ name: "", role: "" });
+    setForm({ name: "", role: "", email: "" });
     setSelServices([]);
     setOpen(false);
   };
@@ -140,6 +148,8 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
         <input className="input-field" placeholder={t.staffName + " *"} value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
         <input className="input-field" placeholder={t.staffRole} value={form.role} onChange={e => setForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+        <input className="input-field" type="email" placeholder={`${lang === "nl" ? "E-mail voor login" : "Login email"} (${t.optional || "optional"})`} value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+        <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>{lang === "nl" ? "Voeg een e-mailadres toe als de medewerker in moet kunnen loggen op hun eigen dashboard." : "Add an email if this staff member should be able to log into their own dashboard."}</div>
       </div>
       {services.length > 0 && (
         <div style={{ marginBottom: 8 }}>
@@ -3301,12 +3311,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <input className="input-field" value={editStaffForm.name} onChange={e => setEditStaffForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "7px 10px", flex: 1 }} placeholder={t.staffName} />
                               <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "7px 10px", flex: 1 }} placeholder={t.staffRole} />
                             </div>
+                            <input className="input-field" type="email" value={editStaffForm.email || ""} onChange={e => setEditStaffForm(f => ({...f, email: e.target.value}))} placeholder={lang === "nl" ? "E-mail voor login (optioneel)" : "Login email (optional)"} style={{ fontSize: 12, padding: "7px 10px" }} />
                             <textarea className="input-field" value={editStaffForm.bio} onChange={e => setEditStaffForm(f => ({...f, bio: e.target.value}))} placeholder={t.staffBio} rows={2} style={{ fontSize: 12, padding: "7px 10px", resize: "vertical" }} />
                           </div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 14, fontWeight: 500 }}>{m.name}</div>
+                            <div style={{ fontSize: 14, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                              {m.name}
+                              {m.email && (
+                                <span title={m.user_id ? (lang === "nl" ? "Gekoppeld aan login" : "Linked to login") : (lang === "nl" ? "Wacht op inloggen" : "Waiting for first login")} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: m.user_id ? `${c.success}18` : `${c.warning}18`, color: m.user_id ? c.success : c.warning, border: `1px solid ${m.user_id ? `${c.success}33` : `${c.warning}33`}`, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                  {m.user_id ? (lang === "nl" ? "Gekoppeld" : "Linked") : (lang === "nl" ? "Uitgenodigd" : "Invited")}
+                                </span>
+                              )}
+                            </div>
                             {m.role && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{m.role}</div>}
+                            {m.email && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{m.email}</div>}
                             {m.bio && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{m.bio}</div>}
                           </>
                         )}
@@ -3326,20 +3345,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {editingStaff === m.id ? (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
-                              const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id);
+                              const emailTrim = (editStaffForm.email || "").trim().toLowerCase();
+                              if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) { toast.show(lang === "nl" ? "Ongeldig e-mailadres" : "Invalid email address", "error"); return; }
+                              const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, email: emailTrim || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id).eq("owner_id", salonData.owner_id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               if (editStaffForm.service_ids.length > 0) {
                                 await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
                               }
-                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
+                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, email: emailTrim || null, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
                               setEditingStaff(null);
                             }}><NavIcon name="check" size={12} /> {lang === "nl" ? "Opslaan" : "Save"}</button>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px" }} onClick={() => setEditingStaff(null)}><NavIcon name="xmark" size={12} /></button>
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
                               if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);

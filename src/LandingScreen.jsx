@@ -413,7 +413,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         }
       });
       if (error) { setError(error.message); setLoading(false); return; }
-      // Also upsert directly in case trigger doesn't fire
+      // If this email was invited as staff somewhere, claim that staff row instead of
+      // creating an owner profile. resolveUserRole will route them to the staff dashboard.
+      const inviteEmail = form.email.toLowerCase().trim();
+      const { data: staffInvite } = await supabase.from("staff_members").select("id").eq("email", inviteEmail).is("user_id", null).maybeSingle();
+      if (staffInvite) {
+        await supabase.from("staff_members").update({ user_id: data.user.id }).eq("id", staffInvite.id).is("user_id", null);
+        onLogin({ email: form.email, id: data.user.id });
+        setLoading(false);
+        return;
+      }
+      // Otherwise upsert an owner profile.
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         email: form.email,

@@ -17,6 +17,50 @@ const TermsPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.
 const ContactPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.ContactPage })));
 const DpaPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.DpaPage })));
 
+// ─── ROLE RESOLUTION ─────────────────────────────────────────
+// Figure out whether a logged-in auth user is a SALON OWNER or a STAFF member.
+//
+// The staff-link flow works like this:
+//   1. Owner creates a staff_members row with an `email` field (but no user_id yet).
+//   2. Staff member signs up / logs in at /owner with that email.
+//   3. On first login we find the staff row by email + user_id IS NULL, and claim it
+//      by setting its user_id to session.user.id. Subsequent logins match by user_id.
+//
+// A "real owner" = has a profiles row with a business_name set (auth may create
+// skeleton profiles rows for everyone, so row-existence alone isn't enough).
+// If a user happens to be BOTH a real owner AND a staff member at another salon
+// (dual-role), owner wins so their own dashboard isn't hijacked.
+async function resolveUserRole(user) {
+  if (!user) return { role: null };
+  const email = (user.email || "").toLowerCase();
+  const [{ data: staffByUserId }, { data: ownerProfile }] = await Promise.all([
+    supabase.from("staff_members").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("id, business_name").eq("id", user.id).maybeSingle()
+  ]);
+  const isRealOwner = !!(ownerProfile && ownerProfile.business_name);
+  if (isRealOwner) return { role: "owner" };
+
+  let staffMember = staffByUserId;
+  if (!staffMember && email) {
+    // Try to claim an unlinked staff row that matches our email.
+    const { data: staffByEmail } = await supabase.from("staff_members").select("*").eq("email", email).is("user_id", null).maybeSingle();
+    if (staffByEmail) {
+      const { data: claimed } = await supabase.from("staff_members").update({ user_id: user.id }).eq("id", staffByEmail.id).is("user_id", null).select("*").maybeSingle();
+      if (claimed) staffMember = claimed;
+    }
+  }
+  if (staffMember) {
+    const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
+    if (salonProfile) {
+      return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email } };
+    }
+  }
+  // Fallback: if there's any owner profile at all (even empty), treat as owner and
+  // let PlanSelection handle it. Otherwise nothing — caller handles.
+  if (ownerProfile) return { role: "owner" };
+  return { role: null };
+}
+
 function OwnerEntryPage({ lang, setLang }) {
   const { colors: c } = useTheme();
   const navigate = useNavigate();
@@ -24,65 +68,48 @@ function OwnerEntryPage({ lang, setLang }) {
   const [staffUser, setStaffUser] = useState(null); // { staffMember, salonData }
   const [loading, setLoading] = useState(true);
 
-  // Check for existing session on mount
+  // Check for existing session on mount (and on auth state changes so password-reset
+  // callbacks / magic links don't race the initial mount).
   useEffect(() => {
-    const checkSession = async () => {
+    let cancelled = false;
+    const hydrate = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
       if (session?.user) {
-        // FIRST check if user is a staff member (before profile check)
-        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
-        if (staffMember) {
-          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
-          if (salonProfile) {
-            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
-            setLoading(false);
-            return;
+        const resolved = await resolveUserRole(session.user);
+        if (cancelled) return;
+        if (resolved.role === "staff") { setStaffUser(resolved.staffUser); setLoading(false); return; }
+        if (resolved.role === "owner") {
+          // Rebuild the owner view-model from the full profile.
+          const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+          if (profile) {
+            setOwner({
+              name: profile.business_name || "Mijn Salon",
+              email: session.user.email,
+              slug: profile.slug || session.user.email.split("@")[0],
+              city: profile.city || "Nederland",
+              id: session.user.id,
+              accent: profile.accent_color,
+              plan: profile.plan || null,
+              plan_expires_at: profile.plan_expires_at || null,
+              account_type: profile.account_type || "joint"
+            });
           }
-        }
-        // Then check if user is an owner
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
-        if (profile) {
-          setOwner({
-            name: profile.business_name || "Mijn Salon",
-            email: session.user.email,
-            slug: profile.slug || session.user.email.split("@")[0],
-            city: profile.city || "Nederland",
-            id: session.user.id,
-            accent: profile.accent_color,
-            plan: profile.plan || null,
-            plan_expires_at: profile.plan_expires_at || null,
-            account_type: profile.account_type || "joint"
-          });
         }
       }
       setLoading(false);
     };
-    checkSession();
+    hydrate();
+    const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { hydrate(); });
+    return () => { cancelled = true; authSub?.subscription?.unsubscribe?.(); };
   }, []);
 
   const handleLogin = async (u) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      // Determine role. A user can have:
-      //   - Only a staff_members row  -> use staff view
-      //   - Only a real owner profile -> use owner view
-      //   - Both (dual-role)          -> prefer OWNER so their own dashboard wins
-      //     over being forced into another salon's staff view
-      // Note: auth may auto-create an empty profiles row for every signup, so we
-      // distinguish "real owner" by business_name being set, not just row existence.
-      const [{ data: staffMember }, { data: ownerProfile }] = await Promise.all([
-        supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle(),
-        supabase.from("profiles").select("id, business_name").eq("id", session.user.id).maybeSingle()
-      ]);
-      const isRealOwner = !!(ownerProfile && ownerProfile.business_name);
-      if (isRealOwner) { setOwner(u); return; }
-      if (staffMember) {
-        const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
-        if (salonProfile) {
-          setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
-          return;
-        }
-      }
+      const resolved = await resolveUserRole(session.user);
+      if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
+      if (resolved.role === "owner") { setOwner(u); return; }
     }
     setOwner(u);
   };
@@ -127,24 +154,22 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
 
   useEffect(() => {
     if (propStaffUser) return;
-    const checkSession = async () => {
+    let cancelled = false;
+    const hydrate = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
       if (session?.user) {
-        const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
-        if (staffMember) {
-          const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
-          if (salonProfile) {
-            setStaffUser({ staffMember, profile: salonProfile, email: session.user.email });
-            setLoading(false);
-            return;
-          }
-        }
+        const resolved = await resolveUserRole(session.user);
+        if (cancelled) return;
+        if (resolved.role === "staff") { setStaffUser(resolved.staffUser); setLoading(false); return; }
       }
       // Not a staff member — redirect to /owner
       setLoading(false);
       navigate("/owner", { replace: true });
     };
-    checkSession();
+    hydrate();
+    const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { if (!propStaffUser) hydrate(); });
+    return () => { cancelled = true; authSub?.subscription?.unsubscribe?.(); };
   }, []);
 
   const handleLogout = propOnLogout || (async () => {
