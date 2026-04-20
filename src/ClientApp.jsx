@@ -380,8 +380,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const upperVal = value.toUpperCase();
     setDiscountCode(upperVal);
     setDiscountError("");
-    // Auto-apply if exact match found
-    const found = activeCodes.find(dc => dc.code === upperVal);
+    // Auto-apply if exact match found — compare both sides uppercased to match the
+    // behaviour of applyDiscountCode (owner may have stored mixed-case codes).
+    const found = activeCodes.find(dc => (dc.code || "").toUpperCase() === upperVal);
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");

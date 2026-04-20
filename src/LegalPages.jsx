@@ -8,7 +8,7 @@ function PrivacyPage({ lang, setLang }) {
   useSEO({ title: lang === "nl" ? "Privacybeleid | Vellu" : "Privacy Policy | Vellu", url: "https://vellu.cc/privacy" });
   const content = lang === "nl" ? {
     title: "Privacybeleid",
-    updated: "Laatst bijgewerkt: maart 2026",
+    updated: "Laatst bijgewerkt: april 2026",
     sections: [
       ["Wie zijn wij?", "Vellu is een online boekingsplatform voor beautysalons. Wij verwerken persoonsgegevens namens de salons die ons platform gebruiken."],
       ["Welke gegevens verzamelen wij?", "Bij het boeken van een afspraak: naam, e-mailadres, telefoonnummer (optioneel). Bij het aanmaken van een salonaccount: bedrijfsnaam, e-mailadres, wachtwoord, vestigingsgegevens."],
@@ -21,7 +21,7 @@ function PrivacyPage({ lang, setLang }) {
     ]
   } : {
     title: "Privacy Policy",
-    updated: "Last updated: March 2026",
+    updated: "Last updated: April 2026",
     sections: [
       ["Who are we?", "Vellu is an online booking platform for beauty salons. We process personal data on behalf of the salons that use our platform."],
       ["What data do we collect?", "When booking an appointment: name, email address, phone number (optional). When creating a salon account: business name, email address, password, location details."],
@@ -40,7 +40,7 @@ function PrivacyPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -65,7 +65,7 @@ function TermsPage({ lang, setLang }) {
   useSEO({ title: lang === "nl" ? "Voorwaarden | Vellu" : "Terms of Service | Vellu", url: "https://vellu.cc/terms" });
   const content = lang === "nl" ? {
     title: "Algemene Voorwaarden",
-    updated: "Laatst bijgewerkt: maart 2026",
+    updated: "Laatst bijgewerkt: april 2026",
     sections: [
       ["1. Aanvaarding van de voorwaarden", "Door gebruik te maken van het Vellu-platform (vellu.cc) ga je akkoord met deze Algemene Voorwaarden. Als je niet akkoord gaat, verzoeken wij je het platform niet te gebruiken. Vellu behoudt zich het recht voor deze voorwaarden op elk moment te wijzigen. Wijzigingen worden via het platform gecommuniceerd."],
       ["2. Beschrijving van de dienst", "Vellu is een online boekingsplatform voor beautyprofessionals in Nederland, waaronder nagelsalons, wimperspecialisten, kappers en schoonheidsspecialisten. Het platform biedt saloneigenaren een eigen boekingspagina (vellu.cc/jouw-naam), agendabeheer, teamaccounts, e-mailnotificaties en een klantbeheersysteem. Vellu werkt met een vast maandelijks abonnement zonder commissie op boekingen."],
@@ -83,7 +83,7 @@ function TermsPage({ lang, setLang }) {
     ]
   } : {
     title: "Terms of Service",
-    updated: "Last updated: March 2026",
+    updated: "Last updated: April 2026",
     sections: [
       ["1. Acceptance of terms", "By using the Vellu platform (vellu.cc), you agree to these Terms of Service. If you do not agree, please do not use the platform. Vellu reserves the right to modify these terms at any time. Changes will be communicated through the platform."],
       ["2. Description of service", "Vellu is an online booking platform for beauty professionals in the Netherlands, including nail technicians, lash artists, hairdressers, and beauticians. The platform offers salon owners their own booking page (vellu.cc/your-name), calendar management, team accounts, email notifications, and a client management system. Vellu operates on a flat monthly subscription with no commission on bookings."],
@@ -107,7 +107,7 @@ function TermsPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
@@ -157,7 +157,7 @@ function ContactPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
@@ -198,7 +198,7 @@ function DpaPage({ lang, setLang }) {
   useSEO({ title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : "Data Processing Agreement | Vellu", url: "https://vellu.cc/dpa" });
   const content = lang === "nl" ? {
     title: "Verwerkingsovereenkomst",
-    updated: "Laatst bijgewerkt: maart 2026",
+    updated: "Laatst bijgewerkt: april 2026",
     intro: "Deze verwerkingsovereenkomst (\"Overeenkomst\") is van toepassing op de verwerking van persoonsgegevens door Vellu (\"Verwerker\") namens de saloneigenaar die het Vellu-platform gebruikt (\"Verwerkingsverantwoordelijke\"). Deze overeenkomst maakt integraal onderdeel uit van de Algemene Voorwaarden van Vellu en wordt automatisch geaccepteerd bij het aanmaken van een account.",
     sections: [
       ["1. Definities", "Persoonsgegevens: alle gegevens die betrekking hebben op een geïdentificeerde of identificeerbare natuurlijke persoon. Verwerking: elke bewerking of geheel van bewerkingen met betrekking tot persoonsgegevens, waaronder het verzamelen, vastleggen, ordenen, structureren, opslaan, bijwerken, wijzigen, opvragen, raadplegen, gebruiken, verstrekken, verspreiden, wissen of vernietigen van gegevens. AVG: de Algemene Verordening Gegevensbescherming (EU) 2016/679."],
@@ -219,7 +219,7 @@ function DpaPage({ lang, setLang }) {
     ]
   } : {
     title: "Data Processing Agreement",
-    updated: "Last updated: March 2026",
+    updated: "Last updated: April 2026",
     intro: "This Data Processing Agreement (\"Agreement\") applies to the processing of personal data by Vellu (\"Processor\") on behalf of the salon owner using the Vellu platform (\"Controller\"). This agreement is an integral part of the Vellu Terms of Service and is automatically accepted upon account creation.",
     sections: [
       ["1. Definitions", "Personal data: any data relating to an identified or identifiable natural person. Processing: any operation or set of operations performed on personal data, including collecting, recording, organizing, structuring, storing, adapting, altering, retrieving, consulting, using, disclosing, disseminating, erasing, or destroying data. GDPR: the General Data Protection Regulation (EU) 2016/679."],
@@ -245,7 +245,7 @@ function DpaPage({ lang, setLang }) {
       <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(-1)}>← {t.back}</button>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
             <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>

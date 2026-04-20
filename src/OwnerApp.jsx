@@ -12,21 +12,26 @@ import {
 
 function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
 
   const add = async () => {
     if (!form.name_nl || !form.price) return;
+    const price = parseFloat(form.price);
+    if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
     const { data, error } = await supabase.from("service_variants").insert({
       service_id: serviceId, name_nl: form.name_nl, name_en: form.name_en || null,
       description_nl: form.description_nl || null, description_en: form.description_en || null,
-      price: parseFloat(form.price), duration: parseInt(form.duration)
+      price, duration: parseInt(form.duration) || 60
     }).select().single();
-    if (!error && data) {
-      onAdd(data);
-      setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
-      setOpen(false);
+    if (error || !data) {
+      toast.show(lang === "nl" ? "Toevoegen mislukt" : "Failed to add", "error");
+      return;
     }
+    onAdd(data);
+    setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
+    setOpen(false);
   };
 
   if (!open) return (
@@ -55,20 +60,25 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
 
 function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name_nl: "", name_en: "", price: "" });
 
   const add = async () => {
     if (!form.name_nl || !form.price) return;
+    const price = parseFloat(form.price);
+    if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
     const { data, error } = await supabase.from("service_extras").insert({
       service_id: serviceId, name_nl: form.name_nl, name_en: form.name_en || null,
-      price: parseFloat(form.price)
+      price
     }).select().single();
-    if (!error && data) {
-      onAdd(data);
-      setForm({ name_nl: "", name_en: "", price: "" });
-      setOpen(false);
+    if (error || !data) {
+      toast.show(lang === "nl" ? "Toevoegen mislukt" : "Failed to add", "error");
+      return;
     }
+    onAdd(data);
+    setForm({ name_nl: "", name_en: "", price: "" });
+    setOpen(false);
   };
 
   if (!open) return (
@@ -94,27 +104,30 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
 // ─── STAFF ADDER ────────────────────────────────────────────
 function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", role: "" });
   const [selServices, setSelServices] = useState([]);
 
   const add = async () => {
-    if (!form.name) return;
+    if (!form.name.trim()) return;
     const { data, error } = await supabase.from("staff_members").insert({
-      owner_id: ownerId, name: form.name, role: form.role || null
+      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null
     }).select().single();
-    if (!error && data) {
-      // Link selected services
-      if (selServices.length > 0) {
-        await supabase.from("staff_services").insert(
-          selServices.map(sid => ({ staff_id: data.id, service_id: sid }))
-        );
-      }
-      onAdd({ ...data, service_ids: selServices });
-      setForm({ name: "", role: "" });
-      setSelServices([]);
-      setOpen(false);
+    if (error || !data) {
+      toast.show(lang === "nl" ? "Medewerker toevoegen mislukt" : "Failed to add staff", "error");
+      return;
     }
+    // Link selected services
+    if (selServices.length > 0) {
+      await supabase.from("staff_services").insert(
+        selServices.map(sid => ({ staff_id: data.id, service_id: sid }))
+      );
+    }
+    onAdd({ ...data, service_ids: selServices });
+    setForm({ name: "", role: "" });
+    setSelServices([]);
+    setOpen(false);
   };
 
   if (!open) return (
@@ -155,21 +168,24 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
 // ─── LOCATION ADDER ────────────────────────────────────────
 function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", city: "", phone: "" });
 
   const add = async () => {
-    if (!form.name) return;
+    if (!form.name.trim()) return;
     const { data, error } = await supabase.from("locations").insert({
-      owner_id: ownerId, name: form.name, address: form.address || null,
+      owner_id: ownerId, name: form.name.trim(), address: form.address || null,
       city: form.city || null, phone: form.phone || null,
       business_hours: DEFAULT_HOURS, break_minutes: 0
     }).select().single();
-    if (!error && data) {
-      onAdd(data);
-      setForm({ name: "", address: "", city: "", phone: "" });
-      setOpen(false);
+    if (error || !data) {
+      toast.show(lang === "nl" ? "Locatie toevoegen mislukt" : "Failed to add location", "error");
+      return;
     }
+    onAdd(data);
+    setForm({ name: "", address: "", city: "", phone: "" });
+    setOpen(false);
   };
 
   if (!open) return (
@@ -634,7 +650,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           update(d => { d.appointments = [payload.new, ...d.appointments]; return d; });
           toast.show(langRef.current === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
         } else if (payload.eventType === "UPDATE") {
-          update(d => { d.appointments = d.appointments.map(a => a.id === payload.new.id ? payload.new : a); return d; });
+          // Merge the incoming row into the existing local copy instead of replacing
+          // wholesale — this preserves any local-only optimistic fields and avoids a
+          // flicker back to "confirmed" when the server echoes our mark-complete/no-show.
+          update(d => { d.appointments = d.appointments.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a); return d; });
         } else if (payload.eventType === "DELETE") {
           update(d => { d.appointments = d.appointments.filter(a => a.id !== payload.old.id); return d; });
         }
@@ -652,7 +671,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const filteredAgendaAppts = agendaStaff ? allVisibleAppts.filter(a => a.staff_id === agendaStaff) : allVisibleAppts;
   const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-  const days = getDays();
 
   const update = (fn) => setSalonData(d => {
     const updated = fn({...d});
@@ -766,26 +784,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   const addService = async () => {
     if (!newSvc.name_nl || !newSvc.price) { setSvcError(t.fillRequired); return; }
+    const price = parseFloat(newSvc.price);
+    if (!Number.isFinite(price) || price < 0) { setSvcError(lang === "nl" ? "Ongeldige prijs" : "Invalid price"); return; }
     setSvcError("");
     const { data, error } = await supabase.from("services").insert({
       owner_id: salonData.owner_id,
       name: newSvc.name_nl,
       name_nl: newSvc.name_nl,
       name_en: newSvc.name_en || null,
-      price: parseFloat(newSvc.price),
-      duration: parseInt(newSvc.duration)
+      price,
+      duration: parseInt(newSvc.duration) || 60
     }).select().single();
-    if (!error && data) {
-      update(d => { d.services = [...d.services, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || data.name, photos: [], variants: [], extras: [] }]; return d; });
+    if (error || !data) {
+      // Previously the error was silently swallowed and the form was cleared so owners
+      // thought the service was added. Show a real error and keep the form so they can retry.
+      toast.show(lang === "nl" ? "Dienst toevoegen mislukt" : "Failed to add service", "error");
+      return;
     }
+    update(d => { d.services = [...d.services, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || data.name, photos: [], variants: [], extras: [] }]; return d; });
     setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" });
   };
 
   const deleteService = async (id) => {
-    await supabase.from("service_photos").delete().eq("service_id", id);
-    await supabase.from("service_extras").delete().eq("service_id", id);
-    await supabase.from("service_variants").delete().eq("service_id", id);
-    const { error } = await supabase.from("services").delete().eq("id", id);
+    // Delete children first (still not a true transaction — ideally Postgres ON DELETE CASCADE
+    // would handle this, but we at least surface errors instead of silently leaving orphans).
+    const d1 = await supabase.from("service_photos").delete().eq("service_id", id);
+    const d2 = await supabase.from("service_extras").delete().eq("service_id", id);
+    const d3 = await supabase.from("service_variants").delete().eq("service_id", id);
+    if (d1.error || d2.error || d3.error) {
+      toast.show(lang === "nl" ? "Verwijderen van onderdelen mislukt" : "Failed to delete related items", "error");
+      return;
+    }
+    const { error } = await supabase.from("services").delete().eq("id", id).eq("owner_id", salonData.owner_id);
     if (error) { toast.show(t.somethingWrong, "error"); return; }
     update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
   };
@@ -848,9 +878,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
 
   const deletePhoto = async (serviceId, photoId, photoUrl) => {
-    // Delete from database
-    await supabase.from("service_photos").delete().eq("id", photoId);
-    
+    // Delete from database — scope by owner_id for defense-in-depth and surface errors.
+    const { error } = await supabase.from("service_photos").delete().eq("id", photoId).eq("owner_id", salonData.owner_id);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+
     // Extract file path from URL and delete from storage
     try {
       const urlParts = photoUrl.split("/service-photos/");
@@ -913,8 +944,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const ApptCard = ({ a }) => (
-    <div className="appt-card" title={a.service_name}>
+  // Rendered as a plain function (NOT a React component) so it doesn't get a new identity
+  // on every OwnerApp render — previously `const ApptCard = ({a}) => ...` caused every
+  // appointment card to remount on every keystroke in any form input, a real perf hit
+  // for salons with many appointments. The caller passes `key` on the returned element.
+  const renderApptCard = (a) => (
+    <div key={a.id} className="appt-card" title={a.service_name}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
@@ -1312,7 +1347,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       ) : (
                         <div style={{ position: "relative" }}>
-                          {todayAppts.slice(0, 3).map(a => <ApptCard key={a.id} a={a} />)}
+                          {todayAppts.slice(0, 3).map(a => renderApptCard(a))}
                           {todayAppts.length > 3 && (
                             <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
                               {lang === "nl" ? `+ ${todayAppts.length - 3} meer · Bekijk alles →` : `+ ${todayAppts.length - 3} more · View all →`}
@@ -1394,7 +1429,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -1943,12 +1978,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {calDate === fmt(getToday()) ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}
                     </div>
                     <button className="btn-ghost" style={{ padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 8 }}
-                      onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", date: calDate, time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                      onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: calDate, time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                       <NavIcon name="plus" size={13} color="currentColor" /> {t.addAppointment}
                     </button>
                   </div>
                 ) : (
-                  calAppts.map(a => <ApptCard key={a.id} a={a} />)
+                  calAppts.map(a => renderApptCard(a))
                 )}
                 {calAppts.length > 0 && (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
@@ -4161,9 +4196,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             });
                           })()}
                         </div>
-                        {false && addApptForm.client_email && (
-                          <div></div>
-                        )}
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

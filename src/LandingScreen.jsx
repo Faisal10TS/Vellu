@@ -23,6 +23,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     let clean = slug.toLowerCase().trim()
       .replace(/^https?:\/\//, "")
       .replace(/^(www\.)?vellu\.cc\//, "");
+    // Only allow slug charset — a-z 0-9 dash. Strip everything else so a pasted
+    // `https://evil.com/foo` can't build a weird path that hits another salon.
+    clean = clean.replace(/[^a-z0-9-]/g, "");
     if (!clean) return;
     navigate("/" + clean);
   };
@@ -191,43 +194,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ─── TESTIMONIALS ─── */}
-        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {t.whatUsersSay}
-              </h2>
-              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-              {(lang === "nl" ? [
-                { name: "Yasmin El Amrani", role: "Nail Tech · Amsterdam", text: "Eindelijk een boekingssysteem zonder commissie. Mijn klanten boeken nu 24/7 en ik heb alles op één plek. Super blij mee!", rating: 5 },
-                { name: "Sophie de Vries", role: "Lash Artist · Utrecht", text: "De automatische herinneringen hebben mijn no-shows met 80% verminderd. En het ziet er zo professioneel uit — klanten zijn onder de indruk.", rating: 5 },
-                { name: "Fatima Benali", role: "Kapsalon · Rotterdam", text: "We zijn overgestapt van Treatwell en besparen nu honderden euro's per maand. Het team account werkt perfect voor ons salon met 4 medewerkers.", rating: 5 },
-              ] : [
-                { name: "Yasmin El Amrani", role: "Nail Tech · Amsterdam", text: "Finally a booking system without commission. My clients book 24/7 and I have everything in one place. Super happy with it!", rating: 5 },
-                { name: "Sophie de Vries", role: "Lash Artist · Utrecht", text: "The automatic reminders reduced my no-shows by 80%. And it looks so professional — clients are impressed.", rating: 5 },
-                { name: "Fatima Benali", role: "Hair Salon · Rotterdam", text: "We switched from Treatwell and now save hundreds of euros per month. The team account works perfectly for our salon with 4 staff members.", rating: 5 },
-              ]).map((review, i) => (
-                <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "24px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div style={{ display: "flex", gap: 2 }}>
-                    {[1,2,3,4,5].map(s => (
-                      <svg key={s} width={14} height={14} viewBox="0 0 20 20" fill={s <= review.rating ? "#f5c518" : c.inputBg}>
-                        <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, flex: 1 }}>"{review.text}"</div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{review.name}</div>
-                    <div style={{ fontSize: 11, color: c.textLabel }}>{review.role}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* TESTIMONIALS section removed — the previous hardcoded names/quotes are
+            fabricated marketing content, which under the AVG/Wet OHP (misleidende reclame)
+            creates real legal exposure. Re-add this section only when you have real,
+            opt-in reviews with written consent from the people named. */}
 
         {/* ─── PRICING ─── */}
         <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>

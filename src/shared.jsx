@@ -54,9 +54,13 @@ function ThemeProvider({ children }) {
     try { return localStorage.getItem("vellu-theme") || "dark"; } catch { return "dark"; }
   });
   const toggle = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    try { localStorage.setItem("vellu-theme", next); } catch {}
+    // Functional setState avoids a stale-closure on `theme` if toggle is called
+    // rapidly (multi-click on slow renders).
+    setTheme(prev => {
+      const next = prev === "dark" ? "light" : "dark";
+      try { localStorage.setItem("vellu-theme", next); } catch {}
+      return next;
+    });
   };
   useEffect(() => {
     const bg = THEMES[theme].bg;
@@ -109,10 +113,13 @@ function DashboardSkeleton() {
 }
 
 // ─── TOAST SYSTEM ────────────────────────────────────────────
+let _toastId = 0;
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const show = (message, type = "success") => {
-    const id = Date.now();
+    // Monotonic counter — Date.now() collides when two toasts fire in the same
+    // millisecond (filter-by-id then wipes the wrong one).
+    const id = ++_toastId;
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
