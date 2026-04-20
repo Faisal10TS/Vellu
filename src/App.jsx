@@ -63,15 +63,19 @@ function OwnerEntryPage({ lang, setLang }) {
   const handleLogin = async (u) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      // Prefer OWNER role when the user is both. An owner whose email is also linked as
-      // staff at another salon should land on their own dashboard, not be forced into
-      // that other salon's staff view where they could edit its data.
-      const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
-      if (ownerProfile) {
-        setOwner(u);
-        return;
-      }
-      const { data: staffMember } = await supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle();
+      // Determine role. A user can have:
+      //   - Only a staff_members row  -> use staff view
+      //   - Only a real owner profile -> use owner view
+      //   - Both (dual-role)          -> prefer OWNER so their own dashboard wins
+      //     over being forced into another salon's staff view
+      // Note: auth may auto-create an empty profiles row for every signup, so we
+      // distinguish "real owner" by business_name being set, not just row existence.
+      const [{ data: staffMember }, { data: ownerProfile }] = await Promise.all([
+        supabase.from("staff_members").select("*").eq("user_id", session.user.id).maybeSingle(),
+        supabase.from("profiles").select("id, business_name").eq("id", session.user.id).maybeSingle()
+      ]);
+      const isRealOwner = !!(ownerProfile && ownerProfile.business_name);
+      if (isRealOwner) { setOwner(u); return; }
       if (staffMember) {
         const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
         if (salonProfile) {
