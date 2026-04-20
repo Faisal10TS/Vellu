@@ -593,9 +593,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       });
 
       if (fnErr) {
-        // functions.invoke returns error object on non-2xx too — try to read body
-        const msg = fnErr.context?.body?.error || fnErr.message || "booking_failed";
-        throw new Error(msg);
+        // supabase-js wraps non-2xx responses in FunctionsHttpError whose `message` is
+        // always "Edge Function returned a non-2xx status code". The real code lives in
+        // the Response body under `context`, which we have to .json() ourselves.
+        let serverCode = "booking_failed";
+        try {
+          if (fnErr.context && typeof fnErr.context.json === "function") {
+            const body = await fnErr.context.json();
+            if (body?.error) serverCode = String(body.error);
+          } else if (fnErr.context?.body?.error) {
+            serverCode = String(fnErr.context.body.error);
+          }
+        } catch { /* swallow — fall back to generic code */ }
+        throw new Error(serverCode);
       }
       if (!result?.success) throw new Error(result?.error || "booking_failed");
 
@@ -669,15 +679,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       }
     } catch (err) {
       console.error("Booking error:", err);
-      // Map known server error codes to friendly messages
-      const code = (err?.message || "").toLowerCase();
-      let msg = t.bookingError;
-      if (code.includes("slot_conflict")) msg = lang === "nl" ? "Dit tijdslot is net geboekt — kies een ander." : "This slot was just taken — please pick another.";
-      else if (code.includes("closed") || code.includes("outside_hours") || code.includes("day_blocked") || code.includes("slot_blocked")) msg = lang === "nl" ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.";
-      else if (code.includes("too_soon")) msg = lang === "nl" ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.";
-      else if (code.includes("too_far")) msg = lang === "nl" ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.";
-      else if (code.includes("invalid_discount")) msg = lang === "nl" ? "Ongeldige kortingscode." : "Invalid discount code.";
-      else if (code.includes("rate_limited")) msg = lang === "nl" ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.";
+      // Map the server's specific error code to a friendly message. Any code we don't
+      // recognise falls back to the generic "something went wrong" string.
+      const code = (err?.message || "").toLowerCase().trim();
+      const isNl = lang === "nl";
+      const MAP = {
+        slot_conflict: isNl ? "Dit tijdslot is net geboekt — kies een ander." : "This slot was just taken — please pick another.",
+        closed: isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
+        outside_hours: isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
+        day_blocked: isNl ? "De salon is gesloten op deze dag." : "The salon is closed on this day.",
+        slot_blocked: isNl ? "Dit tijdslot is geblokkeerd." : "This time slot is blocked.",
+        too_soon: isNl ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.",
+        too_far: isNl ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.",
+        invalid_discount: isNl ? "Ongeldige kortingscode." : "Invalid discount code.",
+        rate_limited: isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
+        invalid_email: isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
+        missing_name: isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
+        phone_required: isNl ? "Telefoonnummer is verplicht voor deze salon." : "Phone number is required for this salon.",
+        policy_not_agreed: isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
+        salon_not_found: isNl ? "Salon niet gevonden." : "Salon not found.",
+        invalid_service: isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
+        invalid_variant: isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
+        invalid_extra: isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",
+        invalid_staff: isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
+        staff_not_assigned: isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
+      };
+      const msg = MAP[code] || t.bookingError;
       setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
