@@ -610,33 +610,36 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       submittingRef.current = false;
       setSlotsRefreshKey(k => k + 1);
 
-      // Fire-and-forget: confirmation email + owner notification + google cal.
-      // If any of these fail the booking itself is already safe in the DB.
       const clientFullName = `${form.firstName} ${form.lastName}`;
       const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
 
-      sendEmails("booking_confirmation", {
-        client_name: clientFullName,
-        client_email: clientEmail,
-        service_name: combinedServiceName,
-        date, time,
-        payment: form.payment,
-        price: serverPrice,
-        salon_name: result.salon_name || initialSalon.name,
-        owner_email: result.owner_email || initialSalon.owner_email || "info@vellu.cc",
-        cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
-      }).catch(e => console.error("confirmation email failed:", e));
+      // book-appointment now fires confirmation + notification emails server-side
+      // (send-emails has verify_jwt=true, so an anonymous customer can't call it directly).
+      // Only fall back to client-side sends on older server versions that didn't signal emails_sent.
+      if (!result.emails_sent) {
+        sendEmails("booking_confirmation", {
+          client_name: clientFullName,
+          client_email: clientEmail,
+          service_name: combinedServiceName,
+          date, time,
+          payment: form.payment,
+          price: serverPrice,
+          salon_name: result.salon_name || initialSalon.name,
+          owner_email: result.owner_email || initialSalon.owner_email || "info@vellu.cc",
+          cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
+        }).catch(e => console.error("confirmation email failed:", e));
 
-      sendEmails("booking_notification", {
-        owner_email: result.owner_email || initialSalon.owner_email || null,
-        staff_emails: result.staff_emails || [],
-        client_name: clientFullName,
-        client_phone: form.phone || null,
-        service_name: combinedServiceName,
-        date, time,
-        price: serverPrice,
-        salon_name: result.salon_name || initialSalon.name,
-      }).catch(e => console.error("notification email failed:", e));
+        sendEmails("booking_notification", {
+          owner_email: result.owner_email || initialSalon.owner_email || null,
+          staff_emails: result.staff_emails || [],
+          client_name: clientFullName,
+          client_phone: form.phone || null,
+          service_name: combinedServiceName,
+          date, time,
+          price: serverPrice,
+          salon_name: result.salon_name || initialSalon.name,
+        }).catch(e => console.error("notification email failed:", e));
+      }
 
       supabase.functions.invoke("google-calendar", {
         body: {
