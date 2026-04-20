@@ -223,6 +223,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [discountError, setDiscountError] = useState("");
   const [clientFound, setClientFound] = useState(false);
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
   const [showReviewForm, setShowReviewForm] = useState(reviewMode);
   const [mode, setMode] = useState("profile"); // "profile" | "booking"
@@ -470,15 +471,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // itself can stay locked down to owner/client access only.
   useEffect(() => {
     if (!date || !initialSalon.id) return;
+    let cancelled = false;
+    setSlotsLoading(true);
     const loadSlots = async () => {
       const { data, error } = await supabase.rpc("get_booked_slots", {
         p_slug: initialSalon.id,
         p_date: date,
         p_location_id: selectedLocation?.id || null,
       });
-      if (!error) setBookedSlots(data || []);
+      if (cancelled) return;
+      setBookedSlots(error ? [] : (data || []));
+      setSlotsLoading(false);
     };
     loadSlots();
+    return () => { cancelled = true; };
   }, [date, initialSalon.id, slotsRefreshKey, selectedLocation?.id]);
 
   // Check if a time slot overlaps with existing bookings (including break time)
@@ -1869,6 +1875,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                 {/* Time slots — grouped by period */}
                 {(() => {
+                  // Wait for bookedSlots to load before showing slots, otherwise a fast
+                  // user can tap a slot that's about to be greyed out and get a 409 later.
+                  if (slotsLoading) return (
+                    <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
+                      <div style={{ width: 28, height: 28, margin: "0 auto 12px", border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <div style={{ fontSize: 12 }}>{lang === "nl" ? "Beschikbaarheid laden..." : "Loading availability..."}</div>
+                    </div>
+                  );
                   const availableTimes = getAvailableTimes(date);
                   const totalSlots = availableTimes.length;
                   const bookedCount = availableTimes.filter(tt => isTimeSlotBooked(tt)).length;
@@ -1912,6 +1926,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                             {group.times.map(tt => {
+                              // Don't render any slot until bookedSlots has loaded — otherwise
+                              // a fast user could tap a slot that will be greyed-out once the
+                              // fetch returns, and the server would then reject with slot_conflict.
+                              if (slotsLoading) return null;
                               const booked = isTimeSlotBooked(tt);
                               if (booked) return null; // Hide booked slots entirely
                               const isSel = time === tt;
@@ -2446,13 +2464,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <SL>{t.selectTime}</SL>
                     {(() => {
+                      // Wait for bookedSlots to load before rendering — prevents the brief
+                      // window where all slots look available while the fetch is in flight.
+                      if (slotsLoading) {
+                        return (
+                          <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
+                            {lang === "nl" ? "Beschikbaarheid laden..." : "Loading availability..."}
+                          </div>
+                        );
+                      }
                       const availableTimes = getAvailableTimes(date);
                       return availableTimes.length > 0 ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                           {availableTimes.map(tt => {
                             const booked = isTimeSlotBooked(tt);
                             return (
-                              <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`} 
+                              <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`}
                                 onClick={() => { if (!booked) setTime(tt); }}
                                 style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
                               >{tt}</div>
