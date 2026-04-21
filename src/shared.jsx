@@ -312,7 +312,37 @@ const DEFAULT_HOURS = {
   6: { open: "09:00", close: "17:30", closed: true },  // Saturday
 };
 
-const T = {
+// ─── LANGUAGE REGISTRY ───────────────────────────────────────
+// Add a new language in 2 steps:
+//   1. Append a row here (e.g. { code: "de", label: "DE", name: "Deutsch" })
+//   2. Add a matching `T.de = { ... }` object below
+// The Proxy wrapper on T falls back to English if a language is selected
+// but its translation table hasn't shipped yet — so you can roll out a UI
+// language before 100% of strings are translated without crashing the app.
+const LANGUAGES = [
+  { code: "nl", label: "NL", name: "Nederlands" },
+  { code: "en", label: "EN", name: "English" },
+];
+
+// ─── COUNTRY REGISTRY ────────────────────────────────────────
+// `defaultLang` is a suggestion used when the salon picks a country at
+// signup — they can still flip the language toggle. VAT rate + currency
+// are for future invoice + pricing logic (kept here so per-country rules
+// live in one place). "launched" controls whether a country shows up in
+// the signup dropdown — flip to true as you formally go live there.
+const COUNTRIES = [
+  { code: "NL", name: "Nederland / Netherlands", defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
+  { code: "BE", name: "België / Belgium",        defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
+  { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", vatRate: 0.19, launched: false },
+  { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", vatRate: 0.20, launched: false },
+  { code: "GB", name: "United Kingdom",          defaultLang: "en", currency: "GBP", vatRate: 0.20, launched: false },
+  { code: "ES", name: "España / Spain",          defaultLang: "en", currency: "EUR", vatRate: 0.21, launched: false },
+  { code: "IT", name: "Italia / Italy",          defaultLang: "en", currency: "EUR", vatRate: 0.22, launched: false },
+];
+
+// Raw translation tables. Access via the `T` export (Proxy-wrapped below)
+// so missing languages fall back to English instead of returning undefined.
+const _T_RAW = {
   nl: {
     book:"Boeken", myAppts:"Afspraken", dashboard:"Dashboard", agenda:"Agenda",
     invoices:"Facturen", settings:"Instellingen", selectService:"Kies een Behandeling",
@@ -806,6 +836,16 @@ const T = {
     noTreatmentsCatYet:"No treatments available yet",
   }
 };
+
+// Proxy wrapper: `T[lang]` returns the requested language if it exists, else
+// falls back to English. This lets LangToggle list new languages before every
+// key has been translated, and lets downstream code stay cheap (`T[lang].foo`)
+// without defensive `?.` chains at every call site.
+const T = new Proxy(_T_RAW, {
+  get(target, prop) {
+    return target[prop] || target.en;
+  }
+});
 
 
 // ─── CSS ─────────────────────────────────────────────────────
@@ -1408,10 +1448,12 @@ function ThemeToggle() {
 }
 
 function LangToggle({ lang, setLang }) {
+  // Reads from the LANGUAGES registry so adding a new UI language is just an
+  // entry in that array + a matching T.xx object — no edits here needed.
   return (
     <div className="lang-toggle">
-      {["nl","en"].map(l => (
-        <button key={l} className={`lang-btn ${lang === l ? "active" : "inactive"}`} onClick={() => setLang(l)}>{l.toUpperCase()}</button>
+      {LANGUAGES.map(({ code, label }) => (
+        <button key={code} className={`lang-btn ${lang === code ? "active" : "inactive"}`} onClick={() => setLang(code)}>{label}</button>
       ))}
     </div>
   );
@@ -1448,6 +1490,7 @@ export {
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS,
   T,
+  LANGUAGES, COUNTRIES,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
   supabase,

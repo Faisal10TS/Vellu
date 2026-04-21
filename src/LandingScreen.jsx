@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  useTheme, useSEO, ACCENT, T, Layout, NavIcon, LangToggle, ThemeToggle, Header
+  useTheme, useSEO, ACCENT, T, COUNTRIES, Layout, NavIcon, LangToggle, ThemeToggle, Header
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -369,7 +369,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // effect causing a cascading render.
   const urlRef = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("ref") || "") : "";
   const [mode, setMode] = useState(urlRef ? "signup" : "signin");
-  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", accountType: "joint", referralCode: urlRef.toUpperCase() });
+  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: urlRef.toUpperCase() });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -448,6 +448,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         business_name: form.businessName,
         slug: slug,
         city: form.city || "Nederland",
+        country_code: form.countryCode || "NL",
         accent_color: "#c9a96e",
         account_type: form.accountType || "joint"
       });
@@ -568,6 +569,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               {mode === "signup" && <>
                 <input className="input-field" placeholder={t.businessNameField} value={form.businessName} onChange={e => setForm(f => ({...f, businessName: e.target.value}))} />
                 <input className="input-field" placeholder={t.city} value={form.city} onChange={e => setForm(f => ({...f, city: e.target.value}))} />
+                <select
+                  className="input-field"
+                  value={form.countryCode}
+                  onChange={e => setForm(f => ({...f, countryCode: e.target.value}))}
+                  aria-label={lang === "nl" ? "Land" : "Country"}
+                  style={{ appearance: "none", cursor: "pointer", paddingRight: 40 }}
+                >
+                  {COUNTRIES.filter(c2 => c2.launched).map(c2 => (
+                    <option key={c2.code} value={c2.code}>{c2.name}</option>
+                  ))}
+                </select>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 17, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textLabel, fontFamily: "'Jost',sans-serif", pointerEvents: "none" }}>vellu.cc/</div>
                   <input className="input-field" placeholder={lang === "nl" ? "jouw-salon-naam" : "your-salon-name"} value={form.slug} onChange={e => setForm(f => ({...f, slug: e.target.value.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}))} style={{ paddingLeft: 85 }} />

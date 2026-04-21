@@ -1240,6 +1240,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           owner_id: data.id,
           name: data.business_name || prev.name,
           city: data.city || prev.city,
+          country_code: data.country_code || "NL",
           accent: data.accent_color || prev.accent,
           address: data.address || "",
           kvk_number: data.kvk_number || "",

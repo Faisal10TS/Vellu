@@ -234,6 +234,7 @@ function SalonRoute({ lang, setLang }) {
         owner_id: data.id,
         name: data.business_name || data.owner_name || "Studio",
         city: data.city || "Nederland",
+        country_code: data.country_code || "NL",
         address: data.address || "",
         accent: data.accent_color || "#c9a96e",
         owner_email: data.email,
