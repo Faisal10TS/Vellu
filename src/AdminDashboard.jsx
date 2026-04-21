@@ -137,7 +137,6 @@ export default function AdminDashboard({ onLogout }) {
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <ThemeToggle />
-            <button className="btn-ghost" onClick={() => navigate("/owner")}>My salon →</button>
             {onLogout && <button className="btn-ghost" onClick={onLogout}>Logout</button>}
           </div>
         </div>
