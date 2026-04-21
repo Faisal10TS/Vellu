@@ -211,7 +211,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   
   const [date, setDate] = useState(getFirstAvailableDate);
   const [time, setTime] = useState(null);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" });
+  // `website` is a honeypot field — invisible to real users (positioned
+  // off-screen, aria-hidden, autocomplete off) but filled by dumb bots that
+  // blindly populate every input on a page. If the server receives a non-empty
+  // value, it rejects the booking. See also book-appointment edge fn.
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" });
   const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -590,6 +594,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             email: clientEmail,
             phone: form.phone || null,
             allergies: form.allergies || null,
+            // Honeypot — real users leave this empty; bots fill it. Server
+            // silently rejects if non-empty.
+            website: form.website || "",
           },
           payment_method: form.payment,
           location_id: selectedLocation?.id || null,
@@ -1969,6 +1976,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                  {/* Honeypot — invisible to real users, bots fill it. Offscreen
+                      positioning beats display:none (savvier bots skip hidden
+                      inputs). tabIndex=-1 keeps keyboard users out. */}
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    value={form.website}
+                    onChange={e => setForm(f => ({...f, website: e.target.value}))}
+                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                  />
                   {/* Email first for client lookup */}
                   <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                   
@@ -2503,6 +2523,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {step === 3 && <>
                     <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                      {/* Honeypot — see desktop branch for rationale */}
+                      <input
+                        type="text"
+                        name="website"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        aria-hidden="true"
+                        value={form.website}
+                        onChange={e => setForm(f => ({...f, website: e.target.value}))}
+                        style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                      />
                       {/* Email first for client lookup */}
                       <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                       

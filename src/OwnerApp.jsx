@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
+// Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
+// ~15KB gzipped for the three packages combined.
+import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   Skeleton, DashboardSkeleton,
@@ -15,6 +20,48 @@ import {
 // Small helper for period presets lives in a separate file so it can be
 // imported eagerly without pulling in the heavy deps:
 import { periodPreset } from "./revenueReport.helpers.js";
+
+// Sortable wrapper for a service card. Uses a render-prop so the caller can
+// place the drag handle wherever it wants inside the existing complex card
+// JSX without having to rewrite the whole thing.
+function SortableService({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : 1,
+  };
+  return children({ setNodeRef, style, attributes, listeners, isDragging });
+}
+
+// Drag handle button — 6 dots icon. Must receive the sortable listeners to
+// be the hot zone. tabIndex + aria-label for keyboard/screen-reader users.
+function DragHandle({ listeners, attributes, color }) {
+  return (
+    <button
+      type="button"
+      aria-label="Reorder service"
+      {...attributes}
+      {...listeners}
+      style={{
+        background: "transparent", border: "none", padding: "6px 4px",
+        cursor: "grab", color, display: "flex", alignItems: "center",
+        touchAction: "none", // required by dnd-kit on touch devices
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <svg width="12" height="18" viewBox="0 0 12 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <circle cx="3" cy="4" r="0.6" fill="currentColor" />
+        <circle cx="9" cy="4" r="0.6" fill="currentColor" />
+        <circle cx="3" cy="9" r="0.6" fill="currentColor" />
+        <circle cx="9" cy="9" r="0.6" fill="currentColor" />
+        <circle cx="3" cy="14" r="0.6" fill="currentColor" />
+        <circle cx="9" cy="14" r="0.6" fill="currentColor" />
+      </svg>
+    </button>
+  );
+}
 
 // Reschedule modal — owner picks new date/time (and optionally new staff)
 // for an existing confirmed appointment. All server-side work (conflict
@@ -1102,14 +1149,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           referral_count: referralCount || 0,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
-          services: (data.services || []).map(s => ({
-            ...s,
-            name_nl: s.name_nl || s.name || "",
-            name_en: s.name_en || s.name || "",
-            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
-            variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-            extras: s.service_extras || []
-          })),
+          services: (data.services || [])
+            .slice()
+            // Sort by position first (drag-drop order); fall back to created_at
+            // for salons that predate the position column (rows with position=null).
+            .sort((a, b) => {
+              const pa = a.position ?? 9999;
+              const pb = b.position ?? 9999;
+              if (pa !== pb) return pa - pb;
+              return (a.created_at || "") < (b.created_at || "") ? -1 : 1;
+            })
+            .map(s => ({
+              ...s,
+              name_nl: s.name_nl || s.name || "",
+              name_en: s.name_en || s.name || "",
+              photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
+              variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+              extras: s.service_extras || []
+            })),
           appointments: appts || [],
           reviews: reviews || [],
           staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
@@ -1216,6 +1273,44 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [processingApptId, setProcessingApptId] = useState(null);
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
+
+  // dnd-kit sensors — pointer (mouse + touch) with a small activation distance
+  // so accidental clicks don't start a drag, plus keyboard support for
+  // accessibility. Shared across all sortable lists in the owner dashboard.
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Drop handler for service reordering. Moves the item locally, then writes
+  // the new `position` values to all affected rows in the DB. We write ALL
+  // positions (not just the moved row) because a single move can cascade —
+  // e.g. moving item 5 to position 2 bumps old 2/3/4 down by one.
+  const handleServiceDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = salonData.services.findIndex(s => s.id === active.id);
+    const newIdx = salonData.services.findIndex(s => s.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+
+    const reordered = arrayMove(salonData.services, oldIdx, newIdx);
+    // Optimistic local update
+    update(d => { d.services = reordered; return d; });
+
+    // Persist. Parallel updates — one PATCH per service. Fine for under ~100
+    // services; if a salon ever has more we can batch into a single RPC.
+    try {
+      await Promise.all(reordered.map((s, idx) =>
+        supabase.from("services")
+          .update({ position: idx })
+          .eq("id", s.id)
+          .eq("owner_id", salonData.owner_id)
+      ));
+    } catch (e) {
+      console.error("Reorder save failed:", e);
+      toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
+    }
+  };
   const markComplete = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -3573,6 +3668,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 )}
 
+                <DndContext
+                  sensors={dndSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleServiceDragEnd}
+                >
+                  <SortableContext items={salonData.services.map(s => s.id)} strategy={verticalListSortingStrategy}>
                 {salonData.services.map(s => {
                   const isExpanded = expandedServiceId === s.id;
                   const isEditing = editingService === s.id;
@@ -3584,11 +3685,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const displayPrice = minVariantPrice !== null ? `€${minVariantPrice}+` : `€${s.price}`;
 
                   return (
-                    <div key={s.id} style={{
+                    <SortableService key={s.id} id={s.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
+                    <div ref={setNodeRef} style={{
+                      ...sortStyle,
                       background: c.bgCard,
                       border: `1px solid ${isExpanded ? `${accent}44` : c.border}`,
                       borderRadius: 16, marginBottom: 10,
-                      transition: "border-color 0.2s",
+                      transition: sortStyle.transition || "border-color 0.2s",
                       overflow: "hidden"
                     }}>
                       {isEditing ? (
@@ -3631,11 +3734,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <>
                           {/* ── HEADER ROW — always visible ── */}
                           <div style={{
-                            display: "flex", alignItems: "center", gap: 14,
+                            display: "flex", alignItems: "center", gap: 10,
                             padding: 16, cursor: "pointer",
                             background: isExpanded ? `${accent}08` : "transparent",
                             transition: "background 0.15s"
                           }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
+                            {/* Drag handle — only renders when there's more than one
+                                service to reorder; single-service salons don't need it. */}
+                            {salonData.services.length > 1 && (
+                              <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
+                            )}
                             {/* Thumb */}
                             <div style={{ width: 48, height: 48, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
                               {heroPhoto ? <img src={heroPhoto} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
@@ -3839,8 +3947,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </>
                       )}
                     </div>
+                    )}</SortableService>
                   );
                 })}
+                  </SortableContext>
+                </DndContext>
 
                 {/* Add new service — collapsible CTA */}
                 {showNewServiceForm ? (
