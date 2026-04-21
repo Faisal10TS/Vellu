@@ -97,7 +97,7 @@ export default function AdminDashboard({ onLogout }) {
         <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.text, gap: 16, padding: 24, textAlign: "center" }}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>Not authorised</div>
           <div style={{ fontSize: 13, color: c.textSub, maxWidth: 360 }}>
-            You don't have admin access. If you think that's wrong, ask Faisal to add your account to <code style={{ fontFamily: "monospace", fontSize: 12, color: accent }}>app_admins</code>.
+            You don't have admin access.
           </div>
           <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => navigate("/")}>Back to home</button>
         </div>
