@@ -12,6 +12,9 @@ const ClientApp = lazy(() => import("./ClientApp.jsx"));
 const OwnerApp = lazy(() => import("./OwnerApp.jsx"));
 const PlanSelection = lazy(() => import("./OwnerApp.jsx").then(m => ({ default: m.PlanSelection })));
 const StaffApp = lazy(() => import("./StaffApp.jsx"));
+// Admin-only dashboard (app_admins table gating). Lazy so non-admin users
+// never download the code.
+const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const PrivacyPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.PrivacyPage })));
 const TermsPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.TermsPage })));
 const ContactPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.ContactPage })));
@@ -474,6 +477,29 @@ function CancelRoute({ lang }) {
   );
 }
 
+// ─── ADMIN ROUTE GUARD ───────────────────────────────────────
+// Quick auth check: if no session, bounce to /owner (the login page).
+// Otherwise render AdminDashboard, which does the real is_admin() check
+// via RPC. Keeps anonymous visitors from seeing the admin chrome even
+// briefly.
+function AdminRoute() {
+  const [authed, setAuthed] = useState(null); // null = loading, false = no session
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setAuthed(!!data.session);
+      if (!data.session) navigate("/owner", { replace: true });
+    });
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  if (!authed) return null; // either still loading or already bouncing away
+  return <AdminDashboard onLogout={() => supabase.auth.signOut().then(() => navigate("/"))} />;
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────
 function AppInner({ lang, setLang }) {
   const { colors: c } = useTheme();
@@ -583,6 +609,10 @@ export default function VelluApp() {
               <Route path="/voorwaarden" element={<TermsPage lang={lang} setLang={setLang} />} />
               <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
               <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
+              {/* Admin route — rendered for anyone, but the component itself
+                  calls is_admin() via RPC and shows "Not authorised" for
+                  non-admins. Real enforcement sits in the DB (app_admins). */}
+              <Route path="/admin" element={<AdminRoute />} />
               <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
             </Routes>
           </Suspense>
