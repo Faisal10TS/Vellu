@@ -1274,6 +1274,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
 
+  // Slug editor state. The pending slug is edited locally; availability
+  // check runs debounced; save is a single atomic UPDATE that also handles
+  // the conflict case. Kept separate from the main `update()` flow because
+  // slug changes need special care (uniqueness, reserved words, URL side
+  // effects).
+  const [slugDraft, setSlugDraft] = useState("");
+  const [slugStatus, setSlugStatus] = useState({ state: "idle", message: "" }); // idle | checking | available | taken | invalid | reserved
+  const [slugSaving, setSlugSaving] = useState(false);
+  const slugCheckRef = useRef(null);
+
+  // Paths that must never become a salon slug — they'd shadow real app
+  // routes. Keep in sync with App.jsx <Routes>.
+  const RESERVED_SLUGS = new Set([
+    "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
+    "voorwaarden", "contact", "api", "assets", "public", "static",
+    "auth", "login", "signup", "signin", "logout", "reset", "review",
+    "_", "app", "www",
+  ]);
+
   // dnd-kit sensors — pointer (mouse + touch) with a small activation distance
   // so accidental clicks don't start a drag, plus keyboard support for
   // accessibility. Shared across all sortable lists in the owner dashboard.
@@ -1281,6 +1300,79 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  // Seed the slug draft from the current slug once data has loaded.
+  useEffect(() => {
+    if (salonData.id && !slugDraft) setSlugDraft(salonData.id);
+  }, [salonData.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live availability check — debounced 450ms after last keystroke.
+  useEffect(() => {
+    if (!slugDraft) { setSlugStatus({ state: "idle", message: "" }); return; }
+    if (slugDraft === salonData.id) { setSlugStatus({ state: "idle", message: "" }); return; }
+
+    // Client-side validation first (fast fail)
+    const errMsg = (() => {
+      if (!/^[a-z0-9-]+$/.test(slugDraft)) return lang === "nl"
+        ? "Alleen kleine letters, cijfers en streepjes"
+        : "Lowercase letters, numbers, and hyphens only";
+      if (slugDraft.length < 3) return lang === "nl" ? "Minimaal 3 tekens" : "At least 3 characters";
+      if (slugDraft.length > 40) return lang === "nl" ? "Maximaal 40 tekens" : "At most 40 characters";
+      if (slugDraft.startsWith("-") || slugDraft.endsWith("-")) return lang === "nl"
+        ? "Kan niet beginnen of eindigen met streepje"
+        : "Cannot start or end with a hyphen";
+      if (slugDraft.includes("--")) return lang === "nl" ? "Geen dubbele streepjes" : "No double hyphens";
+      if (RESERVED_SLUGS.has(slugDraft)) return lang === "nl"
+        ? "Deze naam is gereserveerd door Vellu"
+        : "This name is reserved by Vellu";
+      return null;
+    })();
+    if (errMsg) { setSlugStatus({ state: "invalid", message: errMsg }); return; }
+
+    setSlugStatus({ state: "checking", message: lang === "nl" ? "Beschikbaarheid controleren…" : "Checking availability…" });
+    if (slugCheckRef.current) clearTimeout(slugCheckRef.current);
+    slugCheckRef.current = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("profiles").select("id").eq("slug", slugDraft).maybeSingle();
+      if (error) {
+        setSlugStatus({ state: "invalid", message: lang === "nl" ? "Kon niet controleren, probeer opnieuw" : "Couldn't check, try again" });
+        return;
+      }
+      if (data) {
+        setSlugStatus({ state: "taken", message: lang === "nl" ? "Al in gebruik" : "Already taken" });
+      } else {
+        setSlugStatus({ state: "available", message: lang === "nl" ? "Beschikbaar" : "Available" });
+      }
+    }, 450);
+
+    return () => { if (slugCheckRef.current) clearTimeout(slugCheckRef.current); };
+  }, [slugDraft, salonData.id, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveSlug = async () => {
+    if (slugStatus.state !== "available") return;
+    setSlugSaving(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ slug: slugDraft })
+        .eq("id", salonData.owner_id);
+      if (error) {
+        // Unique constraint: someone else grabbed it between check and save.
+        if (error.code === "23505") {
+          setSlugStatus({ state: "taken", message: lang === "nl" ? "Iemand anders was net sneller" : "Just taken by someone else" });
+        } else {
+          toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
+        }
+        return;
+      }
+      // Update React state so the UI, copy-link, and data-reload key flip to the new slug.
+      update(d => { d.id = slugDraft; return d; });
+      // Rewrite the URL + reload so data loads under the new slug. Full reload
+      // is cleanest — avoids chasing cached query keys that reference the old slug.
+      setTimeout(() => { window.location.href = `/owner`; }, 500);
+      toast.show(lang === "nl" ? "Salon-link bijgewerkt" : "Salon link updated");
+    } finally { setSlugSaving(false); }
+  };
 
   // Drop handler for service reordering. Moves the item locally, then writes
   // the new `position` values to all affected rows in the DB. We write ALL
@@ -3450,6 +3542,80 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.businessName} value={salonData.name} onChange={e => update(d => { d.name = e.target.value; return d; })} />
                   <input className="input-field" placeholder={t.city} value={salonData.city} onChange={e => update(d => { d.city = e.target.value; return d; })} />
+                </div>
+
+                {/* Salon URL / slug editor — separate save path from the big
+                    Opslaan at the bottom because changing the slug invalidates
+                    the query (data loads by slug) and forces a reload. */}
+                <div style={{ marginTop: 18 }}>
+                  <SL>{lang === "nl" ? "Salon-link" : "Salon link"}</SL>
+                  <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
+                    {lang === "nl"
+                      ? "Dit is het webadres van jouw salon. Klanten boeken via deze link. Kies iets kort en herkenbaar."
+                      : "This is your salon's public web address. Customers book via this link. Keep it short and recognisable."}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 0, background: c.bg, border: `1px solid ${c.inputBorder}`, borderRadius: 14, overflow: "hidden" }}>
+                    <div style={{ padding: "10px 4px 10px 14px", fontSize: 13, color: c.textMuted, fontFamily: "monospace", whiteSpace: "nowrap" }}>vellu.cc/</div>
+                    <input
+                      value={slugDraft}
+                      onChange={e => setSlugDraft(e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""))}
+                      maxLength={40}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                      placeholder="ttnb-den-haag"
+                      style={{
+                        flex: 1, background: "transparent", border: "none", outline: "none",
+                        padding: "10px 12px 10px 0",
+                        color: c.text, fontFamily: "monospace", fontSize: 13, minWidth: 0,
+                      }}
+                    />
+                  </div>
+                  {/* Status row — colour-coded feedback */}
+                  {slugStatus.state !== "idle" && (
+                    <div style={{
+                      marginTop: 8, fontSize: 11,
+                      color: slugStatus.state === "available" ? c.success
+                        : slugStatus.state === "checking" ? c.textMuted
+                        : c.danger,
+                      display: "flex", alignItems: "center", gap: 6,
+                    }}>
+                      {slugStatus.state === "available" && <span>✓</span>}
+                      {slugStatus.state === "taken" && <span>⚠</span>}
+                      {slugStatus.state === "invalid" && <span>⚠</span>}
+                      {slugStatus.state === "checking" && <span>…</span>}
+                      <span>{slugStatus.message}</span>
+                    </div>
+                  )}
+                  {slugDraft && slugDraft !== salonData.id && slugStatus.state === "available" && (
+                    <div style={{
+                      marginTop: 12, padding: "10px 12px",
+                      background: `${c.warning}10`, border: `1px solid ${c.warning}33`,
+                      borderRadius: 10, fontSize: 11, color: c.textSub, lineHeight: 1.5,
+                    }}>
+                      {lang === "nl"
+                        ? <>Waarschuwing: de oude link <code style={{ fontFamily: "monospace", color: c.text }}>vellu.cc/{salonData.id}</code> werkt niet meer. Update je bio-links, QR-codes en visitekaartjes.</>
+                        : <>Heads up: the old link <code style={{ fontFamily: "monospace", color: c.text }}>vellu.cc/{salonData.id}</code> will stop working. Update your bio links, QR codes, and business cards.</>}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button
+                      className="btn-primary"
+                      disabled={slugSaving || slugStatus.state !== "available" || slugDraft === salonData.id}
+                      onClick={saveSlug}
+                      style={{ fontSize: 12, padding: "10px 18px", opacity: (slugStatus.state !== "available" || slugDraft === salonData.id) ? 0.5 : 1 }}
+                    >
+                      {slugSaving ? "…" : (lang === "nl" ? "Link bijwerken" : "Update link")}
+                    </button>
+                    {slugDraft !== salonData.id && (
+                      <button
+                        className="btn-ghost"
+                        onClick={() => { setSlugDraft(salonData.id); setSlugStatus({ state: "idle", message: "" }); }}
+                        style={{ fontSize: 12 }}
+                      >{lang === "nl" ? "Annuleer" : "Cancel"}</button>
+                    )}
+                  </div>
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <SL>{t.brandColor}</SL>
