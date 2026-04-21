@@ -63,6 +63,130 @@ function DragHandle({ listeners, attributes, color }) {
   );
 }
 
+// QR code modal — owner opens this to show/print/download a QR pointing
+// to their public booking page. qrcode library is lazy-imported on first
+// open so the ~15KB of wasm/canvas code isn't in the main bundle.
+function QRCodeModal({ url, salonName, lang, c, accent, onClose }) {
+  const [dataUrl, setDataUrl] = useState(null);
+  const [svgMarkup, setSvgMarkup] = useState(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod = await import("./qrGenerator.js");
+        const [png, svg] = await Promise.all([
+          mod.renderQrDataUrl(url, 720),
+          mod.renderQrSvg(url),
+        ]);
+        if (cancelled) return;
+        setDataUrl(png);
+        setSvgMarkup(svg);
+      } catch (e) {
+        console.error("QR render failed:", e);
+        if (!cancelled) setErr(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  const downloadPng = async () => {
+    if (!dataUrl) return;
+    const mod = await import("./qrGenerator.js");
+    const blob = mod.dataUrlToBlob(dataUrl);
+    const fn = (salonName || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40) + "-qr.png";
+    mod.triggerDownload(fn, blob);
+  };
+  const downloadSvg = async () => {
+    if (!svgMarkup) return;
+    const mod = await import("./qrGenerator.js");
+    const fn = (salonName || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40) + "-qr.svg";
+    mod.triggerDownload(fn, svgMarkup, "image/svg+xml");
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 1000, padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20,
+          padding: 24, maxWidth: 420, width: "100%", maxHeight: "92vh",
+          overflowY: "auto",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 12 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300 }}>
+            {lang === "nl" ? "QR-code" : "QR code"}
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 4 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
+          {lang === "nl"
+            ? "Klanten scannen deze code met hun telefoon om direct bij jouw boekingspagina te komen. Print op een flyer, raamsticker of visitekaartje."
+            : "Customers scan this code with their phone to jump straight to your booking page. Print it on flyers, a window sticker, or business cards."}
+        </div>
+
+        {/* QR preview */}
+        <div style={{
+          background: "#fff", border: `1px solid ${c.border}`, borderRadius: 14,
+          padding: 20, display: "flex", alignItems: "center", justifyContent: "center",
+          minHeight: 280, marginBottom: 14,
+        }}>
+          {err ? (
+            <div style={{ color: c.danger, fontSize: 12, textAlign: "center" }}>
+              {lang === "nl" ? "Kon QR niet genereren" : "Could not render QR"}
+            </div>
+          ) : dataUrl ? (
+            <img src={dataUrl} alt="QR code" style={{ width: 240, height: 240, display: "block" }} />
+          ) : (
+            <div style={{ color: c.textMuted, fontSize: 12 }}>{lang === "nl" ? "Genereren…" : "Generating…"}</div>
+          )}
+        </div>
+
+        {/* URL display */}
+        <div style={{
+          background: c.bgCard, border: `1px solid ${c.inputBorder}`, borderRadius: 10,
+          padding: "8px 12px", fontFamily: "monospace", fontSize: 11, color: c.textSub,
+          marginBottom: 14, textAlign: "center", wordBreak: "break-all",
+        }}>{url}</div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn-primary"
+            onClick={downloadPng}
+            disabled={!dataUrl}
+            style={{ flex: 1, fontSize: 12, padding: "11px 16px", opacity: dataUrl ? 1 : 0.5 }}
+          >{lang === "nl" ? "Download PNG" : "Download PNG"}</button>
+          <button
+            className="btn-ghost"
+            onClick={downloadSvg}
+            disabled={!svgMarkup}
+            style={{ flex: 1, fontSize: 12, padding: "11px 16px", opacity: svgMarkup ? 1 : 0.5 }}
+            title={lang === "nl" ? "Vector (scherp op elk formaat)" : "Vector (sharp at any size)"}
+          >{lang === "nl" ? "Download SVG" : "Download SVG"}</button>
+        </div>
+
+        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 14, textAlign: "center" }}>
+          {lang === "nl"
+            ? "Tip: gebruik SVG voor de drukker, PNG voor social media of Instagram stories."
+            : "Tip: use SVG for print shops, PNG for social or Instagram stories."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Reschedule modal — owner picks new date/time (and optionally new staff)
 // for an existing confirmed appointment. All server-side work (conflict
 // check, business-hours validation, google-calendar update, client email)
@@ -1273,6 +1397,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [processingApptId, setProcessingApptId] = useState(null);
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
   // check runs debounced; save is a single atomic UPDATE that also handles
@@ -1774,6 +1899,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     <Layout accent={accent}>
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+      {qrOpen && (
+        <QRCodeModal
+          url={`https://vellu.cc/${salonData.id}`}
+          salonName={salonData.name}
+          lang={lang}
+          c={c}
+          accent={accent}
+          onClose={() => setQrOpen(false)}
+        />
+      )}
       {rescheduling && (
         <RescheduleModal
           appt={rescheduling}
@@ -3616,6 +3751,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       >{lang === "nl" ? "Annuleer" : "Cancel"}</button>
                     )}
                   </div>
+
+                  {/* QR code trigger — separate card action, not tied to
+                      slug-save state. Lazy-loaded modal generates the QR
+                      on open. */}
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setQrOpen(true)}
+                    style={{
+                      marginTop: 12, fontSize: 11, padding: "10px 14px",
+                      display: "inline-flex", alignItems: "center", gap: 8,
+                      width: "100%", justifyContent: "center",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                      <line x1="14" y1="14" x2="14" y2="14.01" />
+                      <line x1="18" y1="14" x2="18" y2="18" />
+                      <line x1="14" y1="18" x2="18" y2="18" />
+                      <line x1="18" y1="21" x2="21" y2="21" />
+                      <line x1="21" y1="14" x2="21" y2="18" />
+                    </svg>
+                    {lang === "nl" ? "Toon QR-code" : "Show QR code"}
+                  </button>
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <SL>{t.brandColor}</SL>
