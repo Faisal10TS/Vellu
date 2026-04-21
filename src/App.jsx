@@ -253,14 +253,25 @@ function SalonRoute({ lang, setLang }) {
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,
         max_advance_days: data.max_advance_days || 60,
-        services: (data.services || []).map(s => ({
-          ...s,
-          name_nl: s.name_nl || s.name || "",
-          name_en: s.name_en || s.name || "",
-          photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
-          variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-          extras: s.service_extras || []
-        })),
+        // Sort by `position` (the owner's drag-drop order) so the public page
+        // renders services in the same order as the owner dashboard.
+        // Fall back to created_at for rows that predate the position column.
+        services: (data.services || [])
+          .slice()
+          .sort((a, b) => {
+            const pa = a.position ?? 9999;
+            const pb = b.position ?? 9999;
+            if (pa !== pb) return pa - pb;
+            return (a.created_at || "") < (b.created_at || "") ? -1 : 1;
+          })
+          .map(s => ({
+            ...s,
+            name_nl: s.name_nl || s.name || "",
+            name_en: s.name_en || s.name || "",
+            photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
+            variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
+            extras: s.service_extras || []
+          })),
         appointments: [],
         reviews: reviews || [],
         staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),

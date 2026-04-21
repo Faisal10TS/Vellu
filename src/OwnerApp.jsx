@@ -1625,13 +1625,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const price = parseFloat(newSvc.price);
     if (!Number.isFinite(price) || price < 0) { setSvcError(lang === "nl" ? "Ongeldige prijs" : "Invalid price"); return; }
     setSvcError("");
+    // Append to end: position = max existing + 1 (so new rows land below drag-drop ordered ones).
+    const nextPosition = (salonData.services || []).reduce((m, s) => Math.max(m, s.position ?? -1), -1) + 1;
     const { data, error } = await supabase.from("services").insert({
       owner_id: salonData.owner_id,
       name: newSvc.name_nl,
       name_nl: newSvc.name_nl,
       name_en: newSvc.name_en || null,
       price,
-      duration: parseInt(newSvc.duration) || 60
+      duration: parseInt(newSvc.duration) || 60,
+      position: nextPosition
     }).select().single();
     if (error || !data) {
       // Previously the error was silently swallowed and the form was cleared so owners
