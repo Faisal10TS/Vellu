@@ -10,6 +10,466 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
 
+// PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
+// This keeps jsPDF (~400KB) out of the initial owner dashboard bundle.
+// Small helper for period presets lives in a separate file so it can be
+// imported eagerly without pulling in the heavy deps:
+import { periodPreset } from "./revenueReport.helpers.js";
+
+// Reschedule modal — owner picks new date/time (and optionally new staff)
+// for an existing confirmed appointment. All server-side work (conflict
+// check, business-hours validation, google-calendar update, client email)
+// is done by the reschedule-appointment edge function.
+function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, staffList }) {
+  const [newDate, setNewDate] = useState(appt.date);
+  const [newTime, setNewTime] = useState(appt.time);
+  const [newStaffId, setNewStaffId] = useState(appt.staff_id || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    setError("");
+    if (!newDate || !newTime) {
+      setError(lang === "nl" ? "Vul datum en tijd in" : "Fill in date and time");
+      return;
+    }
+    // Early exit if nothing changed
+    const staffChanged = (newStaffId || null) !== (appt.staff_id || null);
+    if (newDate === appt.date && newTime === appt.time && !staffChanged) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token;
+      if (!tok) {
+        setError(lang === "nl" ? "Sessie verlopen — log opnieuw in" : "Session expired — please sign in again");
+        return;
+      }
+      // Use supabase.functions.invoke rather than a hardcoded URL so we
+      // inherit whatever project_ref the client is configured with. Errors
+      // from non-2xx responses come back on fnErr.context — extract the
+      // error code from there so the UI can show a specific message.
+      const { data, error: fnErr } = await supabase.functions.invoke("reschedule-appointment", {
+        body: {
+          appointment_id: appt.id,
+          new_date: newDate,
+          new_time: newTime,
+          ...(staffChanged ? { new_staff_id: newStaffId || null } : {}),
+        },
+      });
+      let errorCode = null;
+      let appointment = null;
+      if (fnErr) {
+        try { const parsed = await fnErr.context.json(); errorCode = parsed.error; }
+        catch { errorCode = "unknown"; }
+      } else {
+        appointment = data?.appointment;
+        if (data?.error) errorCode = data.error;
+      }
+      if (errorCode) {
+        const msg = {
+          slot_conflict: lang === "nl" ? "Dit tijdstip overlapt met een andere afspraak" : "This slot conflicts with another appointment",
+          outside_hours: lang === "nl" ? "Buiten openingstijden" : "Outside business hours",
+          closed: lang === "nl" ? "Op deze dag is de salon gesloten" : "Salon is closed on this day",
+          day_blocked: lang === "nl" ? "Deze dag is geblokkeerd" : "This day is blocked",
+          slot_blocked: lang === "nl" ? "Dit tijdstip is geblokkeerd" : "This slot is blocked",
+          forbidden: lang === "nl" ? "Je hebt geen toegang tot deze afspraak" : "Not authorized for this appointment",
+          unauthorized: lang === "nl" ? "Sessie verlopen — log opnieuw in" : "Session expired — please sign in again",
+        }[errorCode] || (lang === "nl" ? "Verplaatsen mislukt" : "Reschedule failed");
+        setError(msg);
+        return;
+      }
+      onSuccess(appointment);
+    } catch (e) {
+      console.error("Reschedule error:", e);
+      setError(lang === "nl" ? "Verplaatsen mislukt" : "Reschedule failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 1000, padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20,
+          padding: 24, maxWidth: 420, width: "100%", maxHeight: "90vh", overflowY: "auto",
+        }}
+      >
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 4 }}>
+          {lang === "nl" ? "Afspraak verplaatsen" : "Reschedule appointment"}
+        </div>
+        <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+          {appt.client_name} · {appt.service_name}
+        </div>
+        <div style={{ fontSize: 10, color: c.textMuted, background: c.bgCard, padding: "8px 12px", borderRadius: 10, marginBottom: 16 }}>
+          {lang === "nl" ? "Nu: " : "Currently: "}{appt.date} {lang === "nl" ? "om" : "at"} {appt.time}
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              {lang === "nl" ? "Nieuwe datum" : "New date"}
+            </div>
+            <input
+              type="date"
+              className="input-field"
+              value={newDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={e => setNewDate(e.target.value)}
+              style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              {lang === "nl" ? "Nieuwe tijd" : "New time"}
+            </div>
+            <input
+              type="time"
+              className="input-field"
+              value={newTime}
+              onChange={e => setNewTime(e.target.value)}
+              style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}
+            />
+          </div>
+          {staffList && staffList.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {lang === "nl" ? "Medewerker" : "Staff"}
+              </div>
+              <select
+                value={newStaffId || ""}
+                onChange={e => setNewStaffId(e.target.value || null)}
+                style={{
+                  background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 14,
+                  padding: "10px 12px", color: c.text, fontSize: 13,
+                  fontFamily: "'Jost',sans-serif", width: "100%", cursor: "pointer",
+                }}
+              >
+                <option value="">{lang === "nl" ? "Geen voorkeur" : "No preference"}</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div style={{ fontSize: 12, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+          {lang === "nl"
+            ? "De klant ontvangt automatisch een e-mail met de nieuwe datum. Als Google Agenda gekoppeld is, wordt het event ook verplaatst."
+            : "The client will receive an automatic email with the new date. If Google Calendar is connected, the event will be moved too."}
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-ghost" style={{ flex: 1, fontSize: 12 }} onClick={onClose} disabled={saving}>
+            {lang === "nl" ? "Annuleren" : "Cancel"}
+          </button>
+          <button className="btn-primary" style={{ flex: 2, fontSize: 12, opacity: saving ? 0.6 : 1 }} onClick={submit} disabled={saving}>
+            {saving ? (lang === "nl" ? "Verplaatsen..." : "Moving...") : (lang === "nl" ? "Verplaatsen" : "Reschedule")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Referral program block — displays the owner's unique invite code + shareable
+// link, shows how many salons have signed up with it, and how many months of
+// free credit they've earned. Billing credit is redeemed when iDEAL/Stripe
+// integration reads profiles.referral_credit_months.
+function ReferralBlock({ salonData, lang, c, accent, toast }) {
+  const [copied, setCopied] = useState(false);
+  const code = salonData.referral_code || "";
+  const referralUrl = code ? `https://vellu.cc/owner?ref=${code}` : "";
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(referralUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.show(lang === "nl" ? "Kopiëren mislukt" : "Copy failed", "error");
+    }
+  };
+
+  const share = async () => {
+    const text = lang === "nl"
+      ? `Hey! Ik gebruik Vellu voor mijn online boekingen — geen commissie, alleen een vast maandbedrag. Meld je aan via mijn link en we krijgen allebei een maand gratis: ${referralUrl}`
+      : `Hey! I'm using Vellu for my online bookings — no commission, just a flat monthly fee. Sign up via my link and we both get a free month: ${referralUrl}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Vellu", text, url: referralUrl });
+      } catch {}
+    } else {
+      await copy();
+    }
+  };
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+        {lang === "nl" ? "Nodig een salon uit" : "Refer a salon"}
+      </div>
+      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {lang === "nl"
+          ? "Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei 1 maand gratis."
+          : "Share your link with another salon. If they sign up, you both get 1 free month."}
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        <div style={{ padding: "12px 14px", background: `${accent}0a`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
+          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
+            {lang === "nl" ? "Aanmeldingen" : "Sign-ups"}
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, color: accent, lineHeight: 1 }}>
+            {salonData.referral_count || 0}
+          </div>
+        </div>
+        <div style={{ padding: "12px 14px", background: `${accent}0a`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
+          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
+            {lang === "nl" ? "Maanden gratis" : "Free months"}
+          </div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, color: accent, lineHeight: 1 }}>
+            {salonData.referral_credit_months || 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Code + link */}
+      <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+        {lang === "nl" ? "Jouw code" : "Your code"}
+      </div>
+      <div style={{ background: c.bg, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "10px 14px", fontFamily: "monospace", fontSize: 15, fontWeight: 600, letterSpacing: "0.08em", color: c.text, marginBottom: 10 }}>
+        {code || "—"}
+      </div>
+      <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+        {lang === "nl" ? "Jouw link" : "Your link"}
+      </div>
+      <div style={{ background: c.bg, border: `1px solid ${c.inputBorder}`, borderRadius: 10, padding: "10px 14px", fontSize: 11, color: c.textSub, marginBottom: 10, overflowX: "auto", whiteSpace: "nowrap" }}>
+        {referralUrl || "—"}
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn-ghost" style={{ flex: 1, fontSize: 11 }} onClick={copy} disabled={!code}>
+          {copied ? (lang === "nl" ? "✓ Gekopieerd" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : "Copy link")}
+        </button>
+        <button className="btn-primary" style={{ flex: 1, fontSize: 11 }} onClick={share} disabled={!code}>
+          {lang === "nl" ? "Delen" : "Share"}
+        </button>
+      </div>
+
+      {salonData.referral_credit_months > 0 && (
+        <div style={{ marginTop: 12, fontSize: 10, color: c.success, textAlign: "center" }}>
+          {lang === "nl"
+            ? `Je hebt ${salonData.referral_credit_months} maand${salonData.referral_credit_months === 1 ? "" : "en"} gratis verdiend. Deze worden verrekend bij de volgende facturatie.`
+            : `You've earned ${salonData.referral_credit_months} free month${salonData.referral_credit_months === 1 ? "" : "s"}. These will be applied at your next billing cycle.`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Client CSV export block — sits in Instellingen → Overig. One button,
+// no options: generates a CSV of every unique client who has booked at
+// this salon, aggregated with visit/spend stats. Useful for marketing
+// imports, GDPR data-portability responses, accountant client ledgers,
+// and migration backups.
+function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast }) {
+  const [exporting, setExporting] = useState(false);
+
+  const download = async () => {
+    setExporting(true);
+    try {
+      const mod = await import("./clientExport.js");
+      const result = await mod.exportClientsCSV({ ownerId, salonName, lang });
+      if (result.count === 0) {
+        toast.show(lang === "nl" ? "Nog geen klanten om te exporteren" : "No clients to export yet", "error");
+      } else {
+        toast.show(lang === "nl" ? `${result.count} klanten geëxporteerd` : `Exported ${result.count} clients`);
+      }
+    } catch (e) {
+      console.error("CSV export failed:", e);
+      toast.show(lang === "nl" ? "Export mislukt" : "Export failed", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+        {lang === "nl" ? "Klantenlijst exporteren" : "Export clients"}
+      </div>
+      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {lang === "nl"
+          ? "Download een CSV met al je klanten: contactgegevens, bezoekstatistieken, favoriete behandeling en medewerker. Handig voor nieuwsbrieven, boekhouding of GDPR-verzoeken."
+          : "Download a CSV of every client: contact info, visit stats, favorite service and staff. Useful for newsletters, bookkeeping, or GDPR requests."}
+      </div>
+      <button
+        onClick={download}
+        disabled={exporting}
+        className="btn-ghost"
+        style={{ width: "100%", padding: "10px 14px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", opacity: exporting ? 0.6 : 1 }}
+      >
+        {exporting ? (
+          <>{lang === "nl" ? "Exporteren..." : "Exporting..."}</>
+        ) : (
+          <>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {lang === "nl" ? "Download CSV" : "Download CSV"}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+// Revenue report block — renders inside the Facturen view. Owner picks a
+// period (this/last month, this/last year, or custom range) and clicks
+// download; jsPDF generates and triggers a browser download instantly.
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast }) {
+  const [period, setPeriod] = useState("this_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const presets = [
+    { key: "this_month", label: lang === "nl" ? "Deze maand" : "This month" },
+    { key: "last_month", label: lang === "nl" ? "Vorige maand" : "Last month" },
+    { key: "this_year", label: lang === "nl" ? "Dit jaar" : "This year" },
+    { key: "last_year", label: lang === "nl" ? "Vorig jaar" : "Last year" },
+    { key: "custom", label: lang === "nl" ? "Aangepast" : "Custom" },
+  ];
+
+  const getRange = () => {
+    if (period === "custom") {
+      if (!customFrom || !customTo) return null;
+      const fromDate = new Date(customFrom);
+      const toDate = new Date(customTo);
+      const label = lang === "nl"
+        ? `${fromDate.toLocaleDateString("nl-NL")} — ${toDate.toLocaleDateString("nl-NL")}`
+        : `${fromDate.toLocaleDateString("en-US")} — ${toDate.toLocaleDateString("en-US")}`;
+      return { from: customFrom, to: customTo, label };
+    }
+    return periodPreset(period, lang);
+  };
+
+  const [generating, setGenerating] = useState(false);
+
+  const download = async () => {
+    const range = getRange();
+    if (!range) {
+      toast.show(lang === "nl" ? "Kies een datumbereik" : "Pick a date range", "error");
+      return;
+    }
+    const inRange = completedAppts.filter(a => a.date >= range.from && a.date <= range.to);
+    if (inRange.length === 0) {
+      toast.show(lang === "nl" ? "Geen afgeronde afspraken in deze periode" : "No completed appointments in this period", "error");
+      return;
+    }
+    setGenerating(true);
+    try {
+      // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
+      // chunk downloads; subsequent clicks are instant (browser-cached).
+      const mod = await import("./revenueReport.js");
+      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang });
+      toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
+    } catch (e) {
+      console.error("PDF error:", e);
+      toast.show(lang === "nl" ? "PDF genereren mislukt" : "Failed to generate PDF", "error");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 3 }}>
+            {lang === "nl" ? "Omzetrapport (PDF)" : "Revenue report (PDF)"}
+          </div>
+          <div style={{ fontSize: 11, color: c.textLabel }}>
+            {lang === "nl"
+              ? "Download een professioneel rapport voor je boekhouder of belastingaangifte."
+              : "Download a professional report for your accountant or tax filing."}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
+        {presets.map(p => (
+          <button
+            key={p.key}
+            onClick={() => setPeriod(p.key)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 100,
+              fontSize: 11,
+              fontWeight: period === p.key ? 600 : 400,
+              background: period === p.key ? `${accent}18` : c.inputBg,
+              border: `1px solid ${period === p.key ? accent : c.inputBorder}`,
+              color: period === p.key ? accent : c.textSub,
+              cursor: "pointer",
+              fontFamily: "'Jost',sans-serif",
+              transition: "all 0.2s",
+            }}
+          >{p.label}</button>
+        ))}
+      </div>
+      {period === "custom" && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <input
+            type="date"
+            value={customFrom}
+            onChange={e => setCustomFrom(e.target.value)}
+            className="input-field"
+            style={{ fontSize: 12, padding: "10px 12px", flex: 1, minWidth: 140 }}
+          />
+          <input
+            type="date"
+            value={customTo}
+            onChange={e => setCustomTo(e.target.value)}
+            className="input-field"
+            style={{ fontSize: 12, padding: "10px 12px", flex: 1, minWidth: 140 }}
+          />
+        </div>
+      )}
+      <button
+        onClick={download}
+        disabled={generating}
+        className="btn-primary"
+        style={{ marginTop: 14, width: "100%", padding: "12px 20px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: generating ? 0.6 : 1 }}
+      >
+        {generating ? (
+          <>{lang === "nl" ? "PDF maken..." : "Building PDF..."}</>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {lang === "nl" ? "Download PDF" : "Download PDF"}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
   const toast = useToast();
@@ -510,7 +970,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       min_advance_hours: 0, max_advance_days: 60,
       reminder_hours: 24,
       rebook_nudge_days: 28,
-      google_calendar_connected: false
+      google_calendar_connected: false,
+      google_place_id: "",
+      auto_block_no_show_threshold: 0,
+      client_no_shows: {},
+      referral_code: "",
+      referral_credit_months: 0,
+      referral_count: 0
     };
   });
   const [saved, setSaved] = useState(false);
@@ -579,14 +1045,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           { data: reviews },
           { data: staffData },
           { data: catData },
-          { data: locData }
+          { data: locData },
+          { data: noShowRows },
+          { count: referralCount }
         ] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
           supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position"),
           supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
-          supabase.from("locations").select("*").eq("owner_id", data.id).order("position")
+          supabase.from("locations").select("*").eq("owner_id", data.id).order("position"),
+          supabase.from("client_no_shows").select("client_email, no_show_count, blocked").eq("owner_id", data.id),
+          // How many other salons signed up using this owner's referral code.
+          supabase.from("profiles").select("*", { count: "exact", head: true }).eq("referred_by", data.id)
         ]);
+        // Shape client_no_shows as a lookup by email so renderApptCard is O(1).
+        const clientNoShowsMap = {};
+        for (const r of noShowRows || []) {
+          clientNoShowsMap[r.client_email] = { no_show_count: r.no_show_count, blocked: r.blocked };
+        }
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -618,6 +1094,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           reminder_hours: data.reminder_hours ?? 24,
           rebook_nudge_days: data.rebook_nudge_days ?? 28,
           google_calendar_connected: data.google_calendar_connected || false,
+          google_place_id: data.google_place_id || "",
+          auto_block_no_show_threshold: data.auto_block_no_show_threshold ?? 0,
+          client_no_shows: clientNoShowsMap,
+          referral_code: data.referral_code || "",
+          referral_credit_months: data.referral_credit_months || 0,
+          referral_count: referralCount || 0,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,
           services: (data.services || []).map(s => ({
@@ -732,6 +1214,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
   }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
+  // Reschedule modal state — holds the appointment being moved, or null.
+  const [rescheduling, setRescheduling] = useState(null);
   const markComplete = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -748,10 +1232,39 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
       if (error) return;
-      // Increment client no-show count. supabase.rpc() always resolves (errors come back
-      // as {error}), so the old .catch() never fired and the fallback was dead. Check
-      // .error explicitly and only fall back if the RPC is missing.
       const appt = salonData.appointments.find(a => a.id === id);
+
+      // Per-salon no-show tracking: record_no_show upserts a client_no_shows row
+      // scoped to this owner (separate from clients.no_show_count which is global
+      // across all salons). If the count hits the owner's threshold, the RPC also
+      // sets blocked=true, which book-appointment checks on future bookings.
+      if (appt?.client_email) {
+        const { data: result } = await supabase.rpc("record_no_show", {
+          p_owner_id: salonData.owner_id,
+          p_client_email: appt.client_email,
+        });
+        const row = Array.isArray(result) ? result[0] : result;
+        // Refresh local client_no_shows map so the UI immediately shows the new
+        // count and the "GEBLOKKEERD" badge if the threshold just tripped.
+        if (row) {
+          update(d => {
+            if (!d.client_no_shows) d.client_no_shows = {};
+            d.client_no_shows[appt.client_email.toLowerCase()] = {
+              no_show_count: row.no_show_count,
+              blocked: row.blocked,
+            };
+            return d;
+          });
+          if (row.blocked) {
+            toast.show(lang === "nl"
+              ? `${appt.client_name} is geblokkeerd (${row.no_show_count} no-shows)`
+              : `${appt.client_name} is blocked (${row.no_show_count} no-shows)`, "error");
+          }
+        }
+      }
+
+      // Legacy global counter — kept for backward compatibility with the analytics
+      // stat card. Not used for blocking decisions anymore.
       if (appt?.client_id) {
         const { error: rpcErr } = await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id });
         if (rpcErr) {
@@ -759,6 +1272,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           if (client) await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
         }
       }
+
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
     } finally { setProcessingApptId(null); }
   };
@@ -959,11 +1473,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // on every OwnerApp render — previously `const ApptCard = ({a}) => ...` caused every
   // appointment card to remount on every keystroke in any form input, a real perf hit
   // for salons with many appointments. The caller passes `key` on the returned element.
-  const renderApptCard = (a) => (
+  const renderApptCard = (a) => {
+    // Lookup this client's no-show history for THIS salon. Shows a warning
+    // badge next to the name once they hit 2+, and a solid block indicator
+    // if they've been auto-blocked.
+    const noShowInfo = salonData.client_no_shows?.[(a.client_email || "").toLowerCase()];
+    const showWarn = noShowInfo && noShowInfo.no_show_count >= 2 && !noShowInfo.blocked;
+    const showBlocked = noShowInfo?.blocked;
+    return (
     <div key={a.id} className="appt-card" title={a.service_name}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
+          <div style={{ fontWeight: 500, fontSize: 14, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {a.client_name}
+            {showWarn && (
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.warning}22`, color: c.warning, border: `1px solid ${c.warning}44`, fontWeight: 600, letterSpacing: "0.04em" }}
+                title={lang === "nl" ? `${noShowInfo.no_show_count} no-shows bij jouw salon` : `${noShowInfo.no_show_count} no-shows at your salon`}>
+                ⚠ {noShowInfo.no_show_count}× NO-SHOW
+              </span>
+            )}
+            {showBlocked && (
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.danger}22`, color: c.danger, border: `1px solid ${c.danger}44`, fontWeight: 600, letterSpacing: "0.04em" }}
+                title={lang === "nl" ? "Deze klant is geblokkeerd voor nieuwe boekingen" : "This client is blocked from new bookings"}>
+                {lang === "nl" ? "GEBLOKKEERD" : "BLOCKED"}
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.time} · {a.service_name}</div>
           <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
@@ -980,6 +1515,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6 }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => setRescheduling(a)}>{lang === "nl" ? "Verplaats" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
         </div>
       )}
@@ -1011,7 +1547,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
@@ -1050,6 +1587,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     <Layout accent={accent}>
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+      {rescheduling && (
+        <RescheduleModal
+          appt={rescheduling}
+          onClose={() => setRescheduling(null)}
+          onSuccess={(updated) => {
+            update(d => { d.appointments = d.appointments.map(a => a.id === updated.id ? {...a, ...updated} : a); return d; });
+            setRescheduling(null);
+            toast.show(lang === "nl" ? "Afspraak verplaatst" : "Appointment rescheduled");
+          }}
+          lang={lang}
+          c={c}
+          accent={accent}
+          toast={toast}
+          staffList={salonData.staff || []}
+        />
+      )}
       <div style={{
         background: c.bg,
         minHeight: "100dvh",
@@ -2056,6 +2609,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </div>
 
+                {/* Revenue report (PDF) — generate a tax/accountant-ready PDF
+                    for a selected period. Runs entirely client-side via jsPDF,
+                    so the owner gets an instant download with no server round
+                    trip. */}
+                <RevenueReportBlock
+                  salonData={salonData}
+                  completedAppts={completedAppts}
+                  lang={lang}
+                  c={c}
+                  accent={accent}
+                  toast={toast}
+                />
+
                 {/* Search + filter toolbar */}
                 <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
                   <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -2519,6 +3085,76 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   });
                 })()}
               </div>
+
+              {/* Staff performance — revenue, completion rate, no-show rate
+                  per staff member. Only renders if the salon has ≥1 staff
+                  assigned to any appointments; hiding it on solo salons
+                  avoids a confusing empty block. */}
+              {(() => {
+                const staffList = salonData.staff || [];
+                if (staffList.length === 0) return null;
+                const stats = {};
+                for (const s of staffList) {
+                  stats[s.id] = {
+                    name: s.name, role: s.role || "",
+                    total: 0, completed: 0, cancelled: 0, no_show: 0,
+                    revenue: 0, unique_clients: new Set(),
+                  };
+                }
+                for (const a of appts) {
+                  if (!a.staff_id || !stats[a.staff_id]) continue;
+                  const row = stats[a.staff_id];
+                  row.total++;
+                  if (a.status === "completed") { row.completed++; row.revenue += parseFloat(a.service_price || 0); }
+                  else if (a.status === "cancelled") row.cancelled++;
+                  else if (a.status === "no_show") row.no_show++;
+                  if (a.client_email) row.unique_clients.add(a.client_email);
+                }
+                const rows = Object.values(stats)
+                  .filter(r => r.total > 0)
+                  .sort((a, b) => b.revenue - a.revenue);
+                if (rows.length === 0) return null;
+                const maxRev = Math.max(...rows.map(r => r.revenue), 1);
+
+                return (
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
+                        {lang === "nl" ? "Team prestaties" : "Staff performance"}
+                      </div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        {lang === "nl" ? "Laatste 90 dagen" : "Last 90 days"}
+                      </div>
+                    </div>
+                    {rows.map((r, idx) => {
+                      const completionRate = r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0;
+                      const noShowRate = r.total > 0 ? Math.round((r.no_show / r.total) * 100) : 0;
+                      return (
+                        <div key={idx} style={{ paddingTop: idx === 0 ? 0 : 14, marginTop: idx === 0 ? 0 : 14, borderTop: idx === 0 ? "none" : `1px solid ${c.border}` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+                            <div style={{ minWidth: 0 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{r.name}</span>
+                              {r.role && <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}>{r.role}</span>}
+                            </div>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, lineHeight: 1 }}>€{r.revenue.toFixed(0)}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                            <div style={{ flex: 1, height: 4, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                              <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(r.revenue / maxRev) * 100}%`, transition: "width 0.6s" }} />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 14, fontSize: 10, color: c.textMuted, flexWrap: "wrap" }}>
+                            <span>{r.total} {lang === "nl" ? "afspraken" : "appointments"}</span>
+                            <span style={{ color: completionRate >= 85 ? c.success : c.textMuted }}>✓ {completionRate}% {lang === "nl" ? "voltooid" : "done"}</span>
+                            <span style={{ color: noShowRate >= 15 ? c.danger : c.textMuted }}>{noShowRate}% {lang === "nl" ? "no-show" : "no-show"}</span>
+                            <span>{r.unique_clients.size} {lang === "nl" ? "unieke klanten" : "unique clients"}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Busiest days */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
@@ -3626,7 +4262,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
-                {Object.entries(salonData.day_overrides || {}).filter(([_, v]) => v.type === "exception").map(([date, v]) => (
+                {Object.entries(salonData.day_overrides || {}).filter(([_k, v]) => v.type === "exception").map(([date, v]) => (
                   <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</div>
@@ -3763,6 +4399,105 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     }}>
                     <NavIcon name="calendar" size={14} color={accent} /> {t.googleCalendarConnect}
                   </button>
+                )}
+              </div>
+
+              {/* Google Reviews (Place ID) — when set, the 24h follow-up email
+                  to clients adds a "Leave a review on Google" CTA that opens
+                  the write-review dialog for this business. Helps the salon's
+                  Google SEO. If empty, the follow-up only links to the
+                  Vellu-internal review form (unchanged behavior). */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Google Reviews" : "Google Reviews"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
+                  {lang === "nl"
+                    ? "Plak hier je Google Place ID om klanten in de follow-up e-mail ook naar Google te laten reviewen. Nog geen Place ID? Zoek je salon op google.com/maps, klik op Delen → Link naar deze plaats kopiëren — de Place ID vind je via places-id.appspot.com of Google's Place ID Finder."
+                    : "Paste your Google Place ID here to let clients leave a Google review via the follow-up email. No Place ID yet? Find your salon on google.com/maps and use Google's Place ID Finder tool."}
+                </div>
+                <input
+                  className="input-field"
+                  placeholder="ChIJ..."
+                  value={salonData.google_place_id || ""}
+                  onChange={e => update(d => { d.google_place_id = e.target.value.trim(); return d; })}
+                  style={{ fontFamily: "monospace", fontSize: 12 }}
+                />
+                {salonData.google_place_id && (
+                  <div style={{ marginTop: 10, fontSize: 11 }}>
+                    <a
+                      href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(salonData.google_place_id)}`}
+                      target="_blank" rel="noreferrer"
+                      style={{ color: accent, textDecoration: "none", borderBottom: `1px solid ${accent}44` }}
+                    >{lang === "nl" ? "Test je review-link →" : "Test your review link →"}</a>
+                  </div>
+                )}
+              </div>
+
+              {/* No-show auto-block threshold — when a client hits this many
+                  no-shows at your salon, future bookings with their email are
+                  refused by book-appointment. 0 disables. Scoped per salon so a
+                  no-show at one salon doesn't block the client elsewhere. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "No-show blokkade" : "No-show block"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>
+                  {lang === "nl"
+                    ? "Klanten die bij jouw salon dit aantal no-shows hebben worden automatisch geblokkeerd. Toont een waarschuwingsbadge vanaf 2 no-shows."
+                    : "Clients with this many no-shows at your salon are automatically blocked. A warning badge appears from 2 no-shows."}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[
+                    { v: 0, l: lang === "nl" ? "Uit" : "Off" },
+                    { v: 2, l: "2×" },
+                    { v: 3, l: "3×" },
+                    { v: 4, l: "4×" },
+                    { v: 5, l: "5×" },
+                  ].map(({ v, l }) => {
+                    const active = (salonData.auto_block_no_show_threshold ?? 0) === v;
+                    return (
+                      <div key={v}
+                        onClick={() => update(d => { d.auto_block_no_show_threshold = v; return d; })}
+                        style={{
+                          padding: "8px 14px", borderRadius: 100, cursor: "pointer", fontSize: 11,
+                          fontWeight: active ? 600 : 400,
+                          background: active ? `${accent}18` : c.inputBg,
+                          border: `1px solid ${active ? accent : c.inputBorder}`,
+                          color: active ? accent : c.textSub,
+                          transition: "all 0.2s",
+                        }}
+                      >{l}</div>
+                    );
+                  })}
+                </div>
+                {/* Quick list of currently blocked clients, with unblock button */}
+                {Object.entries(salonData.client_no_shows || {}).filter(([_k, v]) => v.blocked).length > 0 && (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.danger, marginBottom: 8 }}>
+                      {lang === "nl" ? "Geblokkeerd" : "Blocked"}
+                    </div>
+                    {Object.entries(salonData.client_no_shows || {}).filter(([_k, v]) => v.blocked).map(([email, info]) => (
+                      <div key={email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", fontSize: 11, color: c.text }}>
+                        <div>
+                          <span>{email}</span>
+                          <span style={{ color: c.textMuted, marginLeft: 8 }}>({info.no_show_count} no-shows)</span>
+                        </div>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: 10, padding: "4px 10px" }}
+                          onClick={async () => {
+                            const { error: unblockErr } = await supabase.from("client_no_shows")
+                              .update({ blocked: false })
+                              .eq("owner_id", salonData.owner_id)
+                              .eq("client_email", email);
+                            if (unblockErr) { toast.show(lang === "nl" ? "Deblokkeren mislukt" : "Unblock failed", "error"); return; }
+                            update(d => {
+                              if (d.client_no_shows?.[email]) d.client_no_shows[email].blocked = false;
+                              return d;
+                            });
+                            toast.show(lang === "nl" ? "Klant gedeblokkeerd" : "Client unblocked");
+                          }}
+                        >{lang === "nl" ? "Deblokkeer" : "Unblock"}</button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
               </>}
@@ -4000,6 +4735,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* CSV client export — downloadable client list for marketing,
+                  GDPR portability requests, accountant handoff, or switching
+                  platforms. Runs client-side via clientExport.js. */}
+              <ClientExportBlock
+                ownerId={salonData.owner_id}
+                salonName={salonData.name}
+                lang={lang}
+                c={c}
+                accent={accent}
+                toast={toast}
+              />
+
+              {/* Referral program — each owner has a unique 8-char code. When
+                  a new salon signs up via /owner?ref=CODE, both sides get
+                  1 free month credited (redeemed on billing via iDEAL when
+                  that ships). For now we just track and display. */}
+              <ReferralBlock
+                salonData={salonData}
+                lang={lang}
+                c={c}
+                accent={accent}
+                toast={toast}
+              />
+
               {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
               {isMobile && (
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
@@ -4057,7 +4816,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24,
-                  rebook_nudge_days: salonData.rebook_nudge_days ?? 28
+                  rebook_nudge_days: salonData.rebook_nudge_days ?? 28,
+                  google_place_id: salonData.google_place_id || null,
+                  auto_block_no_show_threshold: salonData.auto_block_no_show_threshold ?? 0
                 };
                 const { data: updatedRows, error } = await supabase.from("profiles").update(updateData).eq("id", salonData.owner_id).select();
                 if (error) {

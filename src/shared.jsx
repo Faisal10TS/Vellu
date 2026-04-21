@@ -325,7 +325,7 @@ const T = {
     payMethod:"Betaalmethode", payOnline:"Online Betalen", payArrival:"Betalen bij Afspraak",
     next:"Volgende →", confirm:"Bevestigen", newBooking:"Nieuwe Afspraak",
     treatment:"Behandeling", date:"Datum", time:"Tijd", name:"Naam", payment:"Betaling",
-    total:"Totaal", confirmed:"Bevestigd!", confirmedSub:"We zien je op", at:"om",
+    total:"Totaal", confirmedSub:"We zien je op", at:"om",
     confirmationSent:"Bevestiging verstuurd naar", noAppts:"Nog geen afspraken",
     welcomeBack:"Welkom terug", todayAppts:"Afspraken vandaag",
     noTodayAppts:"Geen afspraken vandaag", markComplete:"Markeer Voltooid",
@@ -341,7 +341,7 @@ const T = {
     businessNameField:"Bedrijfsnaam (bijv. Studio Rosa)",
     slugField:"Jouw link (bijv. studio-rosa)",
     createAccount:"Account Aanmaken", signIn:"Inloggen",
-    manageAppts:"Beheer je afspraken", today:"Vandaag", earnings:"Inkomsten",
+    manageAppts:"Beheer je afspraken", earnings:"Inkomsten",
     appts:"afspraken", treatments:"behandelingen", sent:"Verstuurd", send:"Sturen",
     min:"min", photos:"Foto's", addPhoto:"Foto toevoegen", noPhotos:"Nog geen foto's",
     deletePhoto:"Verwijder", salonLink:"Jouw link", copyLink:"Kopieer",
@@ -368,7 +368,7 @@ const T = {
     staff:"Team", addStaff:"+ Medewerker toevoegen", staffName:"Naam medewerker", staffBio:"Korte bio (zichtbaar voor klanten)",
     staffRole:"Functie (bijv. Nagelstyliste)", selectStaff:"Kies een medewerker",
     anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
-    businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit", closed:"Gesloten",
+    businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit",
     businessHoursDesc:"Stel je werkdagen en -uren in", closedOnDay:"Gesloten op deze dag",
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
@@ -378,7 +378,7 @@ const T = {
     agreeToPolicy:"Ik ga akkoord met de voorwaarden",
     phoneRequired:"Telefoonnummer verplicht", phoneRequiredDesc:"Maak telefoonnummer verplicht voor klanten",
     appearance:"Uiterlijk", logo:"Logo", coverImage:"Cover afbeelding",
-    uploadLogo:"Logo uploaden", uploadCover:"Cover uploaden", removeLogo:"Verwijder logo", removeCover:"Verwijder cover",
+    uploadCover:"Cover uploaden", removeLogo:"Verwijder logo", removeCover:"Verwijder cover",
     logoDesc:"Wordt getoond in de header (aanbevolen: vierkant, max 500x500px)",
     coverDesc:"Wordt getoond bovenaan je pagina (aanbevolen: 1200x400px)",
     discountCodes:"Kortingscodes", addDiscountCode:"+ Kortingscode toevoegen",
@@ -408,7 +408,7 @@ const T = {
     choosePlan:"Kies een abonnement", choosePlanSub:"Selecteer het plan dat bij jou past",
     planStarter:"Starter", planProfessional:"Professional",
     planStarterPrice:"19", planProfessionalPrice:"39",
-    perMonth:"/maand", planStarterDesc:"Perfect om te beginnen", planProfessionalDesc:"Voor de groeiende salon",
+    planStarterDesc:"Perfect om te beginnen", planProfessionalDesc:"Voor de groeiende salon",
     planFeatureBookings:"Online boekingen", planFeatureStaff:"Team beheer", planFeatureAnalytics:"Analytics dashboard",
     planFeatureReviews:"Reviews systeem", planFeatureEmail:"Email bevestigingen", planFeatureReminders:"24u herinneringen",
     planFeatureCustomBranding:"Eigen branding", planFeatureDiscounts:"Kortingscodes", planFeaturePriority:"Prioriteit support",
@@ -465,23 +465,6 @@ const T = {
     whatsappReminder:"Herinnering sturen via WhatsApp",
     // Auto-translate
     autoTranslateBtn:"Vertalen", translating:"Vertalen...", translateFailed:"Vertaling mislukt",
-    // Client dashboard
-    myAppointments:"Mijn afspraken", enterEmailToLogin:"Voer je e-mail in om je afspraken te bekijken",
-    sendCode:"Code versturen", enterCode:"Voer de 6-cijferige code in", verifyCode:"Verifiëren",
-    codeExpired:"Code verlopen, probeer opnieuw", codeSent:"Code verzonden naar",
-    upcomingAppointments:"Komende afspraken", pastAppointments:"Eerdere afspraken",
-    rebookBtn:"Opnieuw boeken", myDetails:"Mijn gegevens", updateAllergies:"Bijwerken",
-    allergiesUpdated:"Allergieën bijgewerkt", noUpcoming:"Geen komende afspraken",
-    noPast:"Geen eerdere afspraken", loginFailed:"Geen account gevonden met dit e-mailadres",
-    wrongCode:"Onjuiste code", backToBooking:"Terug naar boeken",
-    // Client accounts with PIN
-    clientLogin:"Inloggen", clientRegister:"Account aanmaken", enterPin:"Voer je 4-cijferige PIN in",
-    choosePin:"Kies een 4-cijferige PIN", pinPlaceholder:"0000", wrongPin:"Onjuiste PIN",
-    accountExists:"Er bestaat al een account met dit e-mailadres. Log in met je PIN.",
-    createAccountPrompt:"Maak een account aan om je afspraken altijd terug te vinden",
-    createAccountBtn:"Account aanmaken met PIN", skipAccount:"Overslaan",
-    loggedInAs:"Ingelogd als", clientLogout:"Uitloggen", backToBook:"← Terug naar boeken",
-    pinSaved:"Account aangemaakt!", noAccountYet:"Nog geen account?",
     // Locations
     locations:"Locaties", addLocation:"+ Locatie toevoegen", locationName:"Locatienaam",
     locationAddress:"Adres", locationCity:"Stad", locationPhone:"Telefoon",
@@ -566,8 +549,8 @@ const T = {
     exportCalendar:"Exporteer agenda", viewMore:"Bekijk meer →", everyone:"Iedereen",
     confirmed:"Bevestigd", cancelled:"Geannuleerd", completed:"Voltooid",
     apptCompleted:"Afspraak voltooid", errorCompleting:"Fout bij voltooien",
-    invoiceSent:"Factuur verstuurd", client:"Klant",
-    searchPlaceholder:"Zoek op naam of dienst...", services:"Diensten",
+    client:"Klant",
+    searchPlaceholder:"Zoek op naam of dienst...",
     reviewSaveFailed:"Kon review niet opslaan. Probeer het opnieuw.",
     somethingWrong:"Er ging iets mis.", confirmation:"Bevestiging",
     allergyDisclaimer:"Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling.",
@@ -585,7 +568,7 @@ const T = {
     payMethod:"Payment Method", payOnline:"Pay Online", payArrival:"Pay at Appointment",
     next:"Next →", confirm:"Confirm", newBooking:"New Booking",
     treatment:"Treatment", date:"Date", time:"Time", name:"Name", payment:"Payment",
-    total:"Total", confirmed:"Confirmed!", confirmedSub:"We'll see you on", at:"at",
+    total:"Total", confirmedSub:"We'll see you on", at:"at",
     confirmationSent:"Confirmation sent to", noAppts:"No appointments yet",
     welcomeBack:"Welcome back", todayAppts:"Today's appointments",
     noTodayAppts:"No appointments today", markComplete:"Mark Complete",
@@ -601,7 +584,7 @@ const T = {
     businessNameField:"Business name (e.g. Studio Rosa)",
     slugField:"Your link (e.g. studio-rosa)",
     createAccount:"Create Account", signIn:"Sign In",
-    manageAppts:"Manage your appointments", today:"Today", earnings:"Earnings",
+    manageAppts:"Manage your appointments", earnings:"Earnings",
     appts:"appointments", treatments:"treatments", sent:"Sent", send:"Send",
     min:"min", photos:"Photos", addPhoto:"Add photo", noPhotos:"No photos yet",
     deletePhoto:"Delete", salonLink:"Your link", copyLink:"Copy",
@@ -628,7 +611,7 @@ const T = {
     staff:"Team", addStaff:"+ Add staff member", staffName:"Staff name", staffBio:"Short bio (visible to clients)",
     staffRole:"Role (e.g. Nail technician)", selectStaff:"Choose a staff member",
     anyStaff:"No preference", noStaff:"No staff members yet",
-    businessHours:"Business Hours", openTime:"Open", closeTime:"Close", closed:"Closed",
+    businessHours:"Business Hours", openTime:"Open", closeTime:"Close",
     businessHoursDesc:"Set your working days and hours", closedOnDay:"Closed on this day",
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
@@ -638,7 +621,7 @@ const T = {
     agreeToPolicy:"I agree to the booking policy",
     phoneRequired:"Phone number required", phoneRequiredDesc:"Make phone number mandatory for clients",
     appearance:"Appearance", logo:"Logo", coverImage:"Cover image",
-    uploadLogo:"Upload logo", uploadCover:"Upload cover", removeLogo:"Remove logo", removeCover:"Remove cover",
+    uploadCover:"Upload cover", removeLogo:"Remove logo", removeCover:"Remove cover",
     logoDesc:"Shown in the header (recommended: square, max 500x500px)",
     coverDesc:"Shown at the top of your page (recommended: 1200x400px)",
     discountCodes:"Discount Codes", addDiscountCode:"+ Add discount code",
@@ -668,7 +651,7 @@ const T = {
     choosePlan:"Choose a plan", choosePlanSub:"Select the plan that fits you",
     planStarter:"Starter", planProfessional:"Professional",
     planStarterPrice:"19", planProfessionalPrice:"39",
-    perMonth:"/month", planStarterDesc:"Perfect to get started", planProfessionalDesc:"For the growing salon",
+    planStarterDesc:"Perfect to get started", planProfessionalDesc:"For the growing salon",
     planFeatureBookings:"Online bookings", planFeatureStaff:"Team management", planFeatureAnalytics:"Analytics dashboard",
     planFeatureReviews:"Reviews system", planFeatureEmail:"Email confirmations", planFeatureReminders:"24h reminders",
     planFeatureCustomBranding:"Custom branding", planFeatureDiscounts:"Discount codes", planFeaturePriority:"Priority support",
@@ -725,23 +708,6 @@ const T = {
     whatsappReminder:"Send reminder via WhatsApp",
     // Auto-translate
     autoTranslateBtn:"Translate", translating:"Translating...", translateFailed:"Translation failed",
-    // Client dashboard
-    myAppointments:"My appointments", enterEmailToLogin:"Enter your email to view your appointments",
-    sendCode:"Send code", enterCode:"Enter the 6-digit code", verifyCode:"Verify",
-    codeExpired:"Code expired, try again", codeSent:"Code sent to",
-    upcomingAppointments:"Upcoming appointments", pastAppointments:"Past appointments",
-    rebookBtn:"Book again", myDetails:"My details", updateAllergies:"Update",
-    allergiesUpdated:"Allergies updated", noUpcoming:"No upcoming appointments",
-    noPast:"No past appointments", loginFailed:"No account found with this email",
-    wrongCode:"Incorrect code", backToBooking:"Back to booking",
-    // Client accounts with PIN
-    clientLogin:"Sign in", clientRegister:"Create account", enterPin:"Enter your 4-digit PIN",
-    choosePin:"Choose a 4-digit PIN", pinPlaceholder:"0000", wrongPin:"Incorrect PIN",
-    accountExists:"An account with this email already exists. Log in with your PIN.",
-    createAccountPrompt:"Create an account to always find your appointments",
-    createAccountBtn:"Create account with PIN", skipAccount:"Skip",
-    loggedInAs:"Logged in as", clientLogout:"Log out", backToBook:"← Back to booking",
-    pinSaved:"Account created!", noAccountYet:"No account yet?",
     // Locations
     locations:"Locations", addLocation:"+ Add location", locationName:"Location name",
     locationAddress:"Address", locationCity:"City", locationPhone:"Phone",
@@ -826,8 +792,8 @@ const T = {
     exportCalendar:"Export calendar", viewMore:"View more →", everyone:"Everyone",
     confirmed:"Confirmed", cancelled:"Cancelled", completed:"Completed",
     apptCompleted:"Appointment completed", errorCompleting:"Error completing",
-    invoiceSent:"Invoice sent", client:"Client",
-    searchPlaceholder:"Search by name or service...", services:"Services",
+    client:"Client",
+    searchPlaceholder:"Search by name or service...",
     reviewSaveFailed:"Could not save review. Please try again.",
     somethingWrong:"Something went wrong.", confirmation:"Confirmation",
     allergyDisclaimer:"Allergy info is only used for your safety during the treatment.",
@@ -971,7 +937,27 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     .appt-card { padding: 14px 14px; border-radius: 16px; }
     .btn-primary { padding: 14px 20px; font-size: 13px; }
     .btn-ghost { font-size: 11px; }
-    .input-field { padding: 14px 14px; font-size: 16px; }
+    /* !important here is intentional — numerous .input-field instances have
+       inline fontSize (11/12) for tight dashboard layouts. On iOS Safari any
+       input with font-size < 16px auto-zooms on focus, which is jarring and
+       often leaves the page stuck zoomed-in. Force 16px on mobile regardless
+       of inline overrides. */
+    .input-field { padding: 14px 14px; font-size: 16px !important; }
+    /* Safety net: catch any raw inputs / textareas / selects that aren't
+       using the .input-field class (e.g. future code). Covers the input
+       types where iOS actually auto-zooms. */
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="time"],
+    textarea,
+    select { font-size: 16px !important; }
     .nav-item { padding: 8px 4px; }
   }
 

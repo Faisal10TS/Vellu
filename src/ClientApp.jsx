@@ -2218,7 +2218,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           </div> {/* close flex column */}
         </div>
       ) : (
-          <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
+          // NOTE: use natural body scroll on mobile (no 100dvh + nested overflow).
+          // iOS Safari only collapses the URL bar when the body scrolls — a 100dvh
+          // wrapper with an inner scroll area pins the URL bar and cramps the UI.
+          <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
               <div style={{ 
@@ -2261,8 +2264,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
             )}
 
-            {/* Mobile Content */}
-            <div style={{ flex: 1, overflow: "auto", padding: `14px 22px ${!done && selectedServices.length > 0 ? 120 : 24}px` }}>
+            {/* Mobile Content — natural page scroll, no nested overflow.
+                Padding-bottom reserves space for the fixed Volgende pill. */}
+            <div style={{ padding: `14px 22px ${!done && selectedServices.length > 0 ? 120 : 24}px` }}>
               {!done ? (
                 <div key={step} className="fade-up">
                   {/* Progress bar */}

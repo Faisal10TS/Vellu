@@ -1,0 +1,33 @@
+// Lightweight period-preset helpers. Kept in a separate file from the heavy
+// PDF generator so they can be eagerly imported without pulling jsPDF into
+// the main bundle.
+
+export function periodPreset(kind, lang = "nl") {
+  const now = new Date();
+  const monthName = (d) => d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { month: "long", year: "numeric" });
+  const ymd = (d) => d.toISOString().slice(0, 10);
+
+  if (kind === "this_month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { from: ymd(from), to: ymd(to), label: monthName(from) };
+  }
+  if (kind === "last_month") {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const to = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: ymd(from), to: ymd(to), label: monthName(from) };
+  }
+  if (kind === "this_year") {
+    const from = new Date(now.getFullYear(), 0, 1);
+    const to = new Date(now.getFullYear(), 11, 31);
+    return { from: ymd(from), to: ymd(to), label: String(now.getFullYear()) };
+  }
+  if (kind === "last_year") {
+    const from = new Date(now.getFullYear() - 1, 0, 1);
+    const to = new Date(now.getFullYear() - 1, 11, 31);
+    return { from: ymd(from), to: ymd(to), label: String(now.getFullYear() - 1) };
+  }
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { from: ymd(from), to: ymd(to), label: monthName(from) };
+}

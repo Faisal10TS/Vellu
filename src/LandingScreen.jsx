@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
@@ -364,11 +364,29 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const { colors: c } = useTheme();
   const t = T[lang];
-  const [mode, setMode] = useState("signin");
-  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", accountType: "joint" });
+  // Derive referral code from URL synchronously at mount. If present, initial
+  // mode is "signup" directly — avoids the React warning about setState in an
+  // effect causing a cascading render.
+  const urlRef = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("ref") || "") : "";
+  const [mode, setMode] = useState(urlRef ? "signup" : "signin");
+  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", accountType: "joint", referralCode: urlRef.toUpperCase() });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [referrerName, setReferrerName] = useState("");
+
+  // Resolve the referrer's salon name for the invited-by banner. Only the
+  // network lookup stays in the effect — the mode flip is already handled by
+  // the initial state above.
+  useEffect(() => {
+    if (!urlRef) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("profiles").select("business_name").eq("referral_code", urlRef.toUpperCase()).maybeSingle();
+      if (!cancelled && data?.business_name) setReferrerName(data.business_name);
+    })();
+    return () => { cancelled = true; };
+  }, [urlRef]);
 
   const handleReset = async () => {
     if (!form.email) { setError(t.fillEmail); return; }
@@ -441,6 +459,23 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         setLoading(false);
         return;
       }
+
+      // If a referral code was provided (via ?ref= or the signup form), try to
+      // redeem it. Both the new signup and the referrer get 1 month credited.
+      // A typo'd code doesn't block signup — we just log it so the user can
+      // check for a "referral applied" indicator on their dashboard afterwards.
+      const refCode = (new URLSearchParams(window.location.search).get("ref") || form.referralCode || "").trim();
+      if (refCode) {
+        const { data: redeemResult, error: redeemErr } = await supabase.rpc("redeem_referral_code", {
+          p_new_profile_id: data.user.id,
+          p_code: refCode,
+        });
+        const row = Array.isArray(redeemResult) ? redeemResult[0] : redeemResult;
+        if (redeemErr || !row?.success) {
+          console.warn("Referral code not applied:", refCode, redeemErr);
+        }
+      }
+
       onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
@@ -515,6 +550,19 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 }}>{label}</button>
               ))}
             </div>
+
+            {mode === "signup" && referrerName && (
+              <div style={{
+                background: `${ACCENT}12`, border: `1px solid ${ACCENT}33`, borderRadius: 12,
+                padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
+              }}>
+                {lang === "nl" ? (
+                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>1 maand gratis</strong>.</>
+                ) : (
+                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>1 free month</strong>.</>
+                )}
+              </div>
+            )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
               {mode === "signup" && <>

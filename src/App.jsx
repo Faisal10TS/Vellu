@@ -513,8 +513,10 @@ function CookieConsent({ lang }) {
     }
   }, []);
 
-  // Don't show on owner dashboard or cancel pages
-  if (!visible || location.pathname.startsWith("/owner") || location.pathname.startsWith("/cancel")) return null;
+  // Don't show on authenticated dashboards or cancel page — those are logged-in
+  // contexts where the banner would be redundant noise (and the cancel page is
+  // reached from an email link where any consent dance is pointless).
+  if (!visible || location.pathname.startsWith("/owner") || location.pathname.startsWith("/staff") || location.pathname.startsWith("/cancel")) return null;
 
   return (
     <div style={{

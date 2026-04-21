@@ -279,7 +279,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
-      <div style={{ display: "flex", height: "100dvh", overflow: "hidden", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+      {/* Wrapper: on desktop, use fixed 100dvh + overflow:hidden so the sidebar
+          stays put while only the main pane scrolls. On mobile, use natural page
+          scroll — nesting a scroll container inside 100dvh prevents iOS Safari
+          from collapsing its URL bar (see also ClientApp mobile booking flow). */}
+      <div style={{ display: "flex", ...(isMobile ? { minHeight: "100dvh" } : { height: "100dvh", overflow: "hidden" }), background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
         {/* Desktop Sidebar */}
         {!isMobile && (
           <aside style={{
@@ -332,8 +336,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           </aside>
         )}
 
-        {/* Main content */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+        {/* Main content — desktop uses its own scroll pane so the fixed sidebar
+            stays put; mobile inherits the body's natural scroll. */}
+        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", ...(isMobile ? {} : { overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }) }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
