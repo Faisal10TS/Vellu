@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
+import InstallAppPrompt from "./InstallAppPrompt.jsx";
 // Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
 // ~15KB gzipped for the three packages combined.
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
@@ -1899,6 +1900,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     <Layout accent={accent}>
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+
+      {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
+          when already installed, or once dismissed. Shown on every owner
+          dashboard page AFTER login (component only mounts when dataLoaded
+          is true + not on login screen). Puts Vellu one tap from the home
+          screen for owners — the install story matters more for them than
+          for customers since they open the app daily. */}
+      <InstallAppPrompt
+        dismissKey="vellu_install_dismissed_owner"
+        title={lang === "nl" ? "Installeer Vellu" : "Install Vellu"}
+        subtitle={lang === "nl" ? "Snelle toegang tot je dashboard" : "Quick access to your dashboard"}
+        lang={lang} accent={accent} c={c}
+      />
+
       {qrOpen && (
         <QRCodeModal
           url={`https://vellu.cc/${salonData.id}`}
