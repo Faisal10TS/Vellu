@@ -69,11 +69,295 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   );
 }
 
+// ─── PWA INSTALL PROMPT ───────────────────────────────────────
+// Small dismissible banner at the top of the public salon profile page
+// that nudges mobile users to install Vellu to their home screen.
+//
+// Two platforms, two flows:
+//   * Android (+ any Chromium mobile): browser fires `beforeinstallprompt`,
+//     we capture it, show our own banner; user taps "Installeren" and we
+//     call .prompt() to trigger the native OS install dialog.
+//   * iOS Safari: no programmatic install API exists on iOS. We detect the
+//     platform via UA and show a modal with step-by-step instructions
+//     pointing at the Share button. Matches the pattern most NL-salon
+//     booking tools use (Setmore, Treatwell).
+//
+// Visibility rules:
+//   - Only on mobile (desktop users don't install PWAs via banners)
+//   - Hidden if already installed (display-mode: standalone OR iOS standalone)
+//   - Hidden if dismissed previously (localStorage flag, per-device)
+//   - Shows with a 2.5s delay so it doesn't slam into first paint
+function InstallAppPrompt({ salonName, lang, accent, c }) {
+  const [visible, setVisible] = useState(false);
+  const [platform, setPlatform] = useState(null); // "ios" | "android"
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showIosGuide, setShowIosGuide] = useState(false);
+
+  useEffect(() => {
+    // Dismissed previously?
+    if (localStorage.getItem("vellu_install_dismissed") === "true") return;
+    // Already installed?
+    if (window.matchMedia?.("(display-mode: standalone)")?.matches) return;
+    if (window.navigator.standalone === true) return; // iOS Safari PWA flag
+
+    const ua = navigator.userAgent || "";
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isAndroid = /Android/.test(ua);
+    if (!isIos && !isAndroid) return;
+
+    if (isIos) {
+      setPlatform("ios");
+      const tid = setTimeout(() => setVisible(true), 2500);
+      return () => clearTimeout(tid);
+    }
+
+    // Android: wait for the browser-provided install event.
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setPlatform("android");
+      setVisible(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    // Also listen for the installed event to hide ourselves if they install
+    // via browser menu instead of our banner.
+    const installedHandler = () => { setVisible(false); localStorage.setItem("vellu_install_dismissed", "true"); };
+    window.addEventListener("appinstalled", installedHandler);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installedHandler);
+    };
+  }, []);
+
+  const dismiss = () => {
+    setVisible(false);
+    localStorage.setItem("vellu_install_dismissed", "true");
+  };
+
+  const install = async () => {
+    if (platform === "ios") { setShowIosGuide(true); return; }
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      setVisible(false);
+      localStorage.setItem("vellu_install_dismissed", "true");
+    }
+    setDeferredPrompt(null);
+  };
+
+  const t = lang === "nl" ? {
+    title: "Installeer Vellu",
+    sub: salonName ? `Snellere toegang tot ${salonName}` : "Snellere toegang",
+    install: "Installeer",
+    dismiss: "Sluiten",
+    iosTitle: "App installeren",
+    iosIntro: "Installeer Vellu met 2 simpele stappen — geen App Store nodig.",
+    iosStep1: "Tik op de Delen-knop",
+    iosStep1Sub: "Onderaan je Safari scherm",
+    iosStep2: "Kies 'Zet op beginscherm'",
+    iosStep2Sub: "Scroll omlaag in het Delen-menu",
+    iosStep3: "Tik op 'Voeg toe'",
+    iosStep3Sub: "Rechtsboven om te bevestigen",
+    iosDone: "Klaar",
+  } : {
+    title: "Install Vellu",
+    sub: salonName ? `Faster access to ${salonName}` : "Faster access",
+    install: "Install",
+    dismiss: "Close",
+    iosTitle: "Install the app",
+    iosIntro: "Install Vellu in 2 simple steps — no App Store needed.",
+    iosStep1: "Tap the Share button",
+    iosStep1Sub: "At the bottom of your Safari screen",
+    iosStep2: "Choose 'Add to Home Screen'",
+    iosStep2Sub: "Scroll down in the Share menu",
+    iosStep3: "Tap 'Add'",
+    iosStep3Sub: "Top-right to confirm",
+    iosDone: "Got it",
+  };
+
+  if (!visible) return null;
+
+  return (
+    <>
+      {/* Banner — sits above the sticky profile header. Not sticky itself
+          (two competing stickies is visually messy). User scrolls past it,
+          and the profile header takes over at top. padding-top uses
+          safe-area-inset so it clears the notch on iPhones. */}
+      <div style={{
+        background: c.bgCard, borderBottom: `1px solid ${c.border}`,
+        padding: "10px 14px",
+        paddingTop: `calc(10px + env(safe-area-inset-top, 0px))`,
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        {/* App icon */}
+        <img
+          src="/icon-192.png"
+          alt=""
+          style={{ width: 40, height: 40, borderRadius: 9, flexShrink: 0, border: `1px solid ${c.border}` }}
+          onError={e => { e.target.style.display = "none"; }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
+          <div style={{ fontSize: 11, color: c.textLabel, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.sub}</div>
+        </div>
+        <button
+          onClick={install}
+          style={{
+            background: accent, color: "#0d0b0a", border: "none",
+            borderRadius: 100, padding: "8px 16px",
+            fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
+            textTransform: "uppercase", cursor: "pointer",
+            fontFamily: "'Jost',sans-serif", flexShrink: 0,
+          }}
+        >{t.install}</button>
+        <button
+          onClick={dismiss}
+          aria-label={t.dismiss}
+          style={{
+            background: "transparent", border: "none", color: c.textMuted,
+            cursor: "pointer", padding: 6, display: "flex",
+            alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+
+      {/* iOS instruction modal — bottom sheet style */}
+      {showIosGuide && (
+        <div
+          onClick={() => setShowIosGuide(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+            zIndex: 1000, animation: "fadeUp 0.3s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: c.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              padding: "28px 24px",
+              paddingBottom: `calc(28px + env(safe-area-inset-bottom, 0px))`,
+              width: "100%", maxWidth: 480,
+              borderTop: `1px solid ${c.border}`,
+              borderLeft: `1px solid ${c.border}`,
+              borderRight: `1px solid ${c.border}`,
+              animation: "fadeUp 0.35s cubic-bezier(0.16,1,0.3,1)",
+            }}
+          >
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: c.border, margin: "0 auto 20px" }} />
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              <img
+                src="/icon-192.png"
+                alt=""
+                style={{ width: 56, height: 56, borderRadius: 13, border: `1px solid ${c.border}`, marginBottom: 12 }}
+                onError={e => { e.target.style.display = "none"; }}
+              />
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, color: c.text, marginBottom: 4 }}>{t.iosTitle}</div>
+              <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.5, maxWidth: 320, margin: "0 auto" }}>{t.iosIntro}</div>
+            </div>
+
+            {/* Steps */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 24, marginBottom: 20 }}>
+              {[
+                { num: "1", title: t.iosStep1, sub: t.iosStep1Sub, icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                )},
+                { num: "2", title: t.iosStep2, sub: t.iosStep2Sub, icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                )},
+                { num: "3", title: t.iosStep3, sub: t.iosStep3Sub, icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                )},
+              ].map(s => (
+                <div key={s.num} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "12px 14px",
+                  background: c.bgCard,
+                  border: `1px solid ${c.border}`,
+                  borderRadius: 14,
+                }}>
+                  <div style={{
+                    width: 26, height: 26, borderRadius: "50%",
+                    background: `${accent}18`, color: accent,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, flexShrink: 0,
+                  }}>{s.num}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{s.title}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{s.sub}</div>
+                  </div>
+                  <div style={{ color: c.textMuted, flexShrink: 0 }}>{s.icon}</div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => { setShowIosGuide(false); dismiss(); }}
+              style={{
+                width: "100%", background: accent, color: "#0d0b0a", border: "none",
+                borderRadius: 100, padding: "14px", fontSize: 13, fontWeight: 600,
+                letterSpacing: "0.08em", textTransform: "uppercase",
+                cursor: "pointer", fontFamily: "'Jost',sans-serif",
+              }}
+            >{t.iosDone}</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false, reviewEmail = "" }) {
   const { colors: c, theme } = useTheme();
   const accent = initialSalon.accent || ACCENT;
   const t = T[lang];
+
+  // Swap the global manifest for a salon-scoped one while the customer is on
+  // this profile page. Without this override, installing the PWA would open
+  // /owner (the default from public/manifest.json) which is the wrong page
+  // for a booking customer. Uses a Blob URL — no server changes needed.
+  useEffect(() => {
+    if (!initialSalon?.slug) return;
+    const dynamicManifest = {
+      name: `${initialSalon.name} via Vellu`,
+      short_name: initialSalon.name?.slice(0, 12) || "Vellu",
+      description: `Boek je afspraak bij ${initialSalon.name}`,
+      start_url: `/${initialSalon.slug}`,
+      scope: "/",
+      display: "standalone",
+      background_color: "#0d0b0a",
+      theme_color: initialSalon.accent || "#0d0b0a",
+      orientation: "portrait",
+      icons: [
+        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+        { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      ],
+    };
+    const blob = new Blob([JSON.stringify(dynamicManifest)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const existing = document.querySelector('link[rel="manifest"]');
+    const prevHref = existing?.href;
+    let link = existing;
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "manifest";
+      document.head.appendChild(link);
+    }
+    link.href = url;
+    return () => {
+      URL.revokeObjectURL(url);
+      // Restore the global manifest when leaving the profile page so /owner
+      // and /staff installs still point to the right default start_url.
+      if (prevHref) link.href = prevHref;
+      else link.remove();
+    };
+  }, [initialSalon?.slug, initialSalon?.name, initialSalon?.accent]);
+
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const MON = lang === "nl" ? MON_NL : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
@@ -821,6 +1105,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     <Layout accent={accent}>
 
       <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+
+        {/* PWA install prompt — sits above the sticky header. Self-hides on
+            desktop, when already installed, or when dismissed previously. */}
+        <InstallAppPrompt salonName={initialSalon.name} lang={lang} accent={accent} c={c} />
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
