@@ -87,51 +87,74 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
 //   - Hidden if already installed (display-mode: standalone OR iOS standalone)
 //   - Hidden if dismissed previously (localStorage flag, per-device)
 //   - Shows with a 2.5s delay so it doesn't slam into first paint
-function InstallAppPrompt({ salonName, lang, accent, c }) {
-  const [visible, setVisible] = useState(false);
-  const [platform, setPlatform] = useState(null); // "ios" | "android"
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [showIosGuide, setShowIosGuide] = useState(false);
+function InstallAppPrompt({ salonSlug, salonName, lang, accent, c }) {
+  // localStorage key is scoped to the salon slug so dismissing at Salon A
+  // doesn't permanently hide the banner on Salon B (each salon gets its own
+  // manifest + home-screen icon, so each deserves its own install nudge).
+  // Also honours a global dismiss for users who really don't want ANY Vellu
+  // install prompt.
+  const dismissKeyGlobal = "vellu_install_dismissed";
+  const dismissKeySalon = salonSlug ? `vellu_install_dismissed_${salonSlug}` : dismissKeyGlobal;
 
-  useEffect(() => {
-    // Dismissed previously?
-    if (localStorage.getItem("vellu_install_dismissed") === "true") return;
-    // Already installed?
-    if (window.matchMedia?.("(display-mode: standalone)")?.matches) return;
-    if (window.navigator.standalone === true) return; // iOS Safari PWA flag
-
+  // Compute everything that's derivable from the environment synchronously
+  // during initial render. Keeps the setup out of useEffect (React 19's
+  // react-hooks/set-state-in-effect rule), so the first paint already has
+  // the right platform + eligibility state.
+  const env = (() => {
+    if (typeof window === "undefined") return { eligible: false, platform: null };
+    if (localStorage.getItem(dismissKeyGlobal) === "true") return { eligible: false, platform: null };
+    if (localStorage.getItem(dismissKeySalon) === "true") return { eligible: false, platform: null };
+    if (window.matchMedia?.("(display-mode: standalone)")?.matches) return { eligible: false, platform: null };
+    if (window.navigator.standalone === true) return { eligible: false, platform: null };
     const ua = navigator.userAgent || "";
     const isIos = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
     const isAndroid = /Android/.test(ua);
-    if (!isIos && !isAndroid) return;
+    if (isIos) return { eligible: true, platform: "ios" };
+    if (isAndroid) return { eligible: true, platform: "android" };
+    return { eligible: false, platform: null };
+  })();
 
-    if (isIos) {
-      setPlatform("ios");
+  const [visible, setVisible] = useState(false);
+  const [platform] = useState(env.platform);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showIosGuide, setShowIosGuide] = useState(false);
+
+  // Effects only do what effects should do: subscribe to external events
+  // (browser install prompt + installed event) and set up the delayed reveal.
+  useEffect(() => {
+    if (!env.eligible) return;
+
+    if (env.platform === "ios") {
+      // iOS has no programmatic install event, so just delay-show the banner.
       const tid = setTimeout(() => setVisible(true), 2500);
       return () => clearTimeout(tid);
     }
 
-    // Android: wait for the browser-provided install event.
-    const handler = (e) => {
+    // Android: wait for the browser-provided install event before showing.
+    const onBeforeInstall = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setPlatform("android");
       setVisible(true);
     };
-    window.addEventListener("beforeinstallprompt", handler);
-    // Also listen for the installed event to hide ourselves if they install
-    // via browser menu instead of our banner.
-    const installedHandler = () => { setVisible(false); localStorage.setItem("vellu_install_dismissed", "true"); };
-    window.addEventListener("appinstalled", installedHandler);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      window.removeEventListener("appinstalled", installedHandler);
+    const onInstalled = () => {
+      setVisible(false);
+      // Global dismiss once installed — user won't want the same nudge on
+      // other salon pages after they've installed anywhere.
+      localStorage.setItem(dismissKeyGlobal, "true");
     };
-  }, []);
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [env.eligible, env.platform]);
 
   const dismiss = () => {
     setVisible(false);
-    localStorage.setItem("vellu_install_dismissed", "true");
+    // Only dismiss for THIS salon. User may want the prompt again at another
+    // salon. Global dismiss happens on successful install (appinstalled).
+    localStorage.setItem(dismissKeySalon, "true");
   };
 
   const install = async () => {
@@ -141,7 +164,8 @@ function InstallAppPrompt({ salonName, lang, accent, c }) {
     const choice = await deferredPrompt.userChoice;
     if (choice.outcome === "accepted") {
       setVisible(false);
-      localStorage.setItem("vellu_install_dismissed", "true");
+      // Global dismiss — they installed, no need to keep asking.
+      localStorage.setItem(dismissKeyGlobal, "true");
     }
     setDeferredPrompt(null);
   };
@@ -1107,8 +1131,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
 
         {/* PWA install prompt — sits above the sticky header. Self-hides on
-            desktop, when already installed, or when dismissed previously. */}
-        <InstallAppPrompt salonName={initialSalon.name} lang={lang} accent={accent} c={c} />
+            desktop, when already installed, when the user is viewing this
+            page in review mode (?review=true), or when dismissed previously. */}
+        {!reviewMode && (
+          <InstallAppPrompt salonSlug={initialSalon.slug} salonName={initialSalon.name} lang={lang} accent={accent} c={c} />
+        )}
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
