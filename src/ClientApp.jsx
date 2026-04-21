@@ -2070,7 +2070,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                   <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                   <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                 </div>
                 
                 {/* No-show warning */}
@@ -2290,7 +2290,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </>
               )}
               {step === 4 && (
-                <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+                <>
+                  <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, lineHeight: 1.5, textAlign: "center" }}>
+                    {t.bookingLegalNotice}{" "}
+                    <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : "privacy policy"}</a>
+                    {" "}{t.bookingLegalNoticeAnd}{" "}
+                    <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : "terms"}</a>.
+                    {" "}{t.bookingLegalNoticeRefund}
+                  </div>
+                  <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+                </>
               )}
             </div>
             </div>
@@ -2615,7 +2624,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                       <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                       <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  {form.allergies && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{t.allergyDisclaimer}</div>}
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                     </div>
                     
                     {/* No-show warning */}
@@ -2718,6 +2727,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
                         </div>
                       </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, lineHeight: 1.5, textAlign: "center" }}>
+                      {t.bookingLegalNotice}{" "}
+                      <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : "privacy policy"}</a>
+                      {" "}{t.bookingLegalNoticeAnd}{" "}
+                      <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : "terms"}</a>.
+                      {" "}{t.bookingLegalNoticeRefund}
                     </div>
                     <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
                   </>}

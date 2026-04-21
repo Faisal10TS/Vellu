@@ -11,12 +11,15 @@ function PrivacyPage({ lang, setLang }) {
     updated: "Laatst bijgewerkt: april 2026",
     sections: [
       ["Wie zijn wij?", "Vellu is een online boekingsplatform voor beautysalons. Wij verwerken persoonsgegevens namens de salons die ons platform gebruiken."],
-      ["Welke gegevens verzamelen wij?", "Bij het boeken van een afspraak: naam, e-mailadres, telefoonnummer (optioneel). Bij het aanmaken van een salonaccount: bedrijfsnaam, e-mailadres, wachtwoord, vestigingsgegevens."],
-      ["Waarvoor gebruiken wij je gegevens?", "Het verwerken en bevestigen van boekingen (grondslag: uitvoering overeenkomst, Art. 6(1)(b) AVG), het versturen van herinneringen (grondslag: gerechtvaardigd belang, Art. 6(1)(f) AVG), het beheren van je salonaccount en het verbeteren van onze dienstverlening."],
+      ["Welke gegevens verzamelen wij?", "Bij het boeken van een afspraak: naam, e-mailadres, telefoonnummer (optioneel). Bij het aanmaken van een salonaccount: bedrijfsnaam, e-mailadres, wachtwoord, vestigingsgegevens. Optioneel en alleen met jouw expliciete toestemming: allergie-informatie die je zelf invult bij het boeken."],
+      ["Bijzondere persoonsgegevens (gezondheid)", "Het veld 'allergieën' op het boekingsformulier is optioneel. Als je deze informatie invult, geldt dit als expliciete toestemming (Art. 9(2)(a) AVG) voor het verwerken van gezondheidsgegevens met als uitsluitend doel een veilige behandeling. Deze gegevens worden alleen gedeeld met de betreffende salon en worden niet gebruikt voor marketing, analyse of profilering. Je kunt je toestemming op elk moment intrekken via info@vellu.cc; in dat geval worden de gegevens binnen 30 dagen verwijderd."],
+      ["Waarvoor gebruiken wij je gegevens?", "Het verwerken en bevestigen van boekingen (grondslag: uitvoering overeenkomst, Art. 6(1)(b) AVG), het versturen van afspraakherinneringen en follow-ups (grondslag: gerechtvaardigd belang, Art. 6(1)(f) AVG — je kunt je hiertegen verzetten via de opt-out link onderaan elke e-mail), het beheren van je salonaccount en het verbeteren van onze dienstverlening. Wij gebruiken je gegevens nooit voor geautomatiseerde besluitvorming of profilering."],
       ["Hoe lang bewaren wij je gegevens?", "Boekingsgegevens: zolang het salonaccount actief is, plus 30 dagen na verwijdering. Financiële gegevens: 7 jaar (wettelijke bewaarplicht). Na verwijdering van je account worden alle persoonsgegevens binnen 30 dagen gewist."],
       ["Delen wij je gegevens?", "Wij delen je gegevens alleen met: Supabase (database hosting, opslag in EU-regio Frankfurt), Resend (email verzending via Amazon SES EU-West-1 Ierland), Vercel (website hosting, edge netwerk met EU-nodes). Deze bedrijven zijn in de VS gevestigd maar verwerken de data in EU-datacenters. Voor eventuele doorgifte naar de VS (bijv. support-toegang door moedermaatschappij) gelden Standard Contractual Clauses (SCC's) conform Uitvoeringsbesluit (EU) 2021/914 en het EU-US Data Privacy Framework. Alle verwerkers zijn gebonden aan verwerkersovereenkomsten. Wij verkopen nooit je gegevens aan derden."],
-      ["Cookies", "Wij gebruiken alleen functionele cookies die noodzakelijk zijn voor het functioneren van het platform (inlogsessie, taalvoorkeur, thema). Wij gebruiken geen tracking cookies of analytics van derden. Functionele cookies vallen onder de uitzondering van de ePrivacy-richtlijn en vereisen geen toestemming."],
-      ["Je rechten", "Onder de AVG heb je recht op: inzage (Art. 15), correctie (Art. 16), verwijdering (Art. 17), beperking van verwerking (Art. 18), gegevensoverdraagbaarheid (Art. 20), en bezwaar (Art. 21). Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl). Neem contact op via info@vellu.cc voor het uitoefenen van je rechten."],
+      ["Cookies en lokale opslag", "Wij gebruiken uitsluitend strikt noodzakelijke cookies en localStorage-items: inlogsessie (Supabase Auth), taalvoorkeur, thema (licht/donker), en het onthouden of je de 'app installeren'-melding hebt gesloten. Deze zijn noodzakelijk voor de werking van het platform en vallen onder de uitzondering van art. 11.7a lid 3 Telecommunicatiewet (implementatie ePrivacy-richtlijn). Wij gebruiken géén tracking cookies, géén third-party analytics en géén advertentiepixels. Mocht dit in de toekomst veranderen, dan vragen wij eerst om je toestemming via een banner."],
+      ["Je rechten", "Onder de AVG heb je recht op: inzage (Art. 15), correctie (Art. 16), verwijdering (Art. 17), beperking van verwerking (Art. 18), gegevensoverdraagbaarheid (Art. 20), bezwaar (Art. 21), en intrekking van toestemming (Art. 7(3)). Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl). Stuur je verzoek naar info@vellu.cc; we reageren binnen 1 maand conform Art. 12(3) AVG. Voor identificatiedoeleinden kunnen we je vragen om aanvullende verificatie."],
+      ["Leeftijd", "Je moet minimaal 16 jaar oud zijn om zelfstandig een boeking te plaatsen. Ben je jonger dan 16, dan is toestemming van een ouder of voogd vereist (Art. 8 AVG). Vellu controleert dit niet actief; saloneigenaren zijn medeverantwoordelijk voor het correct omgaan met minderjarige klanten."],
+      ["Bewaartermijnen per categorie", "Boekingsgegevens: tot einde abonnement salon + 30 dagen. Factureringsgegevens: 7 jaar (art. 52 AWR). E-mail logs (bounces, opt-outs): 2 jaar. Allergie-informatie: alleen zolang het salonaccount actief is, onmiddellijke verwijdering op verzoek."],
       ["Contact", "Voor vragen over dit privacybeleid: info@vellu.cc"]
     ]
   } : {
@@ -24,12 +27,15 @@ function PrivacyPage({ lang, setLang }) {
     updated: "Last updated: April 2026",
     sections: [
       ["Who are we?", "Vellu is an online booking platform for beauty salons. We process personal data on behalf of the salons that use our platform."],
-      ["What data do we collect?", "When booking an appointment: name, email address, phone number (optional). When creating a salon account: business name, email address, password, location details."],
-      ["What do we use your data for?", "Processing and confirming bookings (legal basis: performance of contract, Art. 6(1)(b) GDPR), sending reminders (legal basis: legitimate interest, Art. 6(1)(f) GDPR), managing your salon account, and improving our services."],
+      ["What data do we collect?", "When booking an appointment: name, email address, phone number (optional). When creating a salon account: business name, email address, password, location details. Optionally and only with your explicit consent: allergy information you voluntarily enter when booking."],
+      ["Special-category data (health)", "The 'allergies' field on the booking form is optional. If you fill it in, this counts as explicit consent (Art. 9(2)(a) GDPR) to process health data for the sole purpose of ensuring a safe treatment. This data is shared only with the relevant salon and is never used for marketing, analytics or profiling. You can withdraw your consent at any time via info@vellu.cc; the data will then be erased within 30 days."],
+      ["What do we use your data for?", "Processing and confirming bookings (legal basis: performance of contract, Art. 6(1)(b) GDPR), sending appointment reminders and follow-ups (legal basis: legitimate interest, Art. 6(1)(f) GDPR — you may object via the opt-out link at the bottom of every email), managing your salon account, and improving our services. We never use your data for automated decision-making or profiling."],
       ["How long do we store your data?", "Booking data: as long as the salon account is active, plus 30 days after deletion. Financial records: 7 years (legal retention requirement). After account deletion, all personal data is erased within 30 days."],
       ["Do we share your data?", "We only share your data with: Supabase (database hosting, storage in EU region Frankfurt), Resend (email delivery via Amazon SES EU-West-1 Ireland), Vercel (website hosting, edge network with EU nodes). These companies are US-incorporated but process data in EU datacenters. Any potential transfer to the US (e.g. parent company support access) is covered by Standard Contractual Clauses (SCCs) per Implementing Decision (EU) 2021/914 and the EU-US Data Privacy Framework. All processors are bound by data processing agreements. We never sell your data to third parties."],
-      ["Cookies", "We only use functional cookies necessary for the platform to work (login session, language preference, theme). We do not use tracking cookies or third-party analytics. Functional cookies fall under the ePrivacy Directive exemption and do not require consent."],
-      ["Your rights", "Under GDPR you have the right to: access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20), and objection (Art. 21). You may also lodge a complaint with the Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl). Contact info@vellu.cc to exercise your rights."],
+      ["Cookies and local storage", "We only use strictly necessary cookies and localStorage items: login session (Supabase Auth), language preference, theme (light/dark), and remembering whether you dismissed the 'install app' prompt. These are necessary for the platform to function and fall under the exemption in art. 11.7a(3) Dutch Telecommunications Act (implementing the ePrivacy Directive). We do not use tracking cookies, third-party analytics, or advertising pixels. If this ever changes we will ask for consent via a banner first."],
+      ["Your rights", "Under GDPR you have the right to: access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20), objection (Art. 21), and withdrawal of consent (Art. 7(3)). You may also lodge a complaint with the Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl). Email info@vellu.cc; we respond within 1 month per Art. 12(3) GDPR. We may ask for additional verification to confirm your identity."],
+      ["Age", "You must be at least 16 years old to place a booking independently. If you are under 16, parental consent is required (Art. 8 GDPR). Vellu does not actively verify age; salon owners share responsibility for handling minor clients correctly."],
+      ["Retention periods by category", "Booking data: until end of salon subscription + 30 days. Invoicing data: 7 years (Dutch tax law, art. 52 AWR). Email logs (bounces, opt-outs): 2 years. Allergy information: only while the salon account is active, immediate erasure on request."],
       ["Contact", "For questions about this privacy policy: info@vellu.cc"]
     ]
   };
@@ -141,7 +147,21 @@ function ContactPage({ lang, setLang }) {
     who: "Wie zit erachter?", whoText: "Vellu is gebouwd door een solo developer uit Nederland met een passie voor technologie en ondernemerschap. Het platform is van de grond af opgebouwd met de focus op wat beauty professionals echt nodig hebben — niet meer, niet minder.",
     contact: "Contact", contactText: "Heb je vragen, feedback of wil je samenwerken? Neem gerust contact op.",
     emailLabel: "E-mail", responseTime: "We reageren meestal binnen 24 uur.",
-    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen →"
+    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen →",
+    imprintTitle: "Bedrijfsgegevens",
+    imprintIntro: "Overeenkomstig art. 3:15d BW:",
+    imprintCompany: "Handelsnaam",
+    imprintCompanyValue: "Vellu",
+    imprintOwner: "Eigenaar",
+    imprintOwnerValue: "Faisal Elmourabit (eenmanszaak)",
+    imprintAddress: "Vestigingsadres",
+    imprintAddressValue: "Op aanvraag via info@vellu.cc",
+    imprintKvk: "KVK-nummer",
+    imprintKvkValue: "In aanvraag",
+    imprintVat: "BTW-id",
+    imprintVatValue: "In aanvraag",
+    imprintAuthority: "Toezichthouder",
+    imprintAuthorityValue: "Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl)",
   } : {
     title: "About Vellu", subtitle: "The story behind the platform",
     mission: "Vellu was built with one mission: give beauty professionals their own online booking platform, without commission and without hassle. No 10% per booking, no expensive subscriptions with hidden costs. Just a flat rate and your brand front and center.",
@@ -149,7 +169,21 @@ function ContactPage({ lang, setLang }) {
     who: "Who's behind it?", whoText: "Vellu is built by a solo developer from the Netherlands with a passion for technology and entrepreneurship. The platform is built from the ground up with a focus on what beauty professionals actually need — nothing more, nothing less.",
     contact: "Contact", contactText: "Got questions, feedback, or want to collaborate? Don't hesitate to reach out.",
     emailLabel: "Email", responseTime: "We usually respond within 24 hours.",
-    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free →"
+    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free →",
+    imprintTitle: "Company details",
+    imprintIntro: "Pursuant to art. 3:15d Dutch Civil Code:",
+    imprintCompany: "Trade name",
+    imprintCompanyValue: "Vellu",
+    imprintOwner: "Owner",
+    imprintOwnerValue: "Faisal Elmourabit (sole proprietorship)",
+    imprintAddress: "Registered address",
+    imprintAddressValue: "On request via info@vellu.cc",
+    imprintKvk: "Chamber of Commerce No.",
+    imprintKvkValue: "Registration pending",
+    imprintVat: "VAT ID",
+    imprintVatValue: "Registration pending",
+    imprintAuthority: "Supervisory authority",
+    imprintAuthorityValue: "Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl)",
   };
   return (
     <Layout>
@@ -179,6 +213,25 @@ function ContactPage({ lang, setLang }) {
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
             <button className="btn-primary" onClick={() => navigate("/owner")}>{content.ctaBtn}</button>
+          </div>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.imprintTitle}</div>
+            <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 14 }}>{content.imprintIntro}</div>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "16px 18px", fontSize: 12, lineHeight: 1.9, color: c.textSub }}>
+              {[
+                [content.imprintCompany, content.imprintCompanyValue],
+                [content.imprintOwner, content.imprintOwnerValue],
+                [content.imprintAddress, content.imprintAddressValue],
+                [content.imprintKvk, content.imprintKvkValue],
+                [content.imprintVat, content.imprintVatValue],
+                [content.imprintAuthority, content.imprintAuthorityValue],
+              ].map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 16, borderBottom: `1px solid ${c.border}`, paddingBottom: 4, marginBottom: 4 }}>
+                  <span style={{ color: c.textLabel, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>{k}</span>
+                  <span style={{ textAlign: "right" }}>{v}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>

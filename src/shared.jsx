@@ -553,7 +553,10 @@ const T = {
     searchPlaceholder:"Zoek op naam of dienst...",
     reviewSaveFailed:"Kon review niet opslaan. Probeer het opnieuw.",
     somethingWrong:"Er ging iets mis.", confirmation:"Bevestiging",
-    allergyDisclaimer:"Allergiegegevens worden alleen gebruikt voor je veiligheid tijdens de behandeling.",
+    allergyDisclaimer:"Door allergie-informatie in te vullen geef je toestemming voor het verwerken van deze gezondheidsgegevens, uitsluitend om een veilige behandeling te waarborgen (Art. 9 AVG). Je kunt dit veld leeg laten.",
+    bookingLegalNotice:"Door te bevestigen bevestig je dat je 16 jaar of ouder bent (of toestemming hebt van een ouder), ga je akkoord met ons",
+    bookingLegalNoticeAnd:"en",
+    bookingLegalNoticeRefund:"Voltooide behandelingen kunnen niet worden terugbetaald; annuleren kan tot je afspraak via de link in je bevestigingsmail.",
     noTreatmentsCatYet:"Nog geen behandelingen beschikbaar",
   },
   en: {
@@ -796,7 +799,10 @@ const T = {
     searchPlaceholder:"Search by name or service...",
     reviewSaveFailed:"Could not save review. Please try again.",
     somethingWrong:"Something went wrong.", confirmation:"Confirmation",
-    allergyDisclaimer:"Allergy info is only used for your safety during the treatment.",
+    allergyDisclaimer:"By entering allergy information you consent to processing this health data solely to ensure a safe treatment (GDPR Art. 9). You may leave this field blank.",
+    bookingLegalNotice:"By confirming you confirm you are 16 or older (or have parental consent), and you agree to our",
+    bookingLegalNoticeAnd:"and",
+    bookingLegalNoticeRefund:"Completed treatments are non-refundable; you may cancel up until your appointment via the link in your confirmation email.",
     noTreatmentsCatYet:"No treatments available yet",
   }
 };
