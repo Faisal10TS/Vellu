@@ -1334,7 +1334,9 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
 
   /* Mobile responsive */
   @media (max-width: 900px) {
-    .profile-header { padding: 0 16px; height: 48px; gap: 12px; }
+    /* Keep the safe-area-inset-top padding/height from the desktop rule —
+       without it the iOS notch + Android status bar overlap the logo/tabs. */
+    .profile-header { padding: 0 16px; padding-top: env(safe-area-inset-top, 0px); height: calc(48px + env(safe-area-inset-top, 0px)); gap: 12px; }
     .profile-header-contact { display: none; }
     .profile-root { display: block; height: auto; overflow: visible; }
     .profile-scroll-area { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
