@@ -16,7 +16,7 @@ function PrivacyPage({ lang, setLang }) {
       ["Waarvoor gebruiken wij je gegevens?", "Het verwerken en bevestigen van boekingen (grondslag: uitvoering overeenkomst, Art. 6(1)(b) AVG), het versturen van afspraakherinneringen en follow-ups (grondslag: gerechtvaardigd belang, Art. 6(1)(f) AVG — je kunt je hiertegen verzetten via de opt-out link onderaan elke e-mail), het beheren van je salonaccount en het verbeteren van onze dienstverlening. Wij gebruiken je gegevens nooit voor geautomatiseerde besluitvorming of profilering."],
       ["Hoe lang bewaren wij je gegevens?", "Boekingsgegevens: zolang het salonaccount actief is, plus 30 dagen na verwijdering. Financiële gegevens: 7 jaar (wettelijke bewaarplicht). Na verwijdering van je account worden alle persoonsgegevens binnen 30 dagen gewist."],
       ["Delen wij je gegevens?", "Wij delen je gegevens alleen met: Supabase (database hosting, opslag in EU-regio Frankfurt), Resend (email verzending via Amazon SES EU-West-1 Ierland), Vercel (website hosting, edge netwerk met EU-nodes). Deze bedrijven zijn in de VS gevestigd maar verwerken de data in EU-datacenters. Voor eventuele doorgifte naar de VS (bijv. support-toegang door moedermaatschappij) gelden Standard Contractual Clauses (SCC's) conform Uitvoeringsbesluit (EU) 2021/914 en het EU-US Data Privacy Framework. Alle verwerkers zijn gebonden aan verwerkersovereenkomsten. Wij verkopen nooit je gegevens aan derden."],
-      ["Google API Services — agenda-integratie", "Als je er zelf voor kiest om je Google Agenda te koppelen, vraagt Vellu de scope 'https://www.googleapis.com/auth/calendar.events' aan. Vellu gebruikt deze toegang uitsluitend om: (a) nieuwe bevestigde boekingen als event in jouw Google Agenda te zetten, (b) bestaande events bij te werken als een afspraak wijzigt, (c) events te verwijderen bij annulering. Vellu leest géén andere events uit je agenda en deelt deze data nooit met derden, gebruikt ze niet voor advertenties, en traint er geen AI-modellen mee. Het gebruik van informatie verkregen via Google API's voldoet aan het Google API Services User Data Policy, inclusief de 'Limited Use'-vereisten. Je kunt de koppeling op elk moment intrekken in Instellingen of via je Google-account op myaccount.google.com/permissions."],
+      ["Google API Services — agenda-integratie", "Als je er zelf voor kiest om je Google Agenda te koppelen, vraagt Vellu de scope 'https://www.googleapis.com/auth/calendar.events' aan. Vellu gebruikt deze toegang uitsluitend om: (a) nieuwe bevestigde boekingen als event in jouw Google Agenda te zetten, (b) bestaande events bij te werken als een afspraak wijzigt, (c) events te verwijderen bij annulering. Vellu leest géén andere events uit je agenda en deelt deze data nooit met derden, gebruikt ze niet voor advertenties, en traint er geen AI-modellen mee. Het gebruik van informatie verkregen via Google API's voldoet aan het Google API Services User Data Policy, inclusief de 'Limited Use'-vereisten. Een uitgebreide beschrijving staat op vellu.cc/integrations/google. Je kunt de koppeling op elk moment intrekken in Instellingen of via je Google-account op myaccount.google.com/permissions."],
       ["Cookies en lokale opslag", "Wij gebruiken uitsluitend strikt noodzakelijke cookies en localStorage-items: inlogsessie (Supabase Auth), taalvoorkeur, thema (licht/donker), en het onthouden of je de 'app installeren'-melding hebt gesloten. Deze zijn noodzakelijk voor de werking van het platform en vallen onder de uitzondering van art. 11.7a lid 3 Telecommunicatiewet (implementatie ePrivacy-richtlijn). Wij gebruiken géén tracking cookies, géén third-party analytics en géén advertentiepixels. Mocht dit in de toekomst veranderen, dan vragen wij eerst om je toestemming via een banner."],
       ["Je rechten", "Onder de AVG heb je recht op: inzage (Art. 15), correctie (Art. 16), verwijdering (Art. 17), beperking van verwerking (Art. 18), gegevensoverdraagbaarheid (Art. 20), bezwaar (Art. 21), en intrekking van toestemming (Art. 7(3)). Je kunt ook een klacht indienen bij de Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl). Stuur je verzoek naar info@vellu.cc; we reageren binnen 1 maand conform Art. 12(3) AVG. Voor identificatiedoeleinden kunnen we je vragen om aanvullende verificatie."],
       ["Leeftijd", "Je moet minimaal 16 jaar oud zijn om zelfstandig een boeking te plaatsen. Ben je jonger dan 16, dan is toestemming van een ouder of voogd vereist (Art. 8 AVG). Vellu controleert dit niet actief; saloneigenaren zijn medeverantwoordelijk voor het correct omgaan met minderjarige klanten."],
@@ -33,7 +33,7 @@ function PrivacyPage({ lang, setLang }) {
       ["What do we use your data for?", "Processing and confirming bookings (legal basis: performance of contract, Art. 6(1)(b) GDPR), sending appointment reminders and follow-ups (legal basis: legitimate interest, Art. 6(1)(f) GDPR — you may object via the opt-out link at the bottom of every email), managing your salon account, and improving our services. We never use your data for automated decision-making or profiling."],
       ["How long do we store your data?", "Booking data: as long as the salon account is active, plus 30 days after deletion. Financial records: 7 years (legal retention requirement). After account deletion, all personal data is erased within 30 days."],
       ["Do we share your data?", "We only share your data with: Supabase (database hosting, storage in EU region Frankfurt), Resend (email delivery via Amazon SES EU-West-1 Ireland), Vercel (website hosting, edge network with EU nodes). These companies are US-incorporated but process data in EU datacenters. Any potential transfer to the US (e.g. parent company support access) is covered by Standard Contractual Clauses (SCCs) per Implementing Decision (EU) 2021/914 and the EU-US Data Privacy Framework. All processors are bound by data processing agreements. We never sell your data to third parties."],
-      ["Google API Services — calendar integration", "If you opt in to connecting your Google Calendar, Vellu requests the 'https://www.googleapis.com/auth/calendar.events' scope. Vellu uses this access solely to: (a) create a calendar event in your Google Calendar for each confirmed booking, (b) update events when a booking changes, (c) delete events when a booking is cancelled. Vellu does not read other events on your calendar, never shares this data with third parties, does not use it for advertising, and does not train AI models on it. Vellu's use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. You can disconnect at any time in Settings or via myaccount.google.com/permissions."],
+      ["Google API Services — calendar integration", "If you opt in to connecting your Google Calendar, Vellu requests the 'https://www.googleapis.com/auth/calendar.events' scope. Vellu uses this access solely to: (a) create a calendar event in your Google Calendar for each confirmed booking, (b) update events when a booking changes, (c) delete events when a booking is cancelled. Vellu does not read other events on your calendar, never shares this data with third parties, does not use it for advertising, and does not train AI models on it. Vellu's use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. A full description is at vellu.cc/integrations/google. You can disconnect at any time in Settings or via myaccount.google.com/permissions."],
       ["Cookies and local storage", "We only use strictly necessary cookies and localStorage items: login session (Supabase Auth), language preference, theme (light/dark), and remembering whether you dismissed the 'install app' prompt. These are necessary for the platform to function and fall under the exemption in art. 11.7a(3) Dutch Telecommunications Act (implementing the ePrivacy Directive). We do not use tracking cookies, third-party analytics, or advertising pixels. If this ever changes we will ask for consent via a banner first."],
       ["Your rights", "Under GDPR you have the right to: access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20), objection (Art. 21), and withdrawal of consent (Art. 7(3)). You may also lodge a complaint with the Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl). Email info@vellu.cc; we respond within 1 month per Art. 12(3) GDPR. We may ask for additional verification to confirm your identity."],
       ["Age", "You must be at least 16 years old to place a booking independently. If you are under 16, parental consent is required (Art. 8 GDPR). Vellu does not actively verify age; salon owners share responsibility for handling minor clients correctly."],
@@ -324,5 +324,170 @@ function DpaPage({ lang, setLang }) {
 }
 
 
-export { PrivacyPage, TermsPage, ContactPage, DpaPage };
+// ─── GOOGLE CALENDAR INTEGRATION PAGE ────────────────────────
+// A public-facing, human-readable description of the Google Calendar
+// integration. Exists primarily to support Google OAuth verification —
+// reviewers appreciate a dedicated page (separate from the privacy policy
+// section) that explains in plain language what the app does with Google
+// user data, lists the exact scope requested, and duplicates the Limited
+// Use disclosure. Also useful for salon owners who are cautious about
+// granting calendar access.
+function GoogleIntegrationPage({ lang, setLang }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const t = T[lang];
+  useSEO({ title: lang === "nl" ? "Google Agenda-integratie | Vellu" : "Google Calendar Integration | Vellu", url: "https://vellu.cc/integrations/google" });
+
+  const content = lang === "nl" ? {
+    title: "Google Agenda-integratie",
+    subtitle: "Hoe Vellu je Google Agenda gebruikt — in gewone taal.",
+    updated: "Laatst bijgewerkt: april 2026",
+    overview: "Deze koppeling is optioneel. Vellu werkt prima zonder. Als je ervoor kiest je Google Agenda te verbinden, synchroniseert Vellu je salonboekingen automatisch naar je agenda zodat je ze ziet naast al je andere afspraken.",
+    scopeTitle: "Welke toestemming vraagt Vellu?",
+    scopeName: "https://www.googleapis.com/auth/calendar.events",
+    scopeDesc: "Met deze scope kan Vellu events in je agenda aanmaken, bijwerken en verwijderen. Vellu kan géén andere events uit je agenda lezen, en heeft géén toegang tot andere agenda's dan de gekoppelde.",
+    stepsTitle: "Wat gebeurt er bij elke actie?",
+    steps: [
+      { icon: "plus", title: "Nieuwe boeking", body: "Een klant boekt een afspraak via je Vellu-pagina. Vellu maakt direct een event aan in je Google Agenda met de naam van de klant, de behandeling, de tijd en de duur." },
+      { icon: "edit", title: "Boeking gewijzigd", body: "Als een klant herplant of jij de afspraak aanpast in de dashboard, werkt Vellu het bijbehorende event bij — één-op-één, geen duplicaten." },
+      { icon: "xmark", title: "Boeking geannuleerd", body: "Bij annulering verwijdert Vellu het event automatisch, zodat je agenda altijd klopt." },
+    ],
+    limitedUseTitle: "Limited Use-verklaring",
+    limitedUseBody: "Het gebruik door Vellu van informatie die is ontvangen via Google API's voldoet aan het Google API Services User Data Policy, inclusief de Limited Use-vereisten. Concreet betekent dit:",
+    limitedUseBullets: [
+      "We gebruiken je Google-data uitsluitend om de bovenstaande salonfuncties te leveren.",
+      "We verkopen of verhandelen je Google-data nooit.",
+      "We delen je Google-data nooit voor advertenties of targeting.",
+      "We trainen geen AI-modellen op je Google-data.",
+      "Menselijke toegang tot je Google-data is alleen toegestaan bij expliciete toestemming, voor security-onderzoek, of wettelijk verplichte redenen.",
+    ],
+    disconnectTitle: "Hoe intrekken?",
+    disconnectBody: "Je kunt de koppeling op twee manieren verwijderen. Beide werken onmiddellijk: bestaande events blijven in je agenda staan, nieuwe events worden niet meer aangemaakt.",
+    disconnectSteps: [
+      "In Vellu: Instellingen → Overig → Google Agenda → 'Loskoppelen'.",
+      "Op Google: myaccount.google.com/permissions → zoek Vellu → 'Toegang intrekken'.",
+    ],
+    moreTitle: "Meer informatie",
+    moreBody: "Voor een volledig overzicht van gegevensverwerking en je rechten onder de AVG, zie ons privacybeleid.",
+    privacyLabel: "Lees ons privacybeleid →",
+  } : {
+    title: "Google Calendar Integration",
+    subtitle: "How Vellu uses your Google Calendar — in plain language.",
+    updated: "Last updated: April 2026",
+    overview: "This integration is optional. Vellu works fine without it. If you choose to connect your Google Calendar, Vellu automatically syncs your salon bookings to your calendar so you see them alongside everything else in your day.",
+    scopeTitle: "What permission does Vellu request?",
+    scopeName: "https://www.googleapis.com/auth/calendar.events",
+    scopeDesc: "This scope lets Vellu create, update, and delete events in your calendar. Vellu cannot read other events in your calendar, and has no access to any calendars other than the one you connect.",
+    stepsTitle: "What happens on each action?",
+    steps: [
+      { icon: "plus", title: "New booking", body: "A customer books an appointment via your Vellu page. Vellu immediately creates an event in your Google Calendar with the customer's name, the service, the time, and the duration." },
+      { icon: "edit", title: "Booking changed", body: "If a customer reschedules or you edit the appointment in the dashboard, Vellu updates the corresponding event — one-to-one, no duplicates." },
+      { icon: "xmark", title: "Booking cancelled", body: "On cancellation, Vellu automatically deletes the event so your calendar stays accurate." },
+    ],
+    limitedUseTitle: "Limited Use statement",
+    limitedUseBody: "Vellu's use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Specifically:",
+    limitedUseBullets: [
+      "We use your Google data solely to provide the salon features described above.",
+      "We never sell or trade your Google data.",
+      "We never share your Google data for advertising or targeting.",
+      "We do not train AI models on your Google data.",
+      "Human access to your Google data is allowed only with explicit consent, for security investigations, or where legally required.",
+    ],
+    disconnectTitle: "How to disconnect",
+    disconnectBody: "You can revoke access two ways. Both take effect immediately: existing events stay in your calendar, but no new events will be created.",
+    disconnectSteps: [
+      "In Vellu: Settings → Other → Google Calendar → 'Disconnect'.",
+      "On Google: myaccount.google.com/permissions → find Vellu → 'Remove access'.",
+    ],
+    moreTitle: "More information",
+    moreBody: "For a full account of how we handle personal data and your rights under GDPR, see our privacy policy.",
+    privacyLabel: "Read our privacy policy →",
+  };
+
+  return (
+    <Layout>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
+        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
+            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
+          </div>
+
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 6 }}>{content.title}</div>
+          <div style={{ fontSize: 13, color: c.textSub, marginBottom: 4, lineHeight: 1.5 }}>{content.subtitle}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{content.updated}</div>
+
+          {/* Overview card */}
+          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.7, marginBottom: 28, padding: "18px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>{content.overview}</div>
+
+          {/* Scope block */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.scopeTitle}</div>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>OAuth scope</div>
+              <div style={{ fontFamily: "'Courier New',monospace", fontSize: 12, color: c.text, wordBreak: "break-all" }}>{content.scopeName}</div>
+            </div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.scopeDesc}</div>
+          </div>
+
+          {/* What happens on each action */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{content.stepsTitle}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {content.steps.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${ACCENT}15`, color: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <NavIcon name={s.icon} size={14} color={ACCENT} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 4 }}>{s.title}</div>
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6 }}>{s.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Limited Use — required on a Google-verification-ready page */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.limitedUseTitle}</div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 10 }}>{content.limitedUseBody}</div>
+            <ul style={{ fontSize: 13, color: c.textSub, lineHeight: 1.8, paddingLeft: 20, margin: 0 }}>
+              {content.limitedUseBullets.map((b, i) => (
+                <li key={i} style={{ marginBottom: 4 }}>{b}</li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Disconnect */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.disconnectTitle}</div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 10 }}>{content.disconnectBody}</div>
+            <ul style={{ fontSize: 13, color: c.textSub, lineHeight: 1.8, paddingLeft: 20, margin: 0 }}>
+              {content.disconnectSteps.map((s, i) => (
+                <li key={i} style={{ marginBottom: 4 }}>{s}</li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Pointer to privacy policy */}
+          <div style={{ marginBottom: 40 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{content.moreTitle}</div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 8 }}>{content.moreBody}</div>
+            <a href="/privacy" style={{ fontSize: 13, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>{content.privacyLabel}</a>
+          </div>
+
+          <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+
+export { PrivacyPage, TermsPage, ContactPage, DpaPage, GoogleIntegrationPage };
 export default PrivacyPage;

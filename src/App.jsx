@@ -19,6 +19,7 @@ const PrivacyPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: 
 const TermsPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.TermsPage })));
 const ContactPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.ContactPage })));
 const DpaPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.DpaPage })));
+const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.GoogleIntegrationPage })));
 
 // ─── ROLE RESOLUTION ─────────────────────────────────────────
 // Figure out whether a logged-in auth user is a SALON OWNER or a STAFF member.
@@ -621,6 +622,9 @@ export default function VelluApp() {
               <Route path="/voorwaarden" element={<TermsPage lang={lang} setLang={setLang} />} />
               <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
               <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
+              {/* Google OAuth verification wants a dedicated public page; this
+                  describes the Google Calendar integration + Limited Use. */}
+              <Route path="/integrations/google" element={<GoogleIntegrationPage lang={lang} setLang={setLang} />} />
               {/* Admin route — rendered for anyone, but the component itself
                   calls is_admin() via RPC and shows "Not authorised" for
                   non-admins. Real enforcement sits in the DB (app_admins). */}
