@@ -620,21 +620,90 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return false;
   };
 
-  // Shared time-slot filter: returns available times for a given date
+  // Shared time-slot filter: returns available times for a given date.
+  //
+  // For multi-service bookings we walk each service in order and require that
+  // its specific sub-window ([start + previous durations, +duration)) is
+  // covered by at least one eligible staff member. This correctly handles:
+  //
+  //   - services bound to different staff (Acryl→Esther, Pedicure→Lady):
+  //     each sub-window must land in that staff's hours, so a Tuesday where
+  //     Lady is closed zeroes out the whole date no matter how many other
+  //     times are "salon open".
+  //
+  //   - services each staff with non-overlapping shifts: if Esther works
+  //     09-12 and Lady works 14-17 and both can do the service, start time
+  //     T=09:00 is valid if Esther covers the whole service; T=11:30 is
+  //     invalid because nobody covers the gap 12-14. No blanket-window
+  //     union can express this — only per-slot checks can.
+  //
+  //   - explicit staff assignment: if item.staff is set (customer picked
+  //     a specific person), only that person counts as "eligible".
   const getAvailableTimes = (forDate) => {
     const dayHours = getEffectiveHours(forDate);
-    const staffWindow = getStaffTimeWindow(forDate);
-    const effectiveOpen = staffWindow?.open && staffWindow.open > dayHours.open ? staffWindow.open : dayHours.open;
-    const effectiveClose = staffWindow?.close && staffWindow.close < dayHours.close ? staffWindow.close : dayHours.close;
-    const serviceDuration = Math.max(getDuration(), 30);
+    if (dayHours.closed) return [];
+
+    // Parse date locally so getDay() isn't shifted into the wrong weekday
+    // for negative-offset timezones.
+    const [yyyy, mm, dd] = (forDate || "").split("-").map(Number);
+    const dayOfWeek = (yyyy && mm && dd) ? new Date(yyyy, mm - 1, dd).getDay() : new Date(forDate).getDay();
+
+    const toMin = (hm) => { const [h, m] = (hm || "0:0").split(":").map(Number); return h * 60 + m; };
+
+    // Precompute per-service: duration + eligible-staff list.
+    const allStaff = initialSalon.staff || [];
+    const serviceSlots = selectedServices.map(item => {
+      const duration = (item.variant ? item.variant.duration : item.service.duration) || 30;
+      const eligible = item.staff
+        ? [item.staff]
+        : allStaff.filter(s =>
+            !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)
+          );
+      return { duration, eligible };
+    });
+
+    // If any service has zero eligible staff at all (misconfigured salon), bail.
+    // A single service with no eligible set means nobody in the salon can do it
+    // — definitively impossible, doesn't matter what hours are set.
+    if (selectedServices.length > 0 && allStaff.length > 0 && serviceSlots.some(s => s.eligible.length === 0)) return [];
+
+    // Is this staff member working the full [startMin, endMin) window today?
+    // Returns true when the staff has no constraint (follows salon hours —
+    // the salon-wide check has already passed by this point).
+    const staffCoversWindow = (staff, startMin, endMin) => {
+      if (!staff?.working_hours) return true;
+      const day = staff.working_hours[dayOfWeek];
+      if (!day) return true;
+      if (day.closed) return false;
+      const staffOpen = toMin(day.open || "00:00");
+      const staffClose = toMin(day.close || "23:59");
+      return startMin >= staffOpen && endMin <= staffClose;
+    };
+
+    const salonOpen = toMin(dayHours.open);
+    const salonClose = toMin(dayHours.close);
+    const totalDuration = serviceSlots.reduce((sum, s) => sum + s.duration, 0) || 30;
+
     return TIMES.filter(tt => {
-      if (dayHours.closed || staffWindow?.closed) return false;
-      if (tt < effectiveOpen || tt >= effectiveClose) return false;
-      // Check if service fits before closing time
-      const [sh, sm] = tt.split(":").map(Number);
-      const slotEndMinutes = sh * 60 + sm + serviceDuration;
-      const [ch, cm] = effectiveClose.split(":").map(Number);
-      if (slotEndMinutes > ch * 60 + cm) return false;
+      const startMin = toMin(tt);
+
+      // Salon-wide bounds: start within open hours, end before close.
+      if (startMin < salonOpen) return false;
+      if (startMin + totalDuration > salonClose) return false;
+
+      // Per-service sub-window: at least one eligible staff must cover it.
+      // Walk services sequentially — each sub-window starts right after the
+      // previous one ends (no gaps within a single booking).
+      let cur = startMin;
+      for (const s of serviceSlots) {
+        const end = cur + s.duration;
+        const covered = s.eligible.length === 0
+          ? true // no staff configured for salon → fall back to salon hours (already checked)
+          : s.eligible.some(sm => staffCoversWindow(sm, cur, end));
+        if (!covered) return false;
+        cur = end;
+      }
+
       if (isTimeBlockedByOverride(forDate, tt)) return false;
       if (forDate === fmt(getToday())) {
         const now = getToday();
