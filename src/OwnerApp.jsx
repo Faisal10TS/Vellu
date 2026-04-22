@@ -4757,7 +4757,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
-                    onClick={() => setShowExceptionForm(true)}>+ {t.addException}</button>
+                    onClick={() => setShowExceptionForm(true)}>{t.addException}</button>
                 )}
               </div>
 
@@ -4851,7 +4851,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
-                    onClick={() => setShowBlockedForm(true)}>+ {t.addBlocked}</button>
+                    onClick={() => setShowBlockedForm(true)}>{t.addBlocked}</button>
                 )}
               </div>
 
