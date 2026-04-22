@@ -207,22 +207,73 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return !staffDay.closed;
   };
 
-  // Get effective time window considering all selected staff members' working hours
+  // Get effective time window considering all selected staff members' working hours.
+  //
+  // For each selected service:
+  //   - If a specific staff is assigned (item.staff set), use their hours.
+  //   - If no staff assigned, use the set of ELIGIBLE staff (who can perform
+  //     this service) and take the union of their working hours for that day.
+  //     If none of the eligible staff work that day, the whole booking can't
+  //     happen on that date — return closed.
+  //
+  // We then intersect across services (every service must be doable in the
+  // same window since appointments are sequential within one booking).
+  //
+  // Known limitation: within-service UNION uses earliest-open / latest-close,
+  // which ignores internal gaps (e.g. one staff works 09-12, another works
+  // 14-17 — we model it as 09-17). Good enough for salons where eligible sets
+  // are usually size 1 (specialist-bound services); revisit if we see the
+  // multi-staff-with-gap case in practice.
   const getStaffTimeWindow = (dateStr) => {
-    const assignedStaff = selectedServices.filter(item => item.staff).map(item => item.staff);
-    if (assignedStaff.length === 0) return null; // No staff constraint
-    const dayOfWeek = new Date(dateStr).getDay();
+    if (selectedServices.length === 0) return null;
+    // Parse dateStr as local so getDay() isn't UTC-shifted into the wrong weekday.
+    const [yyyy, mm, dd] = (dateStr || "").split("-").map(Number);
+    const dayOfWeek = (yyyy && mm && dd) ? new Date(yyyy, mm - 1, dd).getDay() : new Date(dateStr).getDay();
+
+    // Extract a single staff member's window for a given day. Returns:
+    //   null            -> no constraints (follow salon hours)
+    //   { closed:true } -> staff explicitly closed this day
+    //   { open, close } -> staff's working window
+    const staffWindow = (staff) => {
+      if (!staff?.working_hours) return null;
+      const day = staff.working_hours[dayOfWeek];
+      if (!day) return null;
+      if (day.closed) return { closed: true };
+      return { open: day.open || "00:00", close: day.close || "23:59" };
+    };
+
+    // Effective window for one selected-service row.
+    const serviceWindow = (item) => {
+      if (item.staff) return staffWindow(item.staff);
+      // No explicit staff pick — find who CAN do this service and union their windows.
+      const eligible = (initialSalon.staff || []).filter(s =>
+        !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)
+      );
+      if (eligible.length === 0) return null; // No staff list = no constraint
+      const windows = eligible.map(staffWindow).filter(w => w && !w.closed);
+      if (windows.length === 0) return { closed: true }; // Nobody eligible is working today
+      // Union approximation: earliest start, latest close.
+      let open = "23:59", close = "00:00";
+      for (const w of windows) {
+        if (w.open < open) open = w.open;
+        if (w.close > close) close = w.close;
+      }
+      return { open, close };
+    };
+
     let latestStart = "00:00";
     let earliestEnd = "23:59";
-    for (const staff of assignedStaff) {
-      if (!staff.working_hours) continue; // No constraints, follows salon hours
-      const staffDay = staff.working_hours[dayOfWeek];
-      if (!staffDay) continue; // Day not configured = follows salon hours
-      if (staffDay.closed) return { closed: true }; // Staff explicitly closed this day
-      if (staffDay.open && staffDay.open > latestStart) latestStart = staffDay.open;
-      if (staffDay.close && staffDay.close < earliestEnd) earliestEnd = staffDay.close;
+    let hasConstraint = false;
+    for (const item of selectedServices) {
+      const w = serviceWindow(item);
+      if (!w) continue; // No constraint from this item
+      hasConstraint = true;
+      if (w.closed) return { closed: true };
+      if (w.open > latestStart) latestStart = w.open;
+      if (w.close < earliestEnd) earliestEnd = w.close;
     }
-    if (latestStart >= earliestEnd) return { closed: true }; // No overlapping window
+    if (!hasConstraint) return null;
+    if (latestStart >= earliestEnd) return { closed: true };
     return { open: latestStart, close: earliestEnd };
   };
 
