@@ -2116,7 +2116,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view !== "instellingen" ? (
           <div style={{
             minWidth: 0,
-            padding: isMobile ? "14px 14px 100px" : "32px 40px 32px",
+            padding: isMobile ? "14px 14px calc(100px + env(safe-area-inset-bottom, 0px))" : "32px 40px 32px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -3113,7 +3113,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* ANALYTICS */}
           {view === "analytics" && (
-            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflowX: "hidden" }}>
               {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
 
               {/* Key metrics + Revenue chart — combined IIFE to share computed data */}
@@ -3315,7 +3315,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       </div>
                       <div style={{ marginTop: 14, minHeight: 200 }}>
-                        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
+                        <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "hidden" }}>
                           <defs>
                             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
@@ -3328,14 +3328,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <line x1={PAD_L} y1={PAD_TOP + innerH} x2={W - PAD_R} y2={PAD_TOP + innerH} stroke={c.border} strokeWidth="1" />
                           {maxRev > 0 && <path d={areaPath} fill={`url(#${gradId})`} />}
                           {maxRev > 0 && <path d={smoothPath} fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-                          {pts[peakIdx].revenue > 0 && (
-                            <g>
-                              <rect x={pts[peakIdx].x - 30} y={pts[peakIdx].y - 26} width="60" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
-                              <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                €{pts[peakIdx].revenue.toFixed(0)}
-                              </text>
-                            </g>
-                          )}
+                          {pts[peakIdx].revenue > 0 && (() => {
+                            const px = Math.max(PAD_L + 30, Math.min(W - PAD_R - 30, pts[peakIdx].x));
+                            return (
+                              <g>
+                                <rect x={px - 30} y={pts[peakIdx].y - 26} width="60" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
+                                <text x={px} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
+                                  €{pts[peakIdx].revenue.toFixed(0)}
+                                </text>
+                              </g>
+                            );
+                          })()}
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
@@ -3539,9 +3542,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const count = hourCounts[h] || 0;
                         const pct = (count / max) * 100;
                         return (
-                          <div key={h} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div key={h} style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                             <div style={{ width: "100%", borderRadius: 4, background: count > 0 ? `${accent}${Math.max(Math.round(pct * 0.8 + 20), 20).toString(16).padStart(2,"0")}` : c.bgCardHover, height: Math.max(pct * 0.7, 2), transition: "height 0.3s" }} />
-                            <span style={{ fontSize: 10, color: c.textMuted }}>{h}:00</span>
+                            <span style={{ fontSize: 10, color: c.textMuted }}>{isMobile ? h : `${h}:00`}</span>
                           </div>
                         );
                       })}
@@ -3646,7 +3649,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
 
           <div style={{
-            padding: isMobile ? "16px 0 160px" : "16px 0 100px",
+            padding: isMobile ? "16px 0 calc(160px + env(safe-area-inset-bottom, 0px))" : "16px 0 100px",
             backgroundImage: `radial-gradient(ellipse 70% 30% at 50% -5%, ${accent}08 0%, transparent 55%)`
           }}>
 
@@ -5300,6 +5303,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             left: 0,
             right: 0,
             background: c.bg,
+            borderTop: "1px solid " + c.border,
+            boxShadow: `0 -8px 16px -8px ${c.bg}`,
             display: "flex",
             padding: "12px 4px 8px",
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",

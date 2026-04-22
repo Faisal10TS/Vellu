@@ -856,7 +856,7 @@ const T = new Proxy(_T_RAW, {
 const _sanitizeAccent = (a) => (typeof a === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.trim())) ? a.trim() : ACCENT;
 const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent(rawAccent); return `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
   body { overscroll-behavior: none; overflow-x: clip; }
   ::-webkit-scrollbar { width: 0; height: 0; }
   input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
