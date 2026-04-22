@@ -1193,6 +1193,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Exception/blocked days
   const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30" });
   const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" });
+  const [showExceptionForm, setShowExceptionForm] = useState(false);
+  const [showBlockedForm, setShowBlockedForm] = useState(false);
   const [editingVariant, setEditingVariant] = useState(null);
   const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
   const [editingExtra, setEditingExtra] = useState(null);
@@ -4731,22 +4733,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       onClick={() => update(d => { const o = {...(d.day_overrides || {})}; delete o[date]; d.day_overrides = o; return d; })}>×</button>
                   </div>
                 ))}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                  <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
-                  <select value={newException.open} onChange={e => setNewException(f => ({...f, open: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                  </select>
-                  <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
-                  <select value={newException.close} onChange={e => setNewException(f => ({...f, close: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                  </select>
-                </div>
-                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
-                  onClick={() => {
-                    if (!newException.date) return;
-                    update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: { type: "exception", open: newException.open, close: newException.close }}; return d; });
-                    setNewException({ date: "", open: "09:00", close: "17:30" });
-                  }}>{t.addException}</button>
+                {showExceptionForm ? (<>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
+                    <select value={newException.open} onChange={e => setNewException(f => ({...f, open: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                    </select>
+                    <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
+                    <select value={newException.close} onChange={e => setNewException(f => ({...f, close: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                      onClick={() => {
+                        if (!newException.date) return;
+                        update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: { type: "exception", open: newException.open, close: newException.close }}; return d; });
+                        setNewException({ date: "", open: "09:00", close: "17:30" });
+                        setShowExceptionForm(false);
+                      }}>{t.addException}</button>
+                    <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
+                      onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30" }); setShowExceptionForm(false); }}>×</button>
+                  </div>
+                </>) : (
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
+                    onClick={() => setShowExceptionForm(true)}>+ {t.addException}</button>
+                )}
               </div>
 
               {/* Blocked Days */}
@@ -4777,60 +4789,70 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       }}>×</button>
                   </div>
                 ))}
-                {/* Block mode toggle: whole day or time slot */}
-                <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 10 }}>
-                  <div onClick={() => setNewBlocked(f => ({...f, mode: "day"}))} style={{
-                    padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                    background: (newBlocked.mode || "day") === "day" ? `${c.danger}1f` : "transparent",
-                    color: (newBlocked.mode || "day") === "day" ? c.danger : c.textSub,
-                    border: `1px solid ${(newBlocked.mode || "day") === "day" ? `${c.danger}4d` : c.inputBorder}`
-                  }}>{t.blockWholeDay}</div>
-                  <div onClick={() => setNewBlocked(f => ({...f, mode: "time"}))} style={{
-                    padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                    background: newBlocked.mode === "time" ? `${c.danger}1f` : "transparent",
-                    color: newBlocked.mode === "time" ? c.danger : c.textSub,
-                    border: `1px solid ${newBlocked.mode === "time" ? `${c.danger}4d` : c.inputBorder}`
-                  }}>{t.blockTimeSlot}</div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
-                  {(newBlocked.mode || "day") === "day" && (
-                    <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
-                  )}
-                  {newBlocked.mode === "time" && (<>
-                    <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                    </select>
-                    <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
-                    <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
-                    </select>
-                  </>)}
-                </div>
-                <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
-                <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
-                  onClick={() => {
-                    if (!newBlocked.from) return;
-                    const endDate = newBlocked.to || newBlocked.from;
-                    update(d => {
-                      const o = {...(d.day_overrides || {})};
-                      if (newBlocked.mode === "time") {
-                        // Time-slot block: store on single date with time range
-                        o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30" };
-                      } else {
-                        // Whole day block
-                        let cur = new Date(newBlocked.from);
-                        const end = new Date(endDate);
-                        const first = fmt(cur);
-                        while (cur <= end) {
-                          o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
-                          cur.setDate(cur.getDate() + 1);
-                        }
-                      }
-                      d.day_overrides = o; return d;
-                    });
-                    setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30" });
-                  }}>{t.addBlocked}</button>
+                {showBlockedForm ? (<>
+                  {/* Block mode toggle: whole day or time slot */}
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 10 }}>
+                    <div onClick={() => setNewBlocked(f => ({...f, mode: "day"}))} style={{
+                      padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      background: (newBlocked.mode || "day") === "day" ? `${c.danger}1f` : "transparent",
+                      color: (newBlocked.mode || "day") === "day" ? c.danger : c.textSub,
+                      border: `1px solid ${(newBlocked.mode || "day") === "day" ? `${c.danger}4d` : c.inputBorder}`
+                    }}>{t.blockWholeDay}</div>
+                    <div onClick={() => setNewBlocked(f => ({...f, mode: "time"}))} style={{
+                      padding: "6px 14px", borderRadius: 10, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      background: newBlocked.mode === "time" ? `${c.danger}1f` : "transparent",
+                      color: newBlocked.mode === "time" ? c.danger : c.textSub,
+                      border: `1px solid ${newBlocked.mode === "time" ? `${c.danger}4d` : c.inputBorder}`
+                    }}>{t.blockTimeSlot}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
+                    {(newBlocked.mode || "day") === "day" && (
+                      <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
+                    )}
+                    {newBlocked.mode === "time" && (<>
+                      <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
+                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      </select>
+                      <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
+                      <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
+                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      </select>
+                    </>)}
+                  </div>
+                  <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
+                      onClick={() => {
+                        if (!newBlocked.from) return;
+                        const endDate = newBlocked.to || newBlocked.from;
+                        update(d => {
+                          const o = {...(d.day_overrides || {})};
+                          if (newBlocked.mode === "time") {
+                            // Time-slot block: store on single date with time range
+                            o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30" };
+                          } else {
+                            // Whole day block
+                            let cur = new Date(newBlocked.from);
+                            const end = new Date(endDate);
+                            const first = fmt(cur);
+                            while (cur <= end) {
+                              o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
+                              cur.setDate(cur.getDate() + 1);
+                            }
+                          }
+                          d.day_overrides = o; return d;
+                        });
+                        setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30" });
+                        setShowBlockedForm(false);
+                      }}>{t.addBlocked}</button>
+                    <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
+                      onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(false); }}>×</button>
+                  </div>
+                </>) : (
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
+                    onClick={() => setShowBlockedForm(true)}>+ {t.addBlocked}</button>
+                )}
               </div>
 
               {/* Google Calendar Sync */}
