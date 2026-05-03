@@ -299,7 +299,7 @@ serve(async (req) => {
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
           method: "POST",
-          headers: { "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`, "Content-Type": "application/json" },
+          headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "subscription_invoice",
             booking: {
@@ -374,7 +374,7 @@ serve(async (req) => {
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
           method: "POST",
-          headers: { "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`, "Content-Type": "application/json" },
+          headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "subscription_invoice",
             booking: {
