@@ -854,30 +854,166 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
 }
 
 // ─── PLAN SELECTION (PAYWALL) ────────────────────────────────
+// PlanSelection screens 3 user states:
+//   • brand-new owner (no plan, trial_used=false)  → "Start 14-day free trial"
+//   • trial used or past_due (trial expired)        → "Subscribe" (Mollie checkout)
+//   • returning from successful Mollie checkout     → success splash + reload
+//
+// `start-trial` and `create-subscription` are both server-side: pricing,
+// trial_used flip, and Mollie customer creation are all enforced there. This
+// component is purely UI + thin error handling.
 function PlanSelection({ user, lang, setLang, onLogout }) {
   const { colors: c } = useTheme();
   const t = T[lang];
   const accent = ACCENT;
   const toast = useToast();
 
+  const [billingInterval, setBillingInterval] = useState("monthly");
+  const [busy, setBusy] = useState(false);
+  const [profileBilling, setProfileBilling] = useState(null); // { trial_used, subscription_status }
+  const [postCheckout, setPostCheckout] = useState(false);
+
+  // On mount: detect Mollie redirect, then load profile.trial_used / status
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("subscription") === "success") {
+      setPostCheckout(true);
+      // Strip the query string so a refresh doesn't re-trigger the splash
+      window.history.replaceState({}, "", "/owner");
+      // Webhook should have flipped subscription_status=active by now (Mollie
+      // typically pings within seconds). Reload after a short pause so the
+      // user lands in OwnerApp instead of bouncing back here.
+      setTimeout(() => window.location.reload(), 4000);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("trial_used, subscription_status")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!cancelled && data) setProfileBilling(data);
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  // Server-of-truth prices live in create-subscription. Numbers here are
+  // display-only — if they ever drift, the server still bills the correct
+  // amount and refuses anything else. Yearly = 10× monthly = 2 months free.
+  const PRICES = { starter: 19, professional: 39 };
+  const priceFor = (planId) => {
+    const m = PRICES[planId];
+    if (billingInterval === "monthly") return { display: m, suffix: t.perMonth, sub: null };
+    const y = m * 10;
+    return {
+      display: (y / 12).toFixed(2),
+      suffix: t.perMonth,
+      sub: `€${y} ${t.billedYearly}`,
+    };
+  };
+
+  const canTrial = profileBilling && !profileBilling.trial_used;
+
+  const handleStartTrial = async (planId) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("start-trial", {
+        body: { plan: planId, billing_interval: billingInterval },
+      });
+      if (error || !data?.success) {
+        const code = data?.error || error?.message || "unknown";
+        if (code === "trial_already_used") {
+          // Race: profile says no trial, server says yes. Refresh state.
+          toast.show(lang === "nl" ? "Proefperiode al gebruikt" : "Trial already used", "error");
+          setProfileBilling((p) => ({ ...(p || {}), trial_used: true }));
+        } else {
+          toast.show(lang === "nl" ? `Probleem: ${code}` : `Error: ${code}`, "error");
+        }
+        setBusy(false);
+        return;
+      }
+      // Trial activated. Force a hard reload so OwnerEntryPage's role
+      // resolution re-runs and sees the new plan_expires_at.
+      window.location.href = "/owner";
+    } catch (e) {
+      console.error("start-trial error:", e);
+      toast.show(t.somethingWrong, "error");
+      setBusy(false);
+    }
+  };
+
+  const handleSubscribe = async (planId) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-subscription", {
+        body: { plan: planId, billing_interval: billingInterval },
+      });
+      if (error || !data?.checkout_url) {
+        const code = data?.error || error?.message || "unknown";
+        toast.show(
+          lang === "nl"
+            ? `Betaling kon niet starten: ${code}`
+            : `Could not start payment: ${code}`,
+          "error"
+        );
+        setBusy(false);
+        return;
+      }
+      // Hand off to Mollie's hosted checkout. They'll redirect back to
+      // /owner?subscription=success on completion (handled above).
+      window.location.href = data.checkout_url;
+    } catch (e) {
+      console.error("create-subscription error:", e);
+      toast.show(t.somethingWrong, "error");
+      setBusy(false);
+    }
+  };
+
   const plans = [
     {
       id: "starter",
       name: t.planStarter,
-      price: t.planStarterPrice,
       desc: t.planStarterDesc,
       features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureStaff + " (max 3)"],
-      popular: false
+      popular: false,
     },
     {
       id: "professional",
       name: t.planProfessional,
-      price: t.planProfessionalPrice,
       desc: t.planProfessionalDesc,
       features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureUnlimited, t.planFeatureAnalytics, t.planFeatureCustomBranding, t.planFeatureDiscounts, t.planFeatureCategories, t.planFeaturePriority],
-      popular: true
-    }
+      popular: true,
+    },
   ];
+
+  // Post-Mollie-checkout success splash (auto-reloads after a few seconds)
+  if (postCheckout) {
+    return (
+      <Layout>
+        <div style={{ background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Jost',sans-serif", color: c.text, textAlign: "center" }}>
+          <div style={{ marginBottom: 24 }}><NavIcon name="check" size={48} color={c.success} /></div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 12 }}>
+            {lang === "nl" ? "Welkom bij Vellu!" : "Welcome to Vellu!"}
+          </div>
+          <div style={{ fontSize: 14, color: c.textSub, maxWidth: 420 }}>
+            {lang === "nl"
+              ? "Je abonnement wordt geactiveerd. Een momentje…"
+              : "Your subscription is being activated. One moment…"}
+          </div>
+          <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        </div>
+      </Layout>
+    );
+  }
+
+  // The CTA copy depends on whether they can still trial
+  const ctaLabel = (planName) =>
+    canTrial
+      ? (lang === "nl" ? "Start gratis 14 dagen" : "Start 14-day free trial")
+      : (busy ? (lang === "nl" ? "Bezig…" : "Loading…") : t.selectPlan);
 
   return (
     <Layout>
@@ -901,54 +1037,90 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         </div>
 
         <div style={{ maxWidth: 720, width: "100%", position: "relative", zIndex: 10, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }} className="fade-up">
-          <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
             <div style={{ marginBottom: 16 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{t.choosePlan}</div>
-            <div style={{ fontSize: 13, color: c.textLabel }}>{t.choosePlanSub}</div>
+            <div style={{ fontSize: 13, color: c.textLabel }}>
+              {canTrial
+                ? (lang === "nl" ? "Probeer Vellu 14 dagen gratis. Geen creditcard nodig." : "Try Vellu free for 14 days. No credit card required.")
+                : t.choosePlanSub}
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 32 }}>
-            {plans.map(plan => (
-              <div key={plan.id} style={{
-                background: plan.popular ? `${accent}08` : c.bgCard,
-                border: `1px solid ${plan.popular ? `${accent}44` : c.border}`,
-                borderRadius: 24, padding: "28px 24px", position: "relative", transition: "all 0.3s"
-              }}>
-                {plan.popular && (
-                  <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 100 }}>
-                    {lang === "nl" ? "POPULAIR" : "POPULAR"}
-                  </div>
-                )}
-                <div style={{ textAlign: "center", marginBottom: 20 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.06em", marginBottom: 4 }}>{plan.name}</div>
-                  <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 12 }}>{plan.desc}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: accent }}>
-                    €{plan.price}<span style={{ fontSize: 16, color: c.textLabel }}>{t.perMonth}</span>
-                  </div>
-                </div>
-                <div style={{ marginBottom: 20 }}>
-                  {plan.features.map((f, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 12, color: c.textSub }}>
-                      <NavIcon name="check" size={14} color={accent} />
-                      {f}
+          {/* Monthly/Yearly toggle */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+            <div className="lang-toggle">
+              <button
+                className={`lang-btn ${billingInterval === "monthly" ? "active" : "inactive"}`}
+                onClick={() => setBillingInterval("monthly")}
+                aria-pressed={billingInterval === "monthly"}
+              >
+                {t.billingMonthly}
+              </button>
+              <button
+                className={`lang-btn ${billingInterval === "yearly" ? "active" : "inactive"}`}
+                onClick={() => setBillingInterval("yearly")}
+                aria-pressed={billingInterval === "yearly"}
+              >
+                {t.billingYearly}
+                <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.85 }}>· {t.twoMonthsFree}</span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 24 }}>
+            {plans.map(plan => {
+              const p = priceFor(plan.id);
+              return (
+                <div key={plan.id} style={{
+                  background: plan.popular ? `${accent}08` : c.bgCard,
+                  border: `1px solid ${plan.popular ? `${accent}44` : c.border}`,
+                  borderRadius: 24, padding: "28px 24px", position: "relative", transition: "all 0.3s"
+                }}>
+                  {plan.popular && (
+                    <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 100 }}>
+                      {lang === "nl" ? "POPULAIR" : "POPULAR"}
                     </div>
-                  ))}
+                  )}
+                  <div style={{ textAlign: "center", marginBottom: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.06em", marginBottom: 4 }}>{plan.name}</div>
+                    <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 12, minHeight: 16 }}>{plan.desc}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: accent, lineHeight: 1 }}>
+                      €{p.display}<span style={{ fontSize: 16, color: c.textLabel }}>{p.suffix}</span>
+                    </div>
+                    {p.sub && (
+                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6 }}>{p.sub}</div>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: 20 }}>
+                    {plan.features.map((f, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 12, color: c.textSub }}>
+                        <NavIcon name="check" size={14} color={accent} />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className={plan.popular ? "btn-primary" : "btn-ghost"}
+                    style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
+                    disabled={busy || !profileBilling}
+                    onClick={() => (canTrial ? handleStartTrial(plan.id) : handleSubscribe(plan.id))}
+                  >
+                    {ctaLabel(plan.name)}
+                  </button>
                 </div>
-                <button className={plan.popular ? "btn-primary" : "btn-ghost"} style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
-                  onClick={() => {
-                    // TODO: Replace with Mollie checkout when ready
-                    toast.show(lang === "nl"
-                      ? `Neem contact op via info@vellu.cc om ${plan.name} te activeren.`
-                      : `Contact info@vellu.cc to activate ${plan.name}.`
-                    );
-                  }}
-                >{t.selectPlan}</button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div style={{ textAlign: "center", color: c.textMuted, fontSize: 11 }}>
-            {t.paymentComingSoon}
+            {canTrial
+              ? (lang === "nl"
+                  ? "Geen verplichtingen. Annuleer wanneer je wilt tijdens of na de proefperiode."
+                  : "No commitment. Cancel anytime during or after the trial.")
+              : (lang === "nl"
+                  ? "Veilig betalen via iDEAL, creditcard of SEPA — powered by Mollie."
+                  : "Secure payment via iDEAL, card or SEPA — powered by Mollie.")}
           </div>
         </div>
       </div>
@@ -1200,6 +1372,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  // Billing tab state — invoices loaded lazily when the tab is opened. We
+  // also keep the latest profile billing snapshot here so the tab reflects
+  // mid-session changes (e.g. webhook fires while owner is on the page).
+  const [billingInvoices, setBillingInvoices] = useState([]);
+  const [billingLoaded, setBillingLoaded] = useState(false);
+  const [billingProfile, setBillingProfile] = useState(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [staffInvite, setStaffInvite] = useState({}); // { [staffId]: { email, password } }
   const [tempColor, setTempColor] = useState(null); // local color for smooth picker
   const colorDebounceRef = useRef(null);
@@ -1434,6 +1614,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     if (salonData.id && !slugDraft) setSlugDraft(salonData.id);
   }, [salonData.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Billing tab: load invoice history + freshest profile snapshot when the
+  // tab is opened. Cheap to re-run when the user clicks back to it. Skipped
+  // entirely until they ever open the tab so we don't fetch invoices on
+  // every dashboard visit.
+  useEffect(() => {
+    if (settingsTab !== "billing") return;
+    let cancelled = false;
+    (async () => {
+      const [{ data: invs }, { data: prof }] = await Promise.all([
+        supabase
+          .from("payment_invoices")
+          .select("id, invoice_number, issued_at, period_start, period_end, plan, billing_interval, total_eur, vat_amount, amount_excl_vat, pdf_url")
+          .eq("owner_id", user.id)
+          .order("issued_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("profiles")
+          .select("plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setBillingInvoices(invs || []);
+      setBillingProfile(prof || null);
+      setBillingLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [settingsTab, user.id]);
 
   // Live availability check — debounced 450ms after last keystroke.
   useEffect(() => {
@@ -3636,6 +3845,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 ["diensten", "diensten", t.services],
                 ["team", "team", lang === "nl" ? "Team" : "Team"],
                 ["planning", "planning", lang === "nl" ? "Planning" : "Schedule"],
+                ["billing", "creditcard", lang === "nl" ? "Abonnement" : "Billing"],
                 ["facturatie", "overig", lang === "nl" ? "Overig" : "Other"],
               ].map(([key, icon, label]) => (
                 <div key={key} onClick={() => setSettingsTab(key)} style={{
@@ -4981,6 +5191,269 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 )}
               </div>
+              </>}
+
+              {/* ═══ BILLING TAB ═══ */}
+              {settingsTab === "billing" && <>
+              {(() => {
+                if (!billingLoaded) {
+                  return (
+                    <div style={{ padding: "40px 0", textAlign: "center", color: c.textMuted, fontSize: 12 }}>
+                      <div style={{ width: 24, height: 24, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
+                      {lang === "nl" ? "Bezig met laden…" : "Loading…"}
+                    </div>
+                  );
+                }
+                const bp = billingProfile || {};
+                const status = bp.subscription_status || (bp.plan ? "active" : null);
+                const isTrial = status === "trialing";
+                const isActive = status === "active";
+                const isPastDue = status === "past_due";
+                const isCancelled = status === "cancelled";
+                const willCancel = !!bp.cancel_at_period_end && isActive;
+                const planLabel = bp.plan === "professional" ? t.planProfessional : (bp.plan === "starter" ? t.planStarter : (lang === "nl" ? "Geen abonnement" : "No subscription"));
+                const intervalLabel = bp.billing_interval === "yearly" ? (lang === "nl" ? "jaarlijks" : "yearly") : (lang === "nl" ? "maandelijks" : "monthly");
+                const expires = bp.plan_expires_at ? new Date(bp.plan_expires_at) : null;
+                const daysLeft = expires ? Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000)) : null;
+                const trialEnds = bp.trial_ends_at ? new Date(bp.trial_ends_at) : null;
+                const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
+                const fmtEUR = (n) => `€${parseFloat(n || 0).toFixed(2)}`;
+                const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+
+                const statusColor = isActive ? c.success : isTrial ? ACCENT : isPastDue ? c.warning : c.textLabel;
+                const statusLabel = isTrial ? (lang === "nl" ? "Proefperiode" : "Trial")
+                  : isActive ? (willCancel ? (lang === "nl" ? "Actief — stopt aan einde periode" : "Active — cancels at period end") : (lang === "nl" ? "Actief" : "Active"))
+                  : isPastDue ? (lang === "nl" ? "Betaling mislukt" : "Payment failed")
+                  : isCancelled ? (lang === "nl" ? "Geannuleerd" : "Cancelled")
+                  : (lang === "nl" ? "Geen abonnement" : "No subscription");
+
+                const handleCancel = async (immediate) => {
+                  if (cancelBusy) return;
+                  setCancelBusy(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: { immediate: !!immediate } });
+                    if (error || !data?.success) {
+                      const code = data?.error || error?.message || "unknown";
+                      toast.show(lang === "nl" ? `Probleem: ${code}` : `Error: ${code}`, "error");
+                      setCancelBusy(false);
+                      return;
+                    }
+                    toast.show(lang === "nl" ? "Abonnement opgezegd" : "Subscription cancelled", "success");
+                    setCancelConfirmOpen(false);
+                    // Refresh the billing snapshot so the UI reflects the new state.
+                    const { data: prof } = await supabase
+                      .from("profiles")
+                      .select("plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id")
+                      .eq("id", user.id)
+                      .maybeSingle();
+                    setBillingProfile(prof || null);
+                    setCancelBusy(false);
+                  } catch (e) {
+                    console.error("cancel-subscription error:", e);
+                    toast.show(t.somethingWrong, "error");
+                    setCancelBusy(false);
+                  }
+                };
+
+                return (<>
+                  {/* Current plan card */}
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
+                          {lang === "nl" ? "Huidig abonnement" : "Current plan"}
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, lineHeight: 1.1, marginBottom: 4 }}>
+                          {planLabel}
+                        </div>
+                        <div style={{ fontSize: 12, color: c.textSub }}>
+                          {bp.plan ? `${intervalLabel}` : ""}
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: "5px 12px", borderRadius: 100, fontSize: 10, fontWeight: 700,
+                        letterSpacing: "0.1em", textTransform: "uppercase",
+                        background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}44`,
+                        whiteSpace: "nowrap",
+                      }}>
+                        {statusLabel}
+                      </div>
+                    </div>
+
+                    {/* Status detail row */}
+                    {(isTrial || isActive || isPastDue) && (
+                      <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid " + c.border, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
+                        {isTrial && trialEnds && (
+                          <div>
+                            <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+                              {lang === "nl" ? "Proef eindigt" : "Trial ends"}
+                            </div>
+                            <div style={{ fontSize: 14, color: c.text }}>{fmtDate(trialEnds)}</div>
+                            <div style={{ fontSize: 11, color: ACCENT, marginTop: 2 }}>
+                              {trialDaysLeft === 0 ? (lang === "nl" ? "vandaag" : "today") : (lang === "nl" ? `nog ${trialDaysLeft} dagen` : `${trialDaysLeft} days left`)}
+                            </div>
+                          </div>
+                        )}
+                        {(isActive || isPastDue) && expires && (
+                          <div>
+                            <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+                              {willCancel ? (lang === "nl" ? "Toegang tot" : "Access until") : (lang === "nl" ? "Volgende afschrijving" : "Next charge")}
+                            </div>
+                            <div style={{ fontSize: 14, color: c.text }}>{fmtDate(expires)}</div>
+                            {daysLeft !== null && (
+                              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                                {lang === "nl" ? `over ${daysLeft} dagen` : `in ${daysLeft} days`}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {isTrial && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto", flex: "0 0 auto" }}
+                          onClick={async () => {
+                            // Trial → upgrade to paid: kick off Mollie checkout
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", {
+                                body: { plan: bp.plan || "starter", billing_interval: bp.billing_interval || "monthly" },
+                              });
+                              if (error || !data?.checkout_url) {
+                                toast.show(lang === "nl" ? "Checkout kon niet starten" : "Could not start checkout", "error");
+                                return;
+                              }
+                              window.location.href = data.checkout_url;
+                            } catch { toast.show(t.somethingWrong, "error"); }
+                          }}
+                        >
+                          {lang === "nl" ? "Nu abonneren" : "Subscribe now"}
+                        </button>
+                      )}
+                      {isActive && !willCancel && (
+                        <button
+                          className="btn-ghost"
+                          style={{ borderColor: c.danger + "44", color: c.danger }}
+                          onClick={() => setCancelConfirmOpen(true)}
+                        >
+                          {lang === "nl" ? "Abonnement opzeggen" : "Cancel subscription"}
+                        </button>
+                      )}
+                      {isPastDue && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto" }}
+                          onClick={async () => {
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", {
+                                body: { plan: bp.plan || "starter", billing_interval: bp.billing_interval || "monthly" },
+                              });
+                              if (error || !data?.checkout_url) {
+                                toast.show(lang === "nl" ? "Checkout kon niet starten" : "Could not start checkout", "error");
+                                return;
+                              }
+                              window.location.href = data.checkout_url;
+                            } catch { toast.show(t.somethingWrong, "error"); }
+                          }}
+                        >
+                          {lang === "nl" ? "Betaalmethode bijwerken" : "Update payment method"}
+                        </button>
+                      )}
+                      {isCancelled && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto" }}
+                          onClick={() => { window.location.href = "/owner"; }}
+                        >
+                          {lang === "nl" ? "Opnieuw abonneren" : "Resubscribe"}
+                        </button>
+                      )}
+                    </div>
+
+                    {willCancel && (
+                      <div style={{ marginTop: 14, padding: 12, background: `${c.warning}11`, border: `1px solid ${c.warning}33`, borderRadius: 12, fontSize: 12, color: c.text }}>
+                        {lang === "nl"
+                          ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken.`
+                          : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then.`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cancel confirmation modal */}
+                  {cancelConfirmOpen && (
+                    <div onClick={() => !cancelBusy && setCancelConfirmOpen(false)}
+                         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
+                      <div onClick={(e) => e.stopPropagation()}
+                           style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%" }}>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, marginBottom: 8 }}>
+                          {lang === "nl" ? "Abonnement opzeggen?" : "Cancel subscription?"}
+                        </div>
+                        <div style={{ fontSize: 13, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
+                          {lang === "nl"
+                            ? `Je toegang blijft actief tot ${fmtDate(expires)}. Je wordt niet meer afgeschreven. Je kunt opnieuw beginnen wanneer je wilt.`
+                            : `Your access stays active until ${fmtDate(expires)}. You won't be charged again. You can resubscribe anytime.`}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="btn-ghost" style={{ flex: 1 }} disabled={cancelBusy}
+                                  onClick={() => setCancelConfirmOpen(false)}>
+                            {lang === "nl" ? "Behouden" : "Keep"}
+                          </button>
+                          <button className="btn-primary" style={{ flex: 1, background: c.danger, color: "#fff" }} disabled={cancelBusy}
+                                  onClick={() => handleCancel(false)}>
+                            {cancelBusy ? (lang === "nl" ? "Bezig…" : "…") : (lang === "nl" ? "Opzeggen" : "Cancel")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Invoice history */}
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>
+                      {lang === "nl" ? "Facturen van Vellu" : "Vellu invoices"}
+                    </div>
+                    {billingInvoices.length === 0 ? (
+                      <div style={{ fontSize: 12, color: c.textMuted, padding: "12px 0" }}>
+                        {lang === "nl" ? "Nog geen facturen — facturen verschijnen hier zodra je een betaling doet." : "No invoices yet — they'll appear here after your first payment."}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {billingInvoices.map((inv) => (
+                          <div key={inv.id} style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                            padding: "10px 12px", borderRadius: 10, background: c.bg, border: `1px solid ${c.border}`,
+                            fontSize: 12,
+                          }}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 600, color: c.text }}>{inv.invoice_number}</div>
+                              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                                {fmtDate(inv.issued_at)}
+                                {inv.period_start && inv.period_end ? ` · ${fmtDate(inv.period_start)} – ${fmtDate(inv.period_end)}` : ""}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+                              <div style={{ fontWeight: 600, color: c.text }}>{fmtEUR(inv.total_eur)}</div>
+                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                                {lang === "nl" ? "incl. btw" : "incl. VAT"}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Legal footer — Vellu's own entity, NOT the salon's */}
+                  <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "12px 0", lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "Vellu is een product van Mirah Ventures · KVK 42045867 · Amersfoort"
+                      : "Vellu is a product of Mirah Ventures · Chamber of Commerce 42045867 · Amersfoort"}
+                  </div>
+                </>);
+              })()}
               </>}
 
               {/* ═══ FACTURATIE TAB ═══ */}
