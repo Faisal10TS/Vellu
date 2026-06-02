@@ -33,7 +33,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MOLLIE_API_KEY = Deno.env.get("MOLLIE_API_KEY")!;
-const MOLLIE_PROFILE_ID = Deno.env.get("MOLLIE_PROFILE_ID") || "";
 const MOLLIE_BASE_URL = "https://api.mollie.com/v2";
 const APP_URL = Deno.env.get("APP_URL") || "https://vellu.cc";
 
@@ -178,7 +177,6 @@ serve(async (req) => {
       kind: "subscription_first_payment",
     },
   };
-  if (MOLLIE_PROFILE_ID) paymentBody.profileId = MOLLIE_PROFILE_ID;
 
   const pRes = await mollieFetch("/payments", {
     method: "POST",

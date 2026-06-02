@@ -138,7 +138,6 @@ serve(async (req) => {
   const allergies = String(client.allergies || "").trim().slice(0, 500) || null;
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(400, "invalid_email", origin);
   if (!firstName || !lastName) return err(400, "missing_name", origin);
-  if (!policy_agreed) return err(400, "policy_not_agreed", origin);
 
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
@@ -148,6 +147,10 @@ serve(async (req) => {
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
   if (salon.phone_required && !phone) return err(400, "phone_required", origin);
+  // Only require explicit policy agreement when the salon actually has a
+  // booking policy to agree to. New salons have none, so the client UI shows
+  // no checkbox — enforcing it unconditionally here would reject every booking.
+  if (salon.booking_policy && !policy_agreed) return err(400, "policy_not_agreed", origin);
 
   // ---------- 2. Validate services belong to this salon ----------
   const { data: services, error: svcErr } = await supabase
