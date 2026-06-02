@@ -161,7 +161,7 @@ function ContactPage({ lang, setLang }) {
     imprintKvk: "KVK-nummer",
     imprintKvkValue: "42045867",
     imprintVat: "BTW-id",
-    imprintVatValue: "In aanvraag bij de Belastingdienst",
+    imprintVatValue: "NL005453873B29",
     imprintAuthority: "Toezichthouder",
     imprintAuthorityValue: "Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl)",
   } : {
@@ -183,7 +183,7 @@ function ContactPage({ lang, setLang }) {
     imprintKvk: "Chamber of Commerce No.",
     imprintKvkValue: "42045867",
     imprintVat: "VAT ID",
-    imprintVatValue: "Pending registration with Dutch Tax Authority",
+    imprintVatValue: "NL005453873B29",
     imprintAuthority: "Supervisory authority",
     imprintAuthorityValue: "Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl)",
   };
