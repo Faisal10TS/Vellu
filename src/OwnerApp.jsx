@@ -1129,9 +1129,10 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 }
 
 // ─── ONBOARDING WIZARD ──────────────────────────────────────
-function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }) {
+function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent = ACCENT }) {
   const { colors: c } = useTheme();
   const t = T[lang];
+  const toast = useToast();
   const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
   const [step, setStep] = useState(0);
   const [salonName, setSalonName] = useState(salonData.name || "");
@@ -1151,41 +1152,49 @@ function OnboardingWizard({ salonData, update, lang, onFinish, accent = ACCENT }
     if (!salonName.trim()) return;
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ business_name: salonName.trim(), city: city.trim() || null }).eq("id", salonData.owner_id);
-    if (error) { setSaving(false); return; }
-    update(d => { d.name = salonName.trim(); d.city = city.trim(); return d; });
     setSaving(false);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt — probeer opnieuw" : "Save failed — try again", "error"); return; }
+    update(d => { d.name = salonName.trim(); d.city = city.trim(); return d; });
     setStep(1);
   };
 
   const saveStep2 = async () => {
     if (!svcName.trim() || !svcPrice) return;
     setSaving(true);
+    // services.name is NOT NULL — keep it in sync with the localized names so
+    // legacy queries still work for newly-created services.
     const { data: newSvc, error } = await supabase.from("services").insert({
       owner_id: salonData.owner_id,
+      name: svcName.trim(),
       name_nl: svcName.trim(),
       name_en: svcName.trim(),
       price: parseFloat(svcPrice),
       duration: parseInt(svcDuration) || 60,
       position: 0
     }).select().single();
-    if (error || !newSvc) { setSaving(false); return; }
-    update(d => { d.services = [...d.services, { ...newSvc, photos: [], variants: [], extras: [] }]; return d; });
     setSaving(false);
+    if (error || !newSvc) { toast.show(lang === "nl" ? "Dienst toevoegen mislukt — probeer opnieuw" : "Failed to add service — try again", "error"); return; }
+    update(d => { d.services = [...d.services, { ...newSvc, photos: [], variants: [], extras: [] }]; return d; });
     setStep(2);
   };
 
   const saveStep3 = async () => {
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
-    if (error) { setSaving(false); return; }
     setSaving(false);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt — probeer opnieuw" : "Save failed — try again", "error"); return; }
     setStep(3);
   };
 
   return (
     <Layout>
+      <ToastContainer toasts={toast.toasts} />
 
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative" }}>
+        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, zIndex: 5 }}>
+          <ThemeToggle />
+          {setLang && <LangToggle lang={lang} setLang={setLang} />}
+        </div>
         <div style={{ width: "100%", maxWidth: 440 }}>
 
           {/* Progress */}
@@ -2108,7 +2117,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   // Show onboarding wizard for new salons
   if (showOnboarding) {
-    return <OnboardingWizard salonData={salonData} update={update} lang={lang} accent={accent} onFinish={() => setShowOnboarding(false)} />;
+    return <OnboardingWizard salonData={salonData} update={update} lang={lang} setLang={setLang} accent={accent} onFinish={() => setShowOnboarding(false)} />;
   }
 
   return (
