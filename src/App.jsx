@@ -238,7 +238,11 @@ function SalonRoute({ lang, setLang }) {
         country_code: data.country_code || "NL",
         address: data.address || "",
         accent: data.accent_color || "#c9a96e",
-        owner_email: data.email,
+        // NOTE: the owner's login email is deliberately NOT exposed here. The
+        // public page only ever shows `salon_email` (a separate, owner-chosen
+        // contact address). Booking confirmation/notification emails to the
+        // owner are sent server-side by the book-appointment edge function
+        // (salon_email || login email), so the public payload never needs it.
         business_hours: data.business_hours || DEFAULT_HOURS,
         booking_policy: data.booking_policy || "",
         salon_phone: data.salon_phone || "",

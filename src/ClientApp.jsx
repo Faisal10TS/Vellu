@@ -815,12 +815,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           payment: form.payment,
           price: serverPrice,
           salon_name: result.salon_name || initialSalon.name,
-          owner_email: result.owner_email || initialSalon.owner_email || "info@vellu.cc",
+          owner_email: result.owner_email || "info@vellu.cc",
           cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
         }).catch(e => console.error("confirmation email failed:", e));
 
         sendEmails("booking_notification", {
-          owner_email: result.owner_email || initialSalon.owner_email || null,
+          owner_email: result.owner_email || null,
           staff_emails: result.staff_emails || [],
           client_name: clientFullName,
           client_phone: form.phone || null,
@@ -1018,10 +1018,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </button>
             ))}
           </div>
-          {(initialSalon.salon_email || initialSalon.owner_email) && (
+          {(initialSalon.salon_email) && (
             <div className="profile-header-contact">
               <NavIcon name="mail" size={14} color={c.textSub} />
-              <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+              <a href={`mailto:${initialSalon.salon_email}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_email}</a>
             </div>
           )}
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -1264,13 +1264,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 20 }}>
                 {/* Contact details */}
-                {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
                   <div>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.contactUs}</h3>
-                    {(initialSalon.salon_email || initialSalon.owner_email) && (
+                    {(initialSalon.salon_email) && (
                       <div className="profile-contact-row">
                         <NavIcon name="mail" size={14} color={c.textSub} />
-                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+                        <a href={`mailto:${initialSalon.salon_email}`}>{initialSalon.salon_email}</a>
                       </div>
                     )}
                     {initialSalon.salon_phone && (
@@ -1504,7 +1504,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               )}
 
               {/* Contact us */}
-              {((initialSalon.salon_email || initialSalon.owner_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+              {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
                 <div style={{ marginTop: 4 }}>
                   <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
                     {t.contactUs} ↓
@@ -1516,10 +1516,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
                       </div>
                     )}
-                    {(initialSalon.salon_email || initialSalon.owner_email) && (
+                    {(initialSalon.salon_email) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
                         <NavIcon name="mail" size={13} color={c.textSub} />
-                        <a href={`mailto:${initialSalon.salon_email || initialSalon.owner_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.salon_email || initialSalon.owner_email}</a>
+                        <a href={`mailto:${initialSalon.salon_email}`} style={{ color: c.textSub, textDecoration: "none", fontSize: 11 }}>{initialSalon.salon_email}</a>
                       </div>
                     )}
                     {initialSalon.salon_instagram && (

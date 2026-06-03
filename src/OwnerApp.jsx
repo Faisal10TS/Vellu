@@ -1135,8 +1135,10 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
   const toast = useToast();
   const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
   const [step, setStep] = useState(0);
-  const [salonName, setSalonName] = useState(salonData.name || "");
-  const [city, setCity] = useState(salonData.city || "");
+  // Salon name + city are already collected at signup, so onboarding doesn't
+  // re-ask them. Step 1 only collects the public-facing contact email (the one
+  // thing not gathered yet) — empty by default, optional.
+  const [salonEmail, setSalonEmail] = useState("");
   const [svcName, setSvcName] = useState("");
   const [svcPrice, setSvcPrice] = useState("");
   const [svcDuration, setSvcDuration] = useState("60");
@@ -1149,12 +1151,16 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
   ];
 
   const saveStep1 = async () => {
-    if (!salonName.trim()) return;
-    setSaving(true);
-    const { error } = await supabase.from("profiles").update({ business_name: salonName.trim(), city: city.trim() || null }).eq("id", salonData.owner_id);
-    setSaving(false);
-    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt — probeer opnieuw" : "Save failed — try again", "error"); return; }
-    update(d => { d.name = salonName.trim(); d.city = city.trim(); return d; });
+    // salon_email is the public-facing contact address shown on the booking
+    // page. Fully optional — owners can also set it later in Settings — so an
+    // empty value just advances without writing anything.
+    if (salonEmail.trim()) {
+      setSaving(true);
+      const { error } = await supabase.from("profiles").update({ salon_email: salonEmail.trim() }).eq("id", salonData.owner_id);
+      setSaving(false);
+      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt — probeer opnieuw" : "Save failed — try again", "error"); return; }
+      update(d => { d.salon_email = salonEmail.trim(); return d; });
+    }
     setStep(1);
   };
 
@@ -1210,12 +1216,12 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
               <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingWelcome}</div>
               <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingWelcomeSub}</div>
 
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.onboardingStep1}</div>
-              <input className="input-field" placeholder={t.businessName} value={salonName} onChange={e => setSalonName(e.target.value)} style={{ marginBottom: 10 }} />
-              <input className="input-field" placeholder={t.city} value={city} onChange={e => setCity(e.target.value)} style={{ marginBottom: 24 }} />
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.salonEmail}</div>
+              <input className="input-field" type="email" placeholder={lang === "nl" ? "Bijv. info@jouwsalon.nl" : "e.g. info@yoursalon.com"} value={salonEmail} onChange={e => setSalonEmail(e.target.value)} style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 24, lineHeight: 1.5 }}>{lang === "nl" ? "Dit e-mailadres is zichtbaar voor klanten op je boekingspagina. Je inlog-e-mail blijft privé. Optioneel — je kunt dit later wijzigen bij Instellingen." : "This email is visible to clients on your booking page. Your login email stays private. Optional — you can change this later in Settings."}</div>
 
-              <button className="btn-primary" style={{ width: "100%" }} onClick={saveStep1} disabled={saving || !salonName.trim()}>
-                {saving ? "..." : t.onboardingNext}
+              <button className="btn-primary" style={{ width: "100%" }} onClick={saveStep1} disabled={saving}>
+                {saving ? "..." : (salonEmail.trim() ? t.onboardingNext : t.onboardingSkip)}
               </button>
             </div>
           )}
