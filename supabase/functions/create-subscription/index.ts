@@ -167,6 +167,12 @@ serve(async (req) => {
     amount: { currency: "EUR", value: amount.toFixed(2) },
     customerId,
     sequenceType: "first",
+    // Pin the first-payment methods to the recurring-capable ones we support.
+    // Without an explicit method, Mollie auto-selects across ALL enabled
+    // methods and returns "No suitable payment methods found" if any enabled
+    // method (e.g. Apple Pay) can't anchor a recurring mandate. iDEAL +
+    // creditcard both create reusable SEPA/card mandates, so list them.
+    method: ["ideal", "creditcard"],
     description: `${description} (${intervalLabel}) — first payment`,
     redirectUrl: `${APP_URL}/owner?subscription=success`,
     webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
