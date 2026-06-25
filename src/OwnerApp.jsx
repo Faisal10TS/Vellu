@@ -459,6 +459,105 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   );
 }
 
+// Newsletter block — sits in Instellingen → Overig. Lets the owner compose
+// and send a one-off newsletter to every client who has booked at this salon.
+// Recipients are derived server-side by the send-newsletter edge function;
+// here we just show the count and collect subject + message. Sending is a
+// real, irreversible side-effect (emails go out), so it requires an explicit
+// in-component confirmation step before firing.
+function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [count, setCount] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  // Recipient count = distinct client emails across this owner's appointments.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("appointments").select("client_email").eq("owner_id", ownerId);
+      if (cancelled) return;
+      const n = new Set((data || []).map(a => String(a.client_email || "").trim().toLowerCase()).filter(Boolean)).size;
+      setCount(n);
+    })();
+    return () => { cancelled = true; };
+  }, [ownerId]);
+
+  const canSend = subject.trim() && message.trim() && (count || 0) > 0 && !sending;
+
+  const send = async () => {
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-newsletter", {
+        body: { subject: subject.trim(), message: message.trim() },
+      });
+      if (error || !data) throw new Error(error?.message || "send_failed");
+      toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${data.sent} klant${data.sent === 1 ? "" : "en"}` : `Newsletter sent to ${data.sent} client${data.sent === 1 ? "" : "s"}`);
+      setSubject(""); setMessage(""); setConfirming(false);
+    } catch (e) {
+      console.error("Newsletter send failed:", e);
+      toast.show(lang === "nl" ? "Versturen mislukt — probeer opnieuw" : "Send failed — try again", "error");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" };
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+        {lang === "nl" ? "Nieuwsbrief" : "Newsletter"}
+      </div>
+      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {lang === "nl"
+          ? "Stuur een e-mail naar al je klanten — bijvoorbeeld voor een vakantiesluiting, aanbieding of nieuwtje. Klanten krijgen elk een aparte e-mail met jouw salonnaam."
+          : "Send an email to all your clients — for a holiday closure, promo, or update. Each client gets their own email with your salon name."}
+      </div>
+
+      <label style={lbl}>{lang === "nl" ? "Onderwerp" : "Subject"}</label>
+      <input className="input-field" value={subject} onChange={e => setSubject(e.target.value)} maxLength={200}
+        placeholder={lang === "nl" ? "bijv. Tijdelijk gesloten in augustus" : "e.g. Closed during August"}
+        style={{ width: "100%", fontSize: 13, padding: "10px 12px", marginBottom: 12 }} />
+
+      <label style={lbl}>{lang === "nl" ? "Bericht" : "Message"}</label>
+      <textarea className="input-field" value={message} onChange={e => setMessage(e.target.value)} maxLength={5000} rows={6}
+        placeholder={lang === "nl" ? "Beste klant,\n\nWe willen je laten weten dat..." : "Dear client,\n\nWe wanted to let you know that..."}
+        style={{ width: "100%", fontSize: 13, padding: "10px 12px", marginBottom: 10, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
+
+      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>
+        {count === null
+          ? (lang === "nl" ? "Ontvangers laden…" : "Loading recipients…")
+          : (lang === "nl" ? `${count} ontvanger${count === 1 ? "" : "s"}` : `${count} recipient${count === 1 ? "" : "s"}`)}
+      </div>
+
+      {!confirming ? (
+        <button className="btn-primary" disabled={!canSend} onClick={() => setConfirming(true)}
+          style={{ width: "100%", padding: "11px 14px", fontSize: 12 }}>
+          {lang === "nl" ? "Nieuwsbrief versturen" : "Send newsletter"}
+        </button>
+      ) : (
+        <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
+          <div style={{ fontSize: 12, color: c.text, marginBottom: 10, lineHeight: 1.5 }}>
+            {lang === "nl"
+              ? `Versturen naar ${count} klant${count === 1 ? "" : "en"}? Dit kan niet ongedaan gemaakt worden.`
+              : `Send to ${count} client${count === 1 ? "" : "s"}? This cannot be undone.`}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-primary" disabled={sending} onClick={send} style={{ flex: 1, padding: "10px 14px", fontSize: 12 }}>
+              {sending ? (lang === "nl" ? "Versturen…" : "Sending…") : (lang === "nl" ? "Ja, verstuur" : "Yes, send")}
+            </button>
+            <button className="btn-ghost" disabled={sending} onClick={() => setConfirming(false)} style={{ padding: "10px 16px", fontSize: 12 }}>
+              {lang === "nl" ? "Annuleer" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Client CSV export block — sits in Instellingen → Overig. One button,
 // no options: generates a CSV of every unique client who has booked at
 // this salon, aggregated with visit/spend stats. Useful for marketing
@@ -4371,12 +4470,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                       <div key={v.id}>
                                         {editingVariant === v.id ? (
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
+                                            {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam (NL)" : "Name (NL)"} />
-                                              <input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam (EN)" : "Name (EN)"} />
-                                              <input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder="€" />
-                                              <input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Duur (min)" : "Duration (min)"} />
+                                              <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Volledige set" : "e.g. Full set"} /></div>
+                                              <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Full set" : "e.g. Full set"} /></div>
+                                              <div><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" /></div>
+                                              <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "min" : "min"} /></div>
                                             </div>
+                                            ); })()}
+                                            <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Omschrijving (optioneel)" : "Description (optional)"}</label>
                                             <input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%", marginBottom: 8 }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} />
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
@@ -4396,15 +4498,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>€{v.price}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
-                                              <button onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
-                                                style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                <NavIcon name="edit" size={11} color="currentColor" />
+                                              <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
+                                                style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${accent}55`, background: `${accent}14`, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600 }}>
+                                                <NavIcon name="edit" size={11} color="currentColor" /> {lang === "nl" ? "Bewerk" : "Edit"}
                                               </button>
-                                              <button onClick={async () => {
+                                              <button aria-label={lang === "nl" ? "Verwijder variant" : "Delete variant"} onClick={async () => {
                                                 const { error } = await supabase.from("service_variants").delete().eq("id", v.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
-                                              }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                              }} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="xmark" size={11} color="currentColor" />
                                               </button>
                                             </div>
@@ -5703,6 +5805,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </button>
                 </div>
               </div>
+
+              {/* Newsletter — compose + send a one-off email to all clients
+                  who have booked here. Recipients derived server-side. */}
+              <NewsletterBlock
+                ownerId={salonData.owner_id}
+                lang={lang}
+                c={c}
+                accent={accent}
+                toast={toast}
+              />
 
               {/* CSV client export — downloadable client list for marketing,
                   GDPR portability requests, accountant handoff, or switching
