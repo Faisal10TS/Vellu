@@ -1424,6 +1424,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
       booking_policy: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      btw_rate: 21,
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60,
       reminder_hours: 24,
@@ -1541,6 +1542,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           address: data.address || "",
           kvk_number: data.kvk_number || "",
           btw_id: data.btw_id || "",
+          btw_rate: data.btw_rate ?? 21,
           iban: data.iban || "",
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
@@ -1933,7 +1935,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_address: salonData.address || "",
           salon_kvk: salonData.kvk_number || "",
           salon_btw: salonData.btw_id || "",
-          salon_iban: salonData.iban || ""
+          salon_iban: salonData.iban || "",
+          salon_accent: salonData.accent || "",
+          salon_btw_rate: salonData.btw_rate ?? 21,
+          salon_logo: salonData.logo_url || "",
+          lang
         });
         await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
         // Auto-increment invoice number
@@ -4309,6 +4315,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
                     <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
                   </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "BTW-percentage" : "VAT percentage"}</div>
+                    <input className="input-field" type="number" min="0" max="100" step="1" placeholder="21" value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "21% voor nagels/schoonheid, 9% voor reguliere kappersdiensten. Wordt op de factuur als BTW-regel getoond zodra je een BTW-id hebt ingevuld." : "21% for nails/beauty, 9% for typical hairdresser services. Shown as a VAT line on the invoice once you've entered a BTW-id."}</div>
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
@@ -5874,6 +5885,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   address: salonData.address || null,
                   kvk_number: salonData.kvk_number || null,
                   btw_id: salonData.btw_id || null,
+                  btw_rate: salonData.btw_rate === "" || salonData.btw_rate == null ? 21 : salonData.btw_rate,
                   iban: salonData.iban || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
                   // NOTE: next_invoice_number is intentionally excluded from this save.

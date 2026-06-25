@@ -223,7 +223,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_address: invoiceForm.address || salonProfile.address || "",
         salon_kvk: invoiceForm.kvk_number || salonProfile.kvk_number || "",
         salon_btw: invoiceForm.btw_id || salonProfile.btw_id || "",
-        salon_iban: invoiceForm.iban || salonProfile.iban || ""
+        salon_iban: invoiceForm.iban || salonProfile.iban || "",
+        salon_accent: salonProfile.accent_color || "",
+        salon_btw_rate: salonProfile.btw_rate ?? 21,
+        salon_logo: salonProfile.logo_url || "",
+        lang
       });
       await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id).eq("owner_id", salonProfile.id);
       // Auto-increment invoice number

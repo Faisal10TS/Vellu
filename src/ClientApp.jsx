@@ -855,6 +855,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           date, time, price: serverPrice, salon_name: result.salon_name || initialSalon.name,
           salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
           salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "",
+          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
         }).catch(e => console.error("invoice email failed:", e));
       }
     } catch (err) {
