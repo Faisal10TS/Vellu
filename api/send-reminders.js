@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     // Fetch appointments for tomorrow that haven't been reminded yet
     const { data: appointments, error } = await supabase
       .from('appointments')
-      .select('*, profiles:owner_id(business_name, slug)')
+      .select('*, profiles:owner_id(business_name, slug, accent_color, logo_url)')
       .eq('date', tomorrowStr)
       .eq('status', 'confirmed')
       .eq('reminder_sent', false)
@@ -34,6 +34,8 @@ export default async function handler(req, res) {
     for (const appt of appointments || []) {
       const salonName = appt.profiles?.business_name || 'Salon'
       const salonSlug = appt.profiles?.slug || ''
+      const salonAccent = appt.profiles?.accent_color || ''
+      const salonLogo = appt.profiles?.logo_url || ''
 
       // Send reminder email via existing edge function
       try {
@@ -53,7 +55,9 @@ export default async function handler(req, res) {
               time: appt.time,
               price: appt.service_price,
               salon_name: salonName,
-              salon_slug: salonSlug
+              salon_slug: salonSlug,
+              salon_accent: salonAccent,
+              salon_logo: salonLogo
             }
           })
         })

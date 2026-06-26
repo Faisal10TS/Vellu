@@ -815,6 +815,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           payment: form.payment,
           price: serverPrice,
           salon_name: result.salon_name || initialSalon.name,
+          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
           owner_email: result.owner_email || "info@vellu.cc",
           cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
         }).catch(e => console.error("confirmation email failed:", e));
@@ -828,6 +829,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           date, time,
           price: serverPrice,
           salon_name: result.salon_name || initialSalon.name,
+          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
         }).catch(e => console.error("notification email failed:", e));
       }
 

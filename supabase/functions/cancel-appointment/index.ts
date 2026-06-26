@@ -136,16 +136,19 @@ serve(async (req) => {
   await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
 
   // Look up notification recipients (owner + staff)
-  const notify: { owner_email?: string; staff_email?: string; salon_name?: string } = {};
+  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string } = {};
   if (appt.owner_id) {
     const { data: owner } = await supabase
       .from("profiles")
-      .select("email, salon_email, business_name")
+      .select("email, salon_email, business_name, accent_color, logo_url")
       .eq("id", appt.owner_id)
       .maybeSingle();
     if (owner) {
       notify.owner_email = owner.salon_email || owner.email || undefined;
       notify.salon_name = owner.business_name;
+      // Surfaced so the cancellation + owner-notification emails are brand-coloured.
+      notify.salon_accent = owner.accent_color || "";
+      notify.salon_logo = owner.logo_url || "";
     }
   }
   if (appt.staff_id) {

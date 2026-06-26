@@ -6132,7 +6132,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       client_name: addApptForm.client_name, client_email: email,
                       service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
                       payment: "on-arrival", price: price,
-                      salon_name: salonData.name, owner_email: null
+                      salon_name: salonData.name, owner_email: null,
+                      salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang
                     });
                     // Notify assigned staff
                     if (staffMember?.email) {
@@ -6140,7 +6141,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         owner_email: null, staff_emails: [staffMember.email],
                         client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                        price, salon_name: salonData.name
+                        price, salon_name: salonData.name,
+                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang
                       });
                     }
                     setAddApptDone(true);

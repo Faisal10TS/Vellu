@@ -368,6 +368,8 @@ function CancelRoute({ lang }) {
         service_name: a.service_name,
         date: a.date,
         time: a.time,
+        salon_name: notify.salon_name || "",
+        salon_accent: notify.salon_accent || "", salon_logo: notify.salon_logo || "", lang,
       });
 
       // Notify owner + staff about cancellation
@@ -381,6 +383,7 @@ function CancelRoute({ lang }) {
           date: a.date, time: a.time,
           price: a.service_price || 0,
           salon_name: notify.salon_name || "",
+          salon_accent: notify.salon_accent || "", salon_logo: notify.salon_logo || "", lang,
         });
       }
 

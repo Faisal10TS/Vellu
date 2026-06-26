@@ -1609,14 +1609,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     await sendEmails("booking_confirmation", {
                       client_name: addApptForm.client_name, client_email: email,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
-                      payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null
+                      payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
+                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang
                     });
                     // Notify owner about new booking
                     await sendEmails("booking_notification", {
                       owner_email: salonProfile.email || null, staff_emails: [],
                       client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
-                      price, salon_name: salonProfile.business_name
+                      price, salon_name: salonProfile.business_name,
+                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang
                     });
                     setAddApptDone(true);
                     setAddApptLoading(false);
