@@ -100,21 +100,32 @@ serve(async (req) => {
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
 
-  // Trial cancellation: just mark cancelled, no Mollie involvement
-  if (profile.subscription_status === "trialing" && !profile.mollie_subscription_id) {
+  // No Mollie subscription to cancel: a trial, a legacy/comped plan granted by
+  // hand, or a first payment that never established recurring billing. There is
+  // no recurring charge to stop at Mollie, so just reflect the cancellation
+  // locally. Soft-cancel (default) keeps access until plan_expires_at (the
+  // check-trials cron finalises it); immediate ends access now.
+  if (!profile.mollie_subscription_id) {
+    if (immediate) {
+      await supabase
+        .from("profiles")
+        .update({
+          subscription_status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+          cancel_at_period_end: false,
+          plan_expires_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+      return ok({ success: true, mode: "immediate" }, origin);
+    }
     await supabase
       .from("profiles")
       .update({
-        subscription_status: "cancelled",
+        cancel_at_period_end: true,
         cancelled_at: new Date().toISOString(),
-        cancel_at_period_end: false,
       })
       .eq("id", userId);
-    return ok({ success: true, mode: "trial_ended" }, origin);
-  }
-
-  if (!profile.mollie_customer_id || !profile.mollie_subscription_id) {
-    return err(404, "no_subscription", origin);
+    return ok({ success: true, mode: "at_period_end", access_until: profile.plan_expires_at }, origin);
   }
 
   if (immediate) {
