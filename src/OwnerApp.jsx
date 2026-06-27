@@ -968,7 +968,10 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const toast = useToast();
 
   const [billingInterval, setBillingInterval] = useState("monthly");
-  const [busy, setBusy] = useState(false);
+  // The plan id currently being processed (or null). Per-plan so only the
+  // clicked button shows a loading state, never both at once.
+  const [busyPlan, setBusyPlan] = useState(null);
+  const busy = busyPlan !== null;
   const [profileBilling, setProfileBilling] = useState(null); // { trial_used, subscription_status }
   const [postCheckout, setPostCheckout] = useState(false);
 
@@ -1016,7 +1019,8 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
   const handleStartTrial = async (planId) => {
     if (busy) return;
-    setBusy(true);
+    setBusyPlan(planId);
+    let redirecting = false;
     try {
       const { data, error } = await supabase.functions.invoke("start-trial", {
         body: { plan: planId, billing_interval: billingInterval },
@@ -1030,22 +1034,25 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         } else {
           toast.show(lang === "nl" ? `Probleem: ${code}` : `Error: ${code}`, "error");
         }
-        setBusy(false);
         return;
       }
       // Trial activated. Force a hard reload so OwnerEntryPage's role
       // resolution re-runs and sees the new plan_expires_at.
+      redirecting = true;
       window.location.href = "/owner";
     } catch (e) {
       console.error("start-trial error:", e);
       toast.show(t.somethingWrong, "error");
-      setBusy(false);
+    } finally {
+      // Always clear the loading state unless we're navigating away.
+      if (!redirecting) setBusyPlan(null);
     }
   };
 
   const handleSubscribe = async (planId) => {
     if (busy) return;
-    setBusy(true);
+    setBusyPlan(planId);
+    let redirecting = false;
     try {
       const { data, error } = await supabase.functions.invoke("create-subscription", {
         body: { plan: planId, billing_interval: billingInterval },
@@ -1058,16 +1065,19 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
             : `Could not start payment: ${code}`,
           "error"
         );
-        setBusy(false);
         return;
       }
       // Hand off to Mollie's hosted checkout. They'll redirect back to
       // /owner?subscription=success on completion (handled above).
+      redirecting = true;
       window.location.href = data.checkout_url;
     } catch (e) {
       console.error("create-subscription error:", e);
       toast.show(t.somethingWrong, "error");
-      setBusy(false);
+    } finally {
+      // Always clear the loading state unless we're navigating away — this
+      // guarantees the button never stays stuck on "Bezig…".
+      if (!redirecting) setBusyPlan(null);
     }
   };
 
@@ -1108,11 +1118,14 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     );
   }
 
-  // The CTA copy depends on whether they can still trial
-  const ctaLabel = (planName) =>
-    canTrial
-      ? (lang === "nl" ? "Start gratis 14 dagen" : "Start 14-day free trial")
-      : (busy ? (lang === "nl" ? "Bezig…" : "Loading…") : t.selectPlan);
+  // The CTA copy depends on whether they can still trial. Loading text only
+  // shows on the specific plan being processed, never both buttons at once.
+  const ctaLabel = (planId) =>
+    busyPlan === planId
+      ? (lang === "nl" ? "Bezig…" : "Loading…")
+      : (canTrial
+          ? (lang === "nl" ? "Start gratis 14 dagen" : "Start 14-day free trial")
+          : t.selectPlan);
 
   return (
     <Layout>
@@ -1205,7 +1218,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                     disabled={busy || !profileBilling}
                     onClick={() => (canTrial ? handleStartTrial(plan.id) : handleSubscribe(plan.id))}
                   >
-                    {ctaLabel(plan.name)}
+                    {ctaLabel(plan.id)}
                   </button>
                 </div>
               );
