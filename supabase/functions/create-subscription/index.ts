@@ -96,6 +96,12 @@ async function mollieFetch(path: string, init?: RequestInit) {
 
 serve(async (req) => {
   const origin = req.headers.get("origin");
+  // Return the customer to the SAME origin they started on after the Mollie
+  // checkout. The Supabase auth session lives in localStorage scoped per
+  // origin, so redirecting www.vellu.cc → vellu.cc (or vice versa) would land
+  // them logged-out and never reach the dashboard. Only trust an allowlisted
+  // origin; otherwise fall back to APP_URL.
+  const returnOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : APP_URL;
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
   if (req.method !== "POST") return err(405, "method_not_allowed", origin);
   if (!MOLLIE_API_KEY) {
@@ -174,7 +180,7 @@ serve(async (req) => {
     // creditcard both create reusable SEPA/card mandates, so list them.
     method: ["ideal", "creditcard"],
     description: `${description} (${intervalLabel}) — first payment`,
-    redirectUrl: `${APP_URL}/owner?subscription=success`,
+    redirectUrl: `${returnOrigin}/owner?subscription=success`,
     webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
     metadata: {
       owner_id: userId,
