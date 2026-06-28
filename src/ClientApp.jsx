@@ -570,7 +570,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setPolicyAgreed(false);
     setAppliedDiscount(null);
     setDiscountCode("");
-    setActiveCategory("all");
+    // Carry over the category the user was browsing on the profile page so
+     // the booking-flow filter starts on the same tab. Falls back to "all"
+     // when the user opened booking from outside a category context.
+    setActiveCategory(profileCategory || "all");
     if (hasLocations) setSelectedLocation(null);
     setMode("booking");
   };
