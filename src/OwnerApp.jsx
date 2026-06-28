@@ -1432,16 +1432,27 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data: appts } = await supabase
-        .from("appointments")
-        .select("id, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
-        .eq("owner_id", ownerId)
-        .order("date", { ascending: false });
+      // Appointment-derived clients + owner's manually-added contacts, in parallel.
+      const [{ data: appts }, { data: manual }] = await Promise.all([
+        supabase
+          .from("appointments")
+          .select("id, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
+          .eq("owner_id", ownerId)
+          .order("date", { ascending: false }),
+        supabase
+          .from("manual_clients")
+          .select("id, name, email, phone, notes")
+          .eq("owner_id", ownerId),
+      ]);
       if (cancelled) return;
       const nowMs = Date.now();
       const byEmail = new Map();
@@ -1451,14 +1462,28 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
         let agg = byEmail.get(email);
         if (!agg) {
           const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
-          agg = { email, name: fullName, phone: a.clients?.phone || a.client_phone || "", appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           byEmail.set(email, agg);
         }
         if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
         agg.appts.push(a);
         if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
       }
-      const list = Array.from(byEmail.values()).map((cl) => {
+      // Merge manual clients: enrich an existing entry by email, otherwise add
+      // a contact-only entry (no appointment history yet).
+      const extra = [];
+      for (const m of manual || []) {
+        const email = String(m.email || "").toLowerCase();
+        const existing = email ? byEmail.get(email) : null;
+        if (existing) {
+          if (!existing.phone && m.phone) existing.phone = m.phone;
+          if (!existing.notes && m.notes) existing.notes = m.notes;
+          existing.manualId = m.id;
+        } else {
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", manualId: m.id, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+        }
+      }
+      const list = [...Array.from(byEmail.values()), ...extra].map((cl) => {
         const upcoming = cl.appts
           .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
           .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
@@ -1470,11 +1495,30 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [ownerId]);
+  }, [ownerId, refreshKey]);
+
+  const addCustomer = async () => {
+    const name = addForm.name.trim();
+    if (!name) return;
+    setSaving(true);
+    const { error } = await supabase.from("manual_clients").insert({
+      owner_id: ownerId,
+      name,
+      email: addForm.email.trim() || null,
+      phone: addForm.phone.trim() || null,
+      notes: addForm.notes.trim() || null,
+    });
+    setSaving(false);
+    if (error) { toast.show(lang === "nl" ? "Toevoegen mislukt — probeer opnieuw" : "Failed to add — try again", "error"); return; }
+    toast.show(lang === "nl" ? "Klant toegevoegd" : "Customer added");
+    setAddForm({ name: "", email: "", phone: "", notes: "" });
+    setAddOpen(false);
+    setRefreshKey((k) => k + 1);
+  };
 
   const q = search.trim().toLowerCase();
   const filtered = q
-    ? clients.filter((cl) => cl.name.toLowerCase().includes(q) || cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+    ? clients.filter((cl) => cl.name.toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
     : clients;
 
   const initials = (name) => (name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
@@ -1501,15 +1545,18 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     <div className="fade-up" style={{ maxWidth: 720, margin: "0 auto" }}>
       {isMobile && <PTitle sub={lang === "nl" ? "Bekijk en beheer je klanten." : "View and manage your clients."}>{lang === "nl" ? "Klanten" : "Customers"}</PTitle>}
 
-      {/* Search */}
-      <div style={{ position: "relative", marginBottom: 16 }}>
+      {/* Search + add */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <input
           className="input-field"
           placeholder={lang === "nl" ? "Zoek klant op naam, e-mail of telefoon" : "Find customer by name, email or phone"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%" }}
+          style={{ flex: 1, minWidth: 0 }}
         />
+        <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ width: "auto", padding: "0 16px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Klant" : "Add"}
+        </button>
       </div>
 
       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>
@@ -1525,7 +1572,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map((cl) => (
-            <div key={cl.email} onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, cursor: "pointer" }}>
+            <div key={cl.key} onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, cursor: "pointer" }}>
               <div style={{ width: 42, height: 42, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
@@ -1557,13 +1604,21 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
 
             {/* Contact */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-              <a href={`mailto:${selected.email}`} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text, textDecoration: "none" }}>
-                <NavIcon name="mail" size={15} color={accent} /> {selected.email}
-              </a>
+              {selected.email && (
+                <a href={`mailto:${selected.email}`} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text, textDecoration: "none" }}>
+                  <NavIcon name="mail" size={15} color={accent} /> {selected.email}
+                </a>
+              )}
               {selected.phone && (
                 <a href={`tel:${selected.phone}`} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text, textDecoration: "none" }}>
                   <NavIcon name="phone" size={15} color={accent} /> {selected.phone}
                 </a>
+              )}
+              {!selected.email && !selected.phone && (
+                <div style={{ fontSize: 12, color: c.textMuted }}>{lang === "nl" ? "Geen contactgegevens" : "No contact details"}</div>
+              )}
+              {selected.notes && (
+                <div style={{ fontSize: 12, color: c.textSub, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 12px", marginTop: 2 }}>{selected.notes}</div>
               )}
             </div>
 
@@ -1585,6 +1640,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
 
             {/* History */}
             <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 10 }}>{lang === "nl" ? "Geschiedenis" : "History"}</div>
+            {selected.appts.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic", padding: "8px 0" }}>{lang === "nl" ? "Nog geen afspraken." : "No appointments yet."}</div>
+            ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {selected.appts.map((a, i) => {
                 const b = statusBadge(a);
@@ -1596,6 +1654,29 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
                   </div>
                 );
               })}
+            </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add customer modal */}
+      {addOpen && (
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !saving && setAddOpen(false)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant toevoegen" : "Add customer"}</div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>{lang === "nl" ? "Voeg handmatig een klant toe aan je lijst." : "Manually add a client to your list."}</div>
+            {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              <div><label style={lbl}>{lang === "nl" ? "Naam" : "Name"}</label><input className="input-field" value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : "Full name"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "Telefoon" : "Phone"}</label><input className="input-field" type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : "Note (optional)"}</label><input className="input-field" value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
+            </div>
+            ); })()}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" disabled={saving || !addForm.name.trim()} onClick={addCustomer} style={{ flex: 1 }}>{saving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Toevoegen" : "Add")}</button>
+              <button className="btn-ghost" disabled={saving} onClick={() => setAddOpen(false)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
             </div>
           </div>
         </div>
@@ -6141,14 +6222,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             background: c.bg,
             borderTop: "1px solid " + c.border,
             display: "flex",
-            padding: "12px 4px 8px",
+            padding: "10px 2px 8px",
             paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
-            zIndex: 100
+            zIndex: 100,
+            // Promote to its own GPU layer. Without this, iOS Safari/PWA can
+            // fail to repaint a position:fixed bar while the page scrolls,
+            // making page content "bleed through" beneath it.
+            transform: "translateZ(0)",
+            WebkitTransform: "translateZ(0)",
+            backfaceVisibility: "hidden"
           }}>
             {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3, flex: 1, minWidth: 0 }}>
+              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
-                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+                <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.01em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
               </div>
             ))}
           </div>
