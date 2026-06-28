@@ -2445,11 +2445,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 backgroundPosition: `center ${initialSalon.cover_focal_y ?? 50}%`,
                 position: "relative"
               }}>
-                {/* Back button on cover */}
-                <button onClick={done ? reset : (step > (hasLocations ? 0 : 1) ? () => setStep(s => s-1) : () => setMode("profile"))} style={{ position: "absolute", top: 12, left: 12, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, padding: "8px 14px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+                {/* Back button on cover. top respects the iOS safe area so it
+                    isn't tucked under the status bar/notch in the installed PWA
+                    (where it became untappable). */}
+                <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : "Back"} style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", left: 12, zIndex: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
                     ←
                   </button>
-                <div style={{ position: "absolute", top: 12, right: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", right: 12, zIndex: 10, display: "flex", alignItems: "center", gap: 6 }}>
                   <ThemeToggle />
                   <LangToggle lang={lang} setLang={setLang} />
                 </div>
