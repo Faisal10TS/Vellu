@@ -1421,6 +1421,189 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
   );
 }
 
+// ─── CUSTOMERS VIEW ──────────────────────────────────────────
+// Searchable client directory for the owner: contact details, visit stats,
+// next appointment, and full service history per client. "Clients of this
+// salon" = everyone who has booked here at least once (derived from
+// appointments, same definition the CSV export uses), so the list always
+// reflects real bookings.
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
+  const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState([]);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const { data: appts } = await supabase
+        .from("appointments")
+        .select("id, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
+        .eq("owner_id", ownerId)
+        .order("date", { ascending: false });
+      if (cancelled) return;
+      const nowMs = Date.now();
+      const byEmail = new Map();
+      for (const a of appts || []) {
+        const email = String(a.clients?.email || a.client_email || "").toLowerCase();
+        if (!email) continue;
+        let agg = byEmail.get(email);
+        if (!agg) {
+          const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
+          agg = { email, name: fullName, phone: a.clients?.phone || a.client_phone || "", appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          byEmail.set(email, agg);
+        }
+        if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
+        agg.appts.push(a);
+        if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
+      }
+      const list = Array.from(byEmail.values()).map((cl) => {
+        const upcoming = cl.appts
+          .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
+          .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
+        cl.next = upcoming[0] || null;
+        return cl;
+      });
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      setClients(list);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [ownerId]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? clients.filter((cl) => cl.name.toLowerCase().includes(q) || cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+    : clients;
+
+  const initials = (name) => (name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+  const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
+  const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { weekday: "long" }); const ds = d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${a.time}` : ""}`; } catch { return a.date; } };
+
+  const statusBadge = (a) => {
+    if (a.status === "cancelled") return { label: lang === "nl" ? "Geannuleerd" : "Cancelled", bg: `${c.danger}1a`, color: c.danger };
+    if (a.status === "no_show") return { label: "No-show", bg: `${c.danger}1a`, color: c.danger };
+    if (a.status === "completed") return { label: lang === "nl" ? "Voltooid" : "Completed", bg: `${accent}1a`, color: accent };
+    if (new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= Date.now()) return { label: lang === "nl" ? "Aankomend" : "Upcoming", bg: `${accent}1a`, color: accent };
+    return { label: lang === "nl" ? "Bevestigd" : "Confirmed", bg: c.inputBg, color: c.textSub };
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+        <div style={{ width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="fade-up" style={{ maxWidth: 720, margin: "0 auto" }}>
+      {isMobile && <PTitle sub={lang === "nl" ? "Bekijk en beheer je klanten." : "View and manage your clients."}>{lang === "nl" ? "Klanten" : "Customers"}</PTitle>}
+
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: 16 }}>
+        <input
+          className="input-field"
+          placeholder={lang === "nl" ? "Zoek klant op naam, e-mail of telefoon" : "Find customer by name, email or phone"}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: "100%" }}
+        />
+      </div>
+
+      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>
+        {filtered.length} {filtered.length === 1 ? (lang === "nl" ? "klant" : "client") : (lang === "nl" ? "klanten" : "clients")}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "48px 0", color: c.textMuted, fontSize: 13 }}>
+          {clients.length === 0
+            ? (lang === "nl" ? "Nog geen klanten — ze verschijnen hier zodra iemand een afspraak boekt." : "No clients yet — they appear here once someone books an appointment.")
+            : (lang === "nl" ? "Geen klant gevonden." : "No customer found.")}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.map((cl) => (
+            <div key={cl.email} onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, cursor: "pointer" }}>
+              <div style={{ width: 42, height: 42, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
+                <div style={{ fontSize: 11, color: cl.next ? accent : c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {cl.next ? `${lang === "nl" ? "Volgende afspraak" : "Next appointment"}: ${fmtNext(cl.next)}` : (lang === "nl" ? "Geen aankomende afspraak" : "No upcoming appointment")}
+                </div>
+              </div>
+              {cl.phone && (
+                <a href={`tel:${cl.phone}`} onClick={(e) => e.stopPropagation()} aria-label={lang === "nl" ? "Bellen" : "Call"} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
+                  <NavIcon name="phone" size={18} color="currentColor" />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Detail modal */}
+      {selected && (
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setSelected(null)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 16, flexShrink: 0 }}>{initials(selected.name)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400 }}>{selected.name}</div>
+              </div>
+              <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 16, lineHeight: 1 }} onClick={() => setSelected(null)}>×</button>
+            </div>
+
+            {/* Contact */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+              <a href={`mailto:${selected.email}`} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text, textDecoration: "none" }}>
+                <NavIcon name="mail" size={15} color={accent} /> {selected.email}
+              </a>
+              {selected.phone && (
+                <a href={`tel:${selected.phone}`} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text, textDecoration: "none" }}>
+                  <NavIcon name="phone" size={15} color={accent} /> {selected.phone}
+                </a>
+              )}
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 20 }}>
+              <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>{selected.visitCount}</div>
+                <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Bezoeken" : "Visits"}</div>
+              </div>
+              <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>€{selected.totalSpent.toFixed(0)}</div>
+                <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Besteed" : "Spent"}</div>
+              </div>
+              <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginTop: 3 }}>{selected.lastVisit ? fmtDate(selected.lastVisit).replace(/ \d{4}$/, "") : "—"}</div>
+                <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Laatst" : "Last"}</div>
+              </div>
+            </div>
+
+            {/* History */}
+            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 10 }}>{lang === "nl" ? "Geschiedenis" : "History"}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {selected.appts.map((a, i) => {
+                const b = statusBadge(a);
+                return (
+                  <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 0", borderTop: i === 0 ? "none" : `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: c.text, width: 52, flexShrink: 0 }}>{fmtDate(a.date).replace(/ \d{4}$/, "")}</div>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: c.textSub }}>{a.service_name}</div>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: b.bg, color: b.color, whiteSpace: "nowrap", flexShrink: 0 }}>{b.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: c } = useTheme();
@@ -2222,6 +2405,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
+    ["klanten", "team", lang === "nl" ? "Klanten" : "Clients"],
     ["analytics", "analytics", t.analytics],
     ["facturen", "facturen", t.invoices],
     ["instellingen", "instellingen", t.settings]
@@ -2433,7 +2617,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {navItems.find(([k]) => k === view)?.[2] || t.dashboard}
                   </h1>
                   <div style={{ fontSize: 12, color: c.textLabel }}>
-                    {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
+                    {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "klanten" ? (lang === "nl" ? "Bekijk en beheer je klanten." : "View and manage your clients.") : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 12 }}>
@@ -2886,6 +3070,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
             </div>
+          )}
+
+          {/* CUSTOMERS */}
+          {view === "klanten" && (
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} />
           )}
 
           {/* AGENDA */}
