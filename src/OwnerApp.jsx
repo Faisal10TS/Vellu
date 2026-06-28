@@ -5269,11 +5269,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </div>
                               {isOn ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                  <select value={openTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { ...wh[day], closed: false, open: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                  <select value={openTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { closed: false, open: e.target.value, close: wh[day]?.close || closeTime }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
                                     {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                                   </select>
                                   <span style={{ fontSize: 10, color: c.textMuted }}>–</span>
-                                  <select value={closeTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { ...wh[day], closed: false, close: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
+                                  <select value={closeTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { closed: false, open: wh[day]?.open || openTime, close: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
                                     {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                                   </select>
                                 </div>
