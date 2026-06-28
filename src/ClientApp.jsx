@@ -190,20 +190,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
     const [yEH, mEH, dEH] = (dateStr || "").split("-").map(Number);
     const dayOfWeek = (yEH && mEH && dEH) ? new Date(yEH, mEH - 1, dEH).getDay() : new Date(dateStr).getDay();
-    const salonDay = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
-    // Team accounts: the salon's business_hours is a default, NOT a hard gate.
-    // If any staff member has working_hours configured as open for this day,
-    // the salon is effectively open — derive the window from the union of
-    // those staff hours. This avoids the trap where the owner sets staff
-    // schedules but forgets to flip the salon's day-toggles on.
-    if (initialSalon.account_type === "team" && salonDay?.closed) {
-      const staffWindows = (initialSalon.staff || [])
-        .filter(s => s.active !== false && s.working_hours)
-        .map(s => s.working_hours[dayOfWeek])
-        .filter(d => d && !d.closed);
-      if (staffWindows.length > 0) {
+    // For team accounts, derive the day window from the staff schedule
+    // rather than the salon/location business_hours. See getWeeklyHours
+    // for the full rationale — same logic, just per-date here.
+    if (initialSalon.account_type === "team") {
+      const staffDays = (initialSalon.staff || [])
+        .filter(s => s.active !== false)
+        .map(s => s.working_hours?.[dayOfWeek])
+        .filter(Boolean);
+      if (staffDays.length > 0) {
+        const openWindows = staffDays.filter(d => !d.closed);
+        if (openWindows.length === 0) return { closed: true };
         let open = "23:59", close = "00:00";
-        for (const w of staffWindows) {
+        for (const w of openWindows) {
           const o = w.open || "00:00";
           const cl = w.close || "23:59";
           if (o < open) open = o;
@@ -212,7 +211,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         return { closed: false, open, close };
       }
     }
-    return salonDay;
+    return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
   };
   
   // Check if a staff member works on a given day
@@ -929,22 +928,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   
   const _nowDate = new Date();
   const todayDayIndex = _nowDate.getDay();
-  // Recurring weekly hours per day index. For team accounts the salon's
-  // business_hours is only a default — if the salon toggle says closed but
-  // at least one active staff member has working_hours open that weekday,
-  // show the union of their windows so the sidebar matches what is actually
-  // bookable. Identical fallback to getEffectiveHours but date-agnostic
-  // (the sidebar shows a recurring schedule, not a specific date).
+  // Recurring weekly hours per day index. For team accounts the source of
+  // truth is the staff schedule — owners often leave the salon/location
+  // business_hours at their default values (Mon–Fri 09:00–17:30 open),
+  // which then misrepresent reality. So: if *any* active staff member has
+  // working_hours configured for this weekday, derive the open window
+  // from the union of those who aren't closed. If everybody with hours
+  // is closed → really closed. Only when no staff has hours at all do
+  // we fall back to the salon/location business_hours.
   const getWeeklyHours = (dayIdx) => {
-    const salonDay = activeHours[dayIdx] || DEFAULT_HOURS[dayIdx];
-    if (initialSalon.account_type === "team" && salonDay?.closed) {
-      const staffWindows = (initialSalon.staff || [])
-        .filter(s => s.active !== false && s.working_hours)
-        .map(s => s.working_hours[dayIdx])
-        .filter(d => d && !d.closed);
-      if (staffWindows.length > 0) {
+    if (initialSalon.account_type === "team") {
+      const staffDays = (initialSalon.staff || [])
+        .filter(s => s.active !== false)
+        .map(s => s.working_hours?.[dayIdx])
+        .filter(Boolean);
+      if (staffDays.length > 0) {
+        const openWindows = staffDays.filter(d => !d.closed);
+        if (openWindows.length === 0) return { closed: true };
         let open = "23:59", close = "00:00";
-        for (const w of staffWindows) {
+        for (const w of openWindows) {
           const o = w.open || "00:00";
           const cl = w.close || "23:59";
           if (o < open) open = o;
@@ -953,7 +955,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         return { closed: false, open, close };
       }
     }
-    return salonDay;
+    return activeHours[dayIdx] || DEFAULT_HOURS[dayIdx];
   };
   const todayHoursObj = getWeeklyHours(todayDayIndex) || { closed: true };
   // Compute both an "is open now" boolean AND a status label with the right
