@@ -4832,11 +4832,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {/* Name + meta */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
-                              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span>{s.duration} {t.min}</span>
                                 {variantCount > 0 && <><span>·</span><span>{variantCount} {variantCount === 1 ? (lang === "nl" ? "variant" : "variant") : (lang === "nl" ? "varianten" : "variants")}</span></>}
                                 {extrasCount > 0 && <><span>·</span><span>{extrasCount} extra{extrasCount === 1 ? "" : "s"}</span></>}
                                 {photoCount > 0 && <><span>·</span><span>{photoCount} {photoCount === 1 ? (lang === "nl" ? "foto" : "photo") : (lang === "nl" ? "foto's" : "photos")}</span></>}
+                                {(salonData.categories || []).length > 0 && (
+                                  <span onClick={e => e.stopPropagation()} style={{ display: "inline-flex" }}>
+                                    <select
+                                      value={s.category_id || ""}
+                                      onChange={async (e) => {
+                                        const newCatId = e.target.value || null;
+                                        const { error } = await supabase.from("services").update({ category_id: newCatId }).eq("id", s.id);
+                                        if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                        update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, category_id: newCatId} : sv); return d; });
+                                      }}
+                                      style={{
+                                        fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 999,
+                                        border: `1px solid ${s.category_id ? `${accent}55` : c.border}`,
+                                        background: s.category_id ? `${accent}14` : "transparent",
+                                        color: s.category_id ? accent : c.textMuted,
+                                        cursor: "pointer", appearance: "none", WebkitAppearance: "none",
+                                        maxWidth: 140, textOverflow: "ellipsis"
+                                      }}
+                                      title={lang === "nl" ? "Categorie wijzigen" : "Change category"}
+                                    >
+                                      <option value="">{lang === "nl" ? "+ Categorie" : "+ Category"}</option>
+                                      {(salonData.categories || []).map(cat => (
+                                        <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                                      ))}
+                                    </select>
+                                  </span>
+                                )}
                               </div>
                             </div>
                             {/* Price */}
