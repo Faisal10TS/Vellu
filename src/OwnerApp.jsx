@@ -1231,8 +1231,8 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                   ? "Geen verplichtingen. Annuleer wanneer je wilt tijdens of na de proefperiode."
                   : "No commitment. Cancel anytime during or after the trial.")
               : (lang === "nl"
-                  ? "Veilig betalen via iDEAL, creditcard of SEPA — powered by Mollie."
-                  : "Secure payment via iDEAL, card or SEPA — powered by Mollie.")}
+                  ? "Veilig betalen via iDEAL, creditcard, Apple Pay, Google Pay of SEPA — powered by Mollie."
+                  : "Secure payment via iDEAL, card, Apple Pay, Google Pay or SEPA — powered by Mollie.")}
           </div>
         </div>
       </div>
