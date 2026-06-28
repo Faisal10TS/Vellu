@@ -344,7 +344,7 @@ const COUNTRIES = [
 // so missing languages fall back to English instead of returning undefined.
 const _T_RAW = {
   nl: {
-    book:"Boeken", myAppts:"Afspraken", dashboard:"Dashboard", agenda:"Agenda",
+    book:"Boeken", myAppts:"Afspraken", dashboard:"Dashboard", agenda:"Agenda", from:"Vanaf",
     invoices:"Facturen", settings:"Instellingen", selectService:"Kies een Behandeling",
     selectServiceSub:"Kies de behandeling die je wilt", selectDate:"Kies een Datum",
     selectDateSub:"Kies een datum en tijd", selectTime:"Kies een Tijd",
@@ -590,7 +590,7 @@ const _T_RAW = {
     noTreatmentsCatYet:"Nog geen behandelingen beschikbaar",
   },
   en: {
-    book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar",
+    book:"Book", myAppts:"Appointments", dashboard:"Dashboard", agenda:"Calendar", from:"From",
     invoices:"Invoices", settings:"Settings", selectService:"Select a Service",
     selectServiceSub:"Choose the treatment you'd like", selectDate:"Select a Date",
     selectDateSub:"Pick a date and time", selectTime:"Select a Time",

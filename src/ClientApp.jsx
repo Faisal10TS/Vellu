@@ -1113,7 +1113,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     </div>
                     <div className="profile-service-price">
-                      €{s.variants?.length > 0 ? `${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : s.price}
+                      {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                     </div>
                     <div className="profile-service-book-btn" onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                       {t.book}
@@ -1841,7 +1841,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`;
                   return (
                   <div key={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -2581,7 +2581,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               </div>
                             </div>
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
-                              {s.variants?.length > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                              {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (

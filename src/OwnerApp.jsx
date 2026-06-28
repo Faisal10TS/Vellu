@@ -1724,7 +1724,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // the URL bar collapses, visualViewport.resize fires and we re-measure → buffer goes to 0.
   const toast = useToast();
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
-  const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
+  const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60", category_id: "" });
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -1738,7 +1738,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
   const [editLocForm, setEditLocForm] = useState({ name: "", address: "", city: "", phone: "" });
-  const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
+  const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", category_id: "" });
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [editCategoryForm, setEditCategoryForm] = useState({ name_nl: "", name_en: "" });
+  const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
+  const [newCategoryForm, setNewCategoryForm] = useState({ name_nl: "", name_en: "" });
   const [editingStaff, setEditingStaff] = useState(null);
   const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [] });
   // Manual appointment
@@ -1760,7 +1764,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showExceptionForm, setShowExceptionForm] = useState(false);
   const [showBlockedForm, setShowBlockedForm] = useState(false);
   const [editingVariant, setEditingVariant] = useState(null);
-  const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
+  const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "" });
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
@@ -2243,7 +2247,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       name_en: newSvc.name_en || null,
       price,
       duration: parseInt(newSvc.duration) || 60,
-      position: nextPosition
+      position: nextPosition,
+      category_id: newSvc.category_id || null
     }).select().single();
     if (error || !data) {
       // Previously the error was silently swallowed and the form was cleared so owners
@@ -2252,7 +2257,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       return;
     }
     update(d => { d.services = [...d.services, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || data.name, photos: [], variants: [], extras: [] }]; return d; });
-    setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60" });
+    setNewSvc({ name_nl: "", name_en: "", price: "", duration: "60", category_id: "" });
   };
 
   const deleteService = async (id) => {
@@ -4622,6 +4627,98 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ DIENSTEN TAB ═══ */}
               {settingsTab === "diensten" && <>
 
+              {/* ── CATEGORIES ── compact CRUD; used to group services on the public page */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Categorieën" : "Categories"}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.categories || []).length}</div>
+                </div>
+                {(salonData.categories || []).length === 0 && !showNewCategoryForm && (
+                  <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic", padding: "6px 2px 10px" }}>
+                    {lang === "nl" ? "Nog geen categorieën. Groepeer je diensten (bv. Nagels, Brows) zodat klanten makkelijker kunnen kiezen." : "No categories yet. Group your services (e.g. Nails, Brows) so clients can browse faster."}
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                  {(salonData.categories || []).map(cat => (
+                    <div key={cat.id}>
+                      {editingCategoryId === cat.id ? (
+                        <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <input className="input-field" value={editCategoryForm.name_nl} onChange={e => setEditCategoryForm(f => ({...f, name_nl: e.target.value}))} placeholder={lang === "nl" ? "Naam (NL)" : "Name (NL)"} style={{ fontSize: 12, padding: "9px 11px" }} />
+                            <input className="input-field" value={editCategoryForm.name_en} onChange={e => setEditCategoryForm(f => ({...f, name_en: e.target.value}))} placeholder={lang === "nl" ? "Naam (EN)" : "Name (EN)"} style={{ fontSize: 12, padding: "9px 11px" }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                              if (!editCategoryForm.name_nl.trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
+                              const { error } = await supabase.from("service_categories").update({ name_nl: editCategoryForm.name_nl.trim(), name_en: editCategoryForm.name_en.trim() || null }).eq("id", cat.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: editCategoryForm.name_nl.trim(), name_en: editCategoryForm.name_en.trim() || null} : x); return d; });
+                              setEditingCategoryId(null);
+                            }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
+                            <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingCategoryId(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{cat.name_nl}</div>
+                            {cat.name_en && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{cat.name_en}</div>}
+                          </div>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button onClick={() => { setEditingCategoryId(cat.id); setEditCategoryForm({ name_nl: cat.name_nl, name_en: cat.name_en || "" }); }}
+                              style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                              title={lang === "nl" ? "Bewerken" : "Edit"}>
+                              <NavIcon name="edit" size={11} color="currentColor" />
+                            </button>
+                            <button onClick={async () => {
+                              const used = (salonData.services || []).some(sv => sv.category_id === cat.id);
+                              const msg = used
+                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : `Category "${cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
+                                : (lang === "nl" ? "Categorie verwijderen?" : "Delete category?");
+                              if (!(await showConfirm(msg))) return;
+                              const { error } = await supabase.from("service_categories").delete().eq("id", cat.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => {
+                                d.categories = (d.categories || []).filter(x => x.id !== cat.id);
+                                d.services = (d.services || []).map(sv => sv.category_id === cat.id ? {...sv, category_id: null} : sv);
+                                return d;
+                              });
+                            }} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                              title={lang === "nl" ? "Verwijderen" : "Delete"}>
+                              <NavIcon name="xmark" size={11} color="currentColor" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {showNewCategoryForm ? (
+                  <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <input className="input-field" value={newCategoryForm.name_nl} onChange={e => setNewCategoryForm(f => ({...f, name_nl: e.target.value}))} placeholder={lang === "nl" ? "bijv. Nagels" : "e.g. Nails"} style={{ fontSize: 12, padding: "9px 11px" }} autoFocus />
+                      <input className="input-field" value={newCategoryForm.name_en} onChange={e => setNewCategoryForm(f => ({...f, name_en: e.target.value}))} placeholder={lang === "nl" ? "bijv. Nails (EN)" : "e.g. Nails"} style={{ fontSize: 12, padding: "9px 11px" }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                        if (!newCategoryForm.name_nl.trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
+                        const nextPos = ((salonData.categories || []).reduce((m, x) => Math.max(m, x.position || 0), 0)) + 1;
+                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: newCategoryForm.name_nl.trim(), name_en: newCategoryForm.name_en.trim() || null, position: nextPos }).select().single();
+                        if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+                        update(d => { d.categories = [...(d.categories || []), data]; return d; });
+                        setNewCategoryForm({ name_nl: "", name_en: "" });
+                        setShowNewCategoryForm(false);
+                      }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Toevoegen" : "Add"}</button>
+                      <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => { setShowNewCategoryForm(false); setNewCategoryForm({ name_nl: "", name_en: "" }); }}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn-ghost" style={{ width: "100%", padding: "10px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", fontSize: 12 }} onClick={() => setShowNewCategoryForm(true)}>
+                    + {lang === "nl" ? "Categorie toevoegen" : "Add category"}
+                  </button>
+                )}
+              </div>
+
               {/* Services list — collapsible cards */}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
@@ -4650,7 +4747,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const photoCount = (s.photos || []).length;
                   const heroPhoto = s.photos?.[0]?.url || s.photos?.[0];
                   const minVariantPrice = variantCount > 0 ? Math.min(...s.variants.map(v => parseFloat(v.price))) : null;
-                  const displayPrice = minVariantPrice !== null ? `€${minVariantPrice}+` : `€${s.price}`;
+                  const displayPrice = minVariantPrice !== null ? `${t.from} €${minVariantPrice}` : `€${s.price}`;
 
                   return (
                     <SortableService key={s.id} id={s.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
@@ -4684,11 +4781,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                           </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Categorie" : "Category"}</div>
+                            <select className="input-field" value={editSvcForm.category_id || ""} onChange={e => setEditSvcForm(f => ({...f, category_id: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}>
+                              <option value="">{lang === "nl" ? "Geen categorie" : "No category"}</option>
+                              {(salonData.categories || []).map(cat => (
+                                <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                              ))}
+                            </select>
+                            {(salonData.categories || []).length === 0 && (
+                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, fontStyle: "italic" }}>
+                                {lang === "nl" ? "Voeg eerst categorieën toe bovenaan deze pagina." : "Add categories above to assign one."}
+                              </div>
+                            )}
+                          </div>
                           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                             <button className="btn-primary" style={{ padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", flex: 1 }} onClick={async () => {
-                              const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id);
+                              const newCatId = editSvcForm.category_id || null;
+                              const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration), category_id: newCatId }).eq("id", s.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration)} : sv); return d; });
+                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration), category_id: newCatId} : sv); return d; });
                               setEditingService(null);
                             }}>
                               <NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}
@@ -4731,7 +4843,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
                             {/* Actions */}
                             <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                              <button onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedServiceId(null); }}
+                              <button onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration, category_id: s.category_id || "" }); setExpandedServiceId(null); }}
                                 style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
                                 title={lang === "nl" ? "Bewerken" : "Edit"}>
                                 <NavIcon name="edit" size={13} color="currentColor" />
@@ -4772,11 +4884,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "min" : "min"} /></div>
                                             </div>
                                             ); })()}
-                                            <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Omschrijving (optioneel)" : "Description (optional)"}</label>
-                                            <input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%", marginBottom: 8 }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} />
+                                            {(() => { const lbl2 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                              <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (Nederlands)" : "Description (Dutch)"}</label><input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} /></div>
+                                              <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (Engels)" : "Description (English)"}</label><input className="input-field" value={editVariantForm.description_en} onChange={e => setEditVariantForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="Description" /></div>
+                                            </div>
+                                            ); })()}
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                                                await supabase.from("service_variants").update({ name_nl: editVariantForm.name_nl, name_en: editVariantForm.name_en || null, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration), description_nl: editVariantForm.description_nl || null }).eq("id", v.id);
+                                                await supabase.from("service_variants").update({ name_nl: editVariantForm.name_nl, name_en: editVariantForm.name_en || null, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration), description_nl: editVariantForm.description_nl || null, description_en: editVariantForm.description_en || null }).eq("id", v.id);
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...editVariantForm, price: parseFloat(editVariantForm.price), duration: parseInt(editVariantForm.duration)} : vr)} : svc); return d; });
                                                 setEditingVariant(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
@@ -4787,12 +4903,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
-                                              {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{v.description_nl}</div>}
+                                              {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>€{v.price}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
-                                              <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
+                                              <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                                 style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${accent}55`, background: `${accent}14`, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600 }}>
                                                 <NavIcon name="edit" size={11} color="currentColor" /> {lang === "nl" ? "Bewerk" : "Edit"}
                                               </button>
@@ -4949,6 +5065,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input className="input-field" placeholder="60" type="number" value={newSvc.duration} onChange={e => setNewSvc(s => ({...s, duration: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
                       </div>
                     </div>
+                    {(salonData.categories || []).length > 0 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Categorie" : "Category"}</div>
+                        <select className="input-field" value={newSvc.category_id || ""} onChange={e => setNewSvc(s => ({...s, category_id: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }}>
+                          <option value="">{lang === "nl" ? "Geen categorie" : "No category"}</option>
+                          {(salonData.categories || []).map(cat => (
+                            <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {svcError && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8 }}>{svcError}</div>}
                     <button className="btn-primary" style={{ width: "100%", padding: "12px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => { await addService(); setShowNewServiceForm(false); }}>
                       <NavIcon name="plus" size={13} color={c.btnOnDark} /> {t.addService}

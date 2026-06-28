@@ -1405,7 +1405,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
-                                {varCount > 0 ? `€${Math.min(...s.variants.map(v => parseFloat(v.price)))}+` : `€${s.price}`}
+                                {varCount > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
