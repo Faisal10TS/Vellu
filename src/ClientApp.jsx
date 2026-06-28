@@ -929,7 +929,33 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   
   const _nowDate = new Date();
   const todayDayIndex = _nowDate.getDay();
-  const todayHoursObj = activeHours[todayDayIndex] || { closed: true };
+  // Recurring weekly hours per day index. For team accounts the salon's
+  // business_hours is only a default — if the salon toggle says closed but
+  // at least one active staff member has working_hours open that weekday,
+  // show the union of their windows so the sidebar matches what is actually
+  // bookable. Identical fallback to getEffectiveHours but date-agnostic
+  // (the sidebar shows a recurring schedule, not a specific date).
+  const getWeeklyHours = (dayIdx) => {
+    const salonDay = activeHours[dayIdx] || DEFAULT_HOURS[dayIdx];
+    if (initialSalon.account_type === "team" && salonDay?.closed) {
+      const staffWindows = (initialSalon.staff || [])
+        .filter(s => s.active !== false && s.working_hours)
+        .map(s => s.working_hours[dayIdx])
+        .filter(d => d && !d.closed);
+      if (staffWindows.length > 0) {
+        let open = "23:59", close = "00:00";
+        for (const w of staffWindows) {
+          const o = w.open || "00:00";
+          const cl = w.close || "23:59";
+          if (o < open) open = o;
+          if (cl > close) close = cl;
+        }
+        return { closed: false, open, close };
+      }
+    }
+    return salonDay;
+  };
+  const todayHoursObj = getWeeklyHours(todayDayIndex) || { closed: true };
   // Compute both an "is open now" boolean AND a status label with the right
   // phrasing for each case (day-closed vs before-open vs after-close vs open).
   const { salonIsOpen, salonStatusLabel } = (() => {
@@ -1482,7 +1508,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const checkDate = new Date(now);
                   checkDate.setDate(now.getDate() + offset);
                   const dayIdx = checkDate.getDay();
-                  const dayHrs = activeHours[dayIdx] || { closed: true };
+                  const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
                   const override = initialSalon.day_overrides?.[fmt(checkDate)];
                   if (override?.type === "blocked") continue;
                   const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
@@ -1514,7 +1540,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
                 {/* Always show today's hours */}
                 {(() => {
-                  const todayHrs = activeHours[todayDayIndex] || { closed: true };
+                  const todayHrs = getWeeklyHours(todayDayIndex) || { closed: true };
                   return (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 2px", fontSize: 12 }}>
                       <span style={{ color: c.text, fontWeight: 600 }}>{FULL_DAYS[todayDayIndex]}</span>
@@ -1525,7 +1551,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {expandedHours && (
                   <div style={{ paddingTop: 4 }}>
                     {[1,2,3,4,5,6,0].filter(d => d !== todayDayIndex).map(dayIdx => {
-                      const dayHrs = activeHours[dayIdx] || { closed: true };
+                      const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
                       return (
                         <div key={dayIdx} className="profile-hours-row">
                           <span style={{ color: c.textLabel }}>{FULL_DAYS[dayIdx]}</span>

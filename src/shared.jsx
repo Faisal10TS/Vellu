@@ -1084,14 +1084,11 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.5);
   }
 
-  /* Category pill scroll container — fade right edge to hint scrollability */
+  /* Category pill scroll container. Arrows now indicate scrollability,
+     so the previous right-edge fade gradient is no longer needed —
+     leaving it on caused the right arrow button to look faded. */
   .profile-cat-scroll {
     position: relative;
-  }
-  .profile-cat-scroll::after {
-    content: ''; position: absolute; top: 0; right: 0; bottom: 14px;
-    width: 32px; pointer-events: none;
-    background: linear-gradient(to right, transparent, ${c.bg});
   }
 
 
