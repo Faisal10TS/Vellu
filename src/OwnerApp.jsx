@@ -4974,10 +4974,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                       <div key={e.id}>
                                         {editingExtra === e.id ? (
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
-                                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder={lang === "nl" ? "Naam" : "Name"} />
-                                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px" }} placeholder="€" />
+                                            {(() => { const lbl3 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                              <div><label style={lbl3}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Nail art" : "e.g. Nail art"} /></div>
+                                              <div><label style={lbl3}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="e.g. Nail art" /></div>
+                                              <div><label style={lbl3}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" /></div>
                                             </div>
+                                            ); })()}
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const { error } = await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price: parseFloat(editExtraForm.price) }).eq("id", e.id);

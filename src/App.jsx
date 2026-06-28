@@ -244,6 +244,7 @@ function SalonRoute({ lang, setLang }) {
         // owner are sent server-side by the book-appointment edge function
         // (salon_email || login email), so the public payload never needs it.
         business_hours: data.business_hours || DEFAULT_HOURS,
+        account_type: data.account_type || "joint",
         booking_policy: data.booking_policy || "",
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",

@@ -188,8 +188,31 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const getEffectiveHours = (dateStr) => {
     if (isDayBlocked(dateStr)) return { closed: true };
     if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
-    const dayOfWeek = new Date(dateStr).getDay();
-    return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+    const [yEH, mEH, dEH] = (dateStr || "").split("-").map(Number);
+    const dayOfWeek = (yEH && mEH && dEH) ? new Date(yEH, mEH - 1, dEH).getDay() : new Date(dateStr).getDay();
+    const salonDay = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+    // Team accounts: the salon's business_hours is a default, NOT a hard gate.
+    // If any staff member has working_hours configured as open for this day,
+    // the salon is effectively open — derive the window from the union of
+    // those staff hours. This avoids the trap where the owner sets staff
+    // schedules but forgets to flip the salon's day-toggles on.
+    if (initialSalon.account_type === "team" && salonDay?.closed) {
+      const staffWindows = (initialSalon.staff || [])
+        .filter(s => s.active !== false && s.working_hours)
+        .map(s => s.working_hours[dayOfWeek])
+        .filter(d => d && !d.closed);
+      if (staffWindows.length > 0) {
+        let open = "23:59", close = "00:00";
+        for (const w of staffWindows) {
+          const o = w.open || "00:00";
+          const cl = w.close || "23:59";
+          if (o < open) open = o;
+          if (cl > close) close = cl;
+        }
+        return { closed: false, open, close };
+      }
+    }
+    return salonDay;
   };
   
   // Check if a staff member works on a given day
