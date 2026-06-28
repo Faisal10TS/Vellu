@@ -1107,20 +1107,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <section ref={el => profileSectionRefs.current.services = el} className="profile-section">
               <h2 className="profile-section-title">{t.profileServices}</h2>
               
-              {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
-                <div className="profile-cat-scroll">
-                  <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14 }}>
-                    <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
-                      onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
-                    {usedCats.map(cat => (
-                      <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
-                        onClick={() => setProfileCategory(cat.id)}>
-                        {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
-                      </button>
-                    ))}
+              {(() => {
+                const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
+                if (usedCats.length === 0) return null;
+                const scrollRef = { current: null };
+                const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
+                return (
+                  <div className="profile-cat-scroll" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                    </button>
+                    <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                      <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
+                        onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
+                      {usedCats.map(cat => (
+                        <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
+                          onClick={() => setProfileCategory(cat.id)}>
+                          {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                    </button>
                   </div>
-                </div>
-              ); })()}
+                );
+              })()}
 
               <div className="profile-services-grid">
                 {profileFilteredServices.map(s => (
@@ -1817,34 +1829,48 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 1 && <>
                 <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                 
-                {/* Category tabs */}
-                {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 8 }}>
-                    <div
-                      onClick={() => setActiveCategory("all")}
-                      style={{
-                        padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
-                        background: activeCategory === "all" ? accent : c.inputBg,
-                        border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
-                        color: activeCategory === "all" ? c.btnOnDark : c.textSub,
-                        fontSize: 12, fontWeight: 500, transition: "all 0.2s"
-                      }}
-                    >{t.allCategories}</div>
-                    {usedCats.map(cat => (
-                      <div 
-                        key={cat.id}
-                        onClick={() => setActiveCategory(cat.id)}
-                        style={{ 
-                          padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
-                          background: activeCategory === cat.id ? accent : c.inputBg,
-                          border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
-                          color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
-                          fontSize: 12, fontWeight: 500, transition: "all 0.2s"
-                        }}
-                      >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
-                    ))}
-                  </div>
-                ); })()}
+                {/* Category tabs — scrollable with arrows for long lists */}
+                {(() => {
+                  const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
+                  if (usedCats.length === 0) return null;
+                  const scrollRef = { current: null };
+                  const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                      </button>
+                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                        <div
+                          onClick={() => setActiveCategory("all")}
+                          style={{
+                            padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                            background: activeCategory === "all" ? accent : c.inputBg,
+                            border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                            color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                            fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                          }}
+                        >{t.allCategories}</div>
+                        {usedCats.map(cat => (
+                          <div
+                            key={cat.id}
+                            onClick={() => setActiveCategory(cat.id)}
+                            style={{
+                              padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                              background: activeCategory === cat.id ? accent : c.inputBg,
+                              border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                              color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
+                              fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                            }}
+                          >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                        ))}
+                      </div>
+                      <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* Selected services counter */}
                 {selectedServices.length > 0 && (
@@ -2539,34 +2565,48 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {step === 1 && <>
                     <PTitle sub={t.selectServiceSub}>{t.selectService}</PTitle>
                     
-                    {/* Category tabs */}
-                    {(() => { const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id)); return usedCats.length > 0 && (
-                      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6 }}>
-                        <div
-                          onClick={() => setActiveCategory("all")}
-                          style={{
-                            padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
-                            background: activeCategory === "all" ? accent : c.inputBg,
-                            border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
-                            color: activeCategory === "all" ? c.btnOnDark : c.textSub,
-                            fontSize: 11, fontWeight: 500, transition: "all 0.2s"
-                          }}
-                        >{t.allCategories}</div>
-                        {usedCats.map(cat => (
-                          <div
-                            key={cat.id}
-                            onClick={() => setActiveCategory(cat.id)}
-                            style={{
-                              padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
-                              background: activeCategory === cat.id ? accent : c.inputBg,
-                              border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
-                              color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
-                              fontSize: 11, fontWeight: 500, transition: "all 0.2s"
-                            }}
-                          >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
-                        ))}
-                      </div>
-                    ); })()}
+                    {/* Category tabs — scrollable with arrows for long lists */}
+                    {(() => {
+                      const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
+                      if (usedCats.length === 0) return null;
+                      const scrollRef = { current: null };
+                      const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 180, behavior: "smooth" }); };
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                          <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                          </button>
+                          <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                            <div
+                              onClick={() => setActiveCategory("all")}
+                              style={{
+                                padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                                background: activeCategory === "all" ? accent : c.inputBg,
+                                border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                                color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                                fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                              }}
+                            >{t.allCategories}</div>
+                            {usedCats.map(cat => (
+                              <div
+                                key={cat.id}
+                                onClick={() => setActiveCategory(cat.id)}
+                                style={{
+                                  padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                                  background: activeCategory === cat.id ? accent : c.inputBg,
+                                  border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                                  color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
+                                  fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                                }}
+                              >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                            ))}
+                          </div>
+                          <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Selected services counter */}
                     {selectedServices.length > 0 && (
