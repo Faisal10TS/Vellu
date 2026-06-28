@@ -39,6 +39,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met het Professional plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen?", "Ja, automatisch. Bevestiging bij het boeken, herinnering 24 uur van tevoren, en een follow-up na het bezoek voor een review."],
     ["Hoe annuleren klanten?", "Via de annuleringslink in hun bevestigingsmail. Jij bepaalt tot wanneer ze kunnen annuleren."],
+    ["Hoe verschilt Vellu van Treatwell of Salonized?", "Treatwell rekent 5–10% commissie per boeking — bij 50 boekingen á €45 betaal je al snel €100–€225 per maand. Vellu is een vast tarief vanaf €19/maand, 0% commissie. Daarnaast krijg je je eigen merk-pagina (vellu.cc/jouw-naam) in plaats van een profiel in hun zoekplatform; jouw klanten blijven jouw klanten."],
+    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV/Excel) uit Treatwell, Salonized, Acuity of een ander systeem? Stuur die naar ons via Contact, we helpen je gratis met de migratie zodat je niets verliest."],
   ] : [
     ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
     ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
@@ -48,6 +50,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Can my staff manage their own agenda?", "Yes! With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients receive reminders?", "Yes, automatically. Confirmation when booking, reminder 24 hours before, and a follow-up after the visit for a review."],
     ["How do clients cancel?", "Via the cancellation link in their confirmation email. You decide the cancellation deadline."],
+    ["How is Vellu different from Treatwell or Salonized?", "Treatwell charges 5–10% commission per booking — at 50 bookings of €45 that quickly adds up to €100–€225/month. Vellu is a flat fee from €19/month, 0% commission. You also get your own branded page (vellu.cc/your-name) instead of a profile in their marketplace; your clients stay your clients."],
+    ["Can I bring my clients from another system?", "Yes. If you have an export (CSV/Excel) from Treatwell, Salonized, Acuity or any other system, send it to us via Contact and we'll help you migrate for free so nothing gets lost."],
   ];
 
   return (
@@ -68,6 +72,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px clamp(16px, 4vw, 32px)", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              className="btn-ghost"
+              onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ fontSize: 10, padding: "8px 10px", whiteSpace: "nowrap", color: c.textMuted, borderColor: "transparent", display: "none" }}
+              data-show-on-desktop
+            >
+              {t.findSalonNav}
+            </button>
             <ThemeToggle />
             <LangToggle lang={lang} setLang={setLang} />
             <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 12px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
@@ -75,6 +87,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </button>
           </div>
         </nav>
+        <style>{`@media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }`}</style>
 
         {/* ─── HERO ─── */}
         <div style={{ padding: "clamp(32px, 8vw, 80px) 24px 40px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
@@ -117,20 +130,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ─── SEARCH BOX ─── */}
+        {/* ─── SAVINGS CALCULATOR ───
+            Concrete €€ saved vs Treatwell — sliders feel more interactive than
+            a static comparison block and force the visitor to engage with the
+            number, which is the real selling point of the 0% commission model. */}
         <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
-          <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "28px 28px", maxWidth: 440, margin: "0 auto" }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
-              {t.searchLabel}
+          <div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "32px clamp(20px, 4vw, 36px)" }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 300, marginBottom: 6 }}>{t.calcTitle}</h2>
+              <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.55, maxWidth: 460, margin: "0 auto" }}>{t.calcSub}</div>
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1, position: "relative" }}>
-                <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
-                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 85, borderRadius: 12 }} />
-              </div>
-              <button className="btn-primary" style={{ width: "auto", padding: "14px 24px", flexShrink: 0 }} onClick={() => goToSlug(slugInput)}>→</button>
-            </div>
+            <SavingsCalculator lang={lang} t={t} c={c} />
           </div>
         </div>
 
@@ -284,8 +294,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                       €{displayPrice}<span style={{ fontSize: 16, color: c.textMuted }}>{displaySuffix}</span>
                     </div>
                     {billingCycle === "yearly" && (
-                      <div style={{ fontSize: 11, color: ACCENT, marginTop: 4, fontWeight: 500 }}>
-                        {t.twoMonthsFree}
+                      <div style={{ fontSize: 11, color: c.textSub, marginTop: 4, fontWeight: 500 }}>
+                        {t.yearlyEquivalent.replace("{m}", (yearlyTotal / 12).toFixed(2).replace(".", ","))} · <span style={{ color: ACCENT }}>{t.twoMonthsFree}</span>
                       </div>
                     )}
                   </div>
@@ -345,8 +355,33 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
+        {/* ─── FIND-A-SALON (for clients who landed at the bare domain) ─── */}
+        <div id="find-salon" style={{ padding: "0 24px 40px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 520, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: "22px 24px" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t.findSalonTitle}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>{t.findSalonSub}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1, position: "relative" }}>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 76, borderRadius: 10, fontSize: 12 }} />
+              </div>
+              <button className="btn-primary" style={{ width: "auto", padding: "12px 20px", flexShrink: 0 }} onClick={() => goToSlug(slugInput)}>→</button>
+            </div>
+          </div>
+        </div>
+
         {/* Footer */}
-        <footer style={{ padding: "24px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
+        <footer style={{ padding: "24px 32px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
+          <div style={{ fontSize: 10, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", marginBottom: 12, letterSpacing: "0.04em" }}>
+            <span>Mirah Ventures</span>
+            <span>·</span>
+            <span>KVK 42045867</span>
+            <span>·</span>
+            <span>BTW NL005453873B29</span>
+            <span>·</span>
+            <span>{t.trustOrigin} 🇳🇱</span>
+          </div>
           <div style={{ fontSize: 11, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
             <span>© {new Date().getFullYear()} vellu</span>
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Privacy</a>
@@ -355,8 +390,106 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
           </div>
         </footer>
+
+        {/* Sticky bottom-right CTA pill — appears after scrolling past hero so
+            the conversion ask is one tap away regardless of how far down the
+            page they've scrolled. */}
+        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} />
       </div>
     </Layout>
+  );
+}
+
+// Renders a floating "Start trial" pill bottom-right once the visitor has
+// scrolled past the hero. Hidden while in the hero so it doesn't compete
+// with the primary CTA there.
+function StickyStartPill({ onClick, label }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 600);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      style={{
+        position: "fixed", right: 20, bottom: 20, zIndex: 50,
+        padding: "12px 22px", borderRadius: 100, border: "none",
+        background: ACCENT, color: "#fff",
+        fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+        cursor: "pointer",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(20px)",
+        pointerEvents: visible ? "auto" : "none",
+        transition: "opacity 0.25s, transform 0.25s",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Interactive bookings × avg-price calculator that contrasts a fixed Vellu
+// fee against an approximate Treatwell commission. Kept intentionally simple
+// (two sliders, three result lines) so the takeaway lands at a glance.
+function SavingsCalculator({ lang, t, c }) {
+  const [bookings, setBookings] = useState(50);
+  const [avgPrice, setAvgPrice] = useState(45);
+  const revenue = bookings * avgPrice;
+  const treatwellMonthly = revenue * 0.08;
+  const velluMonthly = 19;
+  const savingsYear = Math.max(0, (treatwellMonthly - velluMonthly) * 12);
+  const fmt = (n) => "€" + Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
+  const slider = {
+    width: "100%", appearance: "none", WebkitAppearance: "none",
+    height: 4, borderRadius: 100, background: c.border, outline: "none", cursor: "pointer",
+  };
+  return (
+    <div>
+      <style>{`
+        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+      `}</style>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 22 }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
+            <span>{t.calcBookings}</span><span style={{ color: ACCENT, fontWeight: 600 }}>{bookings}</span>
+          </div>
+          <input type="range" min={5} max={300} step={5} value={bookings} onChange={e => setBookings(parseInt(e.target.value))} style={slider} />
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
+            <span>{t.calcAvgPrice}</span><span style={{ color: ACCENT, fontWeight: 600 }}>€{avgPrice}</span>
+          </div>
+          <input type="range" min={10} max={200} step={5} value={avgPrice} onChange={e => setAvgPrice(parseInt(e.target.value))} style={slider} />
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 18px", background: c.bg, borderRadius: 14, marginBottom: 16 }}>
+        <Row label={t.calcRevenue} value={fmt(revenue)} c={c} />
+        <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}/mo`} c={c} negative />
+        <Row label={t.calcVelluCost} value={`− €${velluMonthly}/mo`} c={c} negative />
+      </div>
+      <div style={{ textAlign: "center", padding: "18px 18px", background: `${ACCENT}10`, border: `1px solid ${ACCENT}33`, borderRadius: 14 }}>
+        <div style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{t.calcSavingsYear}</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 42, fontWeight: 300, color: ACCENT, lineHeight: 1.1 }}>
+          {fmt(savingsYear)}
+        </div>
+      </div>
+      <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>{t.calcFootnote}</div>
+    </div>
+  );
+}
+
+function Row({ label, value, c, negative }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
+      <span style={{ color: c.textSub }}>{label}</span>
+      <span style={{ color: negative ? c.textSub : c.text, fontWeight: 600, fontFamily: "'Cormorant Garamond',serif", fontSize: 16 }}>{value}</span>
+    </div>
   );
 }
 
