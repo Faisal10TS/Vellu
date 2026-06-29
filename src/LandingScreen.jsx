@@ -384,8 +384,6 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <span>KVK 42045867</span>
             <span>·</span>
             <span>BTW NL005453873B29</span>
-            <span>·</span>
-            <span>{t.trustOrigin} 🇳🇱</span>
           </div>
           <div style={{ fontSize: 11, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
             <span>© {new Date().getFullYear()} vellu</span>

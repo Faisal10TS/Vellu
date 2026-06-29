@@ -2349,6 +2349,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
+  // Inline edit-appt modal: owner override for date, time, price, duration —
+  // skips the smart-slot validation that Verplaats uses, since the owner is
+  // intentionally writing values that may not fit normal availability.
+  const [editingAppt, setEditingAppt] = useState(null);
+  const [editApptForm, setEditApptForm] = useState({ date: "", time: "", price: "", duration: "" });
+  const [editApptSaving, setEditApptSaving] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
   // check runs debounced; save is a single atomic UPDATE that also handles
@@ -2605,6 +2611,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
     } finally { setProcessingApptId(null); }
   };
+
+  // Open the inline edit modal for an existing appointment. Pre-fills with
+  // the current row's date/time/price/duration so the owner can override any
+  // subset without re-typing the rest.
+  const openEditAppt = (a) => {
+    setEditingAppt(a);
+    setEditApptForm({
+      date: a.date || "",
+      time: (a.time || "").slice(0, 5),
+      price: a.service_price != null ? String(a.service_price) : "",
+      duration: a.service_duration != null ? String(a.service_duration) : "",
+    });
+  };
+
+  const saveEditAppt = async () => {
+    if (!editingAppt || editApptSaving) return;
+    const priceNum = parseFloat(editApptForm.price);
+    const durationNum = parseInt(editApptForm.duration);
+    if (!editApptForm.date) { toast.show(lang === "nl" ? "Datum is verplicht" : "Date is required", "error"); return; }
+    if (!editApptForm.time) { toast.show(lang === "nl" ? "Tijd is verplicht" : "Time is required", "error"); return; }
+    if (!Number.isFinite(priceNum) || priceNum < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
+    if (!Number.isFinite(durationNum) || durationNum < 5) { toast.show(lang === "nl" ? "Ongeldige duur" : "Invalid duration", "error"); return; }
+    setEditApptSaving(true);
+    const payload = {
+      date: editApptForm.date,
+      time: editApptForm.time,
+      service_price: priceNum,
+      service_duration: durationNum,
+    };
+    const { error } = await supabase.from("appointments").update(payload).eq("id", editingAppt.id);
+    setEditApptSaving(false);
+    if (error) {
+      toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
+      return;
+    }
+    update(d => { d.appointments = d.appointments.map(x => x.id === editingAppt.id ? { ...x, ...payload } : x); return d; });
+    setEditingAppt(null);
+    toast.show(lang === "nl" ? "Afspraak bijgewerkt" : "Appointment updated");
+  };
+
   const sendInvoice = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -2871,11 +2917,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       )}
       {a.status === "confirmed" && (
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => setRescheduling(a)}>{lang === "nl" ? "Verplaats" : "Reschedule"}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
         </div>
+      )}
+      {a.status === "completed" && (
+        <button className="btn-ghost" style={{ fontSize:10, padding: "6px 14px", marginTop: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Prijs of datum aanpassen (bv. correctie)" : "Edit price or date (e.g. correction)"}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
       )}
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
@@ -2970,6 +3020,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           onClose={() => setQrOpen(false)}
         />
       )}
+      {editingAppt && createPortal((
+        <div onClick={() => !editApptSaving && setEditingAppt(null)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", color: c.text }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Afspraak bewerken" : "Edit appointment"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+              {editingAppt.client_name} · {editingAppt.service_name}
+            </div>
+            {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8 }}>
+                <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label><input className="input-field" type="date" value={editApptForm.date} onChange={(e) => setEditApptForm((f) => ({ ...f, date: e.target.value }))} style={{ width: "100%" }} /></div>
+                <div><label style={lbl}>{lang === "nl" ? "Tijd" : "Time"}</label><input className="input-field" type="time" value={editApptForm.time} onChange={(e) => setEditApptForm((f) => ({ ...f, time: e.target.value }))} style={{ width: "100%" }} /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={{ width: "100%" }} /></div>
+                <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" step="5" min="5" value={editApptForm.duration} onChange={(e) => setEditApptForm((f) => ({ ...f, duration: e.target.value }))} style={{ width: "100%" }} /></div>
+              </div>
+            </div>
+            ); })()}
+            <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+              {lang === "nl"
+                ? "Let op: dit is een directe override. Beschikbaarheid van staff wordt niet automatisch gecontroleerd. Voor een normale verplaatsing met slot-check gebruik je 'Verplaats'."
+                : "Note: this is a direct override. Staff availability is not checked. Use 'Reschedule' for a slot-validated move."}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" disabled={editApptSaving} onClick={saveEditAppt} style={{ flex: 1 }}>
+                {editApptSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Opslaan" : "Save")}
+              </button>
+              <button className="btn-ghost" disabled={editApptSaving} onClick={() => setEditingAppt(null)} style={{ padding: "0 18px" }}>
+                {lang === "nl" ? "Annuleer" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
       {rescheduling && (
         <RescheduleModal
           appt={rescheduling}
