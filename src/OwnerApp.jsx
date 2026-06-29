@@ -2612,6 +2612,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     } finally { setProcessingApptId(null); }
   };
 
+  // Hard-delete an appointment. Used by the trash button on the appt card.
+  // Warning copy adapts to the appointment's state so the owner isn't
+  // surprised when removing a completed/invoiced one (those carry an invoice
+  // number that gets a gap in the sequence — usually fine, accountants accept
+  // it, but worth flagging).
+  const deleteAppt = async (a) => {
+    if (processingApptId) return;
+    const isCompleted = a.status === "completed";
+    const baseMsg = lang === "nl"
+      ? "Afspraak definitief verwijderen?"
+      : "Permanently delete this appointment?";
+    const extra = isCompleted
+      ? (lang === "nl"
+          ? " De afspraak telt dan niet meer mee voor je omzet of klanthistorie."
+          : " It will no longer count toward your revenue or client history.")
+      : "";
+    if (!(await showConfirm(baseMsg + extra))) return;
+    setProcessingApptId(a.id);
+    try {
+      // Best-effort: drop the cancellation token first (FK guard would otherwise
+      // block the appointment delete). 404 from the token row is fine.
+      await supabase.from("cancellation_tokens").delete().eq("appointment_id", a.id);
+      const { error } = await supabase.from("appointments").delete().eq("id", a.id);
+      if (error) {
+        toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error");
+        return;
+      }
+      update(d => { d.appointments = d.appointments.filter(x => x.id !== a.id); return d; });
+      toast.show(lang === "nl" ? "Afspraak verwijderd" : "Appointment deleted");
+    } finally { setProcessingApptId(null); }
+  };
+
   // Open the inline edit modal for an existing appointment. Pre-fills with
   // the current row's date/time/price/duration so the owner can override any
   // subset without re-typing the rest.
@@ -2917,15 +2949,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       )}
       {a.status === "confirmed" && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => setRescheduling(a)}>{lang === "nl" ? "Verplaats" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+          <button aria-label={lang === "nl" ? "Verwijderen" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
+            <NavIcon name="xmark" size={11} color="currentColor" />
+          </button>
         </div>
       )}
       {a.status === "completed" && (
-        <button className="btn-ghost" style={{ fontSize:10, padding: "6px 14px", marginTop: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Prijs of datum aanpassen (bv. correctie)" : "Edit price or date (e.g. correction)"}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
+        <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
+          <button className="btn-ghost" style={{ flex: 1, fontSize:10, padding: "6px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Prijs of datum aanpassen (bv. correctie)" : "Edit price or date (e.g. correction)"}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
+          <button aria-label={lang === "nl" ? "Verwijderen" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
+            <NavIcon name="xmark" size={11} color="currentColor" />
+          </button>
+        </div>
+      )}
+      {(a.status === "cancelled" || a.status === "no_show") && (
+        <button className="btn-ghost" style={{ fontSize:10, padding: "6px 14px", marginTop: 6, color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
+          {lang === "nl" ? "Verwijderen" : "Delete"}
+        </button>
       )}
       {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
@@ -3298,50 +3343,88 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
                 });
                 const weekDaily = [];
+                const weekLabels = [];
+                const dayInitialsNL = ["Z", "M", "D", "W", "D", "V", "Z"];
+                const dayInitialsEN = ["S", "M", "T", "W", "T", "F", "S"];
+                const dayInitials = lang === "nl" ? dayInitialsNL : dayInitialsEN;
                 for (let i = 6; i >= 0; i--) {
                   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
                   weekDaily.push(revByDay[fmt(d)] || 0);
+                  weekLabels.push(dayInitials[d.getDay()]);
                 }
                 const monthDaily = [];
+                const monthLabels = [];
                 for (let i = 29; i >= 0; i--) {
                   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
                   monthDaily.push(revByDay[fmt(d)] || 0);
+                  // Sparse labels: show day-of-month on every ~5th column so
+                  // the strip reads like a calendar without crowding.
+                  monthLabels.push((29 - i) % 5 === 0 ? String(d.getDate()) : "");
                 }
-                const sparkline = (data, color) => {
-                  if (!data || data.length < 2) return null;
-                  const W = 200, H = 80, pad = 4;
+                // Bar chart used by the WEEK / MONTH KPI cards. Bars beat a
+                // smoothed curve for sparse daily-revenue data: an empty week
+                // with one €110 day reads as "spike + flat" instead of a
+                // misleading wave. Each bar carries a tiny x-axis tick label
+                // (first letter of the weekday for weeks, week number for the
+                // 30-day version) and the peak bar gets a value pill.
+                const sparkline = (data, color, opts) => {
+                  if (!data || data.length === 0) return null;
+                  const labels = (opts && opts.labels) || [];
+                  const padL = 0, padR = 0, padT = 14, padB = labels.length ? 14 : 4;
+                  const W = 220, H = 80;
+                  const innerW = W - padL - padR;
+                  const innerH = H - padT - padB;
                   const max = Math.max(...data, 1);
-                  const min = Math.min(...data);
-                  const range = max - min || 1;
-                  const pts = data.map((v, i) => {
-                    const x = pad + (i / (data.length - 1)) * (W - pad * 2);
-                    const y = pad + (H - pad * 2) - ((v - min) / range) * (H - pad * 2);
-                    return { x, y };
-                  });
-                  // Smooth bezier curve
-                  const linePath = pts.reduce((acc, p, i) => {
-                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-                    const prev = pts[i - 1];
-                    const cx1 = prev.x + (p.x - prev.x) / 2;
-                    const cy1 = prev.y;
-                    const cx2 = prev.x + (p.x - prev.x) / 2;
-                    const cy2 = p.y;
-                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-                  }, "");
-                  const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${H - pad} L${pts[0].x.toFixed(1)},${H - pad} Z`;
-                  const lastPt = pts[pts.length - 1];
-                  const gradId = "spark-" + color.replace(/[^a-z0-9]/gi, "") + "-" + data.length;
+                  const gap = data.length > 14 ? 1.5 : 3;
+                  const barW = Math.max(2, (innerW - gap * (data.length - 1)) / data.length);
+                  let peakIdx = 0;
+                  data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
+                  const peakVal = data[peakIdx];
+                  const fmt = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
                   return (
-                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
-                      <defs>
-                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-                          <stop offset="100%" stopColor={color} stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      <path d={areaPath} fill={`url(#${gradId})`} />
-                      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                      <circle cx={lastPt.x} cy={lastPt.y} r="3" fill={color} vectorEffect="non-scaling-stroke" />
+                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
+                      {/* Faint baseline so the chart reads as a floor + bars,
+                          not free-floating shapes. */}
+                      <line x1={padL} y1={padT + innerH + 0.5} x2={padL + innerW} y2={padT + innerH + 0.5} stroke={c.border} strokeWidth="0.5" />
+                      {data.map((v, i) => {
+                        const x = padL + i * (barW + gap);
+                        const h = v > 0 ? Math.max(1, (v / max) * innerH) : 0;
+                        const y = padT + innerH - h;
+                        const isPeak = peakVal > 0 && i === peakIdx;
+                        return (
+                          <g key={i}>
+                            <rect
+                              x={x} y={y} width={barW} height={Math.max(0.5, h)}
+                              rx={Math.min(1.5, barW / 2)}
+                              fill={isPeak ? color : `${color}55`}
+                            />
+                          </g>
+                        );
+                      })}
+                      {/* Peak value label sits just above the tallest bar so
+                          the owner can read the magnitude without hovering. */}
+                      {peakVal > 0 && (() => {
+                        const x = padL + peakIdx * (barW + gap) + barW / 2;
+                        const y = padT + innerH - (peakVal / max) * innerH - 3;
+                        const label = "€" + fmt(peakVal);
+                        const labelW = Math.max(22, label.length * 5 + 8);
+                        const lx = Math.max(0, Math.min(W - labelW, x - labelW / 2));
+                        return (
+                          <g>
+                            <rect x={lx} y={y - 11} width={labelW} height={12} rx={6} fill={c.bgCard} stroke={`${color}55`} strokeWidth="0.5" />
+                            <text x={lx + labelW / 2} y={y - 2.5} textAnchor="middle" fontSize="8" fontFamily="'Jost', sans-serif" fontWeight="600" fill={color}>{label}</text>
+                          </g>
+                        );
+                      })()}
+                      {/* X-axis tick labels (e.g. M D W D V Z Z) */}
+                      {labels.length > 0 && labels.map((lab, i) => {
+                        const x = padL + i * (barW + gap) + barW / 2;
+                        return (
+                          <text key={i} x={x} y={H - 2} textAnchor="middle" fontSize="7" fontFamily="'Jost', sans-serif" fill={c.textMuted} letterSpacing="0.04em">
+                            {lab}
+                          </text>
+                        );
+                      })}
                     </svg>
                   );
                 };
@@ -3409,8 +3492,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                           )}
                         </div>
-                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
-                          {sparkline(weekDaily, accent)}
+                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
+                          {sparkline(weekDaily, accent, { labels: weekLabels })}
                         </div>
                       </div>
 
@@ -3421,8 +3504,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
                         </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
-                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
-                          {sparkline(monthDaily, accent)}
+                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
+                          {sparkline(monthDaily, accent, { labels: monthLabels })}
                         </div>
                       </div>
 
