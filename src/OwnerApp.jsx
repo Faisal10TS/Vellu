@@ -1526,6 +1526,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const fileInputRef = useRef(null);
   const [importPreview, setImportPreview] = useState(null); // { rows, skipped, fileName } | null
   const [importing, setImporting] = useState(false);
+  // Edit/delete flow on an individual client.
+  const [editing, setEditing] = useState(null); // the client currently being edited
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1540,7 +1545,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           .order("date", { ascending: false }),
         supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes")
+          .select("id, name, email, phone, notes, hidden")
           .eq("owner_id", ownerId),
       ]);
       if (cancelled) return;
@@ -1560,26 +1565,33 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
         if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
       }
       // Merge manual clients: enrich an existing entry by email, otherwise add
-      // a contact-only entry (no appointment history yet).
+      // a contact-only entry. Manual values WIN over appointment-derived data
+      // for non-empty fields — the owner explicitly edited them, so they
+      // represent the latest intent. The `hidden` flag is carried through so
+      // the display can soft-hide clients whose appointments we can't remove.
       const extra = [];
       for (const m of manual || []) {
         const email = String(m.email || "").toLowerCase();
         const existing = email ? byEmail.get(email) : null;
         if (existing) {
-          if (!existing.phone && m.phone) existing.phone = m.phone;
-          if (!existing.notes && m.notes) existing.notes = m.notes;
+          if (m.name && m.name.trim()) existing.name = m.name;
+          if (m.phone) existing.phone = m.phone;
+          if (m.notes) existing.notes = m.notes;
           existing.manualId = m.id;
+          existing.hidden = !!m.hidden;
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", manualId: m.id, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", manualId: m.id, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
         }
       }
-      const list = [...Array.from(byEmail.values()), ...extra].map((cl) => {
-        const upcoming = cl.appts
-          .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
-          .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
-        cl.next = upcoming[0] || null;
-        return cl;
-      });
+      const list = [...Array.from(byEmail.values()), ...extra]
+        .filter((cl) => !cl.hidden)
+        .map((cl) => {
+          const upcoming = cl.appts
+            .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
+            .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
+          cl.next = upcoming[0] || null;
+          return cl;
+        });
       list.sort((a, b) => a.name.localeCompare(b.name));
       setClients(list);
       setLoading(false);
@@ -1603,6 +1615,89 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     toast.show(lang === "nl" ? "Klant toegevoegd" : "Customer added");
     setAddForm({ name: "", email: "", phone: "", notes: "" });
     setAddOpen(false);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const openEdit = (cl) => {
+    setEditing(cl);
+    setEditForm({
+      name: cl.name === cl.email ? "" : (cl.name || ""),
+      email: cl.email || "",
+      phone: cl.phone || "",
+      notes: cl.notes || "",
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const name = editForm.name.trim();
+    if (!name) {
+      toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error");
+      return;
+    }
+    setEditSaving(true);
+    const payload = {
+      name,
+      email: editForm.email.trim() || null,
+      phone: editForm.phone.trim() || null,
+      notes: editForm.notes.trim() || null,
+    };
+    // Update existing manual_clients row if one already backs this client;
+    // otherwise create one so future loads pick the override up.
+    let error;
+    if (editing.manualId) {
+      ({ error } = await supabase.from("manual_clients").update(payload).eq("id", editing.manualId).eq("owner_id", ownerId));
+    } else {
+      ({ error } = await supabase.from("manual_clients").insert({ owner_id: ownerId, ...payload }));
+    }
+    setEditSaving(false);
+    if (error) {
+      toast.show(lang === "nl" ? "Opslaan mislukt" : "Failed to save", "error");
+      return;
+    }
+    toast.show(lang === "nl" ? "Wijzigingen opgeslagen" : "Changes saved");
+    setEditing(null);
+    setSelected(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const deleteClient = async () => {
+    if (!editing) return;
+    const hasHistory = (editing.appts || []).length > 0;
+    const confirmMsg = hasHistory
+      ? (lang === "nl"
+          ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst.`
+          : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list.`)
+      : (lang === "nl" ? "Klant definitief verwijderen?" : "Permanently delete this client?");
+    if (!window.confirm(confirmMsg)) return;
+    setDeleting(true);
+    let error;
+    if (hasHistory) {
+      // Soft-hide via manual_clients. Insert a shadow row if one doesn't
+      // exist yet — the merge logic checks the hidden flag on load.
+      if (editing.manualId) {
+        ({ error } = await supabase.from("manual_clients").update({ hidden: true }).eq("id", editing.manualId).eq("owner_id", ownerId));
+      } else {
+        ({ error } = await supabase.from("manual_clients").insert({
+          owner_id: ownerId,
+          name: editing.name || editing.email || "—",
+          email: editing.email || null,
+          phone: editing.phone || null,
+          notes: editing.notes || null,
+          hidden: true,
+        }));
+      }
+    } else if (editing.manualId) {
+      ({ error } = await supabase.from("manual_clients").delete().eq("id", editing.manualId).eq("owner_id", ownerId));
+    }
+    setDeleting(false);
+    if (error) {
+      toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error");
+      return;
+    }
+    toast.show(lang === "nl" ? "Klant verwijderd" : "Customer deleted");
+    setEditing(null);
+    setSelected(null);
     setRefreshKey((k) => k + 1);
   };
 
@@ -1769,6 +1864,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400 }}>{selected.name}</div>
               </div>
+              <button
+                onClick={() => openEdit(selected)}
+                aria-label={lang === "nl" ? "Bewerk klant" : "Edit customer"}
+                title={lang === "nl" ? "Bewerk" : "Edit"}
+                style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <NavIcon name="edit" size={14} color="currentColor" />
+              </button>
               <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 16, lineHeight: 1 }} onClick={() => setSelected(null)}>×</button>
             </div>
 
@@ -1904,6 +2007,44 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           </div>
         </div>
       )}
+
+      {/* Edit client modal — owner can correct a name, email or phone, or
+          delete the client entirely. Pure-manual clients are hard-deleted;
+          clients with appointment history are soft-hidden via the manual_clients
+          `hidden` flag so their appointment history is preserved. */}
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !editSaving && !deleting && setEditing(null)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant bewerken" : "Edit customer"}</div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+              {(editing.appts || []).length > 0
+                ? (lang === "nl" ? "Wijzigingen overschrijven de gegevens uit de afspraakhistorie." : "Changes override the data from appointment history.")
+                : (lang === "nl" ? "Pas de gegevens van deze klant aan." : "Update this customer's details.")}
+            </div>
+            {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              <div><label style={lbl}>{lang === "nl" ? "Naam" : "Name"}</label><input className="input-field" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : "Full name"} style={{ width: "100%" }} autoFocus /></div>
+              <div><label style={lbl}>{lang === "nl" ? "Telefoon" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "Notitie" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
+            </div>
+            ); })()}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" disabled={editSaving || deleting || !editForm.name.trim()} onClick={saveEdit} style={{ flex: 1 }}>{editSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Opslaan" : "Save")}</button>
+              <button className="btn-ghost" disabled={editSaving || deleting} onClick={() => setEditing(null)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
+            </div>
+            <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 18, paddingTop: 14 }}>
+              <button
+                disabled={editSaving || deleting}
+                onClick={deleteClient}
+                style={{ width: "100%", padding: "10px 16px", borderRadius: 12, border: `1px solid ${c.danger}33`, background: `${c.danger}10`, color: c.danger, cursor: editSaving || deleting ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, opacity: editSaving || deleting ? 0.6 : 1 }}
+              >
+                {deleting ? (lang === "nl" ? "Verwijderen…" : "Deleting…") : (lang === "nl" ? "Klant verwijderen" : "Delete customer")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1971,7 +2112,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Manual appointment
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
-  const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent"
+  const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent" | "hidden"
   const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [analyticsReviewsExpanded, setAnalyticsReviewsExpanded] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
@@ -2455,6 +2596,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
       toast.show(t.invoiceSent);
     } finally { setProcessingApptId(null); }
+  };
+
+  // Set invoice_view_state for a single appointment. Used by the Facturen view
+  // hide/delete actions — the underlying appointment row is left alone so
+  // agenda + customer history stay intact, only the Facturen view changes.
+  const setInvoiceViewState = async (apptId, state /* "hidden" | "deleted" | null */) => {
+    const { error } = await supabase
+      .from("appointments")
+      .update({ invoice_view_state: state })
+      .eq("id", apptId);
+    if (error) {
+      toast.show(lang === "nl" ? "Kon factuur niet bijwerken" : "Could not update invoice", "error");
+      return;
+    }
+    update(d => {
+      d.appointments = d.appointments.map(a => a.id === apptId ? { ...a, invoice_view_state: state } : a);
+      return d;
+    });
+    if (state === "hidden") toast.show(lang === "nl" ? "Factuur verborgen" : "Invoice hidden");
+    else if (state === "deleted") toast.show(lang === "nl" ? "Factuur verwijderd" : "Invoice deleted");
+    else toast.show(lang === "nl" ? "Factuur teruggezet" : "Invoice restored");
   };
 
   const addService = async () => {
@@ -3745,11 +3907,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* FACTUREN */}
           {view === "facturen" && (() => {
-            const unsent = completedAppts.filter(a => !a.invoice_sent);
-            const sent = completedAppts.filter(a => a.invoice_sent);
+            // Operational counts/filters are scoped to non-hidden, non-deleted
+            // invoices so the stat cards line up with the rows the owner sees
+            // in the Alles/Open/Verstuurd tabs. The Verborgen tab gets its own
+            // bucket from `hiddenAppts`.
+            const visibleCompleted = completedAppts.filter(a => a.invoice_view_state !== "hidden" && a.invoice_view_state !== "deleted");
+            const hiddenAppts = completedAppts.filter(a => a.invoice_view_state === "hidden");
+            const unsent = visibleCompleted.filter(a => !a.invoice_sent);
+            const sent = visibleCompleted.filter(a => a.invoice_sent);
             const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-            const thisMonthAppts = completedAppts.filter(a => a.date?.startsWith(thisMonthPrefix));
+            const thisMonthAppts = visibleCompleted.filter(a => a.date?.startsWith(thisMonthPrefix));
             const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
 
             const formatDate = (ds) => {
@@ -3769,12 +3937,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
               {completedAppts.length > 0 && (<>
-                {/* Stat cards */}
+                {/* Stat cards — scoped to visible invoices so the percentages
+                    match the rows the owner sees in the tabs below. Hidden
+                    invoices live in their own bucket; deleted ones are excluded
+                    everywhere. */}
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{visibleCompleted.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
@@ -3789,7 +3960,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%</div>
                   </div>
                 </div>
 
@@ -3820,11 +3991,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </button>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}`, flexWrap: "wrap" }}>
                     {[
-                      ["all", lang === "nl" ? "Alles" : "All", completedAppts.length],
+                      ["all", lang === "nl" ? "Alles" : "All", visibleCompleted.length],
                       ["unsent", lang === "nl" ? "Open" : "Unsent", unsent.length],
-                      ["sent", lang === "nl" ? "Verstuurd" : "Sent", sent.length]
+                      ["sent", lang === "nl" ? "Verstuurd" : "Sent", sent.length],
+                      ["hidden", lang === "nl" ? "Verborgen" : "Hidden", hiddenAppts.length],
                     ].map(([key, label, count]) => (
                       <div key={key} onClick={() => setInvoiceFilter(key)} style={{
                         padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -3844,7 +4016,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Invoice list */}
               {(() => {
                 const searchLower = invoiceSearch.toLowerCase();
-                const filtered = completedAppts.filter(a => {
+                // Source bucket per tab: the 3 operational tabs run on visible
+                // invoices only, "hidden" gets its own bucket. Deleted invoices
+                // never appear here regardless of tab.
+                const source = invoiceFilter === "hidden" ? hiddenAppts : visibleCompleted;
+                const filtered = source.filter(a => {
                   if (invoiceFilter === "sent" && !a.invoice_sent) return false;
                   if (invoiceFilter === "unsent" && a.invoice_sent) return false;
                   if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
@@ -3910,22 +4086,64 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
 
                         {/* Action */}
-                        <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
-                          {a.invoice_sent ? (
-                            <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                              <NavIcon name="check" size={10} color={c.success} /> {t.sent}
-                            </span>
+                        <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+                          {a.invoice_view_state === "hidden" ? (
+                            <>
+                              <span style={{ fontSize: 10, color: c.textMuted, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: c.inputBg, border: `1px solid ${c.inputBorder}`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                <NavIcon name="eye" size={10} color="currentColor" /> {lang === "nl" ? "Verborgen" : "Hidden"}
+                              </span>
+                              <button
+                                className="btn-ghost"
+                                style={{ padding: "6px 10px", fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5 }}
+                                onClick={() => setInvoiceViewState(a.id, null)}
+                                title={lang === "nl" ? "Terugzetten" : "Restore"}
+                              >
+                                {lang === "nl" ? "Terugzetten" : "Restore"}
+                              </button>
+                              <button
+                                aria-label={lang === "nl" ? "Definitief verwijderen" : "Delete permanently"}
+                                onClick={async () => { if (await showConfirm(lang === "nl" ? "Factuur definitief verwijderen? (afspraak blijft bestaan)" : "Delete invoice permanently? (the appointment itself stays)")) setInvoiceViewState(a.id, "deleted"); }}
+                                style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                title={lang === "nl" ? "Definitief verwijderen" : "Delete permanently"}
+                              >
+                                <NavIcon name="xmark" size={11} color="currentColor" />
+                              </button>
+                            </>
                           ) : (
-                            <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
-                              {isSending ? (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
-                                  <path d="M21 12a9 9 0 11-6.219-8.56" />
-                                </svg>
+                            <>
+                              {a.invoice_sent ? (
+                                <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                  <NavIcon name="check" size={10} color={c.success} /> {t.sent}
+                                </span>
                               ) : (
-                                <NavIcon name="send" size={11} color="currentColor" />
+                                <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
+                                  {isSending ? (
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
+                                      <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                    </svg>
+                                  ) : (
+                                    <NavIcon name="send" size={11} color="currentColor" />
+                                  )}
+                                  {isSending ? "..." : t.send}
+                                </button>
                               )}
-                              {isSending ? "..." : t.send}
-                            </button>
+                              <button
+                                aria-label={lang === "nl" ? "Verbergen" : "Hide"}
+                                onClick={() => setInvoiceViewState(a.id, "hidden")}
+                                style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                title={lang === "nl" ? "Verbergen" : "Hide"}
+                              >
+                                <NavIcon name="eye" size={11} color="currentColor" />
+                              </button>
+                              <button
+                                aria-label={lang === "nl" ? "Verwijderen" : "Delete"}
+                                onClick={async () => { if (await showConfirm(lang === "nl" ? "Factuur verwijderen? De afspraak zelf blijft in je agenda en klanthistorie." : "Delete invoice? The appointment itself stays in your agenda and customer history.")) setInvoiceViewState(a.id, "deleted"); }}
+                                style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                title={lang === "nl" ? "Verwijderen" : "Delete"}
+                              >
+                                <NavIcon name="xmark" size={11} color="currentColor" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
