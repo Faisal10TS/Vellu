@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 // Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
@@ -1855,8 +1856,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
         </div>
       )}
 
-      {/* Detail modal */}
-      {selected && (
+      {/* Detail modal — portal'd to document.body so an ancestor with a
+          transform (the .fade-up container) doesn't scope our
+          position:fixed and push the modal off-center. */}
+      {selected && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setSelected(null)}>
           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
@@ -1931,10 +1934,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
             )}
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* Add customer modal */}
-      {addOpen && (
+      {addOpen && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !saving && setAddOpen(false)}>
           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant toevoegen" : "Add customer"}</div>
@@ -1953,12 +1956,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* CSV import preview — shows what we parsed before committing, so a
           wrong column mapping or unrelated file doesn't silently inflate the
           customer list. */}
-      {importPreview && (
+      {importPreview && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !importing && setImportPreview(null)}>
           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 560, width: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Import controleren" : "Review import"}</div>
@@ -2006,13 +2009,13 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* Edit client modal — owner can correct a name, email or phone, or
           delete the client entirely. Pure-manual clients are hard-deleted;
           clients with appointment history are soft-hidden via the manual_clients
           `hidden` flag so their appointment history is preserved. */}
-      {editing && (
+      {editing && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !editSaving && !deleting && setEditing(null)}>
           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant bewerken" : "Edit customer"}</div>
@@ -2044,7 +2047,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }
