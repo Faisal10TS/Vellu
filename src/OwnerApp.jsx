@@ -4410,45 +4410,71 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   if (a.status !== "completed") return;
                   revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
                 });
+                const dayInitialsNL_an = ["Z", "M", "D", "W", "D", "V", "Z"];
+                const dayInitialsEN_an = ["S", "M", "T", "W", "T", "F", "S"];
+                const dayInitials_an = lang === "nl" ? dayInitialsNL_an : dayInitialsEN_an;
                 const weekDaily = [];
-                for (let i = 6; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); weekDaily.push(revByDay[fmt(d)] || 0); }
+                const weekLabels = [];
+                for (let i = 6; i >= 0; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                  weekDaily.push(revByDay[fmt(d)] || 0);
+                  weekLabels.push(dayInitials_an[d.getDay()]);
+                }
                 const monthDaily = [];
-                for (let i = 29; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); monthDaily.push(revByDay[fmt(d)] || 0); }
+                const monthLabels = [];
+                for (let i = 29; i >= 0; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                  monthDaily.push(revByDay[fmt(d)] || 0);
+                  monthLabels.push((29 - i) % 5 === 0 ? String(d.getDate()) : "");
+                }
 
-                const sparkline = (data, color) => {
-                  if (!data || data.length < 2) return null;
-                  const W = 200, H = 80, pad = 4;
+                // Same bar chart shape as the dashboard sparkline — peak pill,
+                // muted non-peak bars, baseline + x-axis tick labels. Kept local
+                // to the Analytics view so the dashboard version can evolve
+                // independently if we want different sizing here later.
+                const sparkline = (data, color, opts) => {
+                  if (!data || data.length === 0) return null;
+                  const labels = (opts && opts.labels) || [];
+                  const padL = 0, padR = 0, padT = 14, padB = labels.length ? 14 : 4;
+                  const W = 220, H = 80;
+                  const innerW = W - padL - padR;
+                  const innerH = H - padT - padB;
                   const max = Math.max(...data, 1);
-                  const min = Math.min(...data);
-                  const range = max - min || 1;
-                  const pts = data.map((v, i) => {
-                    const x = pad + (i / (data.length - 1)) * (W - pad * 2);
-                    const y = pad + (H - pad * 2) - ((v - min) / range) * (H - pad * 2);
-                    return { x, y };
-                  });
-                  const linePath = pts.reduce((acc, p, i) => {
-                    if (i === 0) return `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-                    const prev = pts[i - 1];
-                    const cx1 = prev.x + (p.x - prev.x) / 2;
-                    const cy1 = prev.y;
-                    const cx2 = prev.x + (p.x - prev.x) / 2;
-                    const cy2 = p.y;
-                    return `${acc} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-                  }, "");
-                  const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${H - pad} L${pts[0].x.toFixed(1)},${H - pad} Z`;
-                  const lastPt = pts[pts.length - 1];
-                  const gradId = "anspark-" + color.replace(/[^a-z0-9]/gi, "") + "-" + data.length;
+                  const gap = data.length > 14 ? 1.5 : 3;
+                  const barW = Math.max(2, (innerW - gap * (data.length - 1)) / data.length);
+                  let peakIdx = 0;
+                  data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
+                  const peakVal = data[peakIdx];
+                  const fmtN = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
                   return (
-                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block" }}>
-                      <defs>
-                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-                          <stop offset="100%" stopColor={color} stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      <path d={areaPath} fill={`url(#${gradId})`} />
-                      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                      <circle cx={lastPt.x} cy={lastPt.y} r="3" fill={color} vectorEffect="non-scaling-stroke" />
+                    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
+                      <line x1={padL} y1={padT + innerH + 0.5} x2={padL + innerW} y2={padT + innerH + 0.5} stroke={c.border} strokeWidth="0.5" />
+                      {data.map((v, i) => {
+                        const x = padL + i * (barW + gap);
+                        const h = v > 0 ? Math.max(1, (v / max) * innerH) : 0;
+                        const y = padT + innerH - h;
+                        const isPeak = peakVal > 0 && i === peakIdx;
+                        return <rect key={i} x={x} y={y} width={barW} height={Math.max(0.5, h)} rx={Math.min(1.5, barW / 2)} fill={isPeak ? color : `${color}55`} />;
+                      })}
+                      {peakVal > 0 && (() => {
+                        const x = padL + peakIdx * (barW + gap) + barW / 2;
+                        const y = padT + innerH - (peakVal / max) * innerH - 3;
+                        const label = "€" + fmtN(peakVal);
+                        const labelW = Math.max(22, label.length * 5 + 8);
+                        const lx = Math.max(0, Math.min(W - labelW, x - labelW / 2));
+                        return (
+                          <g>
+                            <rect x={lx} y={y - 11} width={labelW} height={12} rx={6} fill={c.bgCard} stroke={`${color}55`} strokeWidth="0.5" />
+                            <text x={lx + labelW / 2} y={y - 2.5} textAnchor="middle" fontSize="8" fontFamily="'Jost', sans-serif" fontWeight="600" fill={color}>{label}</text>
+                          </g>
+                        );
+                      })()}
+                      {labels.length > 0 && labels.map((lab, i) => {
+                        const x = padL + i * (barW + gap) + barW / 2;
+                        return (
+                          <text key={i} x={x} y={H - 2} textAnchor="middle" fontSize="7" fontFamily="'Jost', sans-serif" fill={c.textMuted} letterSpacing="0.04em">{lab}</text>
+                        );
+                      })}
                     </svg>
                   );
                 };
@@ -4521,7 +4547,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                           )}
                         </div>
-                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>{sparkline(weekDaily, accent)}</div>
+                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>{sparkline(weekDaily, accent, { labels: weekLabels })}</div>
                       </div>
                       {/* Month */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
@@ -4530,7 +4556,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30d" : "30d"}</div>
                         </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
-                        <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>{sparkline(monthDaily, accent)}</div>
+                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div>
                       </div>
                       {/* Total appointments */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
