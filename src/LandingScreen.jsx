@@ -39,8 +39,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met het Professional plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen?", "Ja, automatisch. Bevestiging bij het boeken, herinnering 24 uur van tevoren, en een follow-up na het bezoek voor een review."],
     ["Hoe annuleren klanten?", "Via de annuleringslink in hun bevestigingsmail. Jij bepaalt tot wanneer ze kunnen annuleren."],
-    ["Hoe verschilt Vellu van Treatwell of Salonized?", "Treatwell rekent 5–10% commissie per boeking — bij 50 boekingen á €45 betaal je al snel €100–€225 per maand. Vellu is een vast tarief vanaf €19/maand, 0% commissie. Daarnaast krijg je je eigen merk-pagina (vellu.cc/jouw-naam) in plaats van een profiel in hun zoekplatform; jouw klanten blijven jouw klanten."],
-    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV/Excel) uit Treatwell, Salonized, Acuity of een ander systeem? Stuur die naar ons via Contact, we helpen je gratis met de migratie zodat je niets verliest."],
+    ["Hoe verschilt Vellu van andere booking platformen?", "De meeste booking platformen rekenen 5–10% commissie per boeking — bij 50 boekingen á €45 betaal je al snel €100–€225 per maand. Vellu is een vast tarief vanaf €19/maand, 0% commissie. Daarnaast krijg je je eigen merk-pagina (vellu.cc/jouw-naam) in plaats van een profiel in een zoekplatform; jouw klanten blijven jouw klanten."],
+    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV/Excel) van je huidige booking platform? Stuur die naar ons via Contact, we helpen je gratis met de migratie zodat je niets verliest."],
   ] : [
     ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
     ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
@@ -50,8 +50,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Can my staff manage their own agenda?", "Yes! With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients receive reminders?", "Yes, automatically. Confirmation when booking, reminder 24 hours before, and a follow-up after the visit for a review."],
     ["How do clients cancel?", "Via the cancellation link in their confirmation email. You decide the cancellation deadline."],
-    ["How is Vellu different from Treatwell or Salonized?", "Treatwell charges 5–10% commission per booking — at 50 bookings of €45 that quickly adds up to €100–€225/month. Vellu is a flat fee from €19/month, 0% commission. You also get your own branded page (vellu.cc/your-name) instead of a profile in their marketplace; your clients stay your clients."],
-    ["Can I bring my clients from another system?", "Yes. If you have an export (CSV/Excel) from Treatwell, Salonized, Acuity or any other system, send it to us via Contact and we'll help you migrate for free so nothing gets lost."],
+    ["How is Vellu different from other booking platforms?", "Most booking platforms charge 5–10% commission per booking — at 50 bookings of €45 that quickly adds up to €100–€225/month. Vellu is a flat fee from €19/month, 0% commission. You also get your own branded page (vellu.cc/your-name) instead of a profile in a marketplace; your clients stay your clients."],
+    ["Can I bring my clients from another system?", "Yes. If you have an export (CSV/Excel) from your current booking platform, send it to us via Contact and we'll help you migrate for free so nothing gets lost."],
   ];
 
   return (
@@ -88,6 +88,26 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </nav>
         <style>{`@media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }`}</style>
+
+        {/* ─── FIND-A-SALON (top of page, for clients who landed at the bare
+            domain — owner-acquisition page wraps around this for the rare
+            "I have a flyer with vellu.cc on it" visitor). */}
+        <div id="find-salon" style={{ padding: "8px 24px 0", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 520, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{t.findSalonTitle}</div>
+              <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>{t.findSalonSub}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flex: "1 1 240px" }}>
+              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px" }} />
+              </div>
+              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugInput)}>→</button>
+            </div>
+          </div>
+        </div>
 
         {/* ─── HERO ─── */}
         <div style={{ padding: "clamp(32px, 8vw, 80px) 24px 40px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
@@ -341,7 +361,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </div>
 
         {/* ─── FINAL CTA ─── */}
-        <div style={{ padding: "60px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
+        <div style={{ padding: "20px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: 600, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
               {t.ctaTitle}
@@ -352,22 +372,6 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => navigate("/owner")}>
               {t.startFree}
             </button>
-          </div>
-        </div>
-
-        {/* ─── FIND-A-SALON (for clients who landed at the bare domain) ─── */}
-        <div id="find-salon" style={{ padding: "0 24px 40px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 520, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: "22px 24px" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t.findSalonTitle}</div>
-            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>{t.findSalonSub}</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ flex: 1, position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
-                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 76, borderRadius: 10, fontSize: 12 }} />
-              </div>
-              <button className="btn-primary" style={{ width: "auto", padding: "12px 20px", flexShrink: 0 }} onClick={() => goToSlug(slugInput)}>→</button>
-            </div>
           </div>
         </div>
 
