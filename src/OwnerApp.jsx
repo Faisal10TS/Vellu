@@ -2143,6 +2143,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [billingProfile, setBillingProfile] = useState(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [upgradeConfirm, setUpgradeConfirm] = useState(false);
+  const [changingPlan, setChangingPlan] = useState(false);
   const [staffInvite, setStaffInvite] = useState({}); // { [staffId]: { email, password } }
   const [tempColor, setTempColor] = useState(null); // local color for smooth picker
   const colorDebounceRef = useRef(null);
@@ -2475,6 +2477,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setTimeout(() => { window.location.href = `/owner`; }, 500);
       toast.show(lang === "nl" ? "Salon-link bijgewerkt" : "Salon link updated");
     } finally { setSlugSaving(false); }
+  };
+
+  // Switch the owner from Starter to Professional (or vice versa) without
+  // bouncing through Mollie's hosted checkout. The change-plan edge function
+  // cancels the current Mollie subscription and creates a new one with the
+  // new amount, scheduled to start on the existing plan_expires_at — so the
+  // owner isn't double-charged and the new tier unlocks immediately.
+  const handleChangePlan = async (newPlan) => {
+    if (changingPlan) return;
+    setChangingPlan(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("change-plan", {
+        body: { plan: newPlan, billing_interval: salonData.billing_interval || "monthly" },
+      });
+      if (error || !data?.success) {
+        const code = data?.error || error?.message || "unknown";
+        toast.show(
+          lang === "nl"
+            ? `Wisselen mislukt: ${code}`
+            : `Plan change failed: ${code}`,
+          "error",
+        );
+        return;
+      }
+      update(d => { d.plan = newPlan; return d; });
+      setUpgradeConfirm(false);
+      toast.show(
+        lang === "nl"
+          ? "Abonnement gewijzigd. Nieuwe prijs gaat in op de volgende renewal."
+          : "Plan changed. New price applies from the next renewal.",
+      );
+    } catch (e) {
+      console.error("change-plan error:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally {
+      setChangingPlan(false);
+    }
   };
 
   // Drop handler for service reordering. Moves the item locally, then writes
@@ -4747,9 +4786,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                     )}
                     {salonData.plan === "starter" && (
-                      <button className="btn-ghost" style={{ marginTop: 12, fontSize: 10, color: accent, borderColor: `${accent}44` }}
-                        onClick={() => toast.show(lang === "nl" ? "Neem contact op via info@vellu.cc om te upgraden." : "Contact info@vellu.cc to upgrade.")}>
-                        {t.upgradePlan} → {t.planProfessional}
+                      <button
+                        className="btn-ghost"
+                        style={{ marginTop: 12, fontSize: 10, color: accent, borderColor: `${accent}44`, opacity: changingPlan ? 0.6 : 1 }}
+                        disabled={changingPlan}
+                        onClick={() => setUpgradeConfirm(true)}
+                      >
+                        {changingPlan ? (lang === "nl" ? "Bezig…" : "Working…") : `${t.upgradePlan} → ${t.planProfessional}`}
                       </button>
                     )}
                   </div>
@@ -4757,6 +4800,42 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 12, color: c.textLabel }}>{t.noPlan}</div>
                 )}
               </div>
+
+              {/* Upgrade confirmation — explains the no-extra-charge timing so
+                  the owner doesn't worry they'll be billed twice for this
+                  month. */}
+              {upgradeConfirm && createPortal((
+                <div onClick={() => !changingPlan && setUpgradeConfirm(false)}
+                     style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+                  <div onClick={(e) => e.stopPropagation()}
+                       style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 460, width: "100%", color: c.text }}>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>
+                      {lang === "nl" ? "Upgraden naar Professional?" : "Upgrade to Professional?"}
+                    </div>
+                    <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 16 }}>
+                      {lang === "nl"
+                        ? "Je krijgt direct toegang tot alle Professional functies. Je betaalt deze maand niets extra — vanaf de volgende afschrijving wordt er €39/maand in plaats van €19/maand afgeschreven."
+                        : "You get instant access to all Professional features. No extra charge this month — from the next renewal you'll be billed €39/month instead of €19/month."}
+                    </div>
+                    {salonData.plan_expires_at && (
+                      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10 }}>
+                        {lang === "nl" ? "Nieuwe prijs gaat in op:" : "New price starts on:"}{" "}
+                        <strong style={{ color: c.text }}>{new Date(salonData.plan_expires_at).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { day: "numeric", month: "long", year: "numeric" })}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn-ghost" style={{ flex: 1 }} disabled={changingPlan}
+                              onClick={() => setUpgradeConfirm(false)}>
+                        {lang === "nl" ? "Annuleer" : "Cancel"}
+                      </button>
+                      <button className="btn-primary" style={{ flex: 1 }} disabled={changingPlan}
+                              onClick={() => handleChangePlan("professional")}>
+                        {changingPlan ? (lang === "nl" ? "Bezig…" : "Working…") : (lang === "nl" ? "Upgrade" : "Upgrade")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ), document.body)}
 
               {/* Profile */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
