@@ -89,26 +89,6 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </nav>
         <style>{`@media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }`}</style>
 
-        {/* ─── FIND-A-SALON (top of page, for clients who landed at the bare
-            domain — owner-acquisition page wraps around this for the rare
-            "I have a flyer with vellu.cc on it" visitor). */}
-        <div id="find-salon" style={{ padding: "8px 24px 0", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 520, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{t.findSalonTitle}</div>
-              <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>{t.findSalonSub}</div>
-            </div>
-            <div style={{ display: "flex", gap: 6, flex: "1 1 240px" }}>
-              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
-                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px" }} />
-              </div>
-              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugInput)}>→</button>
-            </div>
-          </div>
-        </div>
-
         {/* ─── HERO ─── */}
         <div style={{ padding: "clamp(32px, 8vw, 80px) 24px 40px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
           <div className="fade-up">
@@ -150,10 +130,31 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
+        {/* ─── FIND-A-SALON — sits just above the calculator so the
+            owner-acquisition flow above stays uninterrupted while still
+            keeping the client search easy to spot. */}
+        <div id="find-salon" style={{ padding: "0 24px 24px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{t.findSalonTitle}</div>
+              <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>{t.findSalonSub}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flex: "1 1 240px" }}>
+              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px" }} />
+              </div>
+              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugInput)}>→</button>
+            </div>
+          </div>
+        </div>
+
         {/* ─── SAVINGS CALCULATOR ───
-            Concrete €€ saved vs Treatwell — sliders feel more interactive than
-            a static comparison block and force the visitor to engage with the
-            number, which is the real selling point of the 0% commission model. */}
+            Concrete €€ saved vs a typical commission platform — sliders feel
+            more interactive than a static comparison block and force the
+            visitor to engage with the number, which is the real selling
+            point of the 0% commission model. */}
         <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "32px clamp(20px, 4vw, 36px)" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
