@@ -246,6 +246,7 @@ function SalonRoute({ lang, setLang }) {
         business_hours: data.business_hours || DEFAULT_HOURS,
         account_type: data.account_type || "joint",
         booking_policy: data.booking_policy || "",
+        booking_policy_en: data.booking_policy_en || "",
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",
         salon_email: data.salon_email || "",

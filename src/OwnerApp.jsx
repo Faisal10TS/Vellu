@@ -1923,7 +1923,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
-      booking_policy: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      booking_policy: "", booking_policy_en: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       btw_rate: 21,
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60,
@@ -2052,6 +2052,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           next_invoice_number: data.next_invoice_number || 1,
           business_hours: data.business_hours || DEFAULT_HOURS,
           booking_policy: data.booking_policy || "",
+          booking_policy_en: data.booking_policy_en || "",
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
           salon_email: data.salon_email || "",
@@ -6327,15 +6328,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
-              {/* Booking Policy Section */}
+              {/* Booking Policy Section — separate NL/EN so the public profile
+                  shows the right text when the visitor toggles language. EN is
+                  optional; when empty the NL text is shown for both languages. */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>{t.bookingPolicyDesc}</div>
-                <textarea 
-                  className="input-field" 
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
+                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Nederlands" : "Dutch"}</div>
+                <textarea
+                  className="input-field"
                   placeholder={t.bookingPolicyPlaceholder}
                   value={salonData.booking_policy || ""}
                   onChange={e => update(d => { d.booking_policy = e.target.value; return d; })}
+                  style={{ minHeight: 80, resize: "vertical", fontSize: 12, marginBottom: 10 }}
+                />
+                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
+                  {lang === "nl" ? "Engels (optioneel)" : "English (optional)"}
+                </div>
+                <textarea
+                  className="input-field"
+                  placeholder={lang === "nl" ? "Engelse vertaling — getoond als klant op EN staat. Leeg laten = NL gebruiken." : "English translation — shown when client is on EN. Leave empty to use NL."}
+                  value={salonData.booking_policy_en || ""}
+                  onChange={e => update(d => { d.booking_policy_en = e.target.value; return d; })}
                   style={{ minHeight: 80, resize: "vertical", fontSize: 12 }}
                 />
               </div>
@@ -6557,6 +6571,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   // local value, producing duplicate invoice numbers.
                   business_hours: salonData.business_hours || DEFAULT_HOURS,
                   booking_policy: salonData.booking_policy || null,
+                  booking_policy_en: salonData.booking_policy_en || null,
                   salon_phone: salonData.salon_phone || null,
                   salon_instagram: salonData.salon_instagram || null,
                   salon_email: salonData.salon_email || null,

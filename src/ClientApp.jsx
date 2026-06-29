@@ -423,9 +423,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   }, [profileTab]);
   const days = getDays(Math.min(maxAdvanceDays + 1, 90));
   
+  // Booking policy: NL is the default, EN is optional. Falls back to NL when
+  // the salon hasn't provided an English translation, so we don't show empty
+  // space to English visitors of NL-only salons.
+  const effectivePolicy = lang === "en"
+    ? (initialSalon.booking_policy_en || initialSalon.booking_policy || "")
+    : (initialSalon.booking_policy || "");
+
   // Check if form is complete
   const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
-  const policyValid = !initialSalon.booking_policy || policyAgreed;
+  const policyValid = !effectivePolicy || policyAgreed;
   // Basic email validation — lets the UI block submit with an invalid address instead of
   // sending to the server and silently failing the confirmation email.
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
@@ -1360,7 +1367,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
 
                 {/* Booking policy */}
-                {initialSalon.booking_policy && (
+                {effectivePolicy && (
                   <div>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.goodToKnow}</h3>
                     <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
@@ -1371,7 +1378,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     {expandedPolicy && (
                       <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
-                        {initialSalon.booking_policy}
+                        {effectivePolicy}
                       </div>
                     )}
                   </div>
@@ -2320,10 +2327,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
 
                 {/* Booking Policy */}
-                {initialSalon.booking_policy && (
+                {effectivePolicy && (
                   <div style={{ marginBottom: 20, padding: "16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
                     <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
-                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{effectivePolicy}</div>
                     <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                       <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
                         {policyAgreed && <NavIcon name="check" size={14} color={c.btnOnDark} />}
@@ -2890,10 +2897,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     )}
 
                     {/* Booking Policy (mobile) */}
-                    {initialSalon.booking_policy && (
+                    {effectivePolicy && (
                       <div style={{ marginBottom: 20, padding: "14px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
                         <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
-                        <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{initialSalon.booking_policy}</div>
+                        <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{effectivePolicy}</div>
                         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                           <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
                             {policyAgreed && <NavIcon name="check" size={12} color={c.btnOnDark} />}
