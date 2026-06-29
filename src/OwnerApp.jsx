@@ -6340,7 +6340,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   placeholder={t.bookingPolicyPlaceholder}
                   value={salonData.booking_policy || ""}
                   onChange={e => update(d => { d.booking_policy = e.target.value; return d; })}
-                  style={{ minHeight: 80, resize: "vertical", fontSize: 12, marginBottom: 10 }}
+                  rows={6}
+                  style={{ width: "100%", resize: "vertical", fontSize: 13, padding: "10px 12px", marginBottom: 12, fontFamily: "inherit", lineHeight: 1.5 }}
                 />
                 <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
                   {lang === "nl" ? "Engels (optioneel)" : "English (optional)"}
@@ -6350,7 +6351,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   placeholder={lang === "nl" ? "Engelse vertaling — getoond als klant op EN staat. Leeg laten = NL gebruiken." : "English translation — shown when client is on EN. Leave empty to use NL."}
                   value={salonData.booking_policy_en || ""}
                   onChange={e => update(d => { d.booking_policy_en = e.target.value; return d; })}
-                  style={{ minHeight: 80, resize: "vertical", fontSize: 12 }}
+                  rows={6}
+                  style={{ width: "100%", resize: "vertical", fontSize: 13, padding: "10px 12px", fontFamily: "inherit", lineHeight: 1.5 }}
                 />
               </div>
 
