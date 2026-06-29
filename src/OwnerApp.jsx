@@ -1427,6 +1427,91 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
 // salon" = everyone who has booked here at least once (derived from
 // appointments, same definition the CSV export uses), so the list always
 // reflects real bookings.
+// Minimal CSV parser — handles quoted fields, escaped quotes, both \n and
+// \r\n, and auto-detects comma vs semicolon (NL/EU Excel exports default to
+// `;`). Kept inline rather than adding papaparse for one feature.
+function parseCSV(text) {
+  if (!text) return [];
+  // Strip UTF-8 BOM that Excel loves to add.
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  // Sniff delimiter from the first line: whichever of , or ; appears more.
+  const firstLine = text.split(/\r?\n/, 1)[0] || "";
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const delim = semiCount > commaCount ? ";" : ",";
+
+  const rows = [];
+  let cur = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === delim) { cur.push(field); field = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        cur.push(field); field = "";
+        if (cur.length > 1 || cur[0] !== "") rows.push(cur);
+        cur = [];
+      } else {
+        field += ch;
+      }
+    }
+  }
+  if (field !== "" || cur.length) { cur.push(field); rows.push(cur); }
+  return rows;
+}
+
+// Map a parsed CSV (rows[0] = header) onto { name, email, phone, notes } records,
+// recognising both NL and EN column names. Skips rows with no usable name.
+function csvRowsToClients(rows) {
+  if (rows.length < 2) return { records: [], skipped: 0 };
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const findCol = (...names) => {
+    for (const n of names) { const i = header.indexOf(n); if (i !== -1) return i; }
+    return -1;
+  };
+  const iName = findCol("name", "naam", "klant", "client", "customer", "full name", "volledige naam");
+  const iFirst = findCol("first_name", "first name", "voornaam", "given name");
+  const iLast = findCol("last_name", "last name", "achternaam", "surname", "family name");
+  const iEmail = findCol("email", "e-mail", "e_mail", "mail", "emailadres", "e-mailadres");
+  const iPhone = findCol("phone", "telefoon", "tel", "mobile", "mobiel", "phone number", "telefoonnummer");
+  const iNotes = findCol("notes", "notities", "opmerkingen", "comment", "comments", "memo");
+
+  const records = [];
+  let skipped = 0;
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const get = (i) => (i >= 0 && i < row.length) ? String(row[i] || "").trim() : "";
+    let name = get(iName);
+    if (!name) {
+      const f = get(iFirst), l = get(iLast);
+      name = `${f} ${l}`.trim();
+    }
+    const email = get(iEmail);
+    if (!name) {
+      // Last resort: derive a display name from the email local-part so we
+      // don't drop contacts that only carried an email + phone.
+      if (email) name = email.split("@")[0];
+    }
+    if (!name && !email) { skipped++; continue; }
+    records.push({
+      name: name || "—",
+      email: email || null,
+      phone: get(iPhone) || null,
+      notes: get(iNotes) || null,
+    });
+  }
+  return { records, skipped };
+}
+
 function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
@@ -1436,6 +1521,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", email: "", phone: "", notes: "" });
   const [saving, setSaving] = useState(false);
+  // CSV import flow: pick file → parse → preview → bulk insert. Kept in a
+  // separate state slice so it doesn't conflict with the manual-add modal.
+  const fileInputRef = useRef(null);
+  const [importPreview, setImportPreview] = useState(null); // { rows, skipped, fileName } | null
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1516,6 +1606,77 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     setRefreshKey((k) => k + 1);
   };
 
+  const onCSVPicked = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking same file
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.show(lang === "nl" ? "Bestand te groot (max 5MB)" : "File too large (max 5MB)", "error");
+      return;
+    }
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      const { records, skipped } = csvRowsToClients(rows);
+      if (records.length === 0) {
+        toast.show(lang === "nl" ? "Geen klanten in dit bestand. Check de kolomnamen (naam/email/telefoon)." : "No clients found in this file. Check column names (name/email/phone).", "error");
+        return;
+      }
+      setImportPreview({ rows: records, skipped, fileName: file.name });
+    } catch (err) {
+      console.error("CSV parse error:", err);
+      toast.show(lang === "nl" ? "Bestand kon niet gelezen worden" : "Could not read file", "error");
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview) return;
+    setImporting(true);
+    // Dedupe against existing manual_clients on email to avoid duplicate
+    // entries when an owner imports the same export twice.
+    const emails = importPreview.rows.map(r => r.email).filter(Boolean).map(e => e.toLowerCase());
+    let existingEmails = new Set();
+    if (emails.length > 0) {
+      const { data: existing } = await supabase.from("manual_clients").select("email").eq("owner_id", ownerId).not("email", "is", null);
+      existingEmails = new Set((existing || []).map(r => (r.email || "").toLowerCase()).filter(Boolean));
+    }
+    const toInsert = importPreview.rows
+      .filter(r => !r.email || !existingEmails.has(r.email.toLowerCase()))
+      .map(r => ({ owner_id: ownerId, name: r.name, email: r.email, phone: r.phone, notes: r.notes }));
+    const duplicates = importPreview.rows.length - toInsert.length;
+    if (toInsert.length === 0) {
+      setImporting(false);
+      setImportPreview(null);
+      toast.show(lang === "nl" ? "Alle klanten staan al in je lijst" : "All clients are already in your list");
+      return;
+    }
+    // Insert in chunks of 200 so we don't hit any single-request limits on
+    // very large imports.
+    const CHUNK = 200;
+    let inserted = 0;
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      const slice = toInsert.slice(i, i + CHUNK);
+      const { error } = await supabase.from("manual_clients").insert(slice);
+      if (error) {
+        setImporting(false);
+        toast.show(lang === "nl" ? `Import mislukt na ${inserted} klanten` : `Import failed after ${inserted} clients`, "error");
+        setRefreshKey(k => k + 1);
+        setImportPreview(null);
+        return;
+      }
+      inserted += slice.length;
+    }
+    setImporting(false);
+    setImportPreview(null);
+    const parts = [
+      lang === "nl" ? `${inserted} klanten geïmporteerd` : `${inserted} clients imported`,
+    ];
+    if (duplicates > 0) parts.push(lang === "nl" ? `${duplicates} al aanwezig` : `${duplicates} already there`);
+    if (importPreview.skipped > 0) parts.push(lang === "nl" ? `${importPreview.skipped} overgeslagen` : `${importPreview.skipped} skipped`);
+    toast.show(parts.join(" · "));
+    setRefreshKey(k => k + 1);
+  };
+
   const q = search.trim().toLowerCase();
   const filtered = q
     ? clients.filter((cl) => cl.name.toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
@@ -1545,15 +1706,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     <div className="fade-up" style={{ maxWidth: 720, margin: "0 auto" }}>
       {isMobile && <PTitle sub={lang === "nl" ? "Bekijk en beheer je klanten." : "View and manage your clients."}>{lang === "nl" ? "Klanten" : "Customers"}</PTitle>}
 
-      {/* Search + add */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      {/* Search + add + import */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input
           className="input-field"
           placeholder={lang === "nl" ? "Zoek klant op naam, e-mail of telefoon" : "Find customer by name, email or phone"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 0 }}
+          style={{ flex: "1 1 200px", minWidth: 0 }}
         />
+        <button
+          className="btn-ghost"
+          onClick={() => fileInputRef.current?.click()}
+          style={{ width: "auto", padding: "0 14px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, color: accent, borderColor: `${accent}55` }}
+          title={lang === "nl" ? "Importeer CSV/Excel" : "Import CSV/Excel"}
+        >
+          <NavIcon name="upload" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : "Import"}
+        </button>
+        <input ref={fileInputRef} type="file" accept=".csv,text/csv,.txt" onChange={onCSVPicked} style={{ display: "none" }} />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ width: "auto", padding: "0 16px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Klant" : "Add"}
         </button>
@@ -1677,6 +1847,59 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" disabled={saving || !addForm.name.trim()} onClick={addCustomer} style={{ flex: 1 }}>{saving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Toevoegen" : "Add")}</button>
               <button className="btn-ghost" disabled={saving} onClick={() => setAddOpen(false)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV import preview — shows what we parsed before committing, so a
+          wrong column mapping or unrelated file doesn't silently inflate the
+          customer list. */}
+      {importPreview && (
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => !importing && setImportPreview(null)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 560, width: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Import controleren" : "Review import"}</div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14 }}>
+              {lang === "nl"
+                ? `${importPreview.rows.length} klanten gevonden in ${importPreview.fileName}`
+                : `${importPreview.rows.length} clients found in ${importPreview.fileName}`}
+              {importPreview.skipped > 0 && (lang === "nl" ? ` · ${importPreview.skipped} regels overgeslagen (geen naam/email)` : ` · ${importPreview.skipped} rows skipped (no name/email)`)}
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 14 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead style={{ position: "sticky", top: 0, background: c.bgCard, zIndex: 1 }}>
+                  <tr style={{ textAlign: "left", color: c.textLabel, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", fontSize: 9 }}>
+                    <th style={{ padding: "8px 10px" }}>{lang === "nl" ? "Naam" : "Name"}</th>
+                    <th style={{ padding: "8px 10px" }}>{lang === "nl" ? "E-mail" : "Email"}</th>
+                    <th style={{ padding: "8px 10px" }}>{lang === "nl" ? "Telefoon" : "Phone"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.rows.slice(0, 50).map((r, i) => (
+                    <tr key={i} style={{ borderTop: `1px solid ${c.border}` }}>
+                      <td style={{ padding: "6px 10px", color: c.text }}>{r.name}</td>
+                      <td style={{ padding: "6px 10px", color: c.textSub }}>{r.email || "—"}</td>
+                      <td style={{ padding: "6px 10px", color: c.textSub }}>{r.phone || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importPreview.rows.length > 50 && (
+                <div style={{ padding: "8px 10px", fontSize: 11, color: c.textMuted, textAlign: "center", borderTop: `1px solid ${c.border}` }}>
+                  {lang === "nl" ? `…en nog ${importPreview.rows.length - 50} meer` : `…and ${importPreview.rows.length - 50} more`}
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+              {lang === "nl"
+                ? "Klanten met een e-mail die al in je lijst staat worden overgeslagen (geen dubbele entries)."
+                : "Clients with an email already in your list are skipped (no duplicates)."}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" disabled={importing} onClick={confirmImport} style={{ flex: 1 }}>
+                {importing ? (lang === "nl" ? "Bezig…" : "Importing…") : (lang === "nl" ? `Importeer ${importPreview.rows.length} klanten` : `Import ${importPreview.rows.length} clients`)}
+              </button>
+              <button className="btn-ghost" disabled={importing} onClick={() => setImportPreview(null)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
             </div>
           </div>
         </div>

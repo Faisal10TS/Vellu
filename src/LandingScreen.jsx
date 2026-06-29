@@ -40,7 +40,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Krijgen klanten herinneringen?", "Ja, automatisch. Bevestiging bij het boeken, herinnering 24 uur van tevoren, en een follow-up na het bezoek voor een review."],
     ["Hoe annuleren klanten?", "Via de annuleringslink in hun bevestigingsmail. Jij bepaalt tot wanneer ze kunnen annuleren."],
     ["Hoe verschilt Vellu van andere booking platformen?", "De meeste booking platformen rekenen 5–10% commissie per boeking — bij 50 boekingen á €45 betaal je al snel €100–€225 per maand. Vellu is een vast tarief vanaf €19/maand, 0% commissie. Daarnaast krijg je je eigen merk-pagina (vellu.cc/jouw-naam) in plaats van een profiel in een zoekplatform; jouw klanten blijven jouw klanten."],
-    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV/Excel) van je huidige booking platform? Stuur die naar ons via Contact, we helpen je gratis met de migratie zodat je niets verliest."],
+    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV) van je huidige booking platform? Importeer 'm direct in je dashboard onder Klanten → Importeer. Vellu herkent de gangbare kolomnamen (naam, e-mail, telefoon, notities) automatisch. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
   ] : [
     ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
     ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
@@ -51,7 +51,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Do clients receive reminders?", "Yes, automatically. Confirmation when booking, reminder 24 hours before, and a follow-up after the visit for a review."],
     ["How do clients cancel?", "Via the cancellation link in their confirmation email. You decide the cancellation deadline."],
     ["How is Vellu different from other booking platforms?", "Most booking platforms charge 5–10% commission per booking — at 50 bookings of €45 that quickly adds up to €100–€225/month. Vellu is a flat fee from €19/month, 0% commission. You also get your own branded page (vellu.cc/your-name) instead of a profile in a marketplace; your clients stay your clients."],
-    ["Can I bring my clients from another system?", "Yes. If you have an export (CSV/Excel) from your current booking platform, send it to us via Contact and we'll help you migrate for free so nothing gets lost."],
+    ["Can I bring my clients from another system?", "Yes. Got a CSV export from your current booking platform? Import it directly in your dashboard under Customers → Import. Vellu auto-detects common column names (name, email, phone, notes). Stuck? Send it to Contact and we'll help you for free."],
   ];
 
   return (
