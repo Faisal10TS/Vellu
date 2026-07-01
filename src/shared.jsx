@@ -1175,7 +1175,11 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-services-grid {
     display: grid; grid-template-columns: 1fr; gap: 0;
   }
-  @media (min-width: 1024px) {
+  /* Two-column card layout only kicks in when the viewport is wide enough
+     that each card can still fit the row nicely. Below this threshold we
+     stay single-column so the name never gets squeezed to zero and
+     overlapped by the price/booking button. */
+  @media (min-width: 1200px) {
     .profile-services-grid {
       grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 8px;
     }
@@ -1189,9 +1193,36 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     }
   }
   .profile-service-row {
-    display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 16px;
+    display: grid;
+    /* minmax(0, 1fr) instead of plain 1fr so the info column can actually
+       shrink below its intrinsic content width; otherwise a long service
+       name blows the layout up. */
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center; gap: 16px;
     padding: 18px 0; border-bottom: 1px solid ${c.border};
     cursor: pointer; transition: background 0.2s;
+  }
+  /* When the row itself is narrow (roughly tablet + 2-col-card mode)
+     collapse to a 2-row layout: thumb + name on top, price + book below.
+     This uses grid area assignments so the same JSX works everywhere. */
+  @media (max-width: 640px), (min-width: 1200px) and (max-width: 1400px) {
+    .profile-service-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas:
+        "thumb info"
+        "price price"
+        "book book";
+      row-gap: 10px;
+    }
+    .profile-service-row > .profile-service-thumb { grid-area: thumb; }
+    .profile-service-row > .profile-service-info { grid-area: info; }
+    .profile-service-row > .profile-service-price {
+      grid-area: price; text-align: left;
+      font-size: 20px;
+    }
+    .profile-service-row > .profile-service-book-btn {
+      grid-area: book; justify-self: stretch; text-align: center;
+    }
   }
   .profile-service-row:last-child { border-bottom: none; }
   @media (hover: hover) {
@@ -1201,10 +1232,10 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     width: 54px; height: 54px; border-radius: 10px; object-fit: cover;
     flex-shrink: 0; background: ${c.bgCard}; border: 1px solid ${c.border};
   }
-  .profile-service-info { min-width: 0; }
+  .profile-service-info { min-width: 0; overflow: hidden; }
   .profile-service-name {
     font-size: 15px; font-weight: 500; color: ${c.text}; margin-bottom: 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
   .profile-service-meta {
     font-size: 12px; color: ${c.textLabel};
