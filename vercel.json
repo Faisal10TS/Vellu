@@ -38,6 +38,10 @@
     {
       "path": "/api/check-trials",
       "schedule": "5 9 * * *"
+    },
+    {
+      "path": "/api/send-birthday-emails",
+      "schedule": "10 9 * * *"
     }
   ]
 }

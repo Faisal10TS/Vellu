@@ -78,12 +78,19 @@ serve(async (req) => {
   const ownerId = userData.user.id;
 
   // Parse + validate
-  let body: { subject?: string; message?: string };
+  let body: { subject?: string; message?: string; segment?: string; preview_only?: boolean };
   try { body = await req.json(); } catch { return json(400, { error: "invalid_json" }, origin); }
   const subject = String(body.subject || "").trim().slice(0, 200);
   const message = String(body.message || "").trim().slice(0, 5000);
-  if (!subject) return json(400, { error: "missing_subject" }, origin);
-  if (!message) return json(400, { error: "missing_message" }, origin);
+  const segment = String(body.segment || "all").toLowerCase();
+  const previewOnly = body.preview_only === true;
+  if (!["all", "loyal", "new", "dormant"].includes(segment)) return json(400, { error: "invalid_segment" }, origin);
+  // Subject + message are only required when actually sending; a preview
+  // just needs the segment so the client can display an accurate count.
+  if (!previewOnly) {
+    if (!subject) return json(400, { error: "missing_subject" }, origin);
+    if (!message) return json(400, { error: "missing_message" }, origin);
+  }
 
   // Owner profile (for branding + reply-to)
   const { data: profile } = await supabase
@@ -97,19 +104,69 @@ serve(async (req) => {
   const replyTo = profile.salon_email || profile.email || undefined;
 
   // Recipients = distinct client emails from this owner's appointments.
+  // We now also fetch date + status because segments key off appointment
+  // history (visit count, first-seen, last-seen).
   const { data: appts, error: apptErr } = await supabase
     .from("appointments")
-    .select("client_email")
+    .select("client_email, date, status")
     .eq("owner_id", ownerId);
   if (apptErr) return json(500, { error: "db_error" }, origin);
 
-  const emails = Array.from(new Set(
-    (appts || [])
-      .map((a) => String(a.client_email || "").trim().toLowerCase())
-      .filter((e) => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
-  ));
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Aggregate per client: first seen, last seen, and how many completed visits
+  // count toward "loyal". Cancelled / no-show rows still contribute to the
+  // "ever booked" set (so a dormant client with 3 cancellations still shows
+  // up in dormant), but only completed visits count for loyalty tier.
+  type Agg = { first: string; last: string; completed: number };
+  const byEmail: Record<string, Agg> = {};
+  for (const a of appts || []) {
+    const em = String(a.client_email || "").trim().toLowerCase();
+    if (!em || !validEmail.test(em)) continue;
+    const d = String(a.date || "");
+    if (!d) continue;
+    const agg = byEmail[em] || { first: d, last: d, completed: 0 };
+    if (d < agg.first) agg.first = d;
+    if (d > agg.last) agg.last = d;
+    if (a.status === "completed") agg.completed++;
+    byEmail[em] = agg;
+  }
 
-  if (emails.length === 0) return json(200, { sent: 0, total: 0 }, origin);
+  const today = new Date().toISOString().slice(0, 10);
+  const daysAgo = (n: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+  const cutoffLoyal = 5; // completed visits
+  const cutoffNewDays = 30; // first-seen within last N days
+  const cutoffDormantDays = 60; // last-seen more than N days ago
+  const newCutoff = daysAgo(cutoffNewDays);
+  const dormantCutoff = daysAgo(cutoffDormantDays);
+
+  const passes = (agg: Agg) => {
+    if (segment === "all") return true;
+    if (segment === "loyal") return agg.completed >= cutoffLoyal;
+    if (segment === "new") return agg.first >= newCutoff;
+    if (segment === "dormant") return agg.last < dormantCutoff && agg.last <= today;
+    return false;
+  };
+
+  const emails = Object.entries(byEmail)
+    .filter(([, agg]) => passes(agg))
+    .map(([em]) => em);
+
+  // Preview mode: just return the count without touching Resend. The client
+  // uses this to update the recipient badge next to the segment selector.
+  if (previewOnly) {
+    return json(200, {
+      sent: 0,
+      total: emails.length,
+      segment,
+      preview: true,
+    }, origin);
+  }
+
+  if (emails.length === 0) return json(200, { sent: 0, total: 0, segment }, origin);
 
   // Build the branded HTML body.
   const logo = safeImg(profile.logo_url);
@@ -159,5 +216,5 @@ serve(async (req) => {
     }
   }
 
-  return json(200, { sent, total: emails.length }, origin);
+  return json(200, { sent, total: emails.length, segment }, origin);
 });

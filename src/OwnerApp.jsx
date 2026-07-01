@@ -469,21 +469,39 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [segment, setSegment] = useState("all"); // "all" | "loyal" | "new" | "dormant"
   const [count, setCount] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Recipient count = distinct client emails across this owner's appointments.
+  // Segment definitions surfaced to the owner so they know exactly what
+  // filter each option applies. Copy stays generic so it works across
+  // salon types.
+  const SEGMENTS = [
+    { key: "all", nl: "Alle klanten", en: "All clients", desc_nl: "iedereen die ooit een afspraak had", desc_en: "everyone who ever booked" },
+    { key: "loyal", nl: "Trouwe klanten", en: "Loyal clients", desc_nl: "5+ voltooide afspraken", desc_en: "5+ completed visits" },
+    { key: "new", nl: "Nieuwe klanten", en: "New clients", desc_nl: "eerste bezoek in de laatste 30 dagen", desc_en: "first visit in the last 30 days" },
+    { key: "dormant", nl: "Sluipende klanten", en: "Dormant clients", desc_nl: "meer dan 60 dagen niet meer geweest", desc_en: "haven't visited in 60+ days" },
+  ];
+
+  // Recipient count now depends on the selected segment, computed server-side
+  // so the same filter logic is used for preview and actual send. Debounced
+  // so rapid segment-flip clicks don't hammer the edge function.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const { data } = await supabase.from("appointments").select("client_email").eq("owner_id", ownerId);
-      if (cancelled) return;
-      const n = new Set((data || []).map(a => String(a.client_email || "").trim().toLowerCase()).filter(Boolean)).size;
-      setCount(n);
-    })();
-    return () => { cancelled = true; };
-  }, [ownerId]);
+    setCount(null);
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("send-newsletter", {
+          body: { segment, preview_only: true },
+        });
+        if (!cancelled) setCount(data?.total ?? 0);
+      } catch {
+        if (!cancelled) setCount(0);
+      }
+    }, 150);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [ownerId, segment]);
 
   const canSend = subject.trim() && message.trim() && (count || 0) > 0 && !sending;
 
@@ -491,7 +509,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-newsletter", {
-        body: { subject: subject.trim(), message: message.trim() },
+        body: { subject: subject.trim(), message: message.trim(), segment },
       });
       if (error || !data) throw new Error(error?.message || "send_failed");
       toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${data.sent} klant${data.sent === 1 ? "" : "en"}` : `Newsletter sent to ${data.sent} client${data.sent === 1 ? "" : "s"}`);
@@ -515,6 +533,36 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
         {lang === "nl"
           ? "Stuur een e-mail naar al je klanten — bijvoorbeeld voor een vakantiesluiting, aanbieding of nieuwtje. Klanten krijgen elk een aparte e-mail met jouw salonnaam."
           : "Send an email to all your clients — for a holiday closure, promo, or update. Each client gets their own email with your salon name."}
+      </div>
+
+      <label style={lbl}>{lang === "nl" ? "Doelgroep" : "Segment"}</label>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+        {SEGMENTS.map(s => {
+          const active = segment === s.key;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setSegment(s.key)}
+              style={{
+                padding: "7px 12px", borderRadius: 100, fontSize: 11, fontWeight: 600,
+                letterSpacing: "0.04em", cursor: "pointer",
+                background: active ? accent : "transparent",
+                color: active ? c.btnOnDark : c.textSub,
+                border: `1px solid ${active ? accent : c.inputBorder}`,
+                fontFamily: "'Jost', sans-serif",
+              }}
+            >
+              {lang === "nl" ? s.nl : s.en}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 12 }}>
+        {(() => {
+          const active = SEGMENTS.find(s => s.key === segment);
+          return active ? (lang === "nl" ? active.desc_nl : active.desc_en) : "";
+        })()}
       </div>
 
       <label style={lbl}>{lang === "nl" ? "Onderwerp" : "Subject"}</label>
@@ -1485,6 +1533,22 @@ function csvRowsToClients(rows) {
   const iEmail = findCol("email", "e-mail", "e_mail", "mail", "emailadres", "e-mailadres");
   const iPhone = findCol("phone", "telefoon", "tel", "mobile", "mobiel", "phone number", "telefoonnummer");
   const iNotes = findCol("notes", "notities", "opmerkingen", "comment", "comments", "memo");
+  const iBirthday = findCol("birthday", "verjaardag", "geboortedatum", "date of birth", "dob", "birth date");
+
+  // Accepts yyyy-mm-dd, dd-mm-yyyy, dd/mm/yyyy — normalises to yyyy-mm-dd
+  // and returns null when the input doesn't look like a real date.
+  const parseBirthday = (raw) => {
+    if (!raw) return null;
+    const t = String(raw).trim();
+    if (!t) return null;
+    // ISO yyyy-mm-dd
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    // dd-mm-yyyy or dd/mm/yyyy
+    const eu = /^(\d{2})[-\/](\d{2})[-\/](\d{4})$/.exec(t);
+    if (eu) return `${eu[3]}-${eu[2]}-${eu[1]}`;
+    return null;
+  };
 
   const records = [];
   let skipped = 0;
@@ -1508,6 +1572,7 @@ function csvRowsToClients(rows) {
       email: email || null,
       phone: get(iPhone) || null,
       notes: get(iNotes) || null,
+      birthday: parseBirthday(get(iBirthday)),
     });
   }
   return { records, skipped };
@@ -1529,7 +1594,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [importing, setImporting] = useState(false);
   // Edit/delete flow on an individual client.
   const [editing, setEditing] = useState(null); // the client currently being edited
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -1546,7 +1611,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           .order("date", { ascending: false }),
         supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden")
+          .select("id, name, email, phone, notes, hidden, birthday")
           .eq("owner_id", ownerId),
       ]);
       if (cancelled) return;
@@ -1578,10 +1643,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           if (m.name && m.name.trim()) existing.name = m.name;
           if (m.phone) existing.phone = m.phone;
           if (m.notes) existing.notes = m.notes;
+          if (m.birthday) existing.birthday = m.birthday;
           existing.manualId = m.id;
           existing.hidden = !!m.hidden;
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", manualId: m.id, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
         }
       }
       const list = [...Array.from(byEmail.values()), ...extra]
@@ -1626,6 +1692,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       email: cl.email || "",
       phone: cl.phone || "",
       notes: cl.notes || "",
+      birthday: cl.birthday || "",
     });
   };
 
@@ -1642,6 +1709,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       email: editForm.email.trim() || null,
       phone: editForm.phone.trim() || null,
       notes: editForm.notes.trim() || null,
+      // Empty string → null so the DB doesn't try to parse "" as a date.
+      birthday: editForm.birthday && /^\d{4}-\d{2}-\d{2}$/.test(editForm.birthday) ? editForm.birthday : null,
     };
     // Update existing manual_clients row if one already backs this client;
     // otherwise create one so future loads pick the override up.
@@ -1738,7 +1807,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     }
     const toInsert = importPreview.rows
       .filter(r => !r.email || !existingEmails.has(r.email.toLowerCase()))
-      .map(r => ({ owner_id: ownerId, name: r.name, email: r.email, phone: r.phone, notes: r.notes }));
+      .map(r => ({ owner_id: ownerId, name: r.name, email: r.email, phone: r.phone, notes: r.notes, birthday: r.birthday || null }));
     const duplicates = importPreview.rows.length - toInsert.length;
     if (toInsert.length === 0) {
       setImporting(false);
@@ -2030,6 +2099,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "E-mail" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "Verjaardag (optioneel)" : "Birthday (optional)"}</label><input className="input-field" type="date" value={editForm.birthday || ""} onChange={(e) => setEditForm((f) => ({ ...f, birthday: e.target.value }))} style={{ width: "100%" }} /></div>
             </div>
             ); })()}
             <div style={{ display: "flex", gap: 8 }}>
@@ -2166,7 +2236,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           { data: catData },
           { data: locData },
           { data: noShowRows },
-          { count: referralCount }
+          { count: referralCount },
+          { data: manualClients }
         ] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
@@ -2175,12 +2246,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           supabase.from("locations").select("*").eq("owner_id", data.id).order("position"),
           supabase.from("client_no_shows").select("client_email, no_show_count, blocked").eq("owner_id", data.id),
           // How many other salons signed up using this owner's referral code.
-          supabase.from("profiles").select("*", { count: "exact", head: true }).eq("referred_by", data.id)
+          supabase.from("profiles").select("*", { count: "exact", head: true }).eq("referred_by", data.id),
+          // Manual client notes — used by the agenda card to surface a
+          // client-specific note (e.g. "prefers less pressure", "always late")
+          // right at the point of service, so staff don't have to open a
+          // separate client detail page mid-appointment.
+          supabase.from("manual_clients").select("email, notes").eq("owner_id", data.id).not("notes", "is", null)
         ]);
         // Shape client_no_shows as a lookup by email so renderApptCard is O(1).
         const clientNoShowsMap = {};
         for (const r of noShowRows || []) {
           clientNoShowsMap[r.client_email] = { no_show_count: r.no_show_count, blocked: r.blocked };
+        }
+        // Same idea for client notes — email-keyed lookup, lowercased so the
+        // match is case-insensitive with appointment.client_email.
+        const clientNotesMap = {};
+        for (const m of manualClients || []) {
+          if (m.email && m.notes) clientNotesMap[m.email.toLowerCase()] = m.notes;
         }
         setSalonData(prev => ({
           ...prev,
@@ -2204,6 +2286,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_email: data.salon_email || "",
           whatsapp_number: data.whatsapp_number || "",
           phone_required: data.phone_required || false,
+          birthday_email_enabled: data.birthday_email_enabled || false,
+          birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
+          birthday_email_code_prefix: data.birthday_email_code_prefix || "",
           break_minutes: data.break_minutes || 0,
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
@@ -2219,6 +2304,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           google_place_id: data.google_place_id || "",
           auto_block_no_show_threshold: data.auto_block_no_show_threshold ?? 0,
           client_no_shows: clientNoShowsMap,
+          client_notes: clientNotesMap,
           referral_code: data.referral_code || "",
           referral_credit_months: data.referral_credit_months || 0,
           referral_count: referralCount || 0,
@@ -2975,6 +3061,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const noShowInfo = salonData.client_no_shows?.[(a.client_email || "").toLowerCase()];
     const showWarn = noShowInfo && noShowInfo.no_show_count >= 2 && !noShowInfo.blocked;
     const showBlocked = noShowInfo?.blocked;
+    // Client note — surfaced from the manual_clients row so staff sees
+    // it at the point of service without having to click through.
+    const clientNote = salonData.client_notes?.[(a.client_email || "").toLowerCase()];
     return (
     <div key={a.id} className="appt-card" title={a.service_name}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 12 }}>
@@ -3005,6 +3094,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {a.client_allergies && (
         <div style={{ fontSize: 10, color: c.warning, background: `${c.warning}14`, border: `1px solid ${c.warning}28`, borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
           ⚠️ {t.clientAllergies}: {a.client_allergies}
+        </div>
+      )}
+      {clientNote && (
+        <div style={{ fontSize: 10, color: c.textSub, background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 8, padding: "6px 10px", marginBottom: 6, display: "flex", gap: 6, alignItems: "flex-start" }} title={clientNote}>
+          <span style={{ fontSize: 10 }}>📝</span>
+          <span style={{ flex: 1, lineHeight: 1.4 }}>{clientNote}</span>
         </div>
       )}
       {a.status === "confirmed" && (
@@ -7053,6 +7148,75 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Birthday email — opt-in per salon. Cron runs daily server-
+                  side and picks up any client whose birthday matches today,
+                  provided the salon has this toggled on and set a discount %.
+                  Owner only needs to configure once, then it runs itself. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                  {lang === "nl" ? "Verjaardagsmail" : "Birthday email"}
+                </div>
+                <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+                  {lang === "nl"
+                    ? "Stuur automatisch een verjaardagswens met kortingscode naar klanten waarvan je de geboortedatum weet. Vul geboortedatum in via 'Bewerk klant' of importeer via CSV met een kolom 'birthday' (jjjj-mm-dd)."
+                    : "Automatically send a birthday wish + discount code to clients whose birthday you know. Add birthdays via 'Edit customer' or CSV import with a 'birthday' column (yyyy-mm-dd)."}
+                </div>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", cursor: "pointer" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Verjaardagsmail aan" : "Enable birthday email"}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Cron draait elke ochtend rond 09:10" : "Cron runs every morning around 09:10"}</div>
+                  </div>
+                  <div
+                    onClick={() => update(d => { d.birthday_email_enabled = !d.birthday_email_enabled; return d; })}
+                    style={{
+                      width: 40, height: 22, borderRadius: 100, position: "relative",
+                      background: salonData.birthday_email_enabled ? accent : c.inputBorder,
+                      transition: "background 0.2s", flexShrink: 0,
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: 2, left: salonData.birthday_email_enabled ? 20 : 2,
+                      width: 18, height: 18, borderRadius: "50%", background: "#fff",
+                      transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    }} />
+                  </div>
+                </label>
+                {salonData.birthday_email_enabled && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Korting (%)" : "Discount (%)"}</div>
+                      <input
+                        className="input-field"
+                        type="number" min={1} max={99}
+                        value={salonData.birthday_email_discount_pct ?? ""}
+                        onChange={e => update(d => { const v = parseInt(e.target.value); d.birthday_email_discount_pct = Number.isFinite(v) ? Math.max(1, Math.min(99, v)) : null; return d; })}
+                        placeholder="10"
+                        style={{ width: "100%", fontSize: 13, padding: "10px 12px" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Code-prefix" : "Code prefix"}</div>
+                      <input
+                        className="input-field"
+                        value={salonData.birthday_email_code_prefix || ""}
+                        onChange={e => update(d => { d.birthday_email_code_prefix = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); return d; })}
+                        placeholder="BDAY"
+                        style={{ width: "100%", fontSize: 13, padding: "10px 12px", fontFamily: "'Courier New',monospace", letterSpacing: "0.06em" }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1", fontSize: 10, color: c.textMuted, marginTop: -4 }}>
+                      {(() => {
+                        const pct = salonData.birthday_email_discount_pct || 10;
+                        const prefix = (salonData.birthday_email_code_prefix || "BDAY");
+                        return lang === "nl"
+                          ? `Voorbeeldcode: ${prefix}-ANNA-${pct} · Vergeet niet 'Opslaan' om je instelling te bewaren.`
+                          : `Example code: ${prefix}-ANNA-${pct} · Don't forget to hit 'Save' to keep this setting.`;
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Newsletter — compose + send a one-off email to all clients
                   who have booked here. Recipients derived server-side. */}
               <NewsletterBlock
@@ -7136,6 +7300,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   salon_email: salonData.salon_email || null,
                   whatsapp_number: salonData.whatsapp_number || null,
                   phone_required: salonData.phone_required || false,
+                  birthday_email_enabled: !!salonData.birthday_email_enabled,
+                  birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
+                  birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,
                   break_minutes: salonData.break_minutes || 0,
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
