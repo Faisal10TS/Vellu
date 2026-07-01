@@ -330,10 +330,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (staffDays.length > 0) {
         const openWindows = staffDays.filter(d => !d.closed);
         if (openWindows.length === 0) return { closed: true };
+        // Salon/location business_hours for this day, used as a fallback
+        // when a staff entry has closed:false but is missing an open or
+        // close time (a legacy bug in the toggle UI could persist such rows).
+        // Falling back to "00:00" / "23:59" would show absurd times like
+        // "00:00 – 18:00" to clients, so we borrow the salon's window
+        // instead of trusting broken data.
+        const salonFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
+        const fbOpen = salonFallback.open || "09:00";
+        const fbClose = salonFallback.close || "17:30";
         let open = "23:59", close = "00:00";
         for (const w of openWindows) {
-          const o = w.open || "00:00";
-          const cl = w.close || "23:59";
+          const o = w.open || fbOpen;
+          const cl = w.close || fbClose;
           if (o < open) open = o;
           if (cl > close) close = cl;
         }
@@ -342,7 +351,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
   };
-  
+
   // Check if a staff member works on a given day
   const isStaffAvailable = (staffMember, dateStr) => {
     if (!staffMember?.working_hours) return true;
@@ -1102,10 +1111,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (staffDays.length > 0) {
         const openWindows = staffDays.filter(d => !d.closed);
         if (openWindows.length === 0) return { closed: true };
+        // See getEffectiveHours for the "why". A staff row saved as
+        // closed:false but missing open or close is broken data (legacy
+        // toggle bug); fall back to the salon business_hours for that day
+        // rather than "00:00" so we never show times like "00:00 – 18:00".
+        const salonFallback = activeHours[dayIdx] || DEFAULT_HOURS[dayIdx] || {};
+        const fbOpen = salonFallback.open || "09:00";
+        const fbClose = salonFallback.close || "17:30";
         let open = "23:59", close = "00:00";
         for (const w of openWindows) {
-          const o = w.open || "00:00";
-          const cl = w.close || "23:59";
+          const o = w.open || fbOpen;
+          const cl = w.close || fbClose;
           if (o < open) open = o;
           if (cl > close) close = cl;
         }
