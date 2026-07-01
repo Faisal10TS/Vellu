@@ -49,6 +49,21 @@ const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>
 for(const em of rcp){await sendEmail(plainText(em),plainText(`Nieuwe boeking: ${b.client_name}`),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">Nieuwe boeking!</h2><p style="color:#666;margin-bottom:28px;">Er is een nieuwe afspraak gemaakt bij <strong>${eS}</strong></p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row("Klant",eC)}${b.client_phone?row("Telefoon",ePh):""}${row("Behandeling",eSv)}${row("Datum",esc(fmtD(b.date)))}${row("Tijd",eT)}${totRow("Totaal",fP(b.price))}</table></div></div>`);}}
 if(type==="booking_cancelled"){
 await sendEmail(plainText(b.client_email),plainText(txt(lang,"Afspraak geannuleerd","Appointment cancelled")),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,"Je afspraak is succesvol geannuleerd.","Your appointment has been successfully cancelled.")}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment"),eSv)}${row(txt(lang,"Was gepland op","Was scheduled for"),`${esc(b.date)} ${txt(lang,"om","at")} ${eT}`)}</table></div><p style="color:#888;font-size:13px;text-align:center;">${txt(lang,"Wil je opnieuw boeken? Ga naar vellu.cc","Want to rebook? Visit vellu.cc")}</p></div>`);}
+// Sent when the salon owner edits an appointment (date/time/price). Shows
+// the new values; if old_* values are provided, fields that actually changed
+// are highlighted with a strike-through old value next to the new one so
+// the client sees at a glance what the salon changed for them.
+if(type==="appointment_updated"){
+const oldDate=b.old_date?esc(fmtD(b.old_date,lang)):"";
+const oldTime=esc(b.old_time||"");
+const oldPrice=b.old_price!=null?fP(b.old_price):"";
+const newPrice=fP(b.price);
+const changedRow=(label,oldVal,newVal)=>{
+if(!oldVal||oldVal===newVal)return row(label,newVal);
+return `<tr><td ${cL}>${label}</td><td ${cR}><span style="color:#999;text-decoration:line-through;font-size:12px;margin-right:6px;">${oldVal}</span><strong style="color:${AC};">${newVal}</strong></td></tr>`;
+};
+const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${txt(lang,"Past de nieuwe tijd je niet? Annuleren kan via:","Doesn't work for you? Cancel via:")}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment")}</a></div>`:"";
+await sendEmail(plainText(b.client_email),plainText(txt(lang,`Wijziging afspraak bij ${b.salon_name}`,`Appointment updated at ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is gewijzigd","Your appointment has been updated")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eS}</strong> heeft de details van je afspraak aangepast. Hieronder zie je de nieuwe gegevens:`,`<strong>${eS}</strong> updated the details of your appointment. The new details are below:`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment"),eSv)}${changedRow(txt(lang,"Datum","Date"),oldDate,eD)}${changedRow(txt(lang,"Tijd","Time"),oldTime,eT)}${changedRow(txt(lang,"Totaal","Total"),oldPrice,newPrice)}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Zien we je dan, ${eC}!`,`See you then, ${eC}!`)}</p></div>`);}
 if(type==="invoice"){
 const bd=[];if(b.salon_address)bd.push(eAd);if(b.salon_kvk)bd.push(`KVK: ${eKv}`);if(b.salon_btw)bd.push(`BTW: ${eBt}`);if(b.salon_iban)bd.push(`IBAN: ${eIb}`);
 const bSec=bd.length>0?`<div style="background:#f0ede8;border-radius:10px;padding:16px;margin-bottom:24px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:8px;">${txt(lang,"Bedrijfsgegevens","Business details")}</div><div style="font-size:13px;font-weight:500;margin-bottom:4px;">${eS}</div>${bd.map((d)=>`<div style="font-size:12px;color:#666;">${d}</div>`).join("")}</div>`:"";

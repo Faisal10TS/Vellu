@@ -2666,6 +2666,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (!Number.isFinite(priceNum) || priceNum < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
     if (!Number.isFinite(durationNum) || durationNum < 5) { toast.show(lang === "nl" ? "Ongeldige duur" : "Invalid duration", "error"); return; }
     setEditApptSaving(true);
+    const orig = editingAppt;
     const payload = {
       date: editApptForm.date,
       time: editApptForm.time,
@@ -2673,12 +2674,63 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       service_duration: durationNum,
     };
     const { error } = await supabase.from("appointments").update(payload).eq("id", editingAppt.id);
-    setEditApptSaving(false);
     if (error) {
+      setEditApptSaving(false);
       toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
       return;
     }
     update(d => { d.appointments = d.appointments.map(x => x.id === editingAppt.id ? { ...x, ...payload } : x); return d; });
+
+    // Notify the client when something they care about actually changed.
+    // Duration-only edits don't trigger an email — clients don't see duration
+    // in their confirmation, and pinging them for an invisible change just
+    // creates inbox noise. Cancelled/no-show appointments also skip the email.
+    const dateChanged = orig.date !== payload.date;
+    const timeChanged = (orig.time || "").slice(0, 5) !== payload.time;
+    const priceChanged = parseFloat(orig.service_price || 0) !== priceNum;
+    const skipEmail = orig.status === "cancelled" || orig.status === "no_show";
+    if ((dateChanged || timeChanged || priceChanged) && !skipEmail && orig.client_email) {
+      try {
+        // Try to surface an existing cancellation token so the client can
+        // bail if the new slot doesn't work for them. Best-effort: a missing
+        // or expired token just omits the link, doesn't block the email.
+        let cancelUrl = "";
+        try {
+          const { data: tok } = await supabase
+            .from("cancellation_tokens")
+            .select("token")
+            .eq("appointment_id", orig.id)
+            .eq("used", false)
+            .gt("expires_at", new Date().toISOString())
+            .maybeSingle();
+          if (tok?.token) cancelUrl = `${window.location.origin}/cancel/${tok.token}`;
+        } catch { /* token lookup failure is non-fatal */ }
+        await sendEmails("appointment_updated", {
+          client_name: orig.client_name,
+          client_email: orig.client_email,
+          service_name: orig.service_name,
+          // New values:
+          date: payload.date,
+          time: payload.time,
+          price: priceNum,
+          // Old values for the diff render:
+          old_date: dateChanged ? orig.date : null,
+          old_time: timeChanged ? (orig.time || "").slice(0, 5) : null,
+          old_price: priceChanged ? parseFloat(orig.service_price || 0) : null,
+          salon_name: salonData.name,
+          salon_accent: salonData.accent || "",
+          salon_logo: salonData.logo_url || "",
+          salon_slug: salonData.id || "",
+          cancel_url: cancelUrl || null,
+          lang,
+        });
+      } catch (e) {
+        // Don't fail the save flow if the email send hiccups — the DB write
+        // already succeeded. Just log so we notice.
+        console.error("appointment_updated email failed:", e);
+      }
+    }
+    setEditApptSaving(false);
     setEditingAppt(null);
     toast.show(lang === "nl" ? "Afspraak bijgewerkt" : "Appointment updated");
   };
