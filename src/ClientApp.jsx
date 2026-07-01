@@ -73,6 +73,132 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
 }
 
 
+// Circular share button pinned to the top-right of the salon profile hero.
+// Uses the native Web Share API when available (opens the OS share sheet
+// on mobile — WhatsApp / SMS / Instagram DM etc.) and falls back to a
+// small popover with a "copy link" action and a direct WhatsApp share for
+// desktop browsers that don't expose navigator.share.
+function SalonShareButton({ salon, lang, open, setOpen }) {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined"
+    ? `${window.location.origin}/${salon.id}`
+    : `https://vellu.cc/${salon.id}`;
+  const shareText = lang === "nl"
+    ? `Boek bij ${salon.name} via Vellu:`
+    : `Book at ${salon.name} via Vellu:`;
+
+  const openNativeOrPopover = async (e) => {
+    e.stopPropagation();
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: salon.name, text: shareText, url });
+        return;
+      } catch {
+        // User dismissed or share failed — fall through to the popover so
+        // they still have a way to share.
+      }
+    }
+    setOpen(o => !o);
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard API blocked (rare) — select fallback via a hidden input
+      const el = document.createElement("input");
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* give up quietly */ }
+      document.body.removeChild(el);
+    }
+  };
+
+  const openWhatsApp = () => {
+    const msg = encodeURIComponent(`${shareText} ${url}`);
+    window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener,noreferrer");
+    setOpen(false);
+  };
+
+  // Close the popover when the user clicks elsewhere.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = () => setOpen(false);
+    // setTimeout so the click that opened it doesn't immediately close it.
+    const t = setTimeout(() => document.addEventListener("click", onDoc), 0);
+    return () => { clearTimeout(t); document.removeEventListener("click", onDoc); };
+  }, [open, setOpen]);
+
+  return (
+    <div style={{ position: "absolute", top: 14, right: 14, zIndex: 5 }}>
+      <button
+        onClick={openNativeOrPopover}
+        aria-label={lang === "nl" ? "Deel deze pagina" : "Share this page"}
+        title={lang === "nl" ? "Deel" : "Share"}
+        style={{
+          width: 40, height: 40, borderRadius: "50%",
+          background: "rgba(0,0,0,0.42)", border: "1px solid rgba(255,255,255,0.28)",
+          color: "#fff", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          transition: "background 0.2s",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.6)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.42)"; }}
+      >
+        <NavIcon name="share" size={16} color="currentColor" />
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute", top: 48, right: 0, minWidth: 220,
+            background: "#fff", color: "#1a1a1a",
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14, padding: 6,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+            fontFamily: "'Jost', sans-serif",
+          }}
+        >
+          <button
+            onClick={copyLink}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 12px", background: "transparent", border: "none",
+              borderRadius: 10, cursor: "pointer",
+              fontSize: 13, color: "inherit", textAlign: "left",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <NavIcon name="copy" size={14} color="currentColor" />
+            <span style={{ flex: 1 }}>{copied ? (lang === "nl" ? "✓ Gekopieerd" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : "Copy link")}</span>
+          </button>
+          <button
+            onClick={openWhatsApp}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 12px", background: "transparent", border: "none",
+              borderRadius: 10, cursor: "pointer",
+              fontSize: 13, color: "inherit", textAlign: "left",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(37,211,102,0.08)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#25d366" aria-hidden="true">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+            </svg>
+            <span style={{ flex: 1 }}>WhatsApp</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false, reviewEmail = "" }) {
   const { colors: c, theme } = useTheme();
@@ -358,6 +484,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [galleryExpanded, setGalleryExpanded] = useState(false);
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [expandedPolicy, setExpandedPolicy] = useState(false);
+  // Share popover — only used on desktop / browsers without navigator.share.
+  const [shareOpen, setShareOpen] = useState(false);
   const [expandedTeamMember, setExpandedTeamMember] = useState(null);
   const profileSectionRefs = useRef({});
   const profileMainRef = useRef(null);
@@ -1122,6 +1250,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} style={{ objectPosition: `center ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
           <div className="profile-hero-gradient" />
+          <SalonShareButton
+            salon={initialSalon}
+            lang={lang}
+            open={shareOpen}
+            setOpen={setShareOpen}
+          />
           <div className="profile-hero-content">
             <h1 className="profile-hero-name" style={{ fontSize: isMobile ? 28 : 42 }}>{initialSalon.name}</h1>
             {initialSalon.city && (
