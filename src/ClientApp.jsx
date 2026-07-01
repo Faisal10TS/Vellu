@@ -78,7 +78,7 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
 // on mobile — WhatsApp / SMS / Instagram DM etc.) and falls back to a
 // small popover with a "copy link" action and a direct WhatsApp share for
 // desktop browsers that don't expose navigator.share.
-function SalonShareButton({ salon, lang, open, setOpen }) {
+function SalonShareButton({ salon, lang, open, setOpen, accent }) {
   const [copied, setCopied] = useState(false);
   const url = typeof window !== "undefined"
     ? `${window.location.origin}/${salon.id}`
@@ -133,34 +133,37 @@ function SalonShareButton({ salon, lang, open, setOpen }) {
   }, [open, setOpen]);
 
   return (
-    <div style={{ position: "absolute", top: 14, right: 14, zIndex: 5 }}>
+    <div style={{ position: "relative", display: "inline-block" }}>
       <button
         onClick={openNativeOrPopover}
         aria-label={lang === "nl" ? "Deel deze pagina" : "Share this page"}
         title={lang === "nl" ? "Deel" : "Share"}
         style={{
-          width: 40, height: 40, borderRadius: "50%",
-          background: "rgba(0,0,0,0.42)", border: "1px solid rgba(255,255,255,0.28)",
-          color: "#fff", cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          transition: "background 0.2s",
+          height: 44, padding: "0 22px 0 18px", borderRadius: 100,
+          background: "#fff", border: `1px solid rgba(255,255,255,0.9)`,
+          color: "#111", cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: 8,
+          fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600,
+          letterSpacing: "0.06em", textTransform: "uppercase",
+          boxShadow: "0 10px 28px rgba(0,0,0,0.32)",
+          transition: "transform 0.18s, box-shadow 0.18s",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.6)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.42)"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 14px 32px rgba(0,0,0,0.38)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.32)"; }}
       >
-        <NavIcon name="share" size={16} color="currentColor" />
+        <NavIcon name="share" size={15} color={accent || "#c9a96e"} />
+        {lang === "nl" ? "Deel deze salon" : "Share this salon"}
       </button>
       {open && (
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: "absolute", top: 48, right: 0, minWidth: 220,
+            position: "absolute", top: 52, left: "50%", transform: "translateX(-50%)", minWidth: 240,
             background: "#fff", color: "#1a1a1a",
             border: "1px solid rgba(0,0,0,0.08)",
             borderRadius: 14, padding: 6,
             boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-            fontFamily: "'Jost', sans-serif",
+            fontFamily: "'Jost', sans-serif", zIndex: 6,
           }}
         >
           <button
@@ -1250,12 +1253,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} style={{ objectPosition: `center ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
           <div className="profile-hero-gradient" />
-          <SalonShareButton
-            salon={initialSalon}
-            lang={lang}
-            open={shareOpen}
-            setOpen={setShareOpen}
-          />
           <div className="profile-hero-content">
             <h1 className="profile-hero-name" style={{ fontSize: isMobile ? 28 : 42 }}>{initialSalon.name}</h1>
             {initialSalon.city && (
@@ -1282,6 +1279,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
               </div>
             )}
+            {/* Share pill — sits right under the salon name so it's the first
+                thing after the meta row, impossible to miss. */}
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "center", position: "relative" }}>
+              <SalonShareButton
+                salon={initialSalon}
+                lang={lang}
+                open={shareOpen}
+                setOpen={setShareOpen}
+                accent={accent}
+              />
+            </div>
           </div>
         </div>
 
