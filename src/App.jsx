@@ -2,7 +2,7 @@ import { useState, useEffect, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -373,6 +373,21 @@ function CancelRoute({ lang }) {
         salon_name: notify.salon_name || "",
         salon_accent: notify.salon_accent || "", salon_logo: notify.salon_logo || "", lang,
       });
+
+      // SMS mirror — gated server-side to Pro plan + valid phone. The
+      // cancellation flow returns the notify.owner_id we need for the gate.
+      if (a.client_phone && notify.owner_id) {
+        sendSMS("booking_cancelled", {
+          client_name: a.client_name,
+          client_phone: a.client_phone,
+          service_name: a.service_name,
+          date: a.date,
+          time: a.time,
+          salon_name: notify.salon_name || "",
+          owner_id: notify.owner_id,
+          lang,
+        }).catch(e => console.error("cancellation SMS failed:", e));
+      }
 
       // Notify owner + staff about cancellation
       if (notify.owner_email) {

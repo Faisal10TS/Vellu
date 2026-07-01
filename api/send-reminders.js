@@ -68,6 +68,37 @@ export default async function handler(req, res) {
           continue
         }
 
+        // SMS reminder — the edge function silently no-ops if the salon
+        // isn't Professional or the client has no phone, so this is safe to
+        // fire for every reminder. Run after the email so a Twilio hiccup
+        // never blocks the actual email reminder.
+        if (appt.client_phone) {
+          try {
+            await fetch(`${process.env.VITE_SUPABASE_URL}/functions/v1/send-sms`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+              },
+              body: JSON.stringify({
+                type: 'appointment_reminder',
+                booking: {
+                  client_name: appt.client_name,
+                  client_phone: appt.client_phone,
+                  service_name: appt.service_name,
+                  date: appt.date,
+                  time: appt.time,
+                  price: appt.service_price,
+                  salon_name: salonName,
+                  owner_id: appt.owner_id
+                }
+              })
+            })
+          } catch (smsErr) {
+            console.error('SMS reminder error for appointment:', appt.id, smsErr)
+          }
+        }
+
         // Mark reminder as sent
         await supabase
           .from('appointments')

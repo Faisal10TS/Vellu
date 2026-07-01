@@ -251,6 +251,28 @@ async function sendEmails(type, booking) {
   }
 }
 
+// SMS counterpart to sendEmails. The edge function silently no-ops when the
+// salon is not on the Professional plan or the client has no phone number,
+// so callers can safely fire this alongside sendEmails without duplicating
+// the gate logic here. Errors are logged and swallowed — a failed SMS never
+// blocks the flow, because the email path is already covering the essential
+// notification.
+async function sendSMS(type, booking) {
+  try {
+    const { data, error } = await supabase.functions.invoke("send-sms", {
+      body: { type, booking }
+    });
+    if (error) {
+      console.error("SMS error:", error);
+      return { success: false, error };
+    }
+    return { success: true, data };
+  } catch (e) {
+    console.error("SMS error:", e);
+    return { success: false, error: e };
+  }
+}
+
 const ACCENT = "#c9a96e";
 
 // ─── GOOGLE CALENDAR HELPER ──────────────────────────────────
@@ -1513,7 +1535,7 @@ export {
   useToast, ToastContainer,
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
-  compressImage, sendEmails,
+  compressImage, sendEmails, sendSMS,
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, getDays,

@@ -10,7 +10,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   Skeleton, DashboardSkeleton,
-  compressImage, sendEmails, ACCENT,
+  compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
@@ -2705,9 +2705,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             .maybeSingle();
           if (tok?.token) cancelUrl = `${window.location.origin}/cancel/${tok.token}`;
         } catch { /* token lookup failure is non-fatal */ }
-        await sendEmails("appointment_updated", {
+        const notifyPayload = {
           client_name: orig.client_name,
           client_email: orig.client_email,
+          client_phone: orig.client_phone || null,
           service_name: orig.service_name,
           // New values:
           date: payload.date,
@@ -2721,9 +2722,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_accent: salonData.accent || "",
           salon_logo: salonData.logo_url || "",
           salon_slug: salonData.id || "",
+          owner_id: salonData.owner_id,
           cancel_url: cancelUrl || null,
           lang,
-        });
+        };
+        await sendEmails("appointment_updated", notifyPayload);
+        // Fire SMS too — the edge function silently skips if the salon isn't
+        // on Professional or the client has no phone. Runs in parallel so the
+        // save UX isn't blocked by network chatter.
+        sendSMS("appointment_updated", notifyPayload).catch(() => { /* logged in helper */ });
       } catch (e) {
         // Don't fail the save flow if the email send hiccups — the DB write
         // already succeeded. Just log so we notice.
@@ -7364,13 +7371,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     }
                     update(d => { d.appointments = [appt, ...d.appointments]; return d; });
                     // Send confirmation email
-                    await sendEmails("booking_confirmation", {
+                    const bookingConfirmPayload = {
                       client_name: addApptForm.client_name, client_email: email,
+                      client_phone: addApptForm.client_phone || null,
                       service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
                       payment: "on-arrival", price: price,
                       salon_name: salonData.name, owner_email: null,
-                      salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang
-                    });
+                      salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
+                      owner_id: salonData.owner_id, lang
+                    };
+                    await sendEmails("booking_confirmation", bookingConfirmPayload);
+                    sendSMS("booking_confirmation", bookingConfirmPayload).catch(() => { /* logged in helper */ });
                     // Notify assigned staff
                     if (staffMember?.email) {
                       await sendEmails("booking_notification", {

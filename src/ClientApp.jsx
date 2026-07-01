@@ -6,7 +6,7 @@ import { supabase } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
-  compressImage, sendEmails, ACCENT,
+  compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
@@ -863,6 +863,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           salon_name: result.salon_name || initialSalon.name,
           salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
         }).catch(e => console.error("notification email failed:", e));
+      }
+
+      // SMS to the client — fired regardless of whether emails were sent
+      // server-side, because the current book-appointment doesn't dispatch
+      // SMS. The send-sms edge function silently no-ops for salons on the
+      // Starter plan or clients without a phone, so this is safe to call
+      // for every booking; only Pro-tier salons with mobile-phone clients
+      // will actually see a message go out.
+      if (form.phone) {
+        sendSMS("booking_confirmation", {
+          client_name: clientFullName,
+          client_phone: form.phone,
+          service_name: combinedServiceName,
+          date, time,
+          price: serverPrice,
+          salon_name: result.salon_name || initialSalon.name,
+          owner_id: initialSalon.owner_id,
+          lang,
+        }).catch(e => console.error("confirmation SMS failed:", e));
       }
 
       supabase.functions.invoke("google-calendar", {
