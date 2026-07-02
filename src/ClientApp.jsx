@@ -394,12 +394,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     //   null            -> no constraints (follow salon hours)
     //   { closed:true } -> staff explicitly closed this day
     //   { open, close } -> staff's working window
+    //
+    // When a staff row is closed:false but missing open or close (legacy
+    // toggle-picker bug), fall back to the salon business_hours for that
+    // day so we never widen availability to "00:00 – 23:59".
+    const salonDayFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
+    const fbOpen = salonDayFallback.open || "09:00";
+    const fbClose = salonDayFallback.close || "17:30";
     const staffWindow = (staff) => {
       if (!staff?.working_hours) return null;
       const day = staff.working_hours[dayOfWeek];
       if (!day) return null;
       if (day.closed) return { closed: true };
-      return { open: day.open || "00:00", close: day.close || "23:59" };
+      return { open: day.open || fbOpen, close: day.close || fbClose };
     };
 
     // Effective window for one selected-service row.
@@ -841,14 +848,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
     // Is this staff member working the full [startMin, endMin) window today?
     // Returns true when the staff has no constraint (follows salon hours —
-    // the salon-wide check has already passed by this point).
+    // the salon-wide check has already passed by this point). When the
+    // staff row has closed:false but missing open/close (legacy toggle
+    // bug), fall back to the salon business_hours for that day so a
+    // half-saved row can't quietly widen bookable slots to 00:00–23:59.
+    const gatFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
+    const gatFbOpen = gatFallback.open || "09:00";
+    const gatFbClose = gatFallback.close || "17:30";
     const staffCoversWindow = (staff, startMin, endMin) => {
       if (!staff?.working_hours) return true;
       const day = staff.working_hours[dayOfWeek];
       if (!day) return true;
       if (day.closed) return false;
-      const staffOpen = toMin(day.open || "00:00");
-      const staffClose = toMin(day.close || "23:59");
+      const staffOpen = toMin(day.open || gatFbOpen);
+      const staffClose = toMin(day.close || gatFbClose);
       return startMin >= staffOpen && endMin <= staffClose;
     };
 
