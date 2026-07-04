@@ -532,8 +532,8 @@ const _T_RAW = {
     // Exception days & vacation
     exceptionDays:"Uitzonderingsdagen", addException:"+ Uitzonderingsdag",
     exceptionDesc:"Eenmalig open op een dag die normaal dicht is",
-    blockedDays:"Geblokkeerde dagen", addBlocked:"+ Dag blokkeren",
-    blockedDesc:"Blokkeer dagen (bijv. vakantie) zonder je vaste dagen te wijzigen",
+    blockedDays:"Blokkeer dagen of tijden", addBlocked:"+ Blokkeren",
+    blockedDesc:"Blokkeer een hele dag (bv. vakantie) of alleen een tijdvak (bv. lunch of privé-afspraak van 15:00–16:00) zonder je vaste openingstijden te wijzigen.",
     blockedReason:"Reden (optioneel)", vacation:"Vakantie", blocked:"Geblokkeerd",
     dateFrom:"Van", dateTo:"Tot",
     // Staff availability
@@ -793,8 +793,8 @@ const _T_RAW = {
     // Exception days & vacation
     exceptionDays:"Exception days", addException:"+ Exception day",
     exceptionDesc:"One-time open on a day that is normally closed",
-    blockedDays:"Blocked days", addBlocked:"+ Block day",
-    blockedDesc:"Block days (e.g. vacation) without changing your regular hours",
+    blockedDays:"Block days or times", addBlocked:"+ Block",
+    blockedDesc:"Block a whole day (e.g. vacation) or just a time window (e.g. lunch or private appointment 15:00–16:00) without changing your regular hours.",
     blockedReason:"Reason (optional)", vacation:"Vacation", blocked:"Blocked",
     dateFrom:"From", dateTo:"To",
     // Staff availability
