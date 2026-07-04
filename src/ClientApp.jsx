@@ -303,11 +303,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (!override || override.type !== "blocked") return false;
     // If it has specific time bounds, it's a time-slot block, NOT a full-day block
     if (override.block_time_start && override.block_time_end) return false;
+    // Per-staff blocks don't close the whole day — other staff may still work.
+    // The per-slot filter in staffCoversWindow handles the affected staff.
+    if (override.staff_id) return false;
     return true;
   };
   const isTimeBlockedByOverride = (dateStr, timeStr) => {
     const override = dayOverrides[dateStr];
     if (!override || override.type !== "blocked") return false;
+    // Per-staff time blocks are checked in staffCoversWindow (per-slot,
+    // per-eligible-staff). Skip them here so a block on Esther doesn't
+    // remove Lady's slots too.
+    if (override.staff_id) return false;
     if (override.block_time_start && override.block_time_end) {
       return timeStr >= override.block_time_start && timeStr < override.block_time_end;
     }
@@ -855,6 +862,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const gatFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
     const gatFbOpen = gatFallback.open || "09:00";
     const gatFbClose = gatFallback.close || "17:30";
+    // Per-staff block for the current date, if any. Only relevant to slots
+    // that involve THIS specific staff — other staff can still work through
+    // it, which is why isTimeBlockedByOverride skips this case (see above).
+    // Two flavours: time-window (has start/end) and whole-day (no bounds).
+    const dayOverride = dayOverrides[forDate];
+    const staffBlock = (dayOverride && dayOverride.type === "blocked" && dayOverride.staff_id)
+      ? {
+          staffId: dayOverride.staff_id,
+          wholeDay: !dayOverride.block_time_start || !dayOverride.block_time_end,
+          start: dayOverride.block_time_start ? toMin(dayOverride.block_time_start) : 0,
+          end: dayOverride.block_time_end ? toMin(dayOverride.block_time_end) : 24 * 60,
+        }
+      : null;
     const staffCoversWindow = (staff, startMin, endMin) => {
       if (!staff?.working_hours) return true;
       const day = staff.working_hours[dayOfWeek];
@@ -862,7 +882,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (day.closed) return false;
       const staffOpen = toMin(day.open || gatFbOpen);
       const staffClose = toMin(day.close || gatFbClose);
-      return startMin >= staffOpen && endMin <= staffClose;
+      if (startMin < staffOpen || endMin > staffClose) return false;
+      // Per-staff block: this staff can't cover a window that overlaps with
+      // their personal block (or any window if the block is whole-day).
+      // Other eligible staff are still evaluated by the enclosing loop, so
+      // a Lady-block only closes Lady's slot options.
+      if (staffBlock && staff.id === staffBlock.staffId) {
+        if (staffBlock.wholeDay) return false;
+        if (startMin < staffBlock.end && endMin > staffBlock.start) return false;
+      }
+      return true;
     };
 
     const salonOpen = toMin(dayHours.open);

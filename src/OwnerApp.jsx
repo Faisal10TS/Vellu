@@ -2443,7 +2443,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Planning tab's blocker, but writes to profile.day_overrides straight
   // away so the owner doesn't have to remember to hit "Opslaan".
   const [blockModalOpen, setBlockModalOpen] = useState(false);
-  const [blockForm, setBlockForm] = useState({ mode: "time", from: "", to: "", time_start: "09:00", time_end: "17:30", reason: "" });
+  const [blockForm, setBlockForm] = useState({ mode: "time", from: "", to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "" });
   const [blockSaving, setBlockSaving] = useState(false);
   const [editApptForm, setEditApptForm] = useState({ date: "", time: "", price: "", duration: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
@@ -2754,7 +2754,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // a day + this button gets the owner most of the way there.
   const openBlockModal = () => {
     const seed = calDate || fmt(getToday());
-    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "" });
+    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "" });
     setBlockModalOpen(true);
   };
 
@@ -2769,6 +2769,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     setBlockSaving(true);
     const nextOverrides = { ...(salonData.day_overrides || {}) };
+    // Denormalise staff name so the block card can show it without a
+    // separate lookup, and future-proof against a rename (we snapshot).
+    const staffId = blockForm.staff_id || null;
+    const staffName = staffId
+      ? ((salonData.staff || []).find(s => s.id === staffId)?.name || "")
+      : "";
     if (blockForm.mode === "time") {
       nextOverrides[from] = {
         type: "blocked",
@@ -2777,6 +2783,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         to: from,
         block_time_start: blockForm.time_start,
         block_time_end: blockForm.time_end,
+        staff_id: staffId,
+        staff_name: staffName,
       };
     } else {
       const endDate = blockForm.to || from;
@@ -2788,6 +2796,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
           from,
           to: endDate,
+          staff_id: staffId,
+          staff_name: staffName,
         };
         cur.setDate(cur.getDate() + 1);
       }
@@ -3351,6 +3361,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                   <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : "To (optional)"}</label>
                     <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
+                  </div>
+                </div>
+              )}
+              {(salonData.staff || []).length > 0 && (
+                <div><label style={lbl}>{lang === "nl" ? "Voor wie?" : "Who?"}</label>
+                  <select className="input-field" value={blockForm.staff_id} onChange={e => setBlockForm(f => ({ ...f, staff_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                    <option value="">{lang === "nl" ? "Iedereen (hele salon)" : "Everyone (whole salon)"}</option>
+                    {(salonData.staff || []).map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                    {blockForm.staff_id
+                      ? (lang === "nl" ? "Alleen deze medewerker is dan niet boekbaar; anderen blijven beschikbaar." : "Only this staff member is blocked; the rest stays bookable.")
+                      : (lang === "nl" ? "De hele salon is dicht in dit tijdvak." : "The whole salon is closed during this window.")}
                   </div>
                 </div>
               )}
@@ -6594,7 +6619,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
                   <div key={date + (v.block_time_start || "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${c.danger}10`, border: `1px solid ${c.danger}26`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</span>
+                        {/* Scope badge: staff name when the block is per-staff,
+                            "Iedereen" when it's salon-wide. Matches the label
+                            in the agenda modal so it's the same wording. */}
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase",
+                          padding: "2px 7px", borderRadius: 100,
+                          background: v.staff_id ? `${accent}18` : `${c.danger}18`,
+                          color: v.staff_id ? accent : c.danger,
+                          border: `1px solid ${v.staff_id ? `${accent}44` : `${c.danger}44`}`,
+                        }}>
+                          {v.staff_id
+                            ? (v.staff_name || ((salonData.staff || []).find(s => s.id === v.staff_id)?.name) || (lang === "nl" ? "Medewerker" : "Staff"))
+                            : (lang === "nl" ? "Iedereen" : "Everyone")}
+                        </span>
+                      </div>
                       {v.block_time_start && v.block_time_end && (
                         <div style={{ fontSize: 10, color: accent, fontWeight: 500 }}>{v.block_time_start} — {v.block_time_end}</div>
                       )}
