@@ -2439,6 +2439,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // skips the smart-slot validation that Verplaats uses, since the owner is
   // intentionally writing values that may not fit normal availability.
   const [editingAppt, setEditingAppt] = useState(null);
+  // Quick-block modal opened from the agenda toolbar. Same shape as the
+  // Planning tab's blocker, but writes to profile.day_overrides straight
+  // away so the owner doesn't have to remember to hit "Opslaan".
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockForm, setBlockForm] = useState({ mode: "time", from: "", to: "", time_start: "09:00", time_end: "17:30", reason: "" });
+  const [blockSaving, setBlockSaving] = useState(false);
   const [editApptForm, setEditApptForm] = useState({ date: "", time: "", price: "", duration: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
@@ -2741,6 +2747,68 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       price: a.service_price != null ? String(a.service_price) : "",
       duration: a.service_duration != null ? String(a.service_duration) : "",
     });
+  };
+
+  // Open the quick-block modal from the agenda. Prefills the "from" date to
+  // whichever day is currently in focus in the calendar so a single tap on
+  // a day + this button gets the owner most of the way there.
+  const openBlockModal = () => {
+    const seed = calDate || fmt(getToday());
+    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "" });
+    setBlockModalOpen(true);
+  };
+
+  const saveBlock = async () => {
+    if (blockSaving) return;
+    const from = blockForm.from;
+    if (!from) { toast.show(lang === "nl" ? "Datum is verplicht" : "Date is required", "error"); return; }
+    // Time-slot validation: end must be after start.
+    if (blockForm.mode === "time" && !(blockForm.time_end > blockForm.time_start)) {
+      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : "End time must be after start time", "error");
+      return;
+    }
+    setBlockSaving(true);
+    const nextOverrides = { ...(salonData.day_overrides || {}) };
+    if (blockForm.mode === "time") {
+      nextOverrides[from] = {
+        type: "blocked",
+        reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
+        from,
+        to: from,
+        block_time_start: blockForm.time_start,
+        block_time_end: blockForm.time_end,
+      };
+    } else {
+      const endDate = blockForm.to || from;
+      let cur = new Date(from);
+      const end = new Date(endDate);
+      while (cur <= end) {
+        nextOverrides[fmt(cur)] = {
+          type: "blocked",
+          reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
+          from,
+          to: endDate,
+        };
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+    // Persist to the profile immediately — the Planning tab relies on a
+    // manual "Opslaan" press, but blocking from the agenda should feel
+    // like an instant action.
+    const { error } = await supabase
+      .from("profiles")
+      .update({ day_overrides: nextOverrides })
+      .eq("id", salonData.owner_id);
+    setBlockSaving(false);
+    if (error) {
+      toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
+      return;
+    }
+    update(d => { d.day_overrides = nextOverrides; return d; });
+    setBlockModalOpen(false);
+    toast.show(blockForm.mode === "time"
+      ? (lang === "nl" ? "Tijdvak geblokkeerd" : "Time window blocked")
+      : (lang === "nl" ? "Dag geblokkeerd" : "Day blocked"));
   };
 
   const saveEditAppt = async () => {
@@ -3219,6 +3287,90 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           onClose={() => setQrOpen(false)}
         />
       )}
+      {/* Quick-block modal — same fields as the Planning tab's blocker but
+          persists immediately so blocking from the agenda feels like a
+          direct action. Portal'd to escape the .fade-up transform context. */}
+      {blockModalOpen && createPortal((
+        <div onClick={() => !blockSaving && setBlockModalOpen(false)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+              {lang === "nl"
+                ? "Klanten kunnen dan geen afspraak boeken in dit tijdvak of op deze dag."
+                : "Clients won't be able to book during this window or on this day."}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {[
+                { key: "time", nl: "Tijdvak", en: "Time window" },
+                { key: "day", nl: "Hele dag", en: "Whole day" },
+              ].map(opt => {
+                const active = blockForm.mode === opt.key;
+                return (
+                  <button key={opt.key} type="button"
+                    onClick={() => setBlockForm(f => ({ ...f, mode: opt.key }))}
+                    style={{
+                      flex: 1, padding: "9px 12px", borderRadius: 10, cursor: "pointer",
+                      fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                      background: active ? `${c.danger}1f` : "transparent",
+                      color: active ? c.danger : c.textSub,
+                      border: `1px solid ${active ? `${c.danger}4d` : c.inputBorder}`,
+                      fontFamily: "'Jost', sans-serif",
+                    }}
+                  >{lang === "nl" ? opt.nl : opt.en}</button>
+                );
+              })}
+            </div>
+            {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              {blockForm.mode === "time" ? (
+                <>
+                  <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label>
+                    <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                      <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                        {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                      </select>
+                    </div>
+                    <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
+                      <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                        {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                    <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                  </div>
+                  <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : "To (optional)"}</label>
+                    <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
+                  </div>
+                </div>
+              )}
+              <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : "Reason (optional)"}</label>
+                <input className="input-field" value={blockForm.reason} onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. Privé-afspraak, vakantie" : "e.g. Private appointment, vacation"} style={{ width: "100%" }} />
+              </div>
+            </div>
+            ); })()}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" disabled={blockSaving} onClick={saveBlock} style={{ flex: 1, background: c.danger, color: "#fff" }}>
+                {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Blokkeer" : "Block")}
+              </button>
+              <button className="btn-ghost" disabled={blockSaving} onClick={() => setBlockModalOpen(false)} style={{ padding: "0 18px" }}>
+                {lang === "nl" ? "Annuleer" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
       {editingAppt && createPortal((
         <div onClick={() => !editApptSaving && setEditingAppt(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
@@ -3962,15 +4114,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* Top toolbar — view toggle (left) + period navigator (right) */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
-                  {["week", "month", "year"].map(mode => (
-                    <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
-                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
-                      background: calViewMode === mode ? accent : "transparent",
-                      color: calViewMode === mode ? c.btnOnDark : c.textSub,
-                    }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
-                  ))}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                    {["week", "month", "year"].map(mode => (
+                      <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
+                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                        background: calViewMode === mode ? accent : "transparent",
+                        color: calViewMode === mode ? c.btnOnDark : c.textSub,
+                      }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
+                    ))}
+                  </div>
+                  {/* Block-time / block-day button. Opens a quick modal that
+                      writes to profile.day_overrides straight away — no need
+                      to bounce to the Planning settings screen. */}
+                  <button
+                    onClick={openBlockModal}
+                    style={{
+                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                      fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: `${c.danger}10`, color: c.danger,
+                      border: `1px solid ${c.danger}33`,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      fontFamily: "'Jost', sans-serif",
+                    }}
+                    title={lang === "nl" ? "Blokkeer een tijd of dag" : "Block a time or day"}
+                  >
+                    <span aria-hidden="true">🚫</span>
+                    {lang === "nl" ? "Blokkeer tijd" : "Block time"}
+                  </button>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {calWeekOffset !== 0 && (
