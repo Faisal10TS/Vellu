@@ -30,12 +30,11 @@ const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({
 //   3. On first login we find the staff row by email + user_id IS NULL, and claim it
 //      by setting its user_id to session.user.id. Subsequent logins match by user_id.
 //
-// Precedence: staff wins. If a user has a staff_members.user_id link they are
-// staff — full stop. The reason is defence against the invite race: the
-// handle_new_user trigger runs during admin.createUser BEFORE the edge
-// function can set staff_members.user_id, and older rows may have left ghost
-// owner profiles behind. A staff link is authoritative; the profile row may
-// be a leftover.
+// Precedence: a staff link to ANOTHER salon wins over the owner path — that
+// catches the invite race where handle_new_user leaves a ghost profile behind
+// before staff_members.user_id is set. But a staff row where
+// owner_id === user.id is the owner listing themselves as staff of their own
+// team-account salon (very common); that must stay routed to the owner app.
 async function resolveUserRole(user) {
   if (!user) return { role: null };
   const email = (user.email || "").toLowerCase();
@@ -53,15 +52,18 @@ async function resolveUserRole(user) {
       if (claimed) staffMember = claimed;
     }
   }
-  if (staffMember) {
+  // Self-staff (owner_id === user.id) means the owner added themselves to
+  // their own team-account roster — don't hijack their owner dashboard.
+  if (staffMember && staffMember.owner_id !== user.id) {
     const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
     if (salonProfile) {
       return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email } };
     }
   }
 
-  // No staff link → owner path. Any profile row is enough to route into the
-  // owner app; PlanSelection / onboarding handle the empty-profile case.
+  // No cross-salon staff link → owner path. Any profile row is enough to
+  // route into the owner app; PlanSelection / onboarding handle the
+  // empty-profile case.
   if (ownerProfile) return { role: "owner" };
   return { role: null };
 }
