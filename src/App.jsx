@@ -226,12 +226,14 @@ function SalonRoute({ lang, setLang }) {
         { data: reviews },
         { data: staffData },
         { data: categories },
-        { data: locData }
+        { data: locData },
+        { data: staffBlocksData }
       ] = await Promise.all([
         supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
         supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position"),
         supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
-        supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position")
+        supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position"),
+        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", new Date().toISOString().split("T")[0]),
       ]);
       setSalon({
         id: data.slug,
@@ -287,6 +289,7 @@ function SalonRoute({ lang, setLang }) {
         appointments: [],
         reviews: reviews || [],
         staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
+        staff_blocks: staffBlocksData || [],
         categories: categories || [],
         locations: locData || []
       });

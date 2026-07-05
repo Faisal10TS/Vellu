@@ -2241,7 +2241,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           { data: locData },
           { data: noShowRows },
           { count: referralCount },
-          { data: manualClients }
+          { data: manualClients },
+          { data: staffBlocksData }
         ] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
@@ -2255,7 +2256,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // client-specific note (e.g. "prefers less pressure", "always late")
           // right at the point of service, so staff don't have to open a
           // separate client detail page mid-appointment.
-          supabase.from("manual_clients").select("email, notes").eq("owner_id", data.id).not("notes", "is", null)
+          supabase.from("manual_clients").select("email, notes").eq("owner_id", data.id).not("notes", "is", null),
+          // Staff-authored blocks (staff_day_overrides). Owner sees them in
+          // the agenda so they know why a stylist isn't bookable, and can
+          // remove one on their behalf if it was a mistake.
+          supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
         ]);
         // Shape client_no_shows as a lookup by email so renderApptCard is O(1).
         const clientNoShowsMap = {};
@@ -2299,6 +2304,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           cover_focal_y: data.cover_focal_y ?? 50,
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
+          staff_blocks: staffBlocksData || [],
           account_type: data.account_type || "joint",
           show_owner_on_booking: data.show_owner_on_booking || false,
           min_advance_hours: data.min_advance_hours || 0,
@@ -4266,7 +4272,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const blockMatchesStaff = ov && ov.type === "blocked" && (
                         !agendaStaff || !ov.staff_id || ov.staff_id === agendaStaff
                       );
-                      const isFullDayBlocked = blockMatchesStaff && !ov.block_time_start;
+                      // Staff-authored blocks (staff_day_overrides). Owner sees
+                      // them so they know why a stylist isn't bookable.
+                      const staffBlocksHere = (salonData.staff_blocks || [])
+                        .filter(b => b.date === ds && (!agendaStaff || b.staff_id === agendaStaff));
+                      const staffNameById = (id) => (salonData.staff || []).find(sm => sm.id === id)?.name || "";
+                      const staffFullDayBlock = staffBlocksHere.find(b => !b.block_time_start);
+                      const staffTimeBlocks = staffBlocksHere.filter(b => b.block_time_start);
+                      const isFullDayBlocked = (blockMatchesStaff && !ov.block_time_start) || !!staffFullDayBlock;
                       const isTimeBlocked = blockMatchesStaff && !!ov.block_time_start;
                       return (
                         <div key={i} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
@@ -4302,7 +4315,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ov.block_time_start}–{ov.block_time_end}</div>
                               </div>
                             )}
-                            {dayAppts.length === 0 && !isFullDayBlocked && !isTimeBlocked ? (
+                            {staffFullDayBlock && !isFullDayBlocked && (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: isMobile ? "4px 2px" : "6px 4px", background: `${c.danger}18`, border: `1px solid ${c.danger}44`, borderRadius: 6 }}>
+                                <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Vrij" : "Off"}</div>
+                                <div style={{ fontSize: isMobile ? 7 : 9, color: c.danger, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{staffNameById(staffFullDayBlock.staff_id)}</div>
+                              </div>
+                            )}
+                            {staffTimeBlocks.map(b => (
+                              <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }} title={staffNameById(b.staff_id)}>
+                                <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.block_time_start}–{b.block_time_end}</div>
+                              </div>
+                            ))}
+                            {dayAppts.length === 0 && !isFullDayBlocked && !isTimeBlocked && staffBlocksHere.length === 0 ? (
                               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
                             ) : dayAppts.length === 0 ? null : (
                               <>
@@ -4573,6 +4598,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 );
               })()}
+
+              {/* Staff-authored block banners (staff_day_overrides). One card
+                  per matching row so the owner can unblock each individually. */}
+              {calViewMode !== "year" && (salonData.staff_blocks || [])
+                .filter(b => b.date === calDate && (!agendaStaff || b.staff_id === agendaStaff))
+                .map(b => {
+                  const isTimeBlock = !!b.block_time_start;
+                  const staffName = (salonData.staff || []).find(sm => sm.id === b.staff_id)?.name || "";
+                  const removeBlock = async () => {
+                    if (!window.confirm(lang === "nl" ? `Deblokkade van ${staffName} verwijderen?` : `Remove ${staffName}'s block?`)) return;
+                    const { error } = await supabase.from("staff_day_overrides").delete().eq("id", b.id);
+                    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+                    update(d => { d.staff_blocks = (d.staff_blocks || []).filter(x => x.id !== b.id); return d; });
+                    toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
+                  };
+                  return (
+                    <div key={b.id} style={{ marginBottom: 12, padding: "12px 14px", background: `${c.danger}0f`, border: `1px solid ${c.danger}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${c.danger}22`, flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
+                          {isTimeBlock
+                            ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
+                            : (lang === "nl" ? `${staffName} is vrij` : `${staffName} is off`)}
+                        </div>
+                        <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
+                          {b.reason || (lang === "nl" ? "Eigen blokkade — geen reden opgegeven" : "Own block — no reason given")}
+                        </div>
+                      </div>
+                      <button className="btn-ghost" onClick={removeBlock}
+                        style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                        {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                      </button>
+                    </div>
+                  );
+                })}
 
               {/* Appointments list (week/month views) */}
               {calViewMode !== "year" && (<>

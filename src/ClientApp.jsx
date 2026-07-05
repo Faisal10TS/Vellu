@@ -875,6 +875,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           end: dayOverride.block_time_end ? toMin(dayOverride.block_time_end) : 24 * 60,
         }
       : null;
+    // Per-staff blocks pulled from staff_day_overrides — one array of blocks
+    // per staff_id so multiple stylists can each have their own block on the
+    // same date without stepping on each other.
+    const staffBlocksById = {};
+    for (const b of initialSalon.staff_blocks || []) {
+      if (b.date !== forDate) continue;
+      (staffBlocksById[b.staff_id] = staffBlocksById[b.staff_id] || []).push({
+        wholeDay: !b.block_time_start,
+        start: b.block_time_start ? toMin(b.block_time_start) : 0,
+        end: b.block_time_end ? toMin(b.block_time_end) : 24 * 60,
+      });
+    }
     const staffCoversWindow = (staff, startMin, endMin) => {
       if (!staff?.working_hours) return true;
       const day = staff.working_hours[dayOfWeek];
@@ -890,6 +902,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (staffBlock && staff.id === staffBlock.staffId) {
         if (staffBlock.wholeDay) return false;
         if (startMin < staffBlock.end && endMin > staffBlock.start) return false;
+      }
+      // Same logic against staff-authored blocks in staff_day_overrides.
+      const ownBlocks = staffBlocksById[staff.id] || [];
+      for (const b of ownBlocks) {
+        if (b.wholeDay) return false;
+        if (startMin < b.end && endMin > b.start) return false;
       }
       return true;
     };

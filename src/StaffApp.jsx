@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import {
   useTheme, useToast, ToastContainer, useConfirm, ConfirmModal,
@@ -61,6 +62,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [clientNotes, setClientNotes] = useState({});
   const [clientView, setClientView] = useState(null); // selected client for the Klanten detail modal
   const [clientSearch, setClientSearch] = useState("");
+  // Staff blocks — rows in staff_day_overrides scoped to this staff member.
+  // Whole-day blocks have null block_time_start/end; time-window blocks fill both.
+  const [staffBlocks, setStaffBlocks] = useState([]);
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockSaving, setBlockSaving] = useState(false);
+  const [blockForm, setBlockForm] = useState({ mode: "time", from: fmt(getToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" });
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     const url = `${window.location.origin}/${salonProfile.slug || ""}`;
@@ -83,12 +90,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [{ data: appts }, { data: svcs }, { data: manual }] = await Promise.all([
+        const [{ data: appts }, { data: svcs }, { data: manual }, { data: blocks }] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
           supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
+          supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
         ]);
         setAppointments(appts || []);
+        setStaffBlocks(blocks || []);
         const notesMap = {};
         for (const m of manual || []) {
           if (m.email && m.notes) notesMap[m.email.toLowerCase()] = m.notes;
@@ -273,6 +282,56 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "cancelled"} : x));
       toast.show(lang === "nl" ? "Afspraak geannuleerd" : "Appointment cancelled");
     } finally { setProcessingApptId(null); }
+  };
+
+  // Save a staff block. Time-window mode inserts a single row on the chosen
+  // date; whole-day mode inserts one row per date in the from→to range so
+  // filtering (and later deletion) can act per-day.
+  const saveStaffBlock = async () => {
+    if (!blockForm.from) return;
+    if (blockForm.mode === "time" && !(blockForm.time_end > blockForm.time_start)) {
+      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : "End time must be after start time", "error");
+      return;
+    }
+    setBlockSaving(true);
+    try {
+      const reason = blockForm.reason?.trim() || null;
+      const rows = [];
+      if (blockForm.mode === "time") {
+        rows.push({
+          owner_id: salonProfile.id, staff_id: staffMember.id, date: blockForm.from,
+          block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason
+        });
+      } else {
+        const endDate = blockForm.to || blockForm.from;
+        let cur = new Date(blockForm.from);
+        const end = new Date(endDate);
+        while (cur <= end) {
+          rows.push({
+            owner_id: salonProfile.id, staff_id: staffMember.id, date: fmt(cur),
+            block_time_start: null, block_time_end: null, reason
+          });
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+      const { data, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
+      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+      setStaffBlocks(prev => [...prev, ...(data || [])]);
+      setBlockModalOpen(false);
+      toast.show(blockForm.mode === "time"
+        ? (lang === "nl" ? "Tijdvak geblokkeerd" : "Time window blocked")
+        : (lang === "nl" ? "Dag(en) geblokkeerd" : "Day(s) blocked"));
+    } finally {
+      setBlockSaving(false);
+    }
+  };
+
+  const removeStaffBlock = async (id) => {
+    if (!await showConfirm(lang === "nl" ? "Blokkade verwijderen?" : "Remove block?")) return;
+    const { error } = await supabase.from("staff_day_overrides").delete().eq("id", id);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    setStaffBlocks(prev => prev.filter(b => b.id !== id));
+    toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
   };
 
   const ApptCard = ({ a }) => {
@@ -835,7 +894,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => {
+                      setBlockForm({ mode: "time", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "" });
+                      setBlockModalOpen(true);
+                    }}
+                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    title={lang === "nl" ? "Blokkeer een dag of tijdvak" : "Block a day or time window"}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                    {lang === "nl" ? "Blokkeer tijd" : "Block time"}
+                  </button>
                   {staffWeekOffset !== 0 && (
                     <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
                       padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -891,22 +961,44 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       const dayAppts = filteredAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
                       const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 4);
                       const moreCount = dayAppts.length - visibleAppts.length;
+                      const dayBlocks = staffBlocks.filter(b => b.date === ds);
+                      const fullDayBlock = dayBlocks.find(b => !b.block_time_start);
+                      const timeBlocks = dayBlocks.filter(b => b.block_time_start);
                       return (
                         <div key={i} onClick={() => setCalDate(ds)} style={{
                           borderRight: i < 6 ? `1px solid ${c.border}` : "none",
-                          cursor: "pointer", display: "flex", flexDirection: "column",
-                          background: isSel ? `${accent}22` : isToday ? `${accent}08` : "transparent"
+                          cursor: "pointer", display: "flex", flexDirection: "column", position: "relative",
+                          background: isSel ? `${accent}22` : fullDayBlock ? `${c.danger}0d` : isToday ? `${accent}08` : "transparent"
                         }}>
+                          {fullDayBlock && (
+                            <div aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", background: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}14 8px 9px)` }} />
+                          )}
                           {/* Day header */}
-                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}` }}>
+                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}`, position: "relative" }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
                             <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
                           </div>
                           {/* Day content */}
-                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 120, padding: isMobile ? "6px 3px 8px" : "8px 6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
-                            {dayAppts.length === 0 ? (
+                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 120, padding: isMobile ? "6px 3px 8px" : "8px 6px 10px", display: "flex", flexDirection: "column", gap: 3, position: "relative" }}>
+                            {fullDayBlock && (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: isMobile ? "6px 2px" : "8px 4px", background: `${c.danger}18`, border: `1px solid ${c.danger}44`, borderRadius: 6 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                  <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                  <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                    {lang === "nl" ? "Vrij" : "Off"}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {timeBlocks.map(b => (
+                              <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }}>
+                                <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.block_time_start}–{b.block_time_end}</div>
+                              </div>
+                            ))}
+                            {dayAppts.length === 0 && !fullDayBlock && timeBlocks.length === 0 ? (
                               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
-                            ) : (
+                            ) : dayAppts.length === 0 ? null : (
                               <>
                                 {visibleAppts.map((a, ai) => {
                                   const statusColor = a.status === "completed" ? c.success : accent;
@@ -1084,6 +1176,34 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 );
               })()}
 
+              {/* Blocked-day banner — surfaces this staff member's own blocks on
+                  the selected date with a one-tap Deblokkeer button. */}
+              {calViewMode !== "year" && staffBlocks
+                .filter(b => b.date === calDate)
+                .map(b => {
+                  const isTimeBlock = !!b.block_time_start;
+                  return (
+                    <div key={b.id} style={{ marginBottom: 12, padding: "12px 14px", background: `${c.danger}0f`, border: `1px solid ${c.danger}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${c.danger}22`, flexShrink: 0 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
+                          {isTimeBlock
+                            ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
+                            : (lang === "nl" ? "Dag geblokkeerd" : "Day blocked")}
+                        </div>
+                        <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
+                          {b.reason || (lang === "nl" ? "Geen reden opgegeven" : "No reason given")}
+                        </div>
+                      </div>
+                      <button className="btn-ghost" onClick={() => removeStaffBlock(b.id)}
+                        style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                        {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                      </button>
+                    </div>
+                  );
+                })}
               {/* Appointments list + export (week/month views) */}
               {calViewMode !== "year" && (<>
                 {calAppts.length === 0 ? (
@@ -1911,6 +2031,87 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         )}
 
         {/* Mobile bottom nav */}
+        {blockModalOpen && createPortal((
+          <div onClick={() => !blockSaving && setBlockModalOpen(false)}
+               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+            <div onClick={e => e.stopPropagation()}
+                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+                {lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day"}
+              </div>
+              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+                {lang === "nl"
+                  ? "Klanten kunnen dan geen afspraak bij jou boeken in dit tijdvak of op deze dag."
+                  : "Clients won't be able to book you during this window or on this day."}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                {[
+                  { key: "time", nl: "Tijdvak", en: "Time window" },
+                  { key: "day", nl: "Hele dag", en: "Whole day" },
+                ].map(opt => {
+                  const active = blockForm.mode === opt.key;
+                  return (
+                    <button key={opt.key} type="button"
+                      onClick={() => setBlockForm(f => ({ ...f, mode: opt.key }))}
+                      style={{
+                        flex: 1, padding: "9px 12px", borderRadius: 10, cursor: "pointer",
+                        fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                        background: active ? `${c.danger}1f` : "transparent",
+                        color: active ? c.danger : c.textSub,
+                        border: `1px solid ${active ? `${c.danger}4d` : c.inputBorder}`,
+                        fontFamily: "'Jost', sans-serif",
+                      }}
+                    >{lang === "nl" ? opt.nl : opt.en}</button>
+                  );
+                })}
+              </div>
+              {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+                {blockForm.mode === "time" ? (
+                  <>
+                    <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label>
+                      <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                        <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                          {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        </select>
+                      </div>
+                      <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
+                        <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                          {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                      <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                    </div>
+                    <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : "To (optional)"}</label>
+                      <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                )}
+                <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : "Reason (optional)"}</label>
+                  <input className="input-field" value={blockForm.reason} onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. Privé-afspraak, vakantie" : "e.g. Private appointment, vacation"} style={{ width: "100%" }} />
+                </div>
+              </div>
+              ); })()}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-primary" disabled={blockSaving} onClick={saveStaffBlock} style={{ flex: 1, background: c.danger, color: "#fff" }}>
+                  {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Blokkeer" : "Block")}
+                </button>
+                <button className="btn-ghost" disabled={blockSaving} onClick={() => setBlockModalOpen(false)} style={{ padding: "0 18px" }}>
+                  {lang === "nl" ? "Annuleer" : "Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ), document.body)}
+
         {isMobile && (
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
             {navItems.map(([k, icon, label]) => (

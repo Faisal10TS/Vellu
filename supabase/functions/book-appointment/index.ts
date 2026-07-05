@@ -307,6 +307,25 @@ serve(async (req) => {
   const apptEndMin = apptStartMin + totalDuration;
   if (apptStartMin < openMin || apptEndMin > closeMin) return err(400, "outside_hours", origin);
 
+  // ---------- 9b. Validate staff-specific blocks ----------
+  // A stylist can mark themselves off (whole day) or block a time window even
+  // when the salon is open. If any staff involved in this booking has a
+  // matching block on this date, reject the booking.
+  if (staffIdsFlat.length > 0) {
+    const { data: staffBlocks, error: sbErr } = await supabase
+      .from("staff_day_overrides")
+      .select("staff_id, block_time_start, block_time_end")
+      .in("staff_id", staffIdsFlat)
+      .eq("date", date);
+    if (sbErr) return err(500, "db_error_staff_blocks", origin);
+    for (const b of staffBlocks || []) {
+      if (!b.block_time_start) return err(400, "staff_day_blocked", origin);
+      const blockStart = toMinutes(b.block_time_start);
+      const blockEnd = toMinutes(b.block_time_end);
+      if (apptStartMin < blockEnd && apptEndMin > blockStart) return err(400, "staff_time_blocked", origin);
+    }
+  }
+
   // ---------- 10. Slot conflict check ----------
   const breakMin = parseInt(salon.break_minutes || 0);
   const { data: existingAppts, error: exErr } = await supabase
