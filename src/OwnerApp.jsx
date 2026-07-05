@@ -2173,6 +2173,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingService, setEditingService] = useState(null);
   const [expandedServiceId, setExpandedServiceId] = useState(null);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
+  // Services filter + group collapse. A Set of category ids (the string
+  // "__uncat" for services without a category) that are currently hidden.
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
   const [editingLocation, setEditingLocation] = useState(null);
   const [editLocForm, setEditLocForm] = useState({ name: "", address: "", city: "", phone: "" });
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", category_id: "" });
@@ -4247,19 +4251,53 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const dayAppts = filteredAgendaAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
                       const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 5);
                       const moreCount = dayAppts.length - visibleAppts.length;
+                      // Blocks on this date — filtered against the staff-scope pill.
+                      // A block with staff_id === null blocks everyone; a specific
+                      // staff_id only blocks that person, so when the "iedereen"
+                      // filter is on we show it too (it's still relevant info).
+                      const ov = salonData.day_overrides?.[ds];
+                      const blockMatchesStaff = ov && ov.type === "blocked" && (
+                        !agendaStaff || !ov.staff_id || ov.staff_id === agendaStaff
+                      );
+                      const isFullDayBlocked = blockMatchesStaff && !ov.block_time_start;
+                      const isTimeBlocked = blockMatchesStaff && !!ov.block_time_start;
                       return (
                         <div key={i} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
-                          style={{ borderRight: i < 6 ? `1px solid ${c.border}` : "none", cursor: "pointer", display: "flex", flexDirection: "column", background: isSel ? `${accent}22` : isToday ? `${accent}08` : "transparent" }}>
+                          style={{ borderRight: i < 6 ? `1px solid ${c.border}` : "none", cursor: "pointer", display: "flex", flexDirection: "column", background: isSel ? `${accent}22` : isFullDayBlocked ? `${c.danger}0d` : isToday ? `${accent}08` : "transparent", position: "relative" }}>
+                          {/* Diagonal stripe overlay for fully-blocked days —
+                              visually unmistakable without eating readable space. */}
+                          {isFullDayBlocked && (
+                            <div aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", background: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}14 8px 9px)` }} />
+                          )}
                           {/* Day header */}
-                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}` }}>
+                          <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}`, position: "relative" }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
                             <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
                           </div>
                           {/* Day content */}
-                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                            {dayAppts.length === 0 ? (
+                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
+                            {isFullDayBlocked && (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: isMobile ? "6px 2px" : "8px 4px", background: `${c.danger}18`, border: `1px solid ${c.danger}44`, borderRadius: 6 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                  <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                  <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                    {lang === "nl" ? "Gesloten" : "Closed"}
+                                  </div>
+                                </div>
+                                {ov.staff_name && (
+                                  <div style={{ fontSize: isMobile ? 7 : 9, color: c.danger, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{ov.staff_name}</div>
+                                )}
+                              </div>
+                            )}
+                            {isTimeBlocked && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }}>
+                                <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ov.block_time_start}–{ov.block_time_end}</div>
+                              </div>
+                            )}
+                            {dayAppts.length === 0 && !isFullDayBlocked && !isTimeBlocked ? (
                               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.3, fontSize: 11, color: c.textMuted }}>—</div>
-                            ) : (
+                            ) : dayAppts.length === 0 ? null : (
                               <>
                                 {visibleAppts.map((a, ai) => {
                                   const isCancelled = a.status === "cancelled" || a.status === "no_show";
@@ -4351,13 +4389,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             setCalWeekOffset(weekDiff);
                           }} style={{
                             minHeight: isMobile ? 48 : 92, padding: isMobile ? "6px 4px" : "8px 8px 6px", cursor: "pointer", position: "relative",
-                            background: isSel ? `${accent}22` : isToday ? `${accent}10` : "transparent",
+                            background: isSel ? `${accent}22` : (() => {
+                              if (cell.muted) return "transparent";
+                              const ov = salonData.day_overrides?.[ds];
+                              const blocked = ov?.type === "blocked" && !ov.block_time_start && (!agendaStaff || !ov.staff_id || ov.staff_id === agendaStaff);
+                              return blocked ? `${c.danger}12` : isToday ? `${accent}10` : "transparent";
+                            })(),
                             borderRight: col < 6 ? `1px solid ${c.border}` : "none",
                             borderBottom: row < rows - 1 ? `1px solid ${c.border}` : "none",
                             transition: "background 0.15s",
                             opacity: cell.muted ? 0.35 : 1,
                             display: "flex", flexDirection: "column", gap: 3, alignItems: isMobile ? "center" : "stretch"
                           }}>
+                            {(() => {
+                              if (cell.muted) return null;
+                              const ov = salonData.day_overrides?.[ds];
+                              if (!ov || ov.type !== "blocked") return null;
+                              if (agendaStaff && ov.staff_id && ov.staff_id !== agendaStaff) return null;
+                              const isFull = !ov.block_time_start;
+                              return (
+                                <>
+                                  {isFull && (
+                                    <div aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", background: `repeating-linear-gradient(45deg, transparent 0 6px, ${c.danger}18 6px 7px)` }} />
+                                  )}
+                                  <div style={{ position: "absolute", top: 4, right: 4, display: "flex", alignItems: "center", gap: 2 }}>
+                                    <svg width={isMobile ? 9 : 11} height={isMobile ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                  </div>
+                                </>
+                              );
+                            })()}
                             <div style={{
                               fontSize: 12, fontWeight: isToday ? 700 : 500,
                               color: isToday ? c.btnOnDark : isSel ? accent : c.text,
@@ -4440,6 +4500,69 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       );
                     })}
+                  </div>
+                );
+              })()}
+
+              {/* Blocked-day banner — sits above the appointments list so the
+                  owner instantly sees why the day is "empty", and can undo
+                  the block if it was a mistake. Same scope-rules as the week
+                  strip: an all-staff block always shows; a staff-specific
+                  block only shows when its person is the selected filter. */}
+              {calViewMode !== "year" && (() => {
+                const ov = salonData.day_overrides?.[calDate];
+                if (!ov || ov.type !== "blocked") return null;
+                if (agendaStaff && ov.staff_id && ov.staff_id !== agendaStaff) return null;
+                const isTimeBlock = !!ov.block_time_start;
+                const unblock = async () => {
+                  const label = isTimeBlock
+                    ? (lang === "nl" ? `tijdvak ${ov.block_time_start}–${ov.block_time_end}` : `${ov.block_time_start}–${ov.block_time_end} time block`)
+                    : (lang === "nl" ? "geblokkeerde dag" : "blocked day");
+                  if (!window.confirm(lang === "nl" ? `Deblokkeer deze ${label}?` : `Unblock this ${label}?`)) return;
+                  const next = { ...(salonData.day_overrides || {}) };
+                  if (isTimeBlock || !ov.from || ov.from === ov.to) {
+                    delete next[calDate];
+                  } else {
+                    // Multi-day range block: remove every date in the range so
+                    // the whole span disappears (matches how it was created).
+                    let cur = new Date(ov.from);
+                    const end = new Date(ov.to);
+                    while (cur <= end) {
+                      const k = fmt(cur);
+                      if (next[k] && next[k].type === "blocked" && next[k].from === ov.from) delete next[k];
+                      cur.setDate(cur.getDate() + 1);
+                    }
+                  }
+                  const { error } = await supabase
+                    .from("profiles")
+                    .update({ day_overrides: next })
+                    .eq("id", salonData.owner_id);
+                  if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                  update(d => { d.day_overrides = next; return d; });
+                  toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
+                };
+                return (
+                  <div style={{ marginBottom: 12, padding: "12px 14px", background: `${c.danger}0f`, border: `1px solid ${c.danger}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${c.danger}22`, flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
+                        {isTimeBlock
+                          ? (lang === "nl" ? `Geblokkeerd ${ov.block_time_start}–${ov.block_time_end}` : `Blocked ${ov.block_time_start}–${ov.block_time_end}`)
+                          : (lang === "nl" ? "Dag geblokkeerd" : "Day blocked")}
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
+                        {ov.staff_name
+                          ? (lang === "nl" ? `${ov.staff_name} · ` : `${ov.staff_name} · `)
+                          : (lang === "nl" ? "Iedereen · " : "Everyone · ")}
+                        {ov.reason || (lang === "nl" ? "Geen reden opgegeven" : "No reason given")}
+                      </div>
+                    </div>
+                    <button className="btn-ghost" onClick={unblock}
+                      style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                      {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                    </button>
                   </div>
                 );
               })()}
@@ -5806,13 +5929,105 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 )}
 
-                <DndContext
-                  sensors={dndSensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleServiceDragEnd}
-                >
-                  <SortableContext items={salonData.services.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                {salonData.services.map(s => {
+                {/* Search + collapse-all toolbar. Only worth showing when
+                    there are more than a couple of services — the search
+                    would otherwise just add noise. */}
+                {salonData.services.length > 3 && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ position: "relative", flex: "1 1 220px", minWidth: 200 }}>
+                      <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: c.textMuted, pointerEvents: "none", display: "flex" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                      </div>
+                      <input className="input-field" value={serviceSearch} onChange={e => setServiceSearch(e.target.value)}
+                        placeholder={lang === "nl" ? "Zoek dienst..." : "Search services..."}
+                        style={{ width: "100%", fontSize: 12, padding: "9px 34px 9px 32px" }} />
+                      {serviceSearch && (
+                        <button onClick={() => setServiceSearch("")}
+                          style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 20, height: 20, borderRadius: "50%", background: c.inputBorder, border: "none", color: c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                      )}
+                    </div>
+                    {(() => {
+                      // Build the group list once to decide whether we're
+                      // currently "all collapsed" or "all expanded" — the
+                      // button then flips the opposite direction.
+                      const catIdsInUse = new Set();
+                      let hasUncat = false;
+                      for (const s of salonData.services) {
+                        if (s.category_id) catIdsInUse.add(s.category_id);
+                        else hasUncat = true;
+                      }
+                      const totalGroups = catIdsInUse.size + (hasUncat ? 1 : 0);
+                      const allCollapsed = totalGroups > 0 && collapsedGroups.size >= totalGroups;
+                      return (
+                        <button
+                          className="btn-ghost"
+                          onClick={() => {
+                            if (allCollapsed) setCollapsedGroups(new Set());
+                            else {
+                              const s = new Set(catIdsInUse);
+                              if (hasUncat) s.add("__uncat");
+                              setCollapsedGroups(s);
+                            }
+                          }}
+                          style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, flexShrink: 0 }}
+                        >
+                          {allCollapsed
+                            ? (lang === "nl" ? "Alles openen" : "Expand all")
+                            : (lang === "nl" ? "Alles sluiten" : "Collapse all")}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {(() => {
+                  // Filter first (search), then bucket by category. Each group
+                  // gets its own DndContext so drag-reorder is scoped to a
+                  // single category — changing category still goes through the
+                  // inline chip / edit form, which keeps this simple.
+                  const q = serviceSearch.trim().toLowerCase();
+                  const matches = (s) => {
+                    if (!q) return true;
+                    return (s.name_nl || "").toLowerCase().includes(q)
+                        || (s.name_en || "").toLowerCase().includes(q)
+                        || (s.name || "").toLowerCase().includes(q);
+                  };
+                  const buckets = new Map(); // catId -> services[]
+                  const uncat = [];
+                  for (const s of salonData.services) {
+                    if (!matches(s)) continue;
+                    if (s.category_id) {
+                      if (!buckets.has(s.category_id)) buckets.set(s.category_id, []);
+                      buckets.get(s.category_id).push(s);
+                    } else {
+                      uncat.push(s);
+                    }
+                  }
+                  // Ordered category list follows the category-management order.
+                  const orderedCats = (salonData.categories || []).filter(cat => buckets.has(cat.id));
+                  const groups = orderedCats.map(cat => ({
+                    key: cat.id,
+                    label: lang === "nl" ? (cat.name_nl || cat.name_en) : (cat.name_en || cat.name_nl),
+                    services: buckets.get(cat.id),
+                  }));
+                  if (uncat.length > 0) {
+                    groups.push({
+                      key: "__uncat",
+                      label: lang === "nl" ? "Zonder categorie" : "Uncategorised",
+                      services: uncat,
+                      isUncat: true,
+                    });
+                  }
+                  if (groups.length === 0 && salonData.services.length > 0) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "24px 16px", color: c.textMuted, fontSize: 12, background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 14 }}>
+                        {lang === "nl" ? "Geen diensten gevonden voor" : "No services found for"} "{serviceSearch}"
+                      </div>
+                    );
+                  }
+                  const renderService = (s) => {
                   const isExpanded = expandedServiceId === s.id;
                   const isEditing = editingService === s.id;
                   const variantCount = (s.variants || []).length;
@@ -6139,9 +6354,63 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     )}</SortableService>
                   );
-                })}
-                  </SortableContext>
-                </DndContext>
+                  };
+                  return (
+                    <div>
+                      {groups.map((g) => {
+                        const isCollapsed = collapsedGroups.has(g.key);
+                        return (
+                          <div key={g.key} style={{ marginBottom: 14 }}>
+                            <button
+                              onClick={() => {
+                                setCollapsedGroups(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(g.key)) next.delete(g.key);
+                                  else next.add(g.key);
+                                  return next;
+                                });
+                              }}
+                              style={{
+                                width: "100%",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "10px 14px",
+                                background: c.bgCard,
+                                border: `1px solid ${c.border}`,
+                                borderRadius: 12,
+                                cursor: "pointer",
+                                marginBottom: isCollapsed ? 0 : 8,
+                                color: c.text,
+                                textAlign: "left",
+                              }}
+                            >
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                                style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", color: c.textMuted, flexShrink: 0 }}>
+                                <polyline points="6 9 12 15 18 9" />
+                              </svg>
+                              <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, fontStyle: g.isUncat ? "italic" : "normal", color: g.isUncat ? c.textMuted : c.text }}>
+                                {g.label}
+                              </span>
+                              <span style={{ fontSize: 10, color: c.textMuted, marginLeft: "auto" }}>{g.services.length}</span>
+                            </button>
+                            {!isCollapsed && (
+                              <DndContext
+                                sensors={dndSensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleServiceDragEnd}
+                              >
+                                <SortableContext items={g.services.map(sv => sv.id)} strategy={verticalListSortingStrategy}>
+                                  {g.services.map(renderService)}
+                                </SortableContext>
+                              </DndContext>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* Add new service — collapsible CTA */}
                 {showNewServiceForm ? (
@@ -6374,7 +6643,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}><NavIcon name="key" size={10} color={accent} /> {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               <input className="input-field" placeholder={t.staffEmail} type="email" value={staffInvite[m.id]?.email || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), email: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-                              <input className="input-field" placeholder={t.staffPassword} type="password" value={staffInvite[m.id]?.password || ""} onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), password: e.target.value}}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+                              <div style={{ position: "relative" }}>
+                                <input className="input-field" placeholder={t.staffPassword}
+                                  type={staffInvite[m.id]?.show ? "text" : "password"}
+                                  value={staffInvite[m.id]?.password || ""}
+                                  onChange={e => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), password: e.target.value}}))}
+                                  style={{ fontSize: 11, padding: "8px 34px 8px 10px", width: "100%" }} />
+                                <button type="button" tabIndex={-1}
+                                  onClick={() => setStaffInvite(prev => ({...prev, [m.id]: {...(prev[m.id] || {}), show: !prev[m.id]?.show}}))}
+                                  aria-label={staffInvite[m.id]?.show ? (lang === "nl" ? "Wachtwoord verbergen" : "Hide password") : (lang === "nl" ? "Wachtwoord tonen" : "Show password")}
+                                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 0 }}>
+                                  {staffInvite[m.id]?.show ? (
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19M6.71 6.71 1 1M17.29 17.29 23 23M14.12 14.12A3 3 0 1 1 9.88 9.88" />
+                                    </svg>
+                                  ) : (
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+                                      <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
                               <button className="btn-ghost" style={{ fontSize: 10, color: accent, borderColor: `${accent}44` }}
                                 onClick={async () => {
                                   const staffEmail = staffInvite[m.id]?.email;
