@@ -1438,7 +1438,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
                         )}
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 500, fontSize: 14, color: c.text }}>{member.name}</div>
+                          <div style={{ fontWeight: 500, fontSize: 14, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            {member.name}
+                            {/* Owner tag only surfaces when the salon opted in via
+                                Settings → Team. Clients otherwise see all team
+                                members as equals. */}
+                            {initialSalon.show_owner_on_booking && member.user_id && member.user_id === initialSalon.owner_id && (
+                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                {lang === "nl" ? "Eigenaar" : "Owner"}
+                              </span>
+                            )}
+                          </div>
                           {member.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
                         </div>
                         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"

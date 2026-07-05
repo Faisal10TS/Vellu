@@ -2300,6 +2300,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
           account_type: data.account_type || "joint",
+          show_owner_on_booking: data.show_owner_on_booking || false,
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
@@ -6480,6 +6481,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   ))}
                 </div>
+                {/* Public owner-badge toggle — only relevant when there are
+                    multiple staff (otherwise the label is redundant). */}
+                {(salonData.staff || []).length > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: c.text, marginBottom: 3 }}>
+                        {lang === "nl" ? "Toon eigenaar op boekingspagina" : "Show owner on booking page"}
+                      </div>
+                      <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
+                        {lang === "nl"
+                          ? "Klanten zien dan een badge naast je naam in het team-overzicht."
+                          : "Clients will see a badge next to your name in the team list."}
+                      </div>
+                    </div>
+                    <div
+                      onClick={() => update(d => { d.show_owner_on_booking = !d.show_owner_on_booking; return d; })}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: salonData.show_owner_on_booking ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.show_owner_on_booking ? 18 : 2, transition: "left 0.2s" }} />
+                    </div>
+                  </div>
+                )}
                 {(salonData.staff || []).length === 0 && (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
@@ -6536,7 +6558,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <>
                             <div style={{ fontSize: 14, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                               {m.name}
-                              {m.email && (
+                              {m.user_id === salonData.owner_id && (
+                                <span title={lang === "nl" ? "Eigenaar van deze salon" : "Salon owner"} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                  <NavIcon name="crown" size={9} color={accent} />
+                                  {lang === "nl" ? "Eigenaar" : "Owner"}
+                                </span>
+                              )}
+                              {m.email && m.user_id !== salonData.owner_id && (
                                 <span title={m.user_id ? (lang === "nl" ? "Gekoppeld aan login" : "Linked to login") : (lang === "nl" ? "Wacht op inloggen" : "Waiting for first login")} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: m.user_id ? `${c.success}18` : `${c.warning}18`, color: m.user_id ? c.success : c.warning, border: `1px solid ${m.user_id ? `${c.success}33` : `${c.warning}33`}`, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                   {m.user_id ? (lang === "nl" ? "Gekoppeld" : "Linked") : (lang === "nl" ? "Uitgenodigd" : "Invited")}
                                 </span>
@@ -6579,15 +6607,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         ) : (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : "Edit"}</button>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
-                              if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
-                              await supabase.from("staff_services").delete().eq("staff_id", m.id);
-                              await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
-                              const { error } = await supabase.from("staff_members").delete().eq("id", m.id);
-                              if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
-                              toast.show(lang === "nl" ? `${m.name} verwijderd` : `${m.name} deleted`);
-                            }}>×</button>
+                            {/* Delete is guarded for the owner-self row — the owner
+                                is the salon's anchor and losing that row breaks
+                                agenda ownership and the "eigenaar" badge. */}
+                            {m.user_id !== salonData.owner_id && (
+                              <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
+                                if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
+                                await supabase.from("staff_services").delete().eq("staff_id", m.id);
+                                await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
+                                const { error } = await supabase.from("staff_members").delete().eq("id", m.id);
+                                if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
+                                toast.show(lang === "nl" ? `${m.name} verwijderd` : `${m.name} deleted`);
+                              }}>×</button>
+                            )}
                           </>
                         )}
                       </div>
@@ -7813,6 +7846,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",
+                  show_owner_on_booking: !!salonData.show_owner_on_booking,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24,
