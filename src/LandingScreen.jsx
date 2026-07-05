@@ -618,8 +618,10 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(t.wrongCredentials); setLoading(false); return; }
-      // Load profile
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
+      // Load profile — maybeSingle because staff logins legitimately have no
+      // profiles row (they live in staff_members instead). OwnerEntryPage
+      // then routes them to StaffApp via resolveUserRole.
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).maybeSingle();
       const slug = profile?.slug || data.user.email.split("@")[0];
       onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, account_type: profile?.account_type || "joint" });
     }

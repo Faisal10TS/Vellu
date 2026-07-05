@@ -30,10 +30,12 @@ const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({
 //   3. On first login we find the staff row by email + user_id IS NULL, and claim it
 //      by setting its user_id to session.user.id. Subsequent logins match by user_id.
 //
-// A "real owner" = has a profiles row with a business_name set (auth may create
-// skeleton profiles rows for everyone, so row-existence alone isn't enough).
-// If a user happens to be BOTH a real owner AND a staff member at another salon
-// (dual-role), owner wins so their own dashboard isn't hijacked.
+// Precedence: staff wins. If a user has a staff_members.user_id link they are
+// staff — full stop. The reason is defence against the invite race: the
+// handle_new_user trigger runs during admin.createUser BEFORE the edge
+// function can set staff_members.user_id, and older rows may have left ghost
+// owner profiles behind. A staff link is authoritative; the profile row may
+// be a leftover.
 async function resolveUserRole(user) {
   if (!user) return { role: null };
   const email = (user.email || "").toLowerCase();
@@ -41,8 +43,6 @@ async function resolveUserRole(user) {
     supabase.from("staff_members").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("profiles").select("id, business_name").eq("id", user.id).maybeSingle()
   ]);
-  const isRealOwner = !!(ownerProfile && ownerProfile.business_name);
-  if (isRealOwner) return { role: "owner" };
 
   let staffMember = staffByUserId;
   if (!staffMember && email) {
@@ -59,8 +59,9 @@ async function resolveUserRole(user) {
       return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email } };
     }
   }
-  // Fallback: if there's any owner profile at all (even empty), treat as owner and
-  // let PlanSelection handle it. Otherwise nothing — caller handles.
+
+  // No staff link → owner path. Any profile row is enough to route into the
+  // owner app; PlanSelection / onboarding handle the empty-profile case.
   if (ownerProfile) return { role: "owner" };
   return { role: null };
 }
