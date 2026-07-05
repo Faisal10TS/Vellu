@@ -56,6 +56,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [invoiceFilter, setInvoiceFilter] = useState("all");
   const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [expandedStaffSvc, setExpandedStaffSvc] = useState(null);
+  // Client-notes keyed by lowercase email — same shape as OwnerApp's
+  // salonData.client_notes so ApptCard and the new Klanten tab share a lookup.
+  const [clientNotes, setClientNotes] = useState({});
+  const [clientView, setClientView] = useState(null); // selected client for the Klanten detail modal
+  const [clientSearch, setClientSearch] = useState("");
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
@@ -66,11 +71,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [{ data: appts }, { data: svcs }] = await Promise.all([
+        const [{ data: appts }, { data: svcs }, { data: manual }] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
-          supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id)
+          supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
+          supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
         ]);
         setAppointments(appts || []);
+        const notesMap = {};
+        for (const m of manual || []) {
+          if (m.email && m.notes) notesMap[m.email.toLowerCase()] = m.notes;
+        }
+        setClientNotes(notesMap);
         const mySvcIds = staffMember.service_ids || [];
         const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
         setServices(filtered.map(s => ({
@@ -240,22 +251,57 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     } finally { setProcessingApptId(null); }
   };
 
-  const ApptCard = ({ a }) => (
+  const cancelAppt = async (id) => {
+    if (processingApptId) return;
+    if (!await showConfirm(lang === "nl" ? "Afspraak annuleren?" : "Cancel appointment?")) return;
+    setProcessingApptId(id);
+    try {
+      const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id).eq("owner_id", salonProfile.id);
+      if (error) { toast.show(lang === "nl" ? "Annuleren mislukt" : "Cancel failed", "error"); return; }
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "cancelled"} : x));
+      toast.show(lang === "nl" ? "Afspraak geannuleerd" : "Appointment cancelled");
+    } finally { setProcessingApptId(null); }
+  };
+
+  const ApptCard = ({ a }) => {
+    const note = clientNotes[(a.client_email || "").toLowerCase()];
+    const phoneDigits = (a.client_phone || "").replace(/\D/g, "");
+    return (
     <div className="appt-card" style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
           <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.time} · {a.service_name}</div>
-          <div style={{ fontSize: 10, color: c.textMuted }}>{a.client_email}</div>
+          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>
+          {a.client_phone && (
+            <a href={`tel:${a.client_phone}`} style={{ fontSize: 10, color: c.textMuted, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+              <NavIcon name="phone" size={9} color={c.textMuted} /> {a.client_phone}
+            </a>
+          )}
+          {/* Private client notes surfaced so staff walk in prepared. Owner-only
+              in the DB; staff read them via a scoped SELECT policy. */}
+          {note && (
+            <div style={{ marginTop: 8, padding: "6px 10px", background: `${accent}0c`, borderLeft: `2px solid ${accent}55`, borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>{lang === "nl" ? "Notitie" : "Note"}</div>
+              <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{note}</div>
+            </div>
+          )}
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status}</span>
+        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status}</span>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
         </div>
       </div>
       {a.status === "confirmed" && (
-        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
+          {phoneDigits && (
+            <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg({ salonName: salonProfile.business_name, clientName: a.client_name, service: a.service_name, date: a.date, time: a.time, lang }))} target="_blank" rel="noopener noreferrer"
+              className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
+              WhatsApp
+            </a>
+          )}
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textLabel }} onClick={() => {
             const dur = parseInt(a.service_duration || a.duration || 60);
             window.open(getGoogleCalUrl({
@@ -266,14 +312,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             }), "_blank");
           }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
         </div>
       )}
     </div>
   );
+  };
 
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
+    ["klanten", "user", t.customers || (lang === "nl" ? "Klanten" : "Clients")],
     ["facturen", "facturen", t.invoices],
     ["instellingen", "instellingen", t.settings]
   ];
@@ -347,7 +396,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
               <div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "facturen" ? t.invoices : t.settings}</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "klanten" ? (t.customers || (lang === "nl" ? "Klanten" : "Clients")) : view === "facturen" ? t.invoices : t.settings}</div>
                 <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name}</div>
               </div>
             </div>
@@ -1005,6 +1054,188 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 )}
               </>)}
             </div>
+            );
+          })()}
+
+          {/* KLANTEN — read-only client list scoped to this staff member's own
+              appointments. Owner tab has manual add + CSV import + edit; those
+              stay owner-only because clients are a salon-wide resource. */}
+          {view === "klanten" && (() => {
+            const MON = lang === "nl" ? MON_NL : MON_EN;
+            const fmtDate = (ds) => { if (!ds) return ""; const d = new Date(ds); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
+            // Aggregate by lowercase email so a repeat client with different
+            // display names still collapses to one row.
+            const byEmail = new Map();
+            const nowMs = Date.now();
+            for (const a of appointments) {
+              const email = String(a.client_email || "").toLowerCase();
+              if (!email) continue;
+              let agg = byEmail.get(email);
+              if (!agg) {
+                agg = { email, name: a.client_name || email, phone: a.client_phone || "", appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+                byEmail.set(email, agg);
+              }
+              if (!agg.phone && a.client_phone) agg.phone = a.client_phone;
+              if (a.client_name && a.client_name.length > (agg.name?.length || 0)) agg.name = a.client_name;
+              agg.appts.push(a);
+              if (a.status === "completed") {
+                agg.totalSpent += parseFloat(a.service_price || 0);
+                agg.visitCount++;
+                if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date;
+              }
+            }
+            for (const cl of byEmail.values()) {
+              const upcoming = cl.appts
+                .filter(a => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
+                .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
+              cl.next = upcoming[0] || null;
+            }
+            const q = clientSearch.trim().toLowerCase();
+            const list = Array.from(byEmail.values())
+              .filter(cl => !q || cl.name.toLowerCase().includes(q) || cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+              .sort((a, b) => (b.next ? 1 : 0) - (a.next ? 1 : 0) || a.name.localeCompare(b.name));
+
+            return (
+              <div className="fade-up">
+                {isMobile && <PTitle sub={lang === "nl" ? "Klanten die jij hebt behandeld" : "Clients you've served"}>{lang === "nl" ? "Klanten" : "Clients"}</PTitle>}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal klanten" : "Total clients"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{byEmail.size}</div>
+                  </div>
+                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Terugkerend" : "Returning"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{Array.from(byEmail.values()).filter(cl => cl.visitCount > 1).length}</div>
+                  </div>
+                  {!isMobile && (
+                    <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Komende afspraken" : "Upcoming"}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{Array.from(byEmail.values()).filter(cl => cl.next).length}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ position: "relative", marginBottom: 12 }}>
+                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam, e-mail of telefoon" : "Search by name, email or phone"}
+                    value={clientSearch} onChange={e => setClientSearch(e.target.value)}
+                    style={{ width: "100%", padding: "12px 40px 12px 16px", fontSize: 12 }} />
+                  {clientSearch && (
+                    <button onClick={() => setClientSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 6, display: "flex", alignItems: "center" }} aria-label="Wissen">
+                      <NavIcon name="xmark" size={12} color={c.textMuted} />
+                    </button>
+                  )}
+                </div>
+
+                {list.length === 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="user" size={32} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>
+                      {q ? (lang === "nl" ? `Geen klant gevonden voor "${clientSearch}"` : `No client found for "${clientSearch}"`)
+                         : (lang === "nl" ? "Je hebt nog geen klanten behandeld." : "You haven't served any clients yet.")}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    {list.map((cl, i) => {
+                      const note = clientNotes[cl.email];
+                      return (
+                        <div key={cl.email} onClick={() => setClientView(cl)}
+                          style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr auto" : "1fr 1fr auto", gap: 12, padding: "12px 14px", borderTop: i > 0 ? `1px solid ${c.border}` : "none", cursor: "pointer", alignItems: "center" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              {cl.name}
+                              {cl.visitCount >= 3 && (
+                                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                  {lang === "nl" ? "Vaste klant" : "Regular"}
+                                </span>
+                              )}
+                              {note && (
+                                <span title={note} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${c.warning}18`, color: c.warning, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                  {lang === "nl" ? "Notitie" : "Note"}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.email}</div>
+                          </div>
+                          {!isMobile && (
+                            <div style={{ fontSize: 11, color: c.textLabel }}>
+                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : "visit") : (lang === "nl" ? "bezoeken" : "visits")} · €${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : "No visits yet")}
+                              {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
+                            </div>
+                          )}
+                          <div style={{ textAlign: "right" }}>
+                            {cl.next ? (
+                              <div style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, whiteSpace: "nowrap" }}>
+                                {fmtDate(cl.next.date)} · {cl.next.time}
+                              </div>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.textMuted} strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Detail modal */}
+                {clientView && (
+                  <div onClick={() => setClientView(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                        <div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>{clientView.name}</div>
+                          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>{clientView.email}</div>
+                          {clientView.phone && (
+                            <a href={`tel:${clientView.phone}`} style={{ fontSize: 12, color: c.textMuted, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3 }}>
+                              <NavIcon name="phone" size={11} color={c.textMuted} /> {clientView.phone}
+                            </a>
+                          )}
+                        </div>
+                        <button onClick={() => setClientView(null)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 4, display: "flex" }}><NavIcon name="xmark" size={16} color={c.textMuted} /></button>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+                        <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Bezoeken" : "Visits"}</div>
+                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: c.text }}>{clientView.visitCount}</div>
+                        </div>
+                        <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : "Spent"}</div>
+                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>€{clientView.totalSpent.toFixed(0)}</div>
+                        </div>
+                        <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : "Last"}</div>
+                          <div style={{ fontSize: 12, color: c.text, marginTop: 3 }}>{clientView.lastVisit ? fmtDate(clientView.lastVisit) : "—"}</div>
+                        </div>
+                      </div>
+                      {clientNotes[clientView.email] && (
+                        <div style={{ padding: "10px 14px", background: `${accent}0c`, borderLeft: `3px solid ${accent}`, borderRadius: 4, marginBottom: 14 }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Notitie (alleen jullie zien dit)" : "Note (staff-only)"}</div>
+                          <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{clientNotes[clientView.email]}</div>
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Afspraken" : "Appointments"}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {clientView.appts
+                          .slice()
+                          .sort((a, b) => `${b.date}T${b.time || ""}`.localeCompare(`${a.date}T${a.time || ""}`))
+                          .map(a => (
+                            <div key={a.id} style={{ padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 12, color: c.text }}>{fmtDate(a.date)} · {a.time}</div>
+                                <div style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</div>
+                              </div>
+                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
+                                <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })()}
 
