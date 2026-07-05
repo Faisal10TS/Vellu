@@ -2383,7 +2383,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const allVisibleAppts = appts.filter(a => a.status !== "cancelled");
   const completedAppts = appts.filter(a => a.status === "completed");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
-  const filteredAgendaAppts = agendaStaff ? allVisibleAppts.filter(a => a.staff_id === agendaStaff) : allVisibleAppts;
+  // A multi-service booking may have different staff per service. staff_id
+  // only holds the "primary" (first service's) staff, so filtering on that
+  // alone drops any appointment where the selected staff only handled a
+  // non-primary service. staff_assignments captures the full map.
+  const filteredAgendaAppts = agendaStaff
+    ? allVisibleAppts.filter(a => a.staff_id === agendaStaff || Object.values(a.staff_assignments || {}).includes(agendaStaff))
+    : allVisibleAppts;
   const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
 

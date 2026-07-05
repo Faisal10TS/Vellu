@@ -388,6 +388,13 @@ serve(async (req) => {
     invoice_sent: false,
     staff_id: primaryStaffIdCol,
     staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
+    // Full per-service staff map so agenda filters and staff dashboards can
+    // find combined bookings where a stylist owns only ONE of the services.
+    staff_assignments: Object.fromEntries(
+      servicesOrdered
+        .map((s: any) => [s.id, staff_ids_per_service?.[s.id] || null])
+        .filter(([, v]: any) => !!v)
+    ),
     client_allergies: allergies,
     location_id: location_id || null,
   }).select("id").single();

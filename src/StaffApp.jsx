@@ -61,6 +61,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [clientNotes, setClientNotes] = useState({});
   const [clientView, setClientView] = useState(null); // selected client for the Klanten detail modal
   const [clientSearch, setClientSearch] = useState("");
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    const url = `${window.location.origin}/${salonProfile.slug || ""}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Non-secure contexts or old Safari — leave the toast to fill in.
+      toast.show(lang === "nl" ? "Kopiëren mislukt" : "Copy failed", "error");
+    }
+  };
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handler);
@@ -359,6 +371,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
               <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonProfile.business_name}</div>
               <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{myStaff.name}</div>
+              {/* Quick actions so staff can share the salon booking link the
+                  same way the owner can — no need to hunt down the URL. */}
+              {salonProfile.slug && (
+                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                    onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}
+                    title={lang === "nl" ? "Open boekingspagina in nieuw tabblad" : "Open booking page in new tab"}>
+                    <NavIcon name="eye" size={11} color={accent} /> {lang === "nl" ? "Bekijk" : "Preview"}
+                  </button>
+                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+                    onClick={copyLink}
+                    title={lang === "nl" ? "Kopieer boekingspagina-link" : "Copy booking page link"}>
+                    <NavIcon name="link" size={11} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : "Copied") : (lang === "nl" ? "Kopieer" : "Copy")}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Navigation */}
@@ -394,11 +422,25 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", ...(isMobile ? {} : { overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }) }}>
           <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
           {!isMobile && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "klanten" ? (t.customers || (lang === "nl" ? "Klanten" : "Clients")) : view === "facturen" ? t.invoices : t.settings}</div>
                 <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name}</div>
               </div>
+            </div>
+          )}
+          {/* Mobile quick actions — sidebar isn't rendered on mobile so surface
+              the share/preview here so staff can still grab the salon link. */}
+          {isMobile && salonProfile.slug && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}>
+                <NavIcon name="eye" size={12} color={accent} /> {lang === "nl" ? "Bekijk salon" : "Preview salon"}
+              </button>
+              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                onClick={copyLink}>
+                <NavIcon name="link" size={12} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : "Copied") : (lang === "nl" ? "Kopieer link" : "Copy link")}
+              </button>
             </div>
           )}
 
