@@ -2210,6 +2210,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
   const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
+  // Account section state (Overig tab). Keep everything local so a dirty
+  // change-email/change-password form never taints salonData or the main
+  // "Opslaan" flow at the bottom of settings.
+  const [accountForm, setAccountForm] = useState({ newEmail: "", currentPasswordForEmail: "", currentPasswordForPw: "", newPassword: "", newPasswordConfirm: "" });
+  const [accountShowPw, setAccountShowPw] = useState({ currentEmail: false, currentPw: false, newPw: false, confirmPw: false });
+  const [accountSaving, setAccountSaving] = useState("");
   // Billing tab state — invoices loaded lazily when the tab is opened. We
   // also keep the latest profile billing snapshot here so the tab reflects
   // mid-session changes (e.g. webhook fires while owner is on the page).
@@ -7840,6 +7846,149 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* ═══ FACTURATIE TAB ═══ */}
               {settingsTab === "facturatie" && <>
+
+              {/* ── ACCOUNT — change email / password ─────────────────
+                  Both changes re-authenticate with the current password
+                  first so a stolen session can't silently swap the login.
+                  Supabase sends a confirmation link to the new email
+                  before it takes effect — the UI just triggers it. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Account" : "Account"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Wijzig je inlog-e-mail of wachtwoord. Je huidige wachtwoord is altijd nodig ter bevestiging."
+                    : "Change your login email or password. Your current password is required for either change."}
+                </div>
+
+                {/* Current login email — read-only info line */}
+                <div style={{ padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Huidig e-mailadres" : "Current email"}</div>
+                    <div style={{ fontSize: 12, color: c.text, marginTop: 3, wordBreak: "break-word" }}>{user.email}</div>
+                  </div>
+                </div>
+
+                {/* ── Change email ── */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, fontWeight: 600, marginBottom: 10 }}>
+                    {lang === "nl" ? "Nieuw e-mailadres" : "New email"}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <input className="input-field" type="email" placeholder={lang === "nl" ? "nieuw@voorbeeld.nl" : "new@example.com"} autoComplete="off"
+                      value={accountForm.newEmail}
+                      onChange={e => setAccountForm(f => ({ ...f, newEmail: e.target.value }))}
+                      style={{ width: "100%" }} />
+                    <div style={{ position: "relative" }}>
+                      <input className="input-field" placeholder={lang === "nl" ? "Huidig wachtwoord" : "Current password"}
+                        autoComplete="current-password"
+                        type={accountShowPw.currentEmail ? "text" : "password"}
+                        value={accountForm.currentPasswordForEmail}
+                        onChange={e => setAccountForm(f => ({ ...f, currentPasswordForEmail: e.target.value }))}
+                        style={{ width: "100%", paddingRight: 40 }} />
+                      <button type="button" tabIndex={-1}
+                        onClick={() => setAccountShowPw(s => ({ ...s, currentEmail: !s.currentEmail }))}
+                        style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 4, display: "flex", alignItems: "center", lineHeight: 0 }}
+                        aria-label={accountShowPw.currentEmail ? (lang === "nl" ? "Verberg" : "Hide") : (lang === "nl" ? "Toon" : "Show")}>
+                        {accountShowPw.currentEmail ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19M6.71 6.71 1 1M17.29 17.29 23 23M14.12 14.12A3 3 0 1 1 9.88 9.88" /></svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></svg>
+                        )}
+                      </button>
+                    </div>
+                    <button className="btn-primary" disabled={accountSaving === "email" || !accountForm.newEmail || !accountForm.currentPasswordForEmail}
+                      style={{ width: "auto", alignSelf: "flex-start", padding: "10px 20px", fontSize: 11 }}
+                      onClick={async () => {
+                        const newEmail = accountForm.newEmail.trim().toLowerCase();
+                        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { toast.show(lang === "nl" ? "Ongeldig e-mailadres" : "Invalid email address", "error"); return; }
+                        if (newEmail === (user.email || "").toLowerCase()) { toast.show(lang === "nl" ? "Dit is al je huidige e-mailadres" : "That's already your current email", "error"); return; }
+                        setAccountSaving("email");
+                        try {
+                          // Re-authenticate to prove ownership before allowing an
+                          // email change. Supabase then sends a confirmation to
+                          // the NEW address; login stays on the current one until
+                          // the recipient clicks the link.
+                          const { error: reAuthErr } = await supabase.auth.signInWithPassword({ email: user.email, password: accountForm.currentPasswordForEmail });
+                          if (reAuthErr) { toast.show(lang === "nl" ? "Huidig wachtwoord klopt niet" : "Current password is incorrect", "error"); return; }
+                          const { error: updErr } = await supabase.auth.updateUser({ email: newEmail });
+                          if (updErr) { toast.show(updErr.message, "error"); return; }
+                          toast.show(lang === "nl" ? "Check je nieuwe e-mail voor de bevestigingslink" : "Check your new inbox for a confirmation link");
+                          setAccountForm(f => ({ ...f, newEmail: "", currentPasswordForEmail: "" }));
+                        } finally {
+                          setAccountSaving("");
+                        }
+                      }}>
+                      {accountSaving === "email" ? "…" : (lang === "nl" ? "Wijzig e-mail" : "Change email")}
+                    </button>
+                    <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>
+                      {lang === "nl"
+                        ? "We sturen een bevestigingslink naar het nieuwe adres. Je login blijft op het oude adres staan tot je de link opent."
+                        : "We'll email a confirmation link to the new address. Your login stays on the old email until you open the link."}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 18 }} />
+
+                {/* ── Change password ── */}
+                <div>
+                  <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, fontWeight: 600, marginBottom: 10 }}>
+                    {lang === "nl" ? "Nieuw wachtwoord" : "New password"}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {[
+                      { key: "currentPasswordForPw", show: "currentPw", placeholder: lang === "nl" ? "Huidig wachtwoord" : "Current password", autoComplete: "current-password" },
+                      { key: "newPassword", show: "newPw", placeholder: lang === "nl" ? "Nieuw wachtwoord (min. 6 tekens)" : "New password (min. 6 chars)", autoComplete: "new-password" },
+                      { key: "newPasswordConfirm", show: "confirmPw", placeholder: lang === "nl" ? "Nieuw wachtwoord herhalen" : "Confirm new password", autoComplete: "new-password" },
+                    ].map(f => (
+                      <div key={f.key} style={{ position: "relative" }}>
+                        <input className="input-field" placeholder={f.placeholder}
+                          autoComplete={f.autoComplete}
+                          type={accountShowPw[f.show] ? "text" : "password"}
+                          value={accountForm[f.key]}
+                          onChange={e => setAccountForm(fm => ({ ...fm, [f.key]: e.target.value }))}
+                          style={{ width: "100%", paddingRight: 40 }} />
+                        <button type="button" tabIndex={-1}
+                          onClick={() => setAccountShowPw(s => ({ ...s, [f.show]: !s[f.show] }))}
+                          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 4, display: "flex", alignItems: "center", lineHeight: 0 }}
+                          aria-label={accountShowPw[f.show] ? (lang === "nl" ? "Verberg" : "Hide") : (lang === "nl" ? "Toon" : "Show")}>
+                          {accountShowPw[f.show] ? (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19M6.71 6.71 1 1M17.29 17.29 23 23M14.12 14.12A3 3 0 1 1 9.88 9.88" /></svg>
+                          ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></svg>
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                    <button className="btn-primary" disabled={accountSaving === "password" || !accountForm.currentPasswordForPw || !accountForm.newPassword || !accountForm.newPasswordConfirm}
+                      style={{ width: "auto", alignSelf: "flex-start", padding: "10px 20px", fontSize: 11 }}
+                      onClick={async () => {
+                        if (accountForm.newPassword.length < 6) { toast.show(lang === "nl" ? "Wachtwoord moet minimaal 6 tekens zijn" : "Password must be at least 6 characters", "error"); return; }
+                        if (accountForm.newPassword !== accountForm.newPasswordConfirm) { toast.show(lang === "nl" ? "Wachtwoorden komen niet overeen" : "Passwords do not match", "error"); return; }
+                        if (accountForm.newPassword === accountForm.currentPasswordForPw) { toast.show(lang === "nl" ? "Nieuw wachtwoord moet anders zijn dan het huidige" : "New password must be different from the current one", "error"); return; }
+                        setAccountSaving("password");
+                        try {
+                          const { error: reAuthErr } = await supabase.auth.signInWithPassword({ email: user.email, password: accountForm.currentPasswordForPw });
+                          if (reAuthErr) { toast.show(lang === "nl" ? "Huidig wachtwoord klopt niet" : "Current password is incorrect", "error"); return; }
+                          const { error: updErr } = await supabase.auth.updateUser({ password: accountForm.newPassword });
+                          if (updErr) { toast.show(updErr.message, "error"); return; }
+                          toast.show(lang === "nl" ? "Wachtwoord bijgewerkt" : "Password updated");
+                          setAccountForm(f => ({ ...f, currentPasswordForPw: "", newPassword: "", newPasswordConfirm: "" }));
+                        } finally {
+                          setAccountSaving("");
+                        }
+                      }}>
+                      {accountSaving === "password" ? "…" : (lang === "nl" ? "Wijzig wachtwoord" : "Change password")}
+                    </button>
+                    <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>
+                      {lang === "nl"
+                        ? "Wachtwoord vergeten? Log uit en gebruik de \"Wachtwoord vergeten\"-knop op het inlogscherm."
+                        : "Forgot your password? Log out and use the \"Forgot password\" link on the sign-in screen."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
 
               {/* Appearance Section */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
