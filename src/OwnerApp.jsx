@@ -3244,8 +3244,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>{a.time} · {a.service_name}</div>
-          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
+          {(() => {
+            // Compute end time from start + duration so the owner sees the
+            // real time window, not just "start + Xm".
+            const [h, m] = (a.time || "0:0").split(":").map(Number);
+            const startMin = h * 60 + (m || 0);
+            const endMin = startMin + parseInt(a.service_duration || 60);
+            const pad = n => String(n).padStart(2, "0");
+            const endTime = `${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
+            return (
+              <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>
+                <strong style={{ color: c.text, fontWeight: 600 }}>{a.time} – {endTime}</strong> · {a.service_name}
+              </div>
+            );
+          })()}
+          {a.staff_name && (
+            <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
+              <NavIcon name="user" size={9} color={accent} /> {a.staff_name}
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{a.client_email}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : (lang === "nl" ? "Voltooid" : "Completed")}</span>
@@ -4573,10 +4591,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   const statusColor = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
                                   return (
                                     <div key={ai} style={{ padding: isMobile ? "2px 3px" : "4px 6px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden", opacity: isCancelled ? 0.5 : 1 }}>
-                                      <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none", display: "flex", justifyContent: "space-between", gap: 3 }}>
-                                        <span>{a.time}</span>
-                                        {a.service_duration ? <span style={{ opacity: 0.75 }}>{a.service_duration}m</span> : null}
-                                      </div>
+                                      {(() => {
+                                        const [ah, am] = (a.time || "0:0").split(":").map(Number);
+                                        const startMin = ah * 60 + (am || 0);
+                                        const endMin = startMin + parseInt(a.service_duration || 60);
+                                        const pad2 = n => String(n).padStart(2, "0");
+                                        const endTime = `${pad2(Math.floor(endMin / 60) % 24)}:${pad2(endMin % 60)}`;
+                                        return (
+                                          <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                            {a.time}–{endTime}
+                                          </div>
+                                        );
+                                      })()}
                                       <div style={{ fontSize: isMobile ? 8 : 10, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: isCancelled ? "line-through" : "none" }}>{a.client_name?.split(" ")[0] || ""}</div>
                                       {!isMobile && <div style={{ fontSize: 9, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>}
                                     </div>
