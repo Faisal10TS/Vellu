@@ -199,6 +199,24 @@ serve(async (req) => {
 
   // ---------- 5. Validate staff (if provided) ----------
   const staffIdsFlat: string[] = Object.values(staff_ids_per_service || {}).filter(Boolean) as string[];
+
+  // Team accounts with 2+ eligible staff require an explicit stylist per
+  // service — otherwise the booking floats without attribution and never
+  // shows up in a per-staff agenda filter. The client UI enforces this too;
+  // this is the trust-nothing server-side backstop.
+  if (salon.account_type === "team") {
+    const { count: staffCount } = await supabase
+      .from("staff_members")
+      .select("*", { count: "exact", head: true })
+      .eq("owner_id", salon.id)
+      .eq("active", true);
+    if ((staffCount || 0) > 1) {
+      for (const sid of service_ids) {
+        if (!staff_ids_per_service?.[sid]) return err(400, "staff_required", origin);
+      }
+    }
+  }
+
   let staffById: Record<string, any> = {};
   if (staffIdsFlat.length > 0) {
     const { data: staff, error: stErr } = await supabase

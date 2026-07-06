@@ -634,9 +634,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }));
   };
 
-  const canProceedStep1 = selectedServices.length > 0 && selectedServices.every(item =>
-    !item.service.variants?.length || item.variant
-  );
+  // Team accounts with 2+ staff must have a specific stylist picked per
+  // service — otherwise the booking floats without attribution and doesn't
+  // show up in any per-staff agenda filter (see also the server-side check
+  // in book-appointment).
+  const requireStaffPick = initialSalon.account_type === "team" && (initialSalon.staff || []).length > 1;
+  const staffEligibleForService = (svcId) => (initialSalon.staff || []).filter(s => !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(svcId));
+  const missingStaff = requireStaffPick
+    ? selectedServices.filter(item => !item.staff && staffEligibleForService(item.service.id).length > 0)
+    : [];
+  const canProceedStep1 = selectedServices.length > 0
+    && selectedServices.every(item => !item.service.variants?.length || item.variant)
+    && missingStaff.length === 0;
   const missingVariants = selectedServices.filter(item => item.service.variants?.length > 0 && !item.variant);
 
   // Category filtering
@@ -1137,6 +1146,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         invalid_extra: isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",
         invalid_staff: isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
         staff_not_assigned: isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
+        staff_required: isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
+        staff_day_blocked: isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
+        staff_time_blocked: isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
       };
       const msg = MAP[code] || t.bookingError;
       setErrorToast(msg);
@@ -2289,16 +2301,23 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         {/* Staff */}
                         {staffForService.length > 0 && (
                           <div>
-                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectStaff}</div>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>
+                              {t.selectStaff}{requireStaffPick && <span style={{ color: c.danger, marginLeft: 4 }}>*</span>}
+                            </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <div onClick={() => updateServiceItem(s.id, { staff: null })}
-                                style={{
-                                  padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-                                  background: !item?.staff ? `${accent}14` : "transparent",
-                                  border: `1px solid ${!item?.staff ? accent : c.border}`,
-                                  fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
-                                  transition: "all 0.15s"
-                                }}>{t.anyStaff}</div>
+                              {/* "Geen voorkeur" is hidden for team accounts with
+                                  2+ staff — the booking has to be attributable
+                                  to a specific stylist for their own agenda. */}
+                              {!requireStaffPick && (
+                                <div onClick={() => updateServiceItem(s.id, { staff: null })}
+                                  style={{
+                                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                                    background: !item?.staff ? `${accent}14` : "transparent",
+                                    border: `1px solid ${!item?.staff ? accent : c.border}`,
+                                    fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
+                                    transition: "all 0.15s"
+                                  }}>{t.anyStaff}</div>
+                              )}
                               {staffForService.map(m => (
                                 <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
                                   style={{
@@ -2723,6 +2742,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
                   </div>
                 )}
+                {selectedServices.length > 0 && missingStaff.length > 0 && (
+                  <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
+                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een medewerker voor: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
+                  </div>
+                )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {selectedServices.length > 0 ? (
                     <>{t.next} · {getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</>
@@ -2978,11 +3002,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         {/* Staff selection — per selected service, filtered */}
                         {isSel && staffForService.length > 0 && (
                           <div style={{ marginLeft: 30, marginBottom: 10 }}>
-                            <SL>{t.selectStaff}</SL>
+                            <SL>{t.selectStaff}{requireStaffPick && <span style={{ color: c.danger, marginLeft: 4 }}>*</span>}</SL>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
-                                <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
-                              </div>
+                              {!requireStaffPick && (
+                                <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
+                                  <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
+                                </div>
+                              )}
                               {staffForService.map(m => (
                                 <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
@@ -2999,6 +3025,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {selectedServices.length > 0 && missingVariants.length > 0 && (
                         <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
                           <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                        </div>
+                      )}
+                      {selectedServices.length > 0 && missingStaff.length > 0 && (
+                        <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
+                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een medewerker voor: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
                         </div>
                       )}
                       {selectedServices.length === 0 && (
