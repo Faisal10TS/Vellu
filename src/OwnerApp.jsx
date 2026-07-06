@@ -4485,10 +4485,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 padding: "6px 10px", overflow: "hidden", cursor: "pointer",
                                 opacity: isCancelled ? 0.55 : 1
                               }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
-                                <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>
-                              </div>
+                              {(() => {
+                                const pad2 = n => String(n).padStart(2, "0");
+                                const endMinLocal = startMin + durMin;
+                                const endTime = `${pad2(Math.floor(endMinLocal / 60) % 24)}:${pad2(endMinLocal % 60)}`;
+                                return (
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{a.time}–{endTime}</div>
+                                    <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>
+                                  </div>
+                                );
+                              })()}
                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.35 }}>{a.client_name}</div>
                               <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.35 }}>{a.service_name}</div>
                               {a.staff_name && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{a.staff_name}</div>}
