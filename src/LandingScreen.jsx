@@ -505,7 +505,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // effect causing a cascading render.
   const urlRef = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("ref") || "") : "";
   const [mode, setMode] = useState(urlRef ? "signup" : "signin");
-  const [form, setForm] = useState({ email: "", password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: urlRef.toUpperCase() });
+  // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
+  // email field so they only type their password. Supabase itself already
+  // persists the session (localStorage) — this flag only controls whether we
+  // reuse the email locally on the next visit.
+  const rememberedEmail = typeof window !== "undefined" ? (localStorage.getItem("vellu_remember_email") || "") : "";
+  const [form, setForm] = useState({ email: rememberedEmail, password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: urlRef.toUpperCase() });
+  const [rememberMe, setRememberMe] = useState(!!rememberedEmail);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -618,6 +624,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(t.wrongCredentials); setLoading(false); return; }
+      // Honour the "Onthoud mij" checkbox — save just the email locally so the
+      // next visit pre-fills it. The password is never stored.
+      try {
+        if (rememberMe) localStorage.setItem("vellu_remember_email", form.email);
+        else localStorage.removeItem("vellu_remember_email");
+      } catch { /* private mode / no storage — silent fallback */ }
       // Load profile — maybeSingle because staff logins legitimately have no
       // profiles row (they live in staff_members instead). OwnerEntryPage
       // then routes them to StaffApp via resolveUserRole.
@@ -758,6 +770,15 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 </button>
               </div>
             </div>
+            {mode === "signin" && (
+              <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer", userSelect: "none" }}>
+                <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: ACCENT, cursor: "pointer" }} />
+                <span style={{ fontSize: 12, color: c.textSub }}>
+                  {lang === "nl" ? "Onthoud mijn e-mailadres" : "Remember my email"}
+                </span>
+              </label>
+            )}
             {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
             {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
