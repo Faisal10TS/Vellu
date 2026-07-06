@@ -4755,6 +4755,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const dayOfWeek = new Date(calDate + "T12:00:00").getDay();
                 const dayHours = salonData.business_hours?.[dayOfWeek] || {};
                 const dayAppts = filteredAgendaAppts.filter(a => a.date === calDate).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                // Blocks for this date: owner-authored day_override + staff-authored
+                // staff_blocks. Time blocks widen the timeline like appointments;
+                // full-day blocks span whatever window the timeline ends up using.
+                const staffNameById = Object.fromEntries((salonData.staff || []).map(s => [s.id, s.name]));
+                const rawBlocks = [];
+                const dayOv = (salonData.day_overrides || {})[calDate];
+                if (dayOv && dayOv.type === "blocked" && (!agendaStaff || dayOv.staff_id === agendaStaff || !dayOv.staff_id)) {
+                  rawBlocks.push({
+                    key: `owner-${calDate}`,
+                    staffName: dayOv.staff_name || staffNameById[dayOv.staff_id] || null,
+                    reason: dayOv.reason || "",
+                    timeStart: dayOv.block_time_start || null,
+                    timeEnd: dayOv.block_time_end || null,
+                  });
+                }
+                for (const b of (salonData.staff_blocks || [])) {
+                  if (b.date !== calDate) continue;
+                  if (agendaStaff && b.staff_id !== agendaStaff) continue;
+                  rawBlocks.push({
+                    key: `sb-${b.id}`,
+                    staffName: staffNameById[b.staff_id] || "",
+                    reason: b.reason || "",
+                    timeStart: b.block_time_start || null,
+                    timeEnd: b.block_time_end || null,
+                  });
+                }
                 const openDefault = 8 * 60;
                 const closeDefault = 20 * 60;
                 let earliestMin = dayHours.closed ? openDefault : toMin(dayHours.open || "08:00");
@@ -4764,6 +4790,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const end = start + parseInt(a.service_duration || 60);
                   if (start < earliestMin) earliestMin = start;
                   if (end > latestMin) latestMin = end;
+                }
+                // Widen for time blocks so the block is always visible.
+                for (const b of rawBlocks) {
+                  if (b.timeStart && b.timeEnd) {
+                    const s = toMin(b.timeStart);
+                    const e = toMin(b.timeEnd);
+                    if (s < earliestMin) earliestMin = s;
+                    if (e > latestMin) latestMin = e;
+                  }
                 }
                 // Round to the hour and add padding above / below.
                 const startHour = Math.max(0, Math.floor(earliestMin / 60));
@@ -4807,7 +4842,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ position: "absolute", left: -4, top: -3, width: 8, height: 8, borderRadius: "50%", background: c.danger }} />
                           </div>
                         )}
-                        {dayAppts.length === 0 && (
+                        {/* Staff / owner blocks — striped red overlay. Full-day
+                            blocks span the whole visible window; time blocks
+                            only cover their range. Sits BEHIND appointments so
+                            an appointment on the same slot still reads clearly. */}
+                        {rawBlocks.map(b => {
+                          const isTime = b.timeStart && b.timeEnd;
+                          const startMin = isTime ? toMin(b.timeStart) : dayStartMin;
+                          const endMin = isTime ? toMin(b.timeEnd) : endHour * 60;
+                          const top = ((startMin - dayStartMin) / 60) * HOUR_HEIGHT;
+                          const height = Math.max(24, ((endMin - startMin) / 60) * HOUR_HEIGHT - 2);
+                          const pad2 = n => String(n).padStart(2, "0");
+                          const label = isTime
+                            ? `${b.timeStart}–${b.timeEnd}`
+                            : (lang === "nl" ? "Hele dag" : "All day");
+                          return (
+                            <div key={b.key} title={b.reason || label}
+                              style={{
+                                position: "absolute", top, left: 6, right: 6, height,
+                                background: `${c.danger}18`,
+                                backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}22 8px 12px)`,
+                                border: `1px dashed ${c.danger}66`,
+                                borderRadius: 6, padding: "6px 10px", overflow: "hidden", zIndex: 1
+                              }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.04em", fontVariantNumeric: "tabular-nums" }}>{label}</div>
+                              </div>
+                              <div style={{ fontSize: 11, color: c.text, fontWeight: 500 }}>
+                                {b.staffName || (lang === "nl" ? "Iedereen" : "Everyone")}
+                              </div>
+                              {b.reason && (
+                                <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", wordBreak: "break-word", lineHeight: 1.35 }}>{b.reason}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {dayAppts.length === 0 && rawBlocks.length === 0 && (
                           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16 }}>
                             {lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day"}
                           </div>
