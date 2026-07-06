@@ -2192,7 +2192,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent" | "hidden"
   const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [analyticsReviewsExpanded, setAnalyticsReviewsExpanded] = useState(false);
-  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" });
+  // Multi-service structure: services is an array of {id, service_id,
+  // variant_id, staff_id}. The owner can add or remove rows to build a
+  // combined booking (nails with X + toes with Y, one client, one row).
+  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [clientList, setClientList] = useState([]);
@@ -4005,7 +4008,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -4570,7 +4573,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   const statusColor = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
                                   return (
                                     <div key={ai} style={{ padding: isMobile ? "2px 3px" : "4px 6px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden", opacity: isCancelled ? 0.5 : 1 }}>
-                                      <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none" }}>{a.time}</div>
+                                      <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none", display: "flex", justifyContent: "space-between", gap: 3 }}>
+                                        <span>{a.time}</span>
+                                        {a.service_duration ? <span style={{ opacity: 0.75 }}>{a.service_duration}m</span> : null}
+                                      </div>
                                       <div style={{ fontSize: isMobile ? 8 : 10, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: isCancelled ? "line-through" : "none" }}>{a.client_name?.split(" ")[0] || ""}</div>
                                       {!isMobile && <div style={{ fontSize: 9, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>}
                                     </div>
@@ -4705,7 +4711,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
                                   {dayAppts.map((a, ai) => (
                                     <div key={ai} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: `${accent}1a`, color: c.textSub, borderLeft: `2px solid ${accent}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                      {a.time} {a.client_name?.split(" ")[0] || ""}
+                                      {a.time}{a.service_duration ? ` (${a.service_duration}m)` : ""} {a.client_name?.split(" ")[0] || ""}
                                     </div>
                                   ))}
                                   {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
@@ -4872,16 +4878,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* Appointments list (week/month views) */}
               {calViewMode !== "year" && (<>
+                {/* Persistent "+ Afspraak" button — visible above the list on
+                    every day so the owner can add multiple bookings without
+                    having to first empty the day. */}
+                <button className="btn-ghost" style={{ width: "100%", marginBottom: 12, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
+                </button>
                 {calAppts.length === 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={36} color={c.textMuted} /></div>
                     <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>
                       {calDate === fmt(getToday()) ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}
                     </div>
-                    <button className="btn-ghost" style={{ padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 8 }}
-                      onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: calDate, time: "", client_name: "", client_email: "", client_phone: "", staff_id: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
-                      <NavIcon name="plus" size={13} color="currentColor" /> {t.addAppointment}
-                    </button>
                   </div>
                 ) : (
                   calAppts.map(a => renderApptCard(a))
@@ -8466,36 +8475,55 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textSub, marginTop: 4 }}>{t.addAppointmentDesc}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div>
-                    <SL>{t.selectServiceFor}</SL>
-                    <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
-                      <option value="" style={{ background: c.selectBg }}>—</option>
-                      {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
-                    </select>
-                  </div>
-                  {/* Variant selector */}
-                  {(() => {
-                    const selSvc = salonData.services.find(s => s.id === addApptForm.service_id);
-                    if (!selSvc?.variants?.length) return null;
+                  {/* Multi-service list — the owner picks one or more services
+                      per client. Each row can point at its own stylist. */}
+                  {(addApptForm.services || []).map((row, idx) => {
+                    const selSvc = salonData.services.find(s => s.id === row.service_id);
+                    const hasVariants = !!selSvc?.variants?.length;
                     return (
-                      <div>
-                        <SL>{t.selectVariant}</SL>
-                        <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
-                          <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : "No variant"}</option>
-                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — €{v.price} · {v.duration} min</option>)}
+                      <div key={row.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, fontWeight: 600 }}>
+                            {lang === "nl" ? `Dienst ${idx + 1}` : `Service ${idx + 1}`}
+                          </div>
+                          {(addApptForm.services || []).length > 1 && (
+                            <button type="button"
+                              onClick={() => setAddApptForm(f => ({ ...f, services: (f.services || []).filter((_, i) => i !== idx) }))}
+                              style={{ background: "transparent", border: `1px solid ${c.danger}33`, color: c.danger, cursor: "pointer", borderRadius: 8, padding: "3px 8px", fontSize: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <NavIcon name="xmark" size={10} color="currentColor" /> {lang === "nl" ? "Verwijder" : "Remove"}
+                            </button>
+                          )}
+                        </div>
+                        <select className="input-field" value={row.service_id}
+                          onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "" } : r) }))}
+                          style={{ fontSize: 12 }}>
+                          <option value="" style={{ background: c.selectBg }}>—</option>
+                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
                         </select>
+                        {hasVariants && (
+                          <select className="input-field" value={row.variant_id || ""}
+                            onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, variant_id: e.target.value } : r) }))}
+                            style={{ fontSize: 12 }}>
+                            <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : "No variant"}</option>
+                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — €{v.price} · {v.duration} min</option>)}
+                          </select>
+                        )}
+                        {(salonData.staff || []).length > 0 && (
+                          <select className="input-field" value={row.staff_id}
+                            onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, staff_id: e.target.value } : r) }))}
+                            style={{ fontSize: 12 }}>
+                            <option value="" style={{ background: c.selectBg }}>{t.anyStaff}</option>
+                            {(salonData.staff || []).map(m => <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>)}
+                          </select>
+                        )}
                       </div>
                     );
-                  })()}
-                  {(salonData.staff || []).length > 0 && (
-                    <div>
-                      <SL>{t.selectStaff}</SL>
-                      <select className="input-field" value={addApptForm.staff_id} onChange={e => setAddApptForm(f => ({...f, staff_id: e.target.value}))} style={{ fontSize: 12 }}>
-                        <option value="" style={{ background: c.selectBg }}>{t.anyStaff}</option>
-                        {(salonData.staff || []).map(m => <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>)}
-                      </select>
-                    </div>
-                  )}
+                  })}
+                  <button type="button" className="btn-ghost"
+                    onClick={() => setAddApptForm(f => ({ ...f, services: [...(f.services || []), { id: `s_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, service_id: "", variant_id: "", staff_id: "" }] }))}
+                    style={{ borderStyle: "dashed", borderColor: `${accent}44`, color: accent, fontSize: 11, padding: "10px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                    <NavIcon name="plus" size={12} color={accent} /> {lang === "nl" ? "Nog een dienst toevoegen" : "Add another service"}
+                  </button>
                   <div>
                     <SL>{t.selectDateFor}</SL>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -8586,15 +8614,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                   </div>
                 </div>
-                <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
+                <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !(addApptForm.services || []).length || (addApptForm.services || []).some(r => !r.service_id) || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
                   onClick={async () => {
                     setAddApptLoading(true);
-                    const svc = salonData.services.find(s => s.id === addApptForm.service_id);
-                    const variant = svc?.variants?.find(v => v.id === addApptForm.variant_id);
-                    const staffMember = (salonData.staff || []).find(m => m.id === addApptForm.staff_id);
-                    const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "") + (staffMember ? ` (${staffMember.name})` : "") : "";
-                    const price = variant ? variant.price : (svc?.price || 0);
-                    const duration = variant ? variant.duration : (svc?.duration || 60);
+                    // Resolve each row into {svc, variant, staff, price, duration}
+                    // and compose the combined booking the same way book-appointment
+                    // does: joined service_name, summed price + duration, primary
+                    // staff on staff_id, full map on staff_assignments, ordered
+                    // breakdown on service_breakdown.
+                    const rows = [];
+                    for (const r of (addApptForm.services || [])) {
+                      const svc = salonData.services.find(s => s.id === r.service_id);
+                      if (!svc) continue;
+                      const variant = svc.variants?.find(v => v.id === r.variant_id);
+                      const staff = (salonData.staff || []).find(m => m.id === r.staff_id);
+                      const price = parseFloat(variant ? variant.price : svc.price);
+                      const duration = parseInt(variant ? variant.duration : svc.duration);
+                      const labelBase = (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "");
+                      const labelFull = labelBase + (staff ? ` (${staff.name})` : "");
+                      rows.push({ svc, variant, staff, price, duration, labelBase, labelFull });
+                    }
+                    if (rows.length === 0) {
+                      toast.show(lang === "nl" ? "Dienst niet gevonden — herlaad de pagina" : "Service not found — please reload", "error");
+                      setAddApptLoading(false);
+                      return;
+                    }
+                    const combinedName = rows.map(r => r.labelFull).join(" · ");
+                    const totalPrice = rows.reduce((s, r) => s + (Number.isFinite(r.price) ? r.price : 0), 0);
+                    const totalDuration = rows.reduce((s, r) => s + (Number.isFinite(r.duration) ? r.duration : 60), 0);
+                    const staffAssignments = Object.fromEntries(rows.filter(r => r.staff).map(r => [r.svc.id, r.staff.id]));
+                    const staffNames = rows.map(r => r.staff?.name).filter(Boolean);
+                    let runningOffset = 0;
+                    const serviceBreakdown = rows.map(r => {
+                      const entry = { service_id: r.svc.id, staff_id: r.staff?.id || null, duration: r.duration, offset_min: runningOffset, label: r.labelBase };
+                      runningOffset += r.duration;
+                      return entry;
+                    });
+                    const primaryStaff = rows.find(r => r.staff)?.staff || null;
                     // Save client. NOTE: clients.email is globally unique right now, so we
                     // don't scope by owner_id. See TODO on the data model in book-appointment.
                     const email = addApptForm.client_email.toLowerCase().trim();
@@ -8607,21 +8663,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
                       if (nc) clientId = nc.id;
                     }
-                    // Data integrity: abort if the selected service disappeared between pick and submit.
-                    // Never fall back to client_name — that corrupts invoices and analytics.
-                    if (!svc || !svcLabel) {
-                      toast.show(lang === "nl" ? "Dienst niet gevonden — herlaad de pagina" : "Service not found — please reload", "error");
-                      return;
-                    }
-                    // Insert appointment
+                    // Insert appointment — primary service_id is the first row so
+                    // legacy code paths that expect a single service_id still work.
                     const apptData = {
-                      owner_id: salonData.owner_id, service_id: svc.id, client_id: clientId,
-                      service_name: svcLabel,
-                      service_price: price, service_duration: duration,
+                      owner_id: salonData.owner_id, service_id: rows[0].svc.id, client_id: clientId,
+                      service_name: combinedName,
+                      service_price: totalPrice, service_duration: totalDuration,
                       date: addApptForm.date, time: addApptForm.time,
                       client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
                       payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
-                      staff_id: staffMember?.id || null, staff_name: staffMember?.name || null
+                      staff_id: primaryStaff?.id || null,
+                      staff_name: staffNames.length > 0 ? staffNames.join(", ") : null,
+                      staff_assignments: staffAssignments,
+                      service_breakdown: serviceBreakdown,
                     };
                     const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
                     if (apptError || !appt) {
@@ -8635,20 +8689,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       client_name: addApptForm.client_name, client_email: email,
                       client_phone: addApptForm.client_phone || null,
                       service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                      payment: "on-arrival", price: price,
+                      payment: "on-arrival", price: totalPrice,
                       salon_name: salonData.name, owner_email: null,
                       salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
                       owner_id: salonData.owner_id, lang
                     };
                     await sendEmails("booking_confirmation", bookingConfirmPayload);
                     sendSMS("booking_confirmation", bookingConfirmPayload).catch(() => { /* logged in helper */ });
-                    // Notify assigned staff
-                    if (staffMember?.email) {
+                    // Notify every assigned staff — combined bookings can have
+                    // more than one, dedupe on email so nobody gets it twice.
+                    const staffEmails = Array.from(new Set(rows.map(r => r.staff?.email).filter(Boolean)));
+                    if (staffEmails.length > 0) {
                       await sendEmails("booking_notification", {
-                        owner_email: null, staff_emails: [staffMember.email],
+                        owner_email: null, staff_emails: staffEmails,
                         client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                        price, salon_name: salonData.name,
+                        price: totalPrice, salon_name: salonData.name,
                         salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang
                       });
                     }
