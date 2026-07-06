@@ -4498,7 +4498,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               })()}
                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.35 }}>{a.client_name}</div>
                               <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.35 }}>{a.service_name}</div>
-                              {a.staff_name && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{a.staff_name}</div>}
+                              {a.staff_name && (
+                                <div style={{ fontSize: 9, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em" }}>
+                                  <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -4614,6 +4618,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                       })()}
                                       <div style={{ fontSize: isMobile ? 8 : 10, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: isCancelled ? "line-through" : "none" }}>{a.client_name?.split(" ")[0] || ""}</div>
                                       {!isMobile && <div style={{ fontSize: 9, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name?.split(" — ")[0] || a.service_name}</div>}
+                                      {a.staff_name && (
+                                        <div style={{ fontSize: isMobile ? 7 : 9, color: accent, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1, letterSpacing: "0.03em" }}>
+                                          · {a.staff_name.split(",")[0].trim()}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
