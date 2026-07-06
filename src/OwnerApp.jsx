@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -1597,6 +1597,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Merge flow — pick a source client, then pick a target survivor.
+  const [mergeSource, setMergeSource] = useState(null);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [merging, setMerging] = useState(false);
+  const [showDupes, setShowDupes] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1771,6 +1776,78 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     setRefreshKey((k) => k + 1);
   };
 
+  // Merge source client INTO target: rewrite all of source's appointments
+  // to point at target's email/client_id, carry over notes/phone/birthday
+  // from source's manual_clients row when target lacks them, then drop the
+  // source manual_clients row so it disappears from the aggregation.
+  const mergeClientInto = async (source, target) => {
+    if (!source || !target || source.email === target.email) return;
+    setMerging(true);
+    try {
+      // 1. Rewrite appointments belonging to source → target's email.
+      //    Only touch this salon (owner_id) so a shared-email case at
+      //    another Vellu salon is untouched.
+      const { error: apptErr } = await supabase
+        .from("appointments")
+        .update({ client_email: target.email })
+        .eq("owner_id", ownerId)
+        .eq("client_email", source.email);
+      if (apptErr) throw apptErr;
+
+      // 2. Merge manual_clients rows. If source has notes/phone/birthday
+      //    that target doesn't, move them over so nothing is lost.
+      if (source.manualId) {
+        const patch = {};
+        if (source.notes && !target.notes) patch.notes = source.notes;
+        if (source.phone && !target.phone) patch.phone = source.phone;
+        if (source.birthday && !target.birthday) patch.birthday = source.birthday;
+        if (Object.keys(patch).length > 0) {
+          if (target.manualId) {
+            await supabase.from("manual_clients").update(patch).eq("id", target.manualId).eq("owner_id", ownerId);
+          } else if (target.email) {
+            await supabase.from("manual_clients").insert({ owner_id: ownerId, email: target.email, name: target.name, ...patch });
+          }
+        }
+        // Remove source's manual row so it stops showing up in the list.
+        await supabase.from("manual_clients").delete().eq("id", source.manualId).eq("owner_id", ownerId);
+      }
+      toast.show(lang === "nl" ? `Samengevoegd met ${target.name}` : `Merged into ${target.name}`);
+      setMergeSource(null);
+      setMergeSearch("");
+      setSelected(null);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      console.error("merge error:", err);
+      toast.show(lang === "nl" ? "Samenvoegen mislukt" : "Merge failed", "error");
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  // Auto duplicate hint — group clients that share a normalized phone
+  // number (digits only). Same email is already dedupe'd at load time, so
+  // phone is the most reliable "same person, different email" signal.
+  const dupePairs = useMemo(() => {
+    const byPhone = new Map();
+    for (const cl of clients) {
+      const digits = (cl.phone || "").replace(/\D/g, "");
+      if (digits.length < 6) continue;
+      if (!byPhone.has(digits)) byPhone.set(digits, []);
+      byPhone.get(digits).push(cl);
+    }
+    const pairs = [];
+    for (const group of byPhone.values()) {
+      if (group.length < 2) continue;
+      // Emit pairs — sort by visits DESC so the record with more history
+      // becomes the suggested survivor.
+      const sorted = group.slice().sort((a, b) => (b.visitCount || 0) - (a.visitCount || 0));
+      for (let i = 1; i < sorted.length; i++) {
+        pairs.push({ survivor: sorted[0], source: sorted[i] });
+      }
+    }
+    return pairs;
+  }, [clients]);
+
   const onCSVPicked = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking same file
@@ -1898,6 +1975,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
         {filtered.length} {filtered.length === 1 ? (lang === "nl" ? "klant" : "client") : (lang === "nl" ? "klanten" : "clients")}
       </div>
 
+      {/* Duplicate hint — only shown when phone-based matches surface. */}
+      {dupePairs.length > 0 && (
+        <div onClick={() => setShowDupes(true)} role="button" tabIndex={0}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowDupes(true); } }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 12, marginBottom: 12, cursor: "pointer" }}>
+          <NavIcon name="alerttri" size={14} color={c.warning} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: c.warning }}>
+              {lang === "nl" ? `${dupePairs.length} mogelijke duplicate${dupePairs.length === 1 ? "" : "s"} gevonden` : `${dupePairs.length} possible duplicate${dupePairs.length === 1 ? "" : "s"} found`}
+            </div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+              {lang === "nl" ? "Klanten met hetzelfde telefoonnummer — klik om samen te voegen." : "Clients sharing a phone number — click to merge."}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.warning} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 0", color: c.textMuted, fontSize: 13 }}>
           {clients.length === 0
@@ -1936,6 +2031,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400 }}>{selected.name}</div>
               </div>
+              <button
+                onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
+                aria-label={lang === "nl" ? "Samenvoegen met andere klant" : "Merge into another client"}
+                title={lang === "nl" ? "Samenvoegen" : "Merge"}
+                style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /><line x1="9" y1="12" x2="15" y2="12" /><polyline points="12 9 15 12 12 15" /></svg>
+              </button>
               <button
                 onClick={() => openEdit(selected)}
                 aria-label={lang === "nl" ? "Bewerk klant" : "Edit customer"}
@@ -2076,6 +2179,125 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
               </button>
               <button className="btn-ghost" disabled={importing} onClick={() => setImportPreview(null)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
             </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* Merge picker — pick another client to become the survivor. All
+          appointments of the source are rewritten to the survivor's email
+          and the source's manual_clients row is removed. */}
+      {mergeSource && createPortal((
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !merging && setMergeSource(null)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 460, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Samenvoegen met…" : "Merge into…"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
+              {lang === "nl"
+                ? <>Alle afspraken van <strong>{mergeSource.name}</strong> worden verplaatst naar de gekozen klant. Notities en telefoonnummer worden overgenomen als de andere klant die nog niet heeft.</>
+                : <>All appointments of <strong>{mergeSource.name}</strong> will move to the picked client. Notes and phone are carried over if the target lacks them.</>}
+            </div>
+            <input className="input-field" placeholder={lang === "nl" ? "Zoek klant…" : "Search client…"} value={mergeSearch} onChange={e => setMergeSearch(e.target.value)} style={{ width: "100%", marginBottom: 12 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
+              {(() => {
+                const q = mergeSearch.trim().toLowerCase();
+                const candidates = clients
+                  .filter(cl => cl.email !== mergeSource.email)
+                  .filter(cl => !q || cl.name.toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+                  .slice(0, 25);
+                if (candidates.length === 0) return (
+                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>
+                    {lang === "nl" ? "Geen andere klanten gevonden" : "No other clients"}
+                  </div>
+                );
+                return candidates.map(cl => (
+                  <button key={cl.key} type="button" disabled={merging}
+                    onClick={() => {
+                      if (!window.confirm(lang === "nl"
+                        ? `${mergeSource.name} samenvoegen met ${cl.name}? Dit kan niet worden teruggedraaid.`
+                        : `Merge ${mergeSource.name} into ${cl.name}? This can't be undone.`)) return;
+                      mergeClientInto(mergeSource, cl);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, cursor: merging ? "wait" : "pointer", textAlign: "left", color: c.text, opacity: merging ? 0.5 : 1 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{cl.name}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
+                    </div>
+                    <div style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{cl.visitCount || 0}×</div>
+                  </button>
+                ));
+              })()}
+            </div>
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} disabled={merging} onClick={() => setMergeSource(null)}>
+              {lang === "nl" ? "Annuleer" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* Duplicate list — clients grouped by matching phone. Owner picks
+          which of each pair should survive; the other is merged into it. */}
+      {showDupes && createPortal((
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setShowDupes(false)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 520, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Mogelijke duplicates" : "Possible duplicates"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
+              {lang === "nl"
+                ? "Klanten die hetzelfde telefoonnummer delen. Kies welke record je wilt behouden — de ander wordt daarin samengevoegd."
+                : "Clients sharing the same phone number. Pick which record to keep — the other gets merged in."}
+            </div>
+            {dupePairs.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "24px 0" }}>
+                {lang === "nl" ? "Geen duplicates gevonden." : "No duplicates found."}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {dupePairs.map((p, i) => (
+                  <div key={i} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>
+                      {lang === "nl" ? "Telefoon: " : "Phone: "}{p.survivor.phone}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {[p.survivor, p.source].map((cl, j) => (
+                        <div key={j} style={{ padding: "8px 10px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>{cl.name}</div>
+                          <div style={{ fontSize: 10, color: c.textMuted, wordBreak: "break-word" }}>{cl.email}</div>
+                          <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{cl.visitCount || 0} {lang === "nl" ? "bezoeken" : "visits"}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                      <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} disabled={merging}
+                        onClick={() => {
+                          if (!window.confirm(lang === "nl"
+                            ? `${p.source.name} samenvoegen met ${p.survivor.name}?`
+                            : `Merge ${p.source.name} into ${p.survivor.name}?`)) return;
+                          mergeClientInto(p.source, p.survivor);
+                          setShowDupes(false);
+                        }}>
+                        {lang === "nl" ? `Behoud ${p.survivor.name}` : `Keep ${p.survivor.name}`}
+                      </button>
+                      <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} disabled={merging}
+                        onClick={() => {
+                          if (!window.confirm(lang === "nl"
+                            ? `${p.survivor.name} samenvoegen met ${p.source.name}?`
+                            : `Merge ${p.survivor.name} into ${p.source.name}?`)) return;
+                          mergeClientInto(p.survivor, p.source);
+                          setShowDupes(false);
+                        }}>
+                        {lang === "nl" ? `Behoud ${p.source.name}` : `Keep ${p.source.name}`}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => setShowDupes(false)}>
+              {lang === "nl" ? "Sluiten" : "Close"}
+            </button>
           </div>
         </div>
       ), document.body)}
