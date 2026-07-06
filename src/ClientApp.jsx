@@ -1169,6 +1169,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         staff_required: isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
         staff_day_blocked: isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
         staff_time_blocked: isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
+        staff_not_available: isNl ? "Deze medewerker werkt niet op dit tijdstip." : "This stylist doesn't work at this time.",
       };
       const msg = MAP[code] || t.bookingError;
       setErrorToast(msg);

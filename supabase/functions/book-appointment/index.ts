@@ -351,12 +351,68 @@ serve(async (req) => {
     ? { open: override.open, close: override.close, closed: false }
     : salon.business_hours?.[dayOfWeek];
 
+  // Team accounts: the "salon" is open whenever at least ONE stylist is open,
+  // and the effective window is the union of every open stylist's hours for
+  // that day. Mirrors ClientApp.getEffectiveHours so client and server agree
+  // — otherwise a client sees Friday as bookable (because Lady works) while
+  // the server rejects it based on the salon-level Friday=closed flag.
+  if (!applyExceptionSalonWide && salon.account_type === "team") {
+    const { data: allStaff } = await supabase
+      .from("staff_members")
+      .select("id, working_hours")
+      .eq("owner_id", salon.id)
+      .eq("active", true);
+    const openWindows = (allStaff || [])
+      .map((s: any) => s.working_hours?.[dayOfWeek])
+      .filter((d: any) => d && !d.closed);
+    if (openWindows.length > 0) {
+      const fb = salon.business_hours?.[dayOfWeek] || {};
+      const fbOpen = fb.open || "09:00";
+      const fbClose = fb.close || "17:30";
+      let open = "23:59", close = "00:00";
+      for (const w of openWindows) {
+        const o = w.open || fbOpen;
+        const cl = w.close || fbClose;
+        if (o < open) open = o;
+        if (cl > close) close = cl;
+      }
+      dayHours = { closed: false, open, close };
+    }
+  }
+
   if (!dayHours || dayHours.closed) return err(400, "closed", origin);
   const openMin = toMinutes(dayHours.open);
   const closeMin = toMinutes(dayHours.close);
   const apptStartMin = toMinutes(time);
   const apptEndMin = apptStartMin + totalDuration;
   if (apptStartMin < openMin || apptEndMin > closeMin) return err(400, "outside_hours", origin);
+
+  // Also verify each picked stylist is personally open at the booked time. A
+  // team salon can be "open" because one staff works while a DIFFERENT staff
+  // (the one this booking picked) is off that weekday — booking her should
+  // still fail. Skips joint accounts (no per-staff schedule) and any staff
+  // with an exception override that covers this date, since exceptions widen
+  // that specific stylist's hours for the day.
+  if (salon.account_type === "team" && staffIdsFlat.length > 0) {
+    const { data: pickedStaff } = await supabase
+      .from("staff_members")
+      .select("id, name, working_hours")
+      .in("id", staffIdsFlat);
+    // Exception for THIS date on the salon (staff-scoped or not)
+    const excStaffId = override?.type === "exception" ? (override.staff_id || null) : undefined;
+    for (const s of pickedStaff || []) {
+      // A staff-scoped exception on this date widens THIS stylist's hours —
+      // treat them as available.
+      if (excStaffId === s.id) continue;
+      // Salon-wide exception widens everyone's hours; skip the per-staff check.
+      if (override?.type === "exception" && !override.staff_id) continue;
+      const day = s.working_hours?.[dayOfWeek];
+      if (!day || day.closed) return err(400, "staff_not_available", origin);
+      const sOpen = toMinutes(day.open || dayHours.open);
+      const sClose = toMinutes(day.close || dayHours.close);
+      if (apptStartMin < sOpen || apptEndMin > sClose) return err(400, "staff_not_available", origin);
+    }
+  }
 
   // ---------- 9b. Validate staff-specific blocks ----------
   // A stylist can mark themselves off (whole day) or block a time window even
