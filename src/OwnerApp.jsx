@@ -2203,7 +2203,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [clientMode, setClientMode] = useState("existing"); // "existing" or "new"
   // Exception/blocked days
-  const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30" });
+  const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30", staff_id: "" });
   const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" });
   const [showExceptionForm, setShowExceptionForm] = useState(false);
   const [showBlockedForm, setShowBlockedForm] = useState(false);
@@ -7317,7 +7317,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {Object.entries(salonData.day_overrides || {}).filter(([_k, v]) => v.type === "exception").map(([date, v]) => (
                   <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
+                        {v.staff_id ? (
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            {(salonData.staff || []).find(sm => sm.id === v.staff_id)?.name || (lang === "nl" ? "Medewerker" : "Staff")}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: c.inputBg, color: c.textMuted, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            {lang === "nl" ? "Iedereen" : "Everyone"}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: 10, color: c.textLabel }}>{v.open} — {v.close}</div>
                     </div>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
@@ -7335,16 +7346,39 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                     </select>
                   </div>
+                  {(salonData.staff || []).length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 4 }}>{lang === "nl" ? "Voor wie?" : "Who?"}</div>
+                      <select value={newException.staff_id} onChange={e => setNewException(f => ({...f, staff_id: e.target.value}))}
+                        style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "8px 10px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", width: "100%" }}>
+                        <option value="" style={{ background: c.selectBg }}>{lang === "nl" ? "Iedereen (hele salon)" : "Everyone (whole salon)"}</option>
+                        {(salonData.staff || []).map(m => (
+                          <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                        {newException.staff_id
+                          ? (lang === "nl" ? "Alleen deze medewerker is dan boekbaar op deze dag, ook als ze normaal vrij zijn." : "Only this staff member is bookable that day, even if they'd normally be off.")
+                          : (lang === "nl" ? "De hele salon is die dag open met deze tijden." : "The whole salon opens with these hours that day.")}
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
                       onClick={() => {
                         if (!newException.date) return;
-                        update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: { type: "exception", open: newException.open, close: newException.close }}; return d; });
-                        setNewException({ date: "", open: "09:00", close: "17:30" });
+                        const entry = { type: "exception", open: newException.open, close: newException.close };
+                        if (newException.staff_id) {
+                          const staffName = (salonData.staff || []).find(sm => sm.id === newException.staff_id)?.name || "";
+                          entry.staff_id = newException.staff_id;
+                          entry.staff_name = staffName;
+                        }
+                        update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: entry }; return d; });
+                        setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" });
                         setShowExceptionForm(false);
                       }}>{t.addException}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
-                      onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30" }); setShowExceptionForm(false); }}>×</button>
+                      onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" }); setShowExceptionForm(false); }}>×</button>
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}

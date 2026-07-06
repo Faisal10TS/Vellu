@@ -320,7 +320,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     return false; // whole-day blocks are handled by isDayBlocked
   };
-  const isDayException = (dateStr) => dayOverrides[dateStr]?.type === "exception";
+  // Only SALON-WIDE exceptions (no staff_id) widen the whole-day bounds.
+  // Staff-scoped exceptions are applied inside staffCoversWindow so they
+  // don't accidentally shrink the salon bounds for other stylists.
+  const isDayException = (dateStr) => {
+    const ov = dayOverrides[dateStr];
+    return ov?.type === "exception" && !ov.staff_id;
+  };
   const getEffectiveHours = (dateStr) => {
     if (isDayBlocked(dateStr)) return { closed: true };
     if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
@@ -896,14 +902,28 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         end: b.block_time_end ? toMin(b.block_time_end) : 24 * 60,
       });
     }
+    // Exception on this date, if any. When it has a staff_id it only widens
+    // that specific stylist's hours (letting them be booked even if their
+    // weekly working_hours mark the day as closed). Without a staff_id it's
+    // a salon-wide exception — getEffectiveHours already widened dayHours.
+    const dayExc = (dayOverride && dayOverride.type === "exception") ? dayOverride : null;
     const staffCoversWindow = (staff, startMin, endMin) => {
-      if (!staff?.working_hours) return true;
-      const day = staff.working_hours[dayOfWeek];
-      if (!day) return true;
-      if (day.closed) return false;
-      const staffOpen = toMin(day.open || gatFbOpen);
-      const staffClose = toMin(day.close || gatFbClose);
-      if (startMin < staffOpen || endMin > staffClose) return false;
+      const staffExceptionApplies = dayExc && (!dayExc.staff_id || dayExc.staff_id === staff?.id);
+      if (staffExceptionApplies) {
+        // Use the exception window as this staff's effective hours, ignoring
+        // their weekly working_hours which would normally close the day.
+        const excOpen = toMin(dayExc.open || gatFbOpen);
+        const excClose = toMin(dayExc.close || gatFbClose);
+        if (startMin < excOpen || endMin > excClose) return false;
+      } else {
+        if (!staff?.working_hours) return true;
+        const day = staff.working_hours[dayOfWeek];
+        if (!day) return true;
+        if (day.closed) return false;
+        const staffOpen = toMin(day.open || gatFbOpen);
+        const staffClose = toMin(day.close || gatFbClose);
+        if (startMin < staffOpen || endMin > staffClose) return false;
+      }
       // Per-staff block: this staff can't cover a window that overlaps with
       // their personal block (or any window if the block is whole-day).
       // Other eligible staff are still evaluated by the enclosing loop, so

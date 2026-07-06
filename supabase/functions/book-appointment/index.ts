@@ -198,7 +198,13 @@ serve(async (req) => {
   }
 
   // ---------- 5. Validate staff (if provided) ----------
-  const staffIdsFlat: string[] = Object.values(staff_ids_per_service || {}).filter(Boolean) as string[];
+  // Dedupe: the same stylist can legitimately be picked for multiple services
+  // in ONE booking (e.g. Lady does both nails and toes). Without dedupe the
+  // length check below rejects the booking because a `SELECT ... IN (id, id)`
+  // returns one row, not two.
+  const staffIdsFlat: string[] = Array.from(new Set(
+    Object.values(staff_ids_per_service || {}).filter(Boolean) as string[]
+  ));
 
   // Team accounts with 2+ eligible staff require an explicit stylist per
   // service — otherwise the booking floats without attribution and never
@@ -334,7 +340,14 @@ serve(async (req) => {
     }
   }
 
-  let dayHours = override?.type === "exception"
+  // Staff-scoped exceptions only widen hours for that specific stylist —
+  // the salon-wide bounds stay closed unless every service in this booking
+  // is going to that same staff. Otherwise use the weekday's business_hours.
+  const applyExceptionSalonWide = override?.type === "exception" && (
+    !override.staff_id ||
+    Object.values(staff_ids_per_service || {}).filter(Boolean).every((s: any) => s === override.staff_id)
+  );
+  let dayHours = applyExceptionSalonWide
     ? { open: override.open, close: override.close, closed: false }
     : salon.business_hours?.[dayOfWeek];
 
