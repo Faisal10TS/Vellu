@@ -4537,7 +4537,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const isFullDayBlocked = (blockMatchesStaff && !ov.block_time_start) || !!staffFullDayBlock;
                       const isTimeBlocked = blockMatchesStaff && !!ov.block_time_start;
                       return (
-                        <div key={i} role="button" tabIndex={0} onClick={() => setCalDate(ds)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); } }}
+                        <div key={i} role="button" tabIndex={0}
+                          onClick={() => { setCalDate(ds); setCalViewMode("day"); }}
+                          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalDate(ds); setCalViewMode("day"); } }}
                           style={{ borderRight: i < 6 ? `1px solid ${c.border}` : "none", cursor: "pointer", display: "flex", flexDirection: "column", background: isSel ? `${accent}22` : isFullDayBlocked ? `${c.danger}0d` : isToday ? `${accent}08` : "transparent", position: "relative" }}>
                           {/* Diagonal stripe overlay for fully-blocked days —
                               visually unmistakable without eating readable space. */}
