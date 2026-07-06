@@ -259,6 +259,7 @@ function SalonRoute({ lang, setLang }) {
         whatsapp_number: data.whatsapp_number || "",
 
         phone_required: data.phone_required || false,
+        waitlist_enabled: data.waitlist_enabled !== false,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
@@ -635,7 +636,24 @@ class ErrorBoundary extends Component {
 }
 
 export default function VelluApp() {
-  const [lang, setLang] = useState("nl");
+  // Language priority: (1) explicit user choice saved to localStorage on any
+  // pill flip, (2) browser preference (nl-*, otherwise en), (3) nl default.
+  const [lang, setLang] = useState(() => {
+    try {
+      const saved = localStorage.getItem("vellu_lang");
+      if (saved === "nl" || saved === "en") return saved;
+    } catch { /* private mode */ }
+    if (typeof navigator !== "undefined") {
+      const nav = (navigator.language || navigator.languages?.[0] || "").toLowerCase();
+      if (nav.startsWith("nl")) return "nl";
+      if (nav) return "en";
+    }
+    return "nl";
+  });
+  const setLangPersist = (next) => {
+    setLang(next);
+    try { localStorage.setItem("vellu_lang", next); } catch { /* private mode */ }
+  };
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   return (
     <ErrorBoundary>
@@ -643,24 +661,24 @@ export default function VelluApp() {
         <BrowserRouter>
           <Suspense fallback={null}>
             <Routes>
-              <Route path="/" element={<AppInner lang={lang} setLang={setLang} />} />
-              <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLang} />} />
-              <Route path="/staff" element={<StaffEntryPage lang={lang} setLang={setLang} />} />
+              <Route path="/" element={<AppInner lang={lang} setLang={setLangPersist} />} />
+              <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLangPersist} />} />
+              <Route path="/staff" element={<StaffEntryPage lang={lang} setLang={setLangPersist} />} />
               <Route path="/cancel/:token" element={<CancelRoute lang={lang} />} />
-              <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLang} />} />
-              <Route path="/terms" element={<TermsPage lang={lang} setLang={setLang} />} />
+              <Route path="/privacy" element={<PrivacyPage lang={lang} setLang={setLangPersist} />} />
+              <Route path="/terms" element={<TermsPage lang={lang} setLang={setLangPersist} />} />
               {/* Dutch alias — Vellu is NL-first so /voorwaarden must work */}
-              <Route path="/voorwaarden" element={<TermsPage lang={lang} setLang={setLang} />} />
-              <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
-              <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLang} />} />
+              <Route path="/voorwaarden" element={<TermsPage lang={lang} setLang={setLangPersist} />} />
+              <Route path="/contact" element={<ContactPage lang={lang} setLang={setLangPersist} />} />
+              <Route path="/dpa" element={<DpaPage lang={lang} setLang={setLangPersist} />} />
               {/* Google OAuth verification wants a dedicated public page; this
                   describes the Google Calendar integration + Limited Use. */}
-              <Route path="/integrations/google" element={<GoogleIntegrationPage lang={lang} setLang={setLang} />} />
+              <Route path="/integrations/google" element={<GoogleIntegrationPage lang={lang} setLang={setLangPersist} />} />
               {/* Admin route — rendered for anyone, but the component itself
                   calls is_admin() via RPC and shows "Not authorised" for
                   non-admins. Real enforcement sits in the DB (app_admins). */}
               <Route path="/admin" element={<AdminRoute />} />
-              <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLang} />} />
+              <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLangPersist} />} />
             </Routes>
           </Suspense>
             <CookieConsent lang={lang} />

@@ -446,6 +446,13 @@ const _T_RAW = {
     manageCategories:"Categorieën beheren",
     // Client accounts
     welcomeBackClient:"Welkom terug", foundYourDetails:"We hebben je gegevens gevonden!",
+    // Waitlist
+    joinWaitlist:"Zet me op wachtlijst", waitlistTitle:"Op de wachtlijst",
+    waitlistSub:"Laat je gegevens achter. We nemen contact op als er een plek vrijkomt.",
+    waitlistNotes:"Voorkeur / opmerking", waitlistNotesPh:"Bijv. liefst 's ochtends",
+    waitlistJoined:"Je staat op de wachtlijst!",
+    waitlistJoinedSub:"We laten je weten zodra er een plek vrijkomt.",
+    waitlistNoDate:"Kies eerst een datum", waitlistSubmitError:"Er ging iets mis, probeer opnieuw",
     // Cancellation
     cancelBooking:"Afspraak annuleren", cancelBookingDesc:"Weet je zeker dat je wilt annuleren?",
     cancellationReason:"Reden voor annulering (optioneel)", confirmCancel:"Ja, annuleren",
@@ -542,6 +549,8 @@ const _T_RAW = {
     // Team accounts
     accountType:"Account type", jointAccount:"Gedeeld account", teamAccount:"Team account",
     jointDesc:"Eén login voor de hele salon", teamDesc:"Elke medewerker heeft een eigen login",
+    jointInfo:"Kies dit als jij (of jullie samen) alles beheert vanaf één account. Iedereen ziet dezelfde agenda en dezelfde inloggegevens. Ideaal voor een solo-onderneming of een klein team dat samen werkt.",
+    teamInfo:"Kies dit als elke medewerker een eigen login krijgt. Zij zien hun eigen agenda, klanten en verdiensten. Handig voor grotere teams waar iedereen zelfstandig zijn planning bijhoudt. Alleen op het Professional-plan.",
     inviteStaff:"Uitnodigen", inviteStaffDesc:"Maak een login aan voor deze medewerker",
     staffEmail:"E-mail medewerker", staffPassword:"Wachtwoord", inviteSent:"Login aangemaakt!",
     emailTaken:"Dit e-mailadres is al in gebruik", staffLoginInfo:"Logt in op vellu.cc/owner",
@@ -707,6 +716,13 @@ const _T_RAW = {
     manageCategories:"Manage categories",
     // Client accounts
     welcomeBackClient:"Welcome back", foundYourDetails:"We found your details!",
+    // Waitlist
+    joinWaitlist:"Add me to the waitlist", waitlistTitle:"Join the waitlist",
+    waitlistSub:"Leave your details. We'll reach out as soon as a spot opens up.",
+    waitlistNotes:"Preference / note", waitlistNotesPh:"e.g. mornings preferred",
+    waitlistJoined:"You're on the waitlist!",
+    waitlistJoinedSub:"We'll let you know as soon as a spot opens up.",
+    waitlistNoDate:"Pick a date first", waitlistSubmitError:"Something went wrong, please try again",
     // Cancellation
     cancelBooking:"Cancel booking", cancelBookingDesc:"Are you sure you want to cancel?",
     cancellationReason:"Reason for cancellation (optional)", confirmCancel:"Yes, cancel",
@@ -803,6 +819,8 @@ const _T_RAW = {
     // Team accounts
     accountType:"Account type", jointAccount:"Joint account", teamAccount:"Team account",
     jointDesc:"One login for the entire salon", teamDesc:"Each staff member has their own login",
+    jointInfo:"Pick this if you (or you together) run everything from a single account. Everyone sees the same schedule and shares one login. Ideal for a solo business or a small team working side by side.",
+    teamInfo:"Pick this if every staff member should have their own login. They see their own schedule, clients and earnings. Great for larger teams where each person manages their own bookings. Professional plan only.",
     inviteStaff:"Invite", inviteStaffDesc:"Create a login for this staff member",
     staffEmail:"Staff email", staffPassword:"Password", inviteSent:"Login created!",
     emailTaken:"This email is already in use", staffLoginInfo:"Logs in at vellu.cc/owner",

@@ -1602,13 +1602,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   const [mergeSearch, setMergeSearch] = useState("");
   const [merging, setMerging] = useState(false);
   const [showDupes, setShowDupes] = useState(false);
+  // Waitlist — clients who left a request when there were no available slots.
+  const [waitlist, setWaitlist] = useState([]);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [waitlistEnabled, setWaitlistEnabled] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      // Appointment-derived clients + owner's manually-added contacts, in parallel.
-      const [{ data: appts }, { data: manual }] = await Promise.all([
+      // Appointment-derived clients + owner's manually-added contacts + waitlist + waitlist setting, in parallel.
+      const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
@@ -1618,7 +1622,22 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           .from("manual_clients")
           .select("id, name, email, phone, notes, hidden, birthday")
           .eq("owner_id", ownerId),
+        supabase
+          .from("waitlist")
+          .select("id, staff_id, date, client_name, client_email, client_phone, service_ids, notes, status, created_at, notified_at")
+          .eq("owner_id", ownerId)
+          .in("status", ["waiting", "notified"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("profiles")
+          .select("waitlist_enabled")
+          .eq("id", ownerId)
+          .maybeSingle(),
       ]);
+      if (!cancelled) {
+        setWaitlist(wl || []);
+        setWaitlistEnabled(prof?.waitlist_enabled !== false);
+      }
       if (cancelled) return;
       const nowMs = Date.now();
       const byEmail = new Map();
@@ -1848,6 +1867,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     return pairs;
   }, [clients]);
 
+  const markWaitlistNotified = async (id) => {
+    const { error } = await supabase.from("waitlist").update({ status: "notified", notified_at: new Date().toISOString() }).eq("id", id);
+    if (error) { toast.show(lang === "nl" ? "Bijwerken mislukt" : "Update failed", "error"); return; }
+    setWaitlist(list => list.map(w => w.id === id ? { ...w, status: "notified", notified_at: new Date().toISOString() } : w));
+  };
+  const deleteWaitlistEntry = async (id) => {
+    const { error } = await supabase.from("waitlist").delete().eq("id", id);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    setWaitlist(list => list.filter(w => w.id !== id));
+  };
+
   const onCSVPicked = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking same file
@@ -1974,6 +2004,29 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>
         {filtered.length} {filtered.length === 1 ? (lang === "nl" ? "klant" : "client") : (lang === "nl" ? "klanten" : "clients")}
       </div>
+
+      {/* Waitlist banner — only shown when the feature is enabled AND there
+          are waiting entries. Disabling the feature in Settings hides the
+          banner immediately (existing rows are preserved but ignored). */}
+      {waitlistEnabled && waitlist.filter(w => w.status === "waiting").length > 0 && (
+        <div onClick={() => setShowWaitlist(true)} role="button" tabIndex={0}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowWaitlist(true); } }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: `${accent}12`, border: `1px solid ${accent}44`, borderRadius: 12, marginBottom: 12, cursor: "pointer" }}>
+          <NavIcon name="clock" size={14} color={accent} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: accent }}>
+              {(() => {
+                const n = waitlist.filter(w => w.status === "waiting").length;
+                return lang === "nl" ? `${n} klant${n === 1 ? "" : "en"} op de wachtlijst` : `${n} client${n === 1 ? "" : "s"} on the waitlist`;
+              })()}
+            </div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+              {lang === "nl" ? "Klik om te bekijken en contact op te nemen." : "Click to review and reach out."}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        </div>
+      )}
 
       {/* Duplicate hint — only shown when phone-based matches surface. */}
       {dupePairs.length > 0 && (
@@ -2302,6 +2355,72 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
         </div>
       ), document.body)}
 
+      {/* Waitlist modal — review incoming waitlist requests and reach out. */}
+      {showWaitlist && createPortal((
+        <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setShowWaitlist(false)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 560, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Wachtlijst" : "Waitlist"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
+              {lang === "nl"
+                ? "Klanten die zich hebben aangemeld toen er geen tijd vrij was. Neem contact op en markeer als 'benaderd'."
+                : "Clients who signed up when no slots were free. Reach out and mark them as 'contacted'."}
+            </div>
+            {waitlist.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "24px 0" }}>
+                {lang === "nl" ? "Geen wachtlijst-aanmeldingen." : "No waitlist entries."}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {waitlist.map(w => (
+                  <div key={w.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{w.client_name}</div>
+                      {w.status === "notified" && (
+                        <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 999, background: `${c.success || accent}22`, color: c.success || accent, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
+                          {lang === "nl" ? "Benaderd" : "Contacted"}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, wordBreak: "break-word" }}>{w.client_email}{w.client_phone ? ` • ${w.client_phone}` : ""}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 4 }}>
+                      {lang === "nl" ? "Voorkeursdatum: " : "Preferred date: "}<b>{w.date}</b>
+                    </div>
+                    {w.notes && <div style={{ fontSize: 11, color: c.textSub, marginBottom: 4, fontStyle: "italic" }}>&ldquo;{w.notes}&rdquo;</div>}
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      <a href={`mailto:${w.client_email}?subject=${encodeURIComponent(lang === "nl" ? "Er is een plek vrij bij ons" : "A spot has opened up")}`} className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                        <NavIcon name="mail" size={12} color="currentColor" /> {lang === "nl" ? "E-mail" : "Email"}
+                      </a>
+                      {w.client_phone && (
+                        <a href={`https://wa.me/${w.client_phone.replace(/\D/g, "")}`} target="_blank" rel="noopener" className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                          WhatsApp
+                        </a>
+                      )}
+                      {w.status === "waiting" && (
+                        <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} onClick={() => markWaitlistNotified(w.id)}>
+                          {lang === "nl" ? "Markeer benaderd" : "Mark contacted"}
+                        </button>
+                      )}
+                      <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: c.danger, borderColor: `${c.danger}55` }}
+                        onClick={() => {
+                          if (!window.confirm(lang === "nl" ? "Verwijder deze aanmelding?" : "Delete this entry?")) return;
+                          deleteWaitlistEntry(w.id);
+                        }}>
+                        {lang === "nl" ? "Verwijder" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => setShowWaitlist(false)}>
+              {lang === "nl" ? "Sluiten" : "Close"}
+            </button>
+          </div>
+        </div>
+      ), document.body)}
+
       {/* Edit client modal — owner can correct a name, email or phone, or
           delete the client entirely. Pure-manual clients are hard-deleted;
           clients with appointment history are soft-hidden via the manual_clients
@@ -2528,6 +2647,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_email: data.salon_email || "",
           whatsapp_number: data.whatsapp_number || "",
           phone_required: data.phone_required || false,
+          waitlist_enabled: data.waitlist_enabled !== false,
           birthday_email_enabled: data.birthday_email_enabled || false,
           birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
           birthday_email_code_prefix: data.birthday_email_code_prefix || "",
@@ -8417,16 +8537,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
                     <div style={{ fontSize: 11, color: c.textLabel }}>{t.phoneRequiredDesc}</div>
                   </div>
-                  <div 
+                  <div
                     onClick={() => update(d => { d.phone_required = !d.phone_required; return d; })}
-                    style={{ 
+                    style={{
                       width: 36, height: 20, borderRadius: 10, cursor: "pointer",
                       background: salonData.phone_required ? accent : c.toggleInactive,
                       position: "relative", transition: "background 0.2s"
                     }}
                   >
-                    <div style={{ 
+                    <div style={{
                       position: "absolute", top: 2, left: salonData.phone_required ? 18 : 2,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Waitlist Toggle */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Wachtlijst" : "Waitlist"}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.4 }}>
+                      {lang === "nl"
+                        ? "Klanten kunnen zich aanmelden als er geen tijd vrij is. Bij een annulering krijgt de eerste wachtende automatisch een mail."
+                        : "Clients can sign up when nothing is free. When an appointment is cancelled the first waiting client is emailed automatically."}
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => update(d => { d.waitlist_enabled = !d.waitlist_enabled; return d; })}
+                    style={{
+                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                      background: salonData.waitlist_enabled ? accent : c.toggleInactive,
+                      position: "relative", transition: "background 0.2s", flexShrink: 0
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: 2, left: salonData.waitlist_enabled ? 18 : 2,
                       width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
                     }} />
                   </div>
@@ -8707,6 +8854,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   salon_email: salonData.salon_email || null,
                   whatsapp_number: salonData.whatsapp_number || null,
                   phone_required: salonData.phone_required || false,
+                  waitlist_enabled: salonData.waitlist_enabled !== false,
                   birthday_email_enabled: !!salonData.birthday_email_enabled,
                   birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
                   birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,

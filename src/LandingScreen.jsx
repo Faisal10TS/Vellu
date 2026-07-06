@@ -739,12 +739,22 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 <div>
                   <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.accountType}</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {[["joint", "user", t.jointAccount, t.jointDesc], ["team", "team", t.teamAccount, t.teamDesc]].map(([type, icon, label, desc]) => (
+                    {[["joint", "user", t.jointAccount, t.jointDesc, t.jointInfo], ["team", "team", t.teamAccount, t.teamDesc, t.teamInfo]].map(([type, icon, label, desc, info]) => (
                       <div key={type} onClick={() => setForm(f => ({...f, accountType: type}))} style={{
                         flex: 1, padding: "14px 12px", borderRadius: 14, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
                         background: form.accountType === type ? `${ACCENT}12` : c.inputBg,
-                        border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`
+                        border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`,
+                        position: "relative"
                       }}>
+                        {/* Info icon — click stops propagation so tapping the ⓘ
+                            doesn't also flip the selection. Native title tooltip
+                            works on desktop; on touch we surface it via alert() */}
+                        <button type="button" aria-label={label + " info"}
+                          onClick={(e) => { e.stopPropagation(); if (window.matchMedia("(hover: none)").matches) alert(info); }}
+                          title={info}
+                          style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textLabel, fontSize: 10, fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontWeight: 700, lineHeight: 1, cursor: "help", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                          i
+                        </button>
                         <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? ACCENT : c.textSub} /></div>
                         <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? ACCENT : c.text }}>{label}</div>
                         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, lineHeight: 1.3 }}>{desc}</div>
@@ -775,7 +785,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
                   style={{ width: 16, height: 16, accentColor: ACCENT, cursor: "pointer" }} />
                 <span style={{ fontSize: 12, color: c.textSub }}>
-                  {lang === "nl" ? "Onthoud mijn e-mailadres" : "Remember my email"}
+                  {lang === "nl" ? "Onthoud mijn gegevens" : "Remember me"}
                 </span>
               </label>
             )}

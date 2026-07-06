@@ -504,6 +504,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [appliedDiscount, setAppliedDiscount] = useState(null);
   const [discountError, setDiscountError] = useState("");
   const [clientFound, setClientFound] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+  const [waitlistDone, setWaitlistDone] = useState(false);
+  const [waitlistNotes, setWaitlistNotes] = useState("");
+  const [waitlistError, setWaitlistError] = useState("");
   const [bookedSlots, setBookedSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
@@ -533,6 +538,31 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   }, [date]);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
+
+  // Return-client prefill. Debounces so we don't fire on every keystroke, and
+  // never overwrites fields the user has already typed into — the lookup is a
+  // convenience, not a source of truth.
+  useEffect(() => {
+    const raw = form.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { setClientFound(false); return; }
+    const myTick = ++emailLookupRef.current;
+    const t = setTimeout(() => {
+      if (myTick !== emailLookupRef.current) return;
+      try {
+        const store = JSON.parse(localStorage.getItem(`vellu_return_${initialSalon.id}`) || "{}");
+        const hit = store[raw];
+        if (!hit) { setClientFound(false); return; }
+        setClientFound(true);
+        setForm(f => ({
+          ...f,
+          firstName: f.firstName || hit.firstName || "",
+          lastName: f.lastName || hit.lastName || "",
+          phone: f.phone || hit.phone || "",
+        }));
+      } catch { /* private mode — skip silently */ }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [form.email, initialSalon.id]);
 
   // Scroll-spy: update active tab based on which section is closest to top
   useEffect(() => {
@@ -729,7 +759,44 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+
+  // Submit a waitlist entry. Kept lightweight — insert only, no server-side
+  // dedup: someone joining twice for the same date is fine, the owner sees
+  // both rows and can dismiss. If the client hasn't filled in their name yet
+  // (they haven't been through step 3), we require them to fill it in the
+  // modal. When they HAVE, we prefill from `form`.
+  const submitWaitlist = async () => {
+    if (waitlistSubmitting) return;
+    if (!date) { setWaitlistError(T[lang].waitlistNoDate); return; }
+    const first = form.firstName.trim();
+    const last = form.lastName.trim();
+    const email = form.email.trim().toLowerCase();
+    if (!first || !last || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setWaitlistError(T[lang].waitlistSubmitError);
+      return;
+    }
+    setWaitlistSubmitting(true);
+    setWaitlistError("");
+    // Pick the first selected service's staff (if any) as the anchor — the
+    // owner can still fulfil with any stylist later. service_ids is best-effort
+    // context for the owner.
+    const staffId = selectedServices.find(s => s.staff)?.staff?.id || null;
+    const serviceIds = selectedServices.map(s => s.service?.id).filter(Boolean);
+    const { error } = await supabase.from("waitlist").insert({
+      owner_id: initialSalon.owner_id,
+      staff_id: staffId,
+      date,
+      client_name: `${first} ${last}`,
+      client_email: email,
+      client_phone: form.phone?.trim() || null,
+      service_ids: serviceIds.length ? serviceIds : null,
+      notes: waitlistNotes.trim() || null,
+    });
+    setWaitlistSubmitting(false);
+    if (error) { setWaitlistError(T[lang].waitlistSubmitError); return; }
+    setWaitlistDone(true);
+  };
 
   // Enter booking mode (optionally pre-select a service)
   const enterBooking = (service = null) => {
@@ -1060,6 +1127,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       setSubmitting(false);
       submittingRef.current = false;
       setSlotsRefreshKey(k => k + 1);
+
+      // Cache this client's details locally so a repeat booking from the same
+      // browser can prefill after they type their email. Keyed per salon so
+      // switching salons doesn't cross-pollinate. Not a DB lookup on purpose —
+      // an anonymous "type any email → get name/phone" endpoint would leak PII.
+      try {
+        const key = `vellu_return_${initialSalon.id}`;
+        const store = JSON.parse(localStorage.getItem(key) || "{}");
+        store[form.email.trim().toLowerCase()] = {
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          phone: (form.phone || "").trim(),
+        };
+        localStorage.setItem(key, JSON.stringify(store));
+      } catch { /* private mode / quota — skip silently */ }
 
       const clientFullName = `${form.firstName} ${form.lastName}`;
       const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
@@ -2456,18 +2538,24 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   if (totalSlots === 0) return (
                     <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
                       <div style={{ marginBottom: 8, opacity: 0.4 }}><NavIcon name="clock" size={28} color={c.textMuted} /></div>
-                      <div style={{ fontSize: 13 }}>{t.noTimesAvailable}</div>
+                      <div style={{ fontSize: 13, marginBottom: 16 }}>{t.noTimesAvailable}</div>
+                      {initialSalon.waitlist_enabled !== false && (
+                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                      )}
                     </div>
                   );
                   if (freeCount === 0) return (
                     <div style={{ textAlign: "center", padding: "40px 20px" }}>
                       <div style={{ marginBottom: 10, opacity: 0.4 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
-                      <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5 }}>
+                      <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5, marginBottom: 16 }}>
                         {lang === "nl"
                           ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt. Kies een andere datum.`
                           : `All ${totalSlots} time slots on this day are booked. Please pick another date.`}
                       </div>
+                      {initialSalon.waitlist_enabled !== false && (
+                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                      )}
                     </div>
                   );
                   // Group into morning / afternoon / evening
@@ -3106,8 +3194,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           })}
                         </div>
                       ) : (
-                        <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
-                          {t.noTimesAvailable}
+                        <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, marginBottom: 20 }}>
+                          <div style={{ fontSize: 13, marginBottom: 14 }}>{t.noTimesAvailable}</div>
+                          {initialSalon.waitlist_enabled !== false && (
+                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                      )}
                         </div>
                       );
                     })()}
@@ -3399,6 +3490,51 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           }}>
             {errorToast}
           </div>
+        )}
+
+        {/* Waitlist modal — rendered at ClientApp root so it's available from
+            both profile and booking modes. Portalled to body to sit above the
+            floating pill and any sticky headers. */}
+        {waitlistOpen && createPortal(
+          <div onClick={() => !waitlistSubmitting && setWaitlistOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", zIndex: 340, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 400, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
+              {waitlistDone ? (
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ width: 56, height: 56, margin: "0 auto 16px", borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <NavIcon name="check" size={26} color={accent} />
+                  </div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{T[lang].waitlistJoined}</div>
+                  <div style={{ fontSize: 13, color: c.textLabel, marginBottom: 20 }}>{T[lang].waitlistJoinedSub}</div>
+                  <button className="btn-primary" style={{ width: "100%" }} onClick={() => setWaitlistOpen(false)}>{T[lang].close}</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 6 }}>{T[lang].waitlistTitle}</div>
+                  <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 16, lineHeight: 1.5 }}>
+                    {T[lang].waitlistSub}
+                    {date && <><br/><b>{fmt(new Date(date), lang)}</b></>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <input className="input-field" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                      <input className="input-field" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                    </div>
+                    <input className="input-field" placeholder={T[lang].email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                    <input className="input-field" placeholder={`${T[lang].phone} (${T[lang].optional})`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+                    <textarea className="input-field" placeholder={T[lang].waitlistNotesPh} value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} rows={2} style={{ resize: "none" }} />
+                  </div>
+                  {waitlistError && (
+                    <div style={{ fontSize: 11, color: c.danger, marginTop: 8 }}>{waitlistError}</div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <button className="btn-ghost" style={{ flex: 1 }} disabled={waitlistSubmitting} onClick={() => setWaitlistOpen(false)}>{T[lang].cancel}</button>
+                    <button className="btn-primary" style={{ flex: 1 }} disabled={waitlistSubmitting} onClick={submitWaitlist}>{waitlistSubmitting ? "..." : T[lang].joinWaitlist}</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body
         )}
       </div>
     </Layout>
