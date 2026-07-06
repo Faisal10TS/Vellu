@@ -7953,7 +7953,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // the recipient clicks the link.
                           const { error: reAuthErr } = await supabase.auth.signInWithPassword({ email: user.email, password: accountForm.currentPasswordForEmail });
                           if (reAuthErr) { toast.show(lang === "nl" ? "Huidig wachtwoord klopt niet" : "Current password is incorrect", "error"); return; }
-                          const { error: updErr } = await supabase.auth.updateUser({ email: newEmail });
+                          // emailRedirectTo pins the confirmation link back to
+                          // the LIVE site — without it, Supabase falls back to
+                          // whatever Site URL is set on the project (which is
+                          // localhost while you develop, so real users would
+                          // get an unreachable link).
+                          const redirectTo = `${window.location.origin}/owner`;
+                          const { error: updErr } = await supabase.auth.updateUser({ email: newEmail }, { emailRedirectTo: redirectTo });
                           if (updErr) { toast.show(updErr.message, "error"); return; }
                           toast.show(lang === "nl" ? "Check je nieuwe e-mail voor de bevestigingslink" : "Check your new inbox for a confirmation link");
                           setAccountForm(f => ({ ...f, newEmail: "", currentPasswordForEmail: "" }));
