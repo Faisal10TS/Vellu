@@ -2288,6 +2288,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           iban: data.iban || "",
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
+          invoice_profiles: Array.isArray(data.invoice_profiles) ? data.invoice_profiles : [],
           business_hours: data.business_hours || DEFAULT_HOURS,
           booking_policy: data.booking_policy || "",
           booking_policy_en: data.booking_policy_en || "",
@@ -2480,6 +2481,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
   }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
+  const [invoicePickerFor, setInvoicePickerFor] = useState(null); // appointment id when the extra-profile picker is open
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -2954,39 +2956,63 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     toast.show(lang === "nl" ? "Afspraak bijgewerkt" : "Appointment updated");
   };
 
-  const sendInvoice = async (id) => {
+  // Send an invoice using a specific profile. profileIdx === null uses the
+  // primary (top-level profiles.* columns); a number picks that entry in
+  // profiles.invoice_profiles. Each profile owns its own next-number counter.
+  const sendInvoiceWith = async (id, profileIdx) => {
     if (processingApptId) return;
     setProcessingApptId(id);
+    setInvoicePickerFor(null);
     try {
       const a = salonData.appointments.find(x => x.id === id);
       if (a) {
-        const invoiceNumber = `${salonData.invoice_prefix || "INV"}-${String(salonData.next_invoice_number || 1).padStart(4, "0")}`;
+        const extras = salonData.invoice_profiles || [];
+        const isExtra = profileIdx !== null && profileIdx !== undefined && extras[profileIdx];
+        const p = isExtra ? extras[profileIdx] : null;
+        const prefix = (p ? p.invoice_prefix : salonData.invoice_prefix) || "INV";
+        const nextNum = (p ? p.next_invoice_number : salonData.next_invoice_number) || 1;
+        const invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
         await sendEmails("invoice", {
           client_name: a.client_name,
           client_email: a.client_email,
           service_name: a.service_name,
           date: a.date,
           price: a.service_price,
-          salon_name: salonData.name,
+          salon_name: p?.label ? `${salonData.name} — ${p.label}` : salonData.name,
           invoice_number: invoiceNumber,
-          salon_address: salonData.address || "",
-          salon_kvk: salonData.kvk_number || "",
-          salon_btw: salonData.btw_id || "",
-          salon_iban: salonData.iban || "",
+          salon_address: (p ? p.address : salonData.address) || "",
+          salon_kvk: (p ? p.kvk_number : salonData.kvk_number) || "",
+          salon_btw: (p ? p.btw_id : salonData.btw_id) || "",
+          salon_iban: (p ? p.iban : salonData.iban) || "",
           salon_accent: salonData.accent || "",
           salon_btw_rate: salonData.btw_rate ?? 21,
           salon_logo: salonData.logo_url || "",
           lang
         });
         await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
-        // Auto-increment invoice number
-        const nextNum = (salonData.next_invoice_number || 1) + 1;
-        await supabase.from("profiles").update({ next_invoice_number: nextNum }).eq("id", salonData.owner_id);
-        update(d => { d.next_invoice_number = nextNum; return d; });
+        if (isExtra) {
+          const nextExtras = extras.map((x, i) => i === profileIdx ? { ...x, next_invoice_number: (x.next_invoice_number || 1) + 1 } : x);
+          await supabase.from("profiles").update({ invoice_profiles: nextExtras }).eq("id", salonData.owner_id);
+          update(d => { d.invoice_profiles = nextExtras; return d; });
+        } else {
+          const next = (salonData.next_invoice_number || 1) + 1;
+          await supabase.from("profiles").update({ next_invoice_number: next }).eq("id", salonData.owner_id);
+          update(d => { d.next_invoice_number = next; return d; });
+        }
       }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
       toast.show(t.invoiceSent);
     } finally { setProcessingApptId(null); }
+  };
+
+  const sendInvoice = async (id) => {
+    if (processingApptId) return;
+    // With no extras there's only one profile — send instantly. With extras,
+    // open the picker so the right person invoices the right client.
+    if ((salonData.invoice_profiles || []).length === 0) {
+      return sendInvoiceWith(id, null);
+    }
+    setInvoicePickerFor(id);
   };
 
   // Set invoice_view_state for a single appointment. Used by the Facturen view
@@ -3440,6 +3466,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {lang === "nl" ? "Annuleer" : "Cancel"}
               </button>
             </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {invoicePickerFor && createPortal((
+        <div onClick={() => setInvoicePickerFor(null)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={e => e.stopPropagation()}
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Welk factuurprofiel?" : "Which invoice profile?"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
+              {lang === "nl"
+                ? "Kies namens welk profiel je deze factuur verstuurt. Elk profiel heeft zijn eigen nummering."
+                : "Pick which profile is sending this invoice. Each has its own numbering."}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+              <button className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, null)}
+                style={{ padding: "12px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: c.bgCard, border: `1px solid ${c.border}`, color: c.text }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{salonData.name}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Standaardprofiel" : "Primary profile"}</div>
+                </div>
+                <div style={{ fontFamily: "monospace", fontSize: 11, color: accent, flexShrink: 0 }}>
+                  {(salonData.invoice_prefix || "INV")}-{String(salonData.next_invoice_number || 1).padStart(4, "0")}
+                </div>
+              </button>
+              {(salonData.invoice_profiles || []).map((p, idx) => (
+                <button key={p.id || idx} className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, idx)}
+                  style={{ padding: "12px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: c.bgCard, border: `1px solid ${c.border}`, color: c.text }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{p.label || (lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                      {p.btw_id ? `BTW ${p.btw_id}` : (p.kvk_number ? `KVK ${p.kvk_number}` : (lang === "nl" ? "Extra profiel" : "Extra profile"))}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: "monospace", fontSize: 11, color: accent, flexShrink: 0 }}>
+                    {(p.invoice_prefix || "INV")}-{String(p.next_invoice_number || 1).padStart(4, "0")}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => setInvoicePickerFor(null)}>
+              {lang === "nl" ? "Annuleer" : "Cancel"}
+            </button>
           </div>
         </div>
       ), document.body)}
@@ -5918,6 +5990,77 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </div>
               </div>
+
+              {/* Extra invoice profiles — shared-account use case where two
+                  stylists on ONE login want to invoice under their own
+                  KVK/BTW/IBAN. Each extra has its own counter that ticks
+                  independently. Primary block above stays the default. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Extra factuurprofielen" : "Extra invoice profiles"}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Handig als jullie met z'n tweeën één login delen en elk een eigen KVK/BTW/IBAN gebruiken. Bij het versturen van een factuur kies je welk profiel je wil gebruiken."
+                    : "Useful if two of you share one login and each want your own VAT/IBAN details. When sending an invoice, you'll pick which profile to use."}
+                </div>
+                {(salonData.invoice_profiles || []).map((p, idx) => (
+                  <div key={p.id || idx} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted }}>
+                        {lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`}
+                      </div>
+                      <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}33`, display: "inline-flex", alignItems: "center", gap: 5 }}
+                        onClick={() => update(d => { d.invoice_profiles = (d.invoice_profiles || []).filter((_, i) => i !== idx); return d; })}>
+                        <NavIcon name="xmark" size={11} color="currentColor" /> {lang === "nl" ? "Verwijder" : "Delete"}
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam / label" : "Name / label"}</div>
+                        <input className="input-field" placeholder={lang === "nl" ? "bijv. Lady" : "e.g. Lady"} value={p.label || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, label: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
+                        <input className="input-field" placeholder="Haarlemmerdijk 95, 1013 KD Amsterdam" value={p.address || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, address: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
+                          <input className="input-field" placeholder="12345678" value={p.kvk_number || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, kvk_number: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
+                          <input className="input-field" placeholder="NL123456789B01" value={p.btw_id || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, btw_id: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
+                        <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={p.iban || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, iban: e.target.value} : x); return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
+                          <input className="input-field" placeholder="INV" value={p.invoice_prefix || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, invoice_prefix: e.target.value} : x); return d; })} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
+                          <div className="input-field" style={{ width: "100%", fontVariantNumeric: "tabular-nums", opacity: 0.7, display: "flex", alignItems: "center" }}
+                            title={lang === "nl" ? "Automatisch bijgewerkt wanneer je een factuur verstuurt" : "Updated automatically when you send an invoice"}>
+                            {p.next_invoice_number || 1}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button className="btn-ghost" style={{ width: "100%", padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", fontSize: 11 }}
+                  onClick={() => update(d => {
+                    const rid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `p_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+                    d.invoice_profiles = [...(d.invoice_profiles || []), { id: rid, label: "", address: "", kvk_number: "", btw_id: "", iban: "", invoice_prefix: "INV", next_invoice_number: 1 }];
+                    return d;
+                  })}>
+                  <NavIcon name="plus" size={13} color={accent} /> {lang === "nl" ? "Extra profiel toevoegen" : "Add extra profile"}
+                </button>
+              </div>
               </>}
 
               {/* ═══ DIENSTEN TAB ═══ */}
@@ -7958,6 +8101,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   btw_rate: salonData.btw_rate === "" || salonData.btw_rate == null ? 21 : salonData.btw_rate,
                   iban: salonData.iban || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
+                  // Extras are stored in ONE jsonb column so we have to write
+                  // the whole array — including each extra's next_invoice_number
+                  // counter. sendInvoice keeps salonData.invoice_profiles in
+                  // sync when it increments, so this write is safe.
+                  invoice_profiles: salonData.invoice_profiles || [],
                   // NOTE: next_invoice_number is intentionally excluded from this save.
                   // It's owned by sendInvoice() exclusively — saving settings after an
                   // invoice was sent would otherwise roll the counter back to the stale
