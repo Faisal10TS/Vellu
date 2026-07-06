@@ -3235,7 +3235,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.time} · {a.service_name}</div>
+          <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>{a.time} · {a.service_name}</div>
           <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{a.client_email}{a.staff_name ? ` · ${a.staff_name}` : ""}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
@@ -4225,7 +4225,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // Compute the current period's appointments for the summary bar
             let periodAppts = [];
             let periodLabel = "";
-            if (calViewMode === "week") {
+            if (calViewMode === "day") {
+              // Day view uses calDate directly; the prev/next arrows also
+              // shift calDate by ±1 day so this label follows suit.
+              periodAppts = filteredAgendaAppts.filter(a => a.date === calDate);
+              const d = new Date(calDate + "T12:00:00");
+              periodLabel = `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+            } else if (calViewMode === "week") {
               const base = new Date(todayDate);
               base.setDate(base.getDate() + calWeekOffset * 7);
               const weekStart = new Date(base);
@@ -4261,13 +4267,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
-                    {["week", "month", "year"].map(mode => (
-                      <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); }} style={{
+                    {["day", "week", "month", "year"].map(mode => (
+                      <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); if (mode === "day") setCalDate(fmt(getToday())); }} style={{
                         padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: calViewMode === mode ? accent : "transparent",
                         color: calViewMode === mode ? c.btnOnDark : c.textSub,
-                      }}>{mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
+                      }}>{mode === "day" ? (lang === "nl" ? "Dag" : "Day") : mode === "week" ? t.weekView : mode === "month" ? t.monthView : t.yearView}</div>
                     ))}
                   </div>
                   {/* Block-time / block-day button. Opens a quick modal that
@@ -4290,20 +4296,40 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </button>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {calWeekOffset !== 0 && (
-                    <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
-                      padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
-                      letterSpacing: "0.06em", textTransform: "uppercase",
-                      background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
-                    }}>{t.backToToday}</div>
-                  )}
-                  <div onClick={() => setCalWeekOffset(o => o - 1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Vorige" : "Previous"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalWeekOffset(o => o - 1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
-                  <div onClick={() => setCalWeekOffset(o => o + 1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Volgende" : "Next"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCalWeekOffset(o => o + 1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-                  </div>
+                  {/* Prev/next either shift calWeekOffset (week/month/year)
+                      or hop the day by ±1 for the day view — reduces two
+                      state variables into one intuitive navigator. */}
+                  {(() => {
+                    const shift = (dir) => {
+                      if (calViewMode === "day") {
+                        const d = new Date(calDate + "T12:00:00");
+                        d.setDate(d.getDate() + dir);
+                        setCalDate(fmt(d));
+                      } else {
+                        setCalWeekOffset(o => o + dir);
+                      }
+                    };
+                    const isTodayInDay = calViewMode === "day" && calDate === fmt(getToday());
+                    const showBackToToday = calViewMode === "day" ? !isTodayInDay : calWeekOffset !== 0;
+                    return (
+                      <>
+                        {showBackToToday && (
+                          <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
+                            padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                            letterSpacing: "0.06em", textTransform: "uppercase",
+                            background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
+                          }}>{t.backToToday}</div>
+                        )}
+                        <div onClick={() => shift(-1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Vorige" : "Previous"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(-1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
+                        <div onClick={() => shift(1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Volgende" : "Next"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -4348,6 +4374,105 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>€{periodRevenue.toFixed(0)}</div>
                 </div>
               </div>
+
+              {/* DAY VIEW — timeline for the selected date so the owner sees
+                  the whole day's plan (times + full booking details) in one
+                  read. Bounds come from the salon's business hours for that
+                  weekday, clamped so appointments outside those hours still
+                  fit. Appointments are absolutely positioned by start-minute
+                  and stretch to their duration; clicking opens the edit modal. */}
+              {calViewMode === "day" && (() => {
+                const toMin = (t) => { const [h, m] = (t || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
+                const dayOfWeek = new Date(calDate + "T12:00:00").getDay();
+                const dayHours = salonData.business_hours?.[dayOfWeek] || {};
+                const dayAppts = filteredAgendaAppts.filter(a => a.date === calDate).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                const openDefault = 8 * 60;
+                const closeDefault = 20 * 60;
+                let earliestMin = dayHours.closed ? openDefault : toMin(dayHours.open || "08:00");
+                let latestMin = dayHours.closed ? closeDefault : toMin(dayHours.close || "20:00");
+                for (const a of dayAppts) {
+                  const start = toMin(a.time);
+                  const end = start + parseInt(a.service_duration || 60);
+                  if (start < earliestMin) earliestMin = start;
+                  if (end > latestMin) latestMin = end;
+                }
+                // Round to the hour and add padding above / below.
+                const startHour = Math.max(0, Math.floor(earliestMin / 60));
+                const endHour = Math.min(24, Math.ceil(latestMin / 60));
+                const HOUR_HEIGHT = isMobile ? 60 : 68;
+                const dayStartMin = startHour * 60;
+                const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
+                const nowMinutes = (() => {
+                  const now = new Date();
+                  const nowStr = fmt(now);
+                  if (nowStr !== calDate) return null;
+                  return now.getHours() * 60 + now.getMinutes();
+                })();
+                return (
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                    <div style={{ padding: "10px 14px", borderBottom: `1px solid ${c.border}`, background: c.inputBg, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, textTransform: "capitalize" }}>
+                        {new Date(calDate + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+                      </div>
+                      <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        {dayAppts.length} {dayAppts.length === 1 ? (lang === "nl" ? "afspraak" : "appt") : (lang === "nl" ? "afspraken" : "appts")}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", position: "relative" }}>
+                      {/* Hour rail */}
+                      <div style={{ width: isMobile ? 46 : 56, flexShrink: 0, background: c.inputBg, borderRight: `1px solid ${c.border}` }}>
+                        {hours.map((h, i) => (
+                          <div key={h} style={{ height: HOUR_HEIGHT, padding: "6px 6px 0 0", fontSize: 10, color: c.textMuted, textAlign: "right", borderBottom: i < hours.length - 1 ? `1px dashed ${c.border}` : "none", fontVariantNumeric: "tabular-nums" }}>
+                            {String(h).padStart(2, "0")}:00
+                          </div>
+                        ))}
+                      </div>
+                      {/* Slots */}
+                      <div style={{ flex: 1, position: "relative", minHeight: hours.length * HOUR_HEIGHT }}>
+                        {hours.map((h, i) => (
+                          <div key={h} style={{ position: "absolute", top: i * HOUR_HEIGHT, left: 0, right: 0, height: HOUR_HEIGHT, borderBottom: i < hours.length - 1 ? `1px dashed ${c.border}` : "none" }} />
+                        ))}
+                        {/* Now-line */}
+                        {nowMinutes !== null && nowMinutes >= dayStartMin && nowMinutes <= endHour * 60 && (
+                          <div style={{ position: "absolute", left: 0, right: 0, top: ((nowMinutes - dayStartMin) / 60) * HOUR_HEIGHT, height: 2, background: c.danger, zIndex: 2 }}>
+                            <div style={{ position: "absolute", left: -4, top: -3, width: 8, height: 8, borderRadius: "50%", background: c.danger }} />
+                          </div>
+                        )}
+                        {dayAppts.length === 0 && (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16 }}>
+                            {lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day"}
+                          </div>
+                        )}
+                        {dayAppts.map(a => {
+                          const startMin = toMin(a.time);
+                          const durMin = Math.max(15, parseInt(a.service_duration || 60));
+                          const top = ((startMin - dayStartMin) / 60) * HOUR_HEIGHT;
+                          const height = Math.max(28, (durMin / 60) * HOUR_HEIGHT - 2);
+                          const isCancelled = a.status === "cancelled" || a.status === "no_show";
+                          const color = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
+                          return (
+                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)}
+                              style={{
+                                position: "absolute", top, left: 6, right: 6, height,
+                                background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
+                                padding: "6px 10px", overflow: "hidden", cursor: "pointer",
+                                opacity: isCancelled ? 0.55 : 1
+                              }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
+                                <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.35 }}>{a.client_name}</div>
+                              <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.35 }}>{a.service_name}</div>
+                              {a.staff_name && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{a.staff_name}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* WEEK VIEW — calendar grid with appointment previews */}
               {calViewMode === "week" && (() => {
