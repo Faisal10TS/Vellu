@@ -2536,7 +2536,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Multi-service structure: services is an array of {id, service_id,
   // variant_id, staff_id}. The owner can add or remove rows to build a
   // combined booking (nails with X + toes with Y, one client, one row).
-  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
+  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [clientList, setClientList] = useState([]);
@@ -4368,7 +4368,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -5339,7 +5339,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     every day so the owner can add multiple bookings without
                     having to first empty the day. */}
                 <button className="btn-ghost" style={{ width: "100%", marginBottom: 12, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
                 </button>
                 {calAppts.length === 0 ? (
@@ -9005,6 +9005,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {(addApptForm.services || []).map((row, idx) => {
                     const selSvc = salonData.services.find(s => s.id === row.service_id);
                     const hasVariants = !!selSvc?.variants?.length;
+                    const hasExtras = !!selSvc?.extras?.length;
                     return (
                       <div key={row.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -9020,7 +9021,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           )}
                         </div>
                         <select className="input-field" value={row.service_id}
-                          onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "" } : r) }))}
+                          onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "", extra_ids: [] } : r) }))}
                           style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
                           {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
@@ -9032,6 +9033,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : "No variant"}</option>
                             {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — €{v.price} · {v.duration} min</option>)}
                           </select>
+                        )}
+                        {hasExtras && (
+                          <div>
+                            <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, fontWeight: 600, marginBottom: 6 }}>
+                              {lang === "nl" ? "Extra's (optioneel)" : "Extras (optional)"}
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {selSvc.extras.map(ex => {
+                                const on = (row.extra_ids || []).includes(ex.id);
+                                const label = lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl);
+                                return (
+                                  <button key={ex.id} type="button"
+                                    onClick={() => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => {
+                                      if (i !== idx) return r;
+                                      const cur = new Set(r.extra_ids || []);
+                                      if (cur.has(ex.id)) cur.delete(ex.id); else cur.add(ex.id);
+                                      return { ...r, extra_ids: Array.from(cur) };
+                                    }) }))}
+                                    style={{
+                                      cursor: "pointer", border: `1px solid ${on ? accent : c.inputBorder}`,
+                                      background: on ? `${accent}18` : "transparent",
+                                      color: on ? accent : c.textSub, fontSize: 11, padding: "6px 10px",
+                                      borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 4,
+                                      fontWeight: on ? 600 : 500,
+                                    }}>
+                                    {on && <NavIcon name="check" size={10} color={accent} />}
+                                    {label} · +€{parseFloat(ex.price || 0).toFixed(2)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
                         {(salonData.staff || []).length > 0 && (
                           <select className="input-field" value={row.staff_id}
@@ -9045,7 +9078,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     );
                   })}
                   <button type="button" className="btn-ghost"
-                    onClick={() => setAddApptForm(f => ({ ...f, services: [...(f.services || []), { id: `s_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, service_id: "", variant_id: "", staff_id: "" }] }))}
+                    onClick={() => setAddApptForm(f => ({ ...f, services: [...(f.services || []), { id: `s_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }] }))}
                     style={{ borderStyle: "dashed", borderColor: `${accent}44`, color: accent, fontSize: 11, padding: "10px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                     <NavIcon name="plus" size={12} color={accent} /> {lang === "nl" ? "Nog een dienst toevoegen" : "Add another service"}
                   </button>
@@ -9153,11 +9186,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       if (!svc) continue;
                       const variant = svc.variants?.find(v => v.id === r.variant_id);
                       const staff = (salonData.staff || []).find(m => m.id === r.staff_id);
-                      const price = parseFloat(variant ? variant.price : svc.price);
+                      // Extras add to price but not duration (matches client flow —
+                      // service_extras schema has no duration column).
+                      const extras = (svc.extras || []).filter(ex => (r.extra_ids || []).includes(ex.id));
+                      const extrasPrice = extras.reduce((s, ex) => s + parseFloat(ex.price || 0), 0);
+                      const price = parseFloat(variant ? variant.price : svc.price) + extrasPrice;
                       const duration = parseInt(variant ? variant.duration : svc.duration);
-                      const labelBase = (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "");
+                      const extrasSuffix = extras.length
+                        ? " + " + extras.map(ex => lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)).join(", ")
+                        : "";
+                      const labelBase = (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "") + extrasSuffix;
                       const labelFull = labelBase + (staff ? ` (${staff.name})` : "");
-                      rows.push({ svc, variant, staff, price, duration, labelBase, labelFull });
+                      rows.push({ svc, variant, extras, staff, price, duration, labelBase, labelFull });
                     }
                     if (rows.length === 0) {
                       toast.show(lang === "nl" ? "Dienst niet gevonden — herlaad de pagina" : "Service not found — please reload", "error");
