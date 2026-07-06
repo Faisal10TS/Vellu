@@ -230,6 +230,12 @@ serve(async (req) => {
   let totalPrice = 0;
   let totalDuration = 0;
   const serviceNameParts: string[] = [];
+  // Per-service breakdown so a staff-filtered agenda can render each
+  // stylist's own sub-slot at the correct start time inside a combined
+  // booking. Duration + offset_min mean a downstream reader doesn't need
+  // to reconstruct the math from the service list.
+  const serviceBreakdown: any[] = [];
+  let runningOffset = 0;
 
   for (const svc of servicesOrdered) {
     const variantId = variant_ids?.[svc.id];
@@ -250,6 +256,20 @@ serve(async (req) => {
       label += " + " + svcExtras.map((e: any) => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
     }
     serviceNameParts.push(label);
+
+    // Compact label for the agenda card (service name + variant only,
+    // without the parenthetical staff name — the agenda already renders
+    // that separately via the filter pill).
+    let shortLabel = lang === "nl" ? svc.name_nl : (svc.name_en || svc.name_nl);
+    if (variant) shortLabel += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl));
+    serviceBreakdown.push({
+      service_id: svc.id,
+      staff_id: staffId || null,
+      duration,
+      offset_min: runningOffset,
+      label: shortLabel,
+    });
+    runningOffset += duration;
   }
 
   // ---------- 7. Apply discount (if any) ----------
@@ -414,6 +434,9 @@ serve(async (req) => {
         .map((s: any) => [s.id, staff_ids_per_service?.[s.id] || null])
         .filter(([, v]: any) => !!v)
     ),
+    // Ordered per-service breakdown — enables the agenda to show each
+    // stylist's own sub-slot at the correct start time.
+    service_breakdown: serviceBreakdown,
     client_allergies: allergies,
     location_id: location_id || null,
   }).select("id").single();

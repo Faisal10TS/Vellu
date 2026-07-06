@@ -90,13 +90,25 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [{ data: appts }, { data: svcs }, { data: manual }, { data: blocks }] = await Promise.all([
-          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).eq("staff_id", staffMember.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
+        // Load ALL salon appointments (staff RLS allows it) so combined bookings
+        // where this stylist owns only a non-primary service still surface in
+        // their own agenda. We filter to "mine" client-side against staff_id,
+        // staff_assignments and service_breakdown.
+        const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }] = await Promise.all([
+          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
           supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
           supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
         ]);
-        setAppointments(appts || []);
+        const isMine = (a) => {
+          if (a.staff_id === staffMember.id) return true;
+          const assignments = a.staff_assignments || {};
+          if (Object.values(assignments).includes(staffMember.id)) return true;
+          const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+          if (breakdown.some(p => p.staff_id === staffMember.id)) return true;
+          return false;
+        };
+        setAppointments((apptsAll || []).filter(isMine));
         setStaffBlocks(blocks || []);
         const notesMap = {};
         for (const m of manual || []) {
@@ -334,15 +346,37 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
   };
 
+  // Compute this staff member's own time-window inside a combined booking.
+  // Only the sub-slot(s) this staff owns are shown, at the correct offset.
+  const mySlots = (a) => {
+    const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+    const mine = breakdown.filter(p => p.staff_id === staffMember.id);
+    if (mine.length === 0) return [{ time: a.time, duration: a.service_duration, label: a.service_name }];
+    const [h, m] = (a.time || "0:0").split(":").map(Number);
+    const baseMin = h * 60 + (m || 0);
+    const pad = n => String(n).padStart(2, "0");
+    return mine.map(p => {
+      const startMin = baseMin + (p.offset_min || 0);
+      return {
+        time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+        duration: p.duration || a.service_duration,
+        label: p.label || a.service_name,
+      };
+    });
+  };
+
   const ApptCard = ({ a }) => {
     const note = clientNotes[(a.client_email || "").toLowerCase()];
     const phoneDigits = (a.client_phone || "").replace(/\D/g, "");
+    const slots = mySlots(a);
     return (
     <div className="appt-card" style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
-          <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{a.time} · {a.service_name}</div>
+          {slots.map((s, i) => (
+            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}</div>
+          ))}
           <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>
           {a.client_phone && (
             <a href={`tel:${a.client_phone}`} style={{ fontSize: 10, color: c.textMuted, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2 }}>

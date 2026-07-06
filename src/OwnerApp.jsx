@@ -2394,8 +2394,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // only holds the "primary" (first service's) staff, so filtering on that
   // alone drops any appointment where the selected staff only handled a
   // non-primary service. staff_assignments captures the full map.
+  //
+  // When a staff filter is active we also SPLIT each matched appointment into
+  // per-service sub-slots so the agenda shows this staff's own start-time and
+  // duration (e.g. nails 10:00–11:00 with Esther, toes 11:00–12:20 with Lady).
+  // Sub-slots share the parent id — key with `${id}::${offset}` when rendering.
   const filteredAgendaAppts = agendaStaff
-    ? allVisibleAppts.filter(a => a.staff_id === agendaStaff || Object.values(a.staff_assignments || {}).includes(agendaStaff))
+    ? allVisibleAppts.flatMap(a => {
+        const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+        const myParts = breakdown.filter(p => p.staff_id === agendaStaff);
+        // No breakdown or no match by staff_id → fall back to legacy behaviour:
+        // include the whole appointment if the primary staff or any entry in
+        // staff_assignments matches.
+        if (myParts.length === 0) {
+          if (a.staff_id === agendaStaff || Object.values(a.staff_assignments || {}).includes(agendaStaff)) return [a];
+          return [];
+        }
+        // Add offset_min to the parent time so each sub-slot starts when the
+        // stylist actually begins their service.
+        const [h, m] = (a.time || "0:0").split(":").map(Number);
+        const baseMin = h * 60 + (m || 0);
+        return myParts.map(p => {
+          const startMin = baseMin + (p.offset_min || 0);
+          const pad = n => String(n).padStart(2, "0");
+          return {
+            ...a,
+            time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+            service_duration: p.duration || a.service_duration,
+            service_name: p.label || a.service_name,
+            _slotKey: `${a.id}::${p.offset_min || 0}`,
+          };
+        });
+      })
     : allVisibleAppts;
   const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
@@ -3161,7 +3191,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // it at the point of service without having to click through.
     const clientNote = salonData.client_notes?.[(a.client_email || "").toLowerCase()];
     return (
-    <div key={a.id} className="appt-card" title={a.service_name}>
+    <div key={a._slotKey || a.id} className="appt-card" title={a.service_name}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
