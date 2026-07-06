@@ -42,7 +42,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [editingSvc, setEditingSvc] = useState(null);
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", price: "", duration: "" });
   const [editingVar, setEditingVar] = useState(null);
-  const [editVarForm, setEditVarForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "" });
+  const [editVarForm, setEditVarForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "" });
+  const [editingExtra, setEditingExtra] = useState(null);
+  const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [gallery, setGallery] = useState(null);
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
@@ -1853,15 +1855,47 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.variants}</div>
                                     <div style={{ fontSize: 10, color: c.textMuted }}>{varCount}</div>
                                   </div>
-                                  {(s.variants || []).map(v => (
+                                  {(s.variants || []).map(v => editingVar === v.id ? (
+                                    <div key={v.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginBottom: 6 }}>
+                                      {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editVarForm.name_nl} onChange={ev => setEditVarForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editVarForm.name_en} onChange={ev => setEditVarForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVarForm.duration} onChange={ev => setEditVarForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                      </div>
+                                      ); })()}
+                                      {(() => { const lbl2 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (NL)" : "Description (NL)"}</label><input className="input-field" value={editVarForm.description_nl} onChange={ev => setEditVarForm(f => ({...f, description_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (EN)" : "Description (EN)"}</label><input className="input-field" value={editVarForm.description_en} onChange={ev => setEditVarForm(f => ({...f, description_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                      </div>
+                                      ); })()}
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                          const price = parseFloat(editVarForm.price);
+                                          const duration = parseInt(editVarForm.duration);
+                                          if (!editVarForm.name_nl || !Number.isFinite(price) || !Number.isFinite(duration)) { toast.show(lang === "nl" ? "Vul alle velden in" : "Fill in all fields", "error"); return; }
+                                          const { error } = await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null }).eq("id", v.id);
+                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                                          setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null} : vr)} : sv));
+                                          setEditingVar(null);
+                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : "Save"}</button>
+                                        <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingVar(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                                      </div>
+                                    </div>
+                                  ) : (
                                     <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
-                                      <div style={{ flex: 1 }}>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
+                                        {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && (
+                                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>
+                                        )}
                                         <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                       </div>
                                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
-                                        <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "" }); }}
+                                        <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
@@ -1883,15 +1917,42 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.extras}</div>
                                     <div style={{ fontSize: 10, color: c.textMuted }}>{extCount}</div>
                                   </div>
-                                  {(s.extras || []).map(e => (
+                                  {(s.extras || []).map(e => editingExtra === e.id ? (
+                                    <div key={e.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginBottom: 6 }}>
+                                      {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                      </div>
+                                      ); })()}
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                          const price = parseFloat(editExtraForm.price);
+                                          if (!editExtraForm.name_nl || !Number.isFinite(price)) { toast.show(lang === "nl" ? "Vul alle velden in" : "Fill in all fields", "error"); return; }
+                                          const { error } = await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price }).eq("id", e.id);
+                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                                          setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price} : ex)} : sv));
+                                          setEditingExtra(null);
+                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : "Save"}</button>
+                                        <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                                      </div>
+                                    </div>
+                                  ) : (
                                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
                                       <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                       <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
                                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
-                                      <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
-                                        style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                        <NavIcon name="xmark" size={11} color="currentColor" />
-                                      </button>
+                                      <div style={{ display: "flex", gap: 4 }}>
+                                        <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
+                                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                          <NavIcon name="edit" size={11} color="currentColor" />
+                                        </button>
+                                        <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
+                                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                          <NavIcon name="xmark" size={11} color="currentColor" />
+                                        </button>
+                                      </div>
                                     </div>
                                   ))}
                                   <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
