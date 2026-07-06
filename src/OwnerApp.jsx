@@ -2209,6 +2209,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
   // Billing tab state — invoices loaded lazily when the tab is opened. We
   // also keep the latest profile billing snapshot here so the tab reflects
   // mid-session changes (e.g. webhook fires while owner is on the page).
@@ -6537,18 +6538,53 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.staff}</SL>
                 {/* Account type toggle */}
-                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 6, marginBottom: accountTypeInfo ? 8 : 14 }}>
                   {[["joint", "user", t.jointAccount], ["team", "team", t.teamAccount]].map(([type, icon, label]) => (
                     <div key={type} onClick={() => update(d => { d.account_type = type; return d; })} style={{
-                      flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
+                      flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer", textAlign: "center", transition: "all 0.2s", position: "relative",
                       background: salonData.account_type === type ? `${accent}12` : "transparent",
                       border: `1px solid ${salonData.account_type === type ? accent : c.inputBorder}`
                     }}>
+                      {/* Info icon — stopPropagation so tapping "?" doesn't
+                          switch the account type. Toggles the description
+                          panel below and closes when tapped again. */}
+                      <button type="button"
+                        onClick={e => { e.stopPropagation(); setAccountTypeInfo(v => v === type ? null : type); }}
+                        aria-label={lang === "nl" ? "Meer info" : "More info"}
+                        style={{
+                          position: "absolute", top: 4, right: 4,
+                          width: 18, height: 18, borderRadius: "50%",
+                          background: accountTypeInfo === type ? `${accent}22` : "transparent",
+                          border: `1px solid ${accountTypeInfo === type ? accent : c.inputBorder}`,
+                          color: accountTypeInfo === type ? accent : c.textMuted,
+                          cursor: "pointer", padding: 0,
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif", lineHeight: 1,
+                        }}>i</button>
                       <NavIcon name={icon} size={14} color={salonData.account_type === type ? accent : c.textSub} />
                       <div style={{ fontSize: 10, fontWeight: 600, color: salonData.account_type === type ? accent : c.textSub, marginTop: 2 }}>{label}</div>
                     </div>
                   ))}
                 </div>
+                {accountTypeInfo && (
+                  <div style={{ marginBottom: 14, padding: "12px 14px", background: c.bg, border: `1px solid ${accent}33`, borderRadius: 12, position: "relative" }}>
+                    <button type="button" onClick={() => setAccountTypeInfo(null)}
+                      style={{ position: "absolute", top: 6, right: 8, background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 4 }}
+                      aria-label={lang === "nl" ? "Sluit" : "Close"}>×</button>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
+                      {accountTypeInfo === "joint" ? t.jointAccount : t.teamAccount}
+                    </div>
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55 }}>
+                      {accountTypeInfo === "joint"
+                        ? (lang === "nl"
+                            ? <>Eén salon-account voor iedereen. Je logt met dezelfde login in op de vellu.cc/owner-pagina en beheert alles vanuit dit dashboard. Handig als je in je eentje werkt of als het team altijd samen op één laptop / iPad zit.<br /><br /><strong>Kies dit als:</strong> je solo bent, of medewerkers werken alleen aan de kassa en hoeven geen eigen agenda / factuurgegevens te beheren.</>
+                            : <>One salon account for everyone. You log in on vellu.cc/owner and manage everything from this dashboard. Handy if you work solo or the team always shares one device.<br /><br /><strong>Pick this when:</strong> you're solo, or your team only works at the front desk and doesn't need a personal agenda or invoice profile.</>)
+                        : (lang === "nl"
+                            ? <>Elke medewerker krijgt een eigen login op vellu.cc/staff. Ze zien alleen hun eigen afspraken, klanten en facturen. Ze kunnen hun eigen werktijden aanpassen, tijdvakken blokkeren en persoonlijke factuurgegevens (KVK, BTW, IBAN) invullen zodat facturen van hen persoonlijk uitgaan.<br /><br /><strong>Kies dit als:</strong> je met meerdere zelfstandige stylisten werkt, of iedereen een eigen agenda + factuurstroom wil.</>
+                            : <>Every staff member gets their own login at vellu.cc/staff. They only see their own appointments, clients and invoices. They can edit their own working hours, block time and add personal invoice details (VAT/IBAN) so invoices go out in their name.<br /><br /><strong>Pick this when:</strong> you work with independent stylists or everyone needs their own agenda and invoicing flow.</>)}
+                    </div>
+                  </div>
+                )}
                 {/* Public owner-badge toggle — only relevant when there are
                     multiple staff (otherwise the label is redundant). */}
                 {(salonData.staff || []).length > 1 && (
