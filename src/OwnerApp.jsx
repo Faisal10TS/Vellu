@@ -6894,16 +6894,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div key={cat.id}>
                       {editingCategoryId === cat.id ? (
                         <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                            <input className="input-field" value={editCategoryForm.name_nl} onChange={e => setEditCategoryForm(f => ({...f, name_nl: e.target.value}))} placeholder={lang === "nl" ? "Naam (NL)" : "Name (NL)"} style={{ fontSize: 12, padding: "9px 11px" }} />
-                            <input className="input-field" value={editCategoryForm.name_en} onChange={e => setEditCategoryForm(f => ({...f, name_en: e.target.value}))} placeholder={lang === "nl" ? "Naam (EN)" : "Name (EN)"} style={{ fontSize: 12, padding: "9px 11px" }} />
+                          <div style={{ marginBottom: 8 }}>
+                            <AutoTranslateField
+                              nlValue={editCategoryForm.name_nl}
+                              enValue={editCategoryForm.name_en}
+                              setNl={v => setEditCategoryForm(f => ({...f, name_nl: v}))}
+                              setEn={v => setEditCategoryForm(f => ({...f, name_en: v}))}
+                              lang={lang} accent={accent}
+                              placeholder={lang === "nl" ? "Naam" : "Name"}
+                            />
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                              if (!editCategoryForm.name_nl.trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
-                              const { error } = await supabase.from("service_categories").update({ name_nl: editCategoryForm.name_nl.trim(), name_en: editCategoryForm.name_en.trim() || null }).eq("id", cat.id);
+                              const primary = lang === "nl" ? editCategoryForm.name_nl : editCategoryForm.name_en;
+                              if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
+                              const filled = await autoFillTranslations(editCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
+                              const nlName = (filled.name_nl || filled.name_en || "").trim();
+                              const enName = (filled.name_en || "").trim();
+                              const { error } = await supabase.from("service_categories").update({ name_nl: nlName, name_en: enName || null }).eq("id", cat.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: editCategoryForm.name_nl.trim(), name_en: editCategoryForm.name_en.trim() || null} : x); return d; });
+                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: nlName, name_en: enName || null} : x); return d; });
                               setEditingCategoryId(null);
                             }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                             <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingCategoryId(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -6912,8 +6922,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{cat.name_nl}</div>
-                            {cat.name_en && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{cat.name_en}</div>}
+                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? (cat.name_nl || cat.name_en) : (cat.name_en || cat.name_nl)}</div>
                           </div>
                           <div style={{ display: "flex", gap: 4 }}>
                             <button onClick={() => { setEditingCategoryId(cat.id); setEditCategoryForm({ name_nl: cat.name_nl, name_en: cat.name_en || "" }); }}
@@ -6946,15 +6955,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
                 {showNewCategoryForm ? (
                   <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                      <input className="input-field" value={newCategoryForm.name_nl} onChange={e => setNewCategoryForm(f => ({...f, name_nl: e.target.value}))} placeholder={lang === "nl" ? "bijv. Nagels" : "e.g. Nails"} style={{ fontSize: 12, padding: "9px 11px" }} autoFocus />
-                      <input className="input-field" value={newCategoryForm.name_en} onChange={e => setNewCategoryForm(f => ({...f, name_en: e.target.value}))} placeholder={lang === "nl" ? "bijv. Nails (EN)" : "e.g. Nails"} style={{ fontSize: 12, padding: "9px 11px" }} />
+                    <div style={{ marginBottom: 8 }}>
+                      <AutoTranslateField
+                        nlValue={newCategoryForm.name_nl}
+                        enValue={newCategoryForm.name_en}
+                        setNl={v => setNewCategoryForm(f => ({...f, name_nl: v}))}
+                        setEn={v => setNewCategoryForm(f => ({...f, name_en: v}))}
+                        lang={lang} accent={accent}
+                        placeholder={lang === "nl" ? "bijv. Nagels" : "e.g. Nails"}
+                      />
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                        if (!newCategoryForm.name_nl.trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
+                        const primary = lang === "nl" ? newCategoryForm.name_nl : newCategoryForm.name_en;
+                        if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : "Name is required", "error"); return; }
+                        const filled = await autoFillTranslations(newCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
+                        const nlName = (filled.name_nl || filled.name_en || "").trim();
+                        const enName = (filled.name_en || "").trim();
                         const nextPos = ((salonData.categories || []).reduce((m, x) => Math.max(m, x.position || 0), 0)) + 1;
-                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: newCategoryForm.name_nl.trim(), name_en: newCategoryForm.name_en.trim() || null, position: nextPos }).select().single();
+                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: nlName, name_en: enName || null, position: nextPos }).select().single();
                         if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                         update(d => { d.categories = [...(d.categories || []), data]; return d; });
                         setNewCategoryForm({ name_nl: "", name_en: "" });
