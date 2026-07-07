@@ -6912,9 +6912,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ marginBottom: 10 }}>
                             <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Categorie" : "Category"}</div>
                             <select className="input-field" value={editSvcForm.category_id || ""} onChange={e => setEditSvcForm(f => ({...f, category_id: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}>
-                              <option value="">{lang === "nl" ? "Geen categorie" : "No category"}</option>
+                              <option value="" style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? "Geen categorie" : "No category"}</option>
                               {(salonData.categories || []).map(cat => (
-                                <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                                <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
                               ))}
                             </select>
                             {(salonData.categories || []).length === 0 && (
@@ -7281,9 +7281,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Categorie" : "Category"}</div>
                         <select className="input-field" value={newSvc.category_id || ""} onChange={e => setNewSvc(s => ({...s, category_id: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }}>
-                          <option value="">{lang === "nl" ? "Geen categorie" : "No category"}</option>
+                          <option value="" style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? "Geen categorie" : "No category"}</option>
                           {(salonData.categories || []).map(cat => (
-                            <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                            <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
                           ))}
                         </select>
                       </div>
