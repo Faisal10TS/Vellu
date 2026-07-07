@@ -3169,43 +3169,55 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       return;
     }
     setBlockSaving(true);
-    const nextOverrides = { ...(salonData.day_overrides || {}) };
     // Denormalise staff name so the block card can show it without a
     // separate lookup, and future-proof against a rename (we snapshot).
     const staffId = blockForm.staff_id || null;
     const staffName = staffId
       ? ((salonData.staff || []).find(s => s.id === staffId)?.name || "")
       : "";
+    // Time-mode blocks go into staff_day_overrides (row-per-block) so you can
+    // stack multiple time windows on the same date (e.g. 10-11 AND 14-15).
+    // Full-day blocks stay in profiles.day_overrides (one per date) because
+    // the concept of "multiple full-day blocks" doesn't add anything.
     if (blockForm.mode === "time") {
-      nextOverrides[from] = {
+      const { data: inserted, error } = await supabase
+        .from("staff_day_overrides")
+        .insert({
+          owner_id: salonData.owner_id,
+          staff_id: staffId,
+          date: from,
+          block_time_start: blockForm.time_start,
+          block_time_end: blockForm.time_end,
+          reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
+        })
+        .select("*")
+        .single();
+      setBlockSaving(false);
+      if (error) {
+        toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
+        return;
+      }
+      update(d => { d.staff_blocks = [...(d.staff_blocks || []), inserted]; return d; });
+      setBlockModalOpen(false);
+      toast.show(lang === "nl" ? "Tijdvak geblokkeerd" : "Time window blocked");
+      return;
+    }
+    // Full-day / date-range block path — untouched.
+    const nextOverrides = { ...(salonData.day_overrides || {}) };
+    const endDate = blockForm.to || from;
+    let cur = new Date(from);
+    const end = new Date(endDate);
+    while (cur <= end) {
+      nextOverrides[fmt(cur)] = {
         type: "blocked",
         reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
         from,
-        to: from,
-        block_time_start: blockForm.time_start,
-        block_time_end: blockForm.time_end,
+        to: endDate,
         staff_id: staffId,
         staff_name: staffName,
       };
-    } else {
-      const endDate = blockForm.to || from;
-      let cur = new Date(from);
-      const end = new Date(endDate);
-      while (cur <= end) {
-        nextOverrides[fmt(cur)] = {
-          type: "blocked",
-          reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked"),
-          from,
-          to: endDate,
-          staff_id: staffId,
-          staff_name: staffName,
-        };
-        cur.setDate(cur.getDate() + 1);
-      }
+      cur.setDate(cur.getDate() + 1);
     }
-    // Persist to the profile immediately — the Planning tab relies on a
-    // manual "Opslaan" press, but blocking from the agenda should feel
-    // like an instant action.
     const { error } = await supabase
       .from("profiles")
       .update({ day_overrides: nextOverrides })
@@ -3217,9 +3229,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     update(d => { d.day_overrides = nextOverrides; return d; });
     setBlockModalOpen(false);
-    toast.show(blockForm.mode === "time"
-      ? (lang === "nl" ? "Tijdvak geblokkeerd" : "Time window blocked")
-      : (lang === "nl" ? "Dag geblokkeerd" : "Day blocked"));
+    toast.show(lang === "nl" ? "Dag geblokkeerd" : "Day blocked");
   };
 
   const saveEditAppt = async () => {

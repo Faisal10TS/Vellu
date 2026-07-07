@@ -432,6 +432,22 @@ serve(async (req) => {
       if (apptStartMin < blockEnd && apptEndMin > blockStart) return err(400, "staff_time_blocked", origin);
     }
   }
+  // Salon-wide time blocks live as staff_day_overrides rows with staff_id IS
+  // NULL. Multiple rows per date are supported so the owner can carve out
+  // several unavailable windows (e.g. 10-11 AND 14-15).
+  const { data: salonBlocks, error: sbErrAll } = await supabase
+    .from("staff_day_overrides")
+    .select("block_time_start, block_time_end")
+    .is("staff_id", null)
+    .eq("owner_id", salon.id)
+    .eq("date", date);
+  if (sbErrAll) return err(500, "db_error_salon_blocks", origin);
+  for (const b of salonBlocks || []) {
+    if (!b.block_time_start || !b.block_time_end) continue;
+    const blockStart = toMinutes(b.block_time_start);
+    const blockEnd = toMinutes(b.block_time_end);
+    if (apptStartMin < blockEnd && apptEndMin > blockStart) return err(400, "slot_blocked", origin);
+  }
 
   // ---------- 10. Slot conflict check ----------
   const breakMin = parseInt(salon.break_minutes || 0);

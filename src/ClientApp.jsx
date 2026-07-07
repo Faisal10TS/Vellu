@@ -309,16 +309,23 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return true;
   };
   const isTimeBlockedByOverride = (dateStr, timeStr) => {
+    // Legacy salon-wide time block stored on profiles.day_overrides.
     const override = dayOverrides[dateStr];
-    if (!override || override.type !== "blocked") return false;
-    // Per-staff time blocks are checked in staffCoversWindow (per-slot,
-    // per-eligible-staff). Skip them here so a block on Esther doesn't
-    // remove Lady's slots too.
-    if (override.staff_id) return false;
-    if (override.block_time_start && override.block_time_end) {
-      return timeStr >= override.block_time_start && timeStr < override.block_time_end;
+    if (override && override.type === "blocked" && !override.staff_id
+        && override.block_time_start && override.block_time_end
+        && timeStr >= override.block_time_start && timeStr < override.block_time_end) {
+      return true;
     }
-    return false; // whole-day blocks are handled by isDayBlocked
+    // New multi-block model: rows in staff_day_overrides with staff_id=null
+    // are salon-wide time blocks. Iterate through every match on this date
+    // so multiple windows (e.g. 10-11 AND 14-15) all take effect.
+    for (const b of initialSalon.staff_blocks || []) {
+      if (b.date !== dateStr) continue;
+      if (b.staff_id) continue;
+      if (!b.block_time_start || !b.block_time_end) continue;
+      if (timeStr >= b.block_time_start && timeStr < b.block_time_end) return true;
+    }
+    return false;
   };
   // Only SALON-WIDE exceptions (no staff_id) widen the whole-day bounds.
   // Staff-scoped exceptions are applied inside staffCoversWindow so they
