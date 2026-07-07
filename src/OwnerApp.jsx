@@ -8730,7 +8730,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Nederlands" : "Dutch"}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Nederlands" : "Dutch"}</div>
+                  <TranslateBtn sourceText={salonData.booking_policy_en || ""} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => update(d => { d.booking_policy = txt; return d; })} />
+                </div>
                 <textarea
                   className="input-field"
                   placeholder={t.bookingPolicyPlaceholder}
@@ -8739,8 +8742,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   rows={6}
                   style={{ width: "100%", resize: "vertical", fontSize: 13, padding: "10px 12px", marginBottom: 12, fontFamily: "inherit", lineHeight: 1.5 }}
                 />
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
-                  {lang === "nl" ? "Engels (optioneel)" : "English (optional)"}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>
+                    {lang === "nl" ? "Engels (optioneel)" : "English (optional)"}
+                  </div>
+                  <TranslateBtn sourceText={salonData.booking_policy || ""} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => update(d => { d.booking_policy_en = txt; return d; })} />
                 </div>
                 <textarea
                   className="input-field"
