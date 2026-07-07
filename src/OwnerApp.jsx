@@ -8187,6 +8187,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {lang === "nl" ? "Nu abonneren" : "Subscribe now"}
                         </button>
                       )}
+                      {isActive && !willCancel && bp.plan === "starter" && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto", flex: "0 0 auto", opacity: changingPlan ? 0.6 : 1 }}
+                          disabled={changingPlan}
+                          onClick={() => setUpgradeConfirm(true)}
+                        >
+                          {changingPlan ? (lang === "nl" ? "Bezig…" : "Working…") : (lang === "nl" ? "Upgraden naar Professional" : "Upgrade to Professional")}
+                        </button>
+                      )}
                       {isActive && !willCancel && (
                         <button
                           className="btn-ghost"
