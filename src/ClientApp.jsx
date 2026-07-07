@@ -2325,7 +2325,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       </div>
                       {/* Price */}
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent, flexShrink: 0, lineHeight: 1 }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: c.text, flexShrink: 0, lineHeight: 1 }}>
                         {displayPrice}
                       </div>
                       {/* Selection indicator */}
@@ -2369,7 +2369,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{v.price}</div>
                                 </div>
                               ))}
                             </div>
@@ -3061,7 +3061,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 </div>
                               </div>
                             </div>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: c.text }}>
                               {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                             </div>
                           </div>
@@ -3086,7 +3086,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{v.price}</div>
                                 </div>
                               </div>
                             ))}
