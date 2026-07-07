@@ -4894,21 +4894,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // whole salon is closed and no staff overrides it,
                           // say "unavailable" instead of "no appointments".
                           const dow = new Date(calDate + "T12:00:00").getDay();
+                          // Exception day overrides normal working hours — a
+                          // staff-scoped exception opens THAT specific staff
+                          // on THIS date; a salon-wide exception opens
+                          // everyone.
+                          const dayOv = (salonData.day_overrides || {})[calDate];
+                          const isSalonWideException = dayOv?.type === "exception" && !dayOv.staff_id;
+                          const exceptionStaffId = dayOv?.type === "exception" ? (dayOv.staff_id || null) : null;
                           let unavailable = false;
                           let unavailableName = "";
                           if (agendaStaff) {
                             const sm = (salonData.staff || []).find(s => s.id === agendaStaff);
                             const wh = sm?.working_hours?.[dow];
-                            if (sm && (!wh || wh.closed)) { unavailable = true; unavailableName = sm.name; }
+                            const openByException = isSalonWideException || exceptionStaffId === agendaStaff;
+                            if (sm && !openByException && (!wh || wh.closed)) { unavailable = true; unavailableName = sm.name; }
                           } else if (salonData.account_type === "team") {
-                            const anyOpen = (salonData.staff || []).some(s => {
+                            const anyOpen = isSalonWideException || !!exceptionStaffId || (salonData.staff || []).some(s => {
                               const wh = s.working_hours?.[dow];
                               return wh && !wh.closed;
                             });
                             if (!anyOpen) unavailable = true;
                           } else {
                             const bh = salonData.business_hours?.[dow];
-                            if (!bh || bh.closed) unavailable = true;
+                            if (!bh || bh.closed) {
+                              if (!isSalonWideException && !exceptionStaffId) unavailable = true;
+                            }
                           }
                           return (
                             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16, gap: 6 }}>
