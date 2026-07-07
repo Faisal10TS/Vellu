@@ -6208,40 +6208,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ SALON TAB ═══ */}
               {settingsTab === "salon" && <>
 
-              {/* Billing / Subscription */}
-              <div style={{ background: `${accent}06`, border: `1px solid ${accent}22`, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.billing}</SL>
-                {salonData.plan ? (
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 100, letterSpacing: "0.08em", textTransform: "uppercase", background: `${accent}22`, color: accent, border: `1px solid ${accent}44` }}>
-                        {salonData.plan === "starter" ? t.planStarter : t.planProfessional}
-                      </span>
-                      <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: `${c.success}1a`, color: c.success, border: `1px solid ${c.success}33` }}>
-                        {t.activePlan}
-                      </span>
-                    </div>
-                    {salonData.plan_expires_at && (
-                      <div style={{ fontSize: 11, color: c.textLabel }}>
-                        {t.planExpires}: {new Date(salonData.plan_expires_at).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { day: "numeric", month: "long", year: "numeric" })}
-                      </div>
-                    )}
-                    {salonData.plan === "starter" && (
-                      <button
-                        className="btn-ghost"
-                        style={{ marginTop: 12, fontSize: 10, color: accent, borderColor: `${accent}44`, opacity: changingPlan ? 0.6 : 1 }}
-                        disabled={changingPlan}
-                        onClick={() => setUpgradeConfirm(true)}
-                      >
-                        {changingPlan ? (lang === "nl" ? "Bezig…" : "Working…") : `${t.upgradePlan} → ${t.planProfessional}`}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: c.textLabel }}>{t.noPlan}</div>
-                )}
-              </div>
-
               {/* Upgrade confirmation — explains the no-extra-charge timing so
                   the owner doesn't worry they'll be billed twice for this
                   month. */}
