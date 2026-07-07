@@ -790,6 +790,41 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
   );
 }
 
+// Small DeepL-backed translate helper. Sits in a label row next to a text
+// input; clicking pulls the string from the OTHER language and fills THIS
+// field. Disabled while the source is empty or a request is in flight.
+function TranslateBtn({ sourceText, sourceLang, targetLang, onResult, accent }) {
+  const [loading, setLoading] = useState(false);
+  const src = (sourceText || "").trim();
+  const disabled = loading || !src;
+  const doTranslate = async () => {
+    if (disabled) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("translate-text", {
+        body: { texts: [src], source_lang: sourceLang, target_lang: targetLang },
+      });
+      if (!error && data?.translations?.[0]) onResult(data.translations[0]);
+    } catch { /* swallowed — silent no-op if DeepL is unreachable */ }
+    setLoading(false);
+  };
+  return (
+    <button type="button" onClick={doTranslate} disabled={disabled}
+      title={sourceLang === "NL" ? "Vertaal vanuit Nederlands (DeepL)" : "Translate from English (DeepL)"}
+      style={{ background: "transparent", border: "none", color: disabled ? "#999" : accent, cursor: disabled ? "not-allowed" : "pointer", padding: 0, fontSize: 9, letterSpacing: "0.04em", display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 600 }}>
+      {loading ? "..." : (
+        <>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 8l6 6" /><path d="M4 14l6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" />
+            <path d="M22 22l-5-10-5 10" /><path d="M14 18h6" />
+          </svg>
+          {sourceLang === "NL" ? "NL→EN" : "EN→NL"}
+        </>
+      )}
+    </button>
+  );
+}
+
 function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   const { colors: c } = useTheme();
   const toast = useToast();
@@ -822,10 +857,30 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   return (
     <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: 10, marginTop: 4 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-        <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder="Omschrijving (NL)" value={form.description_nl} onChange={e => setForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder="Description (EN)" value={form.description_en} onChange={e => setForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setForm(f => ({...f, name_nl: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setForm(f => ({...f, name_en: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.description_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setForm(f => ({...f, description_nl: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Omschrijving (NL)" value={form.description_nl} onChange={e => setForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.description_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setForm(f => ({...f, description_en: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Description (EN)" value={form.description_en} onChange={e => setForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
         <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
         <input className="input-field" placeholder="Duur (min)" type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
       </div>
@@ -869,9 +924,22 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
   return (
     <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: 10, marginTop: 4 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
-        <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-        <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setForm(f => ({...f, name_nl: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Naam (NL) *" value={form.name_nl} onChange={e => setForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", marginBottom: 2, minHeight: 12 }}>
+            <TranslateBtn sourceText={form.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setForm(f => ({...f, name_en: txt}))} />
+          </div>
+          <input className="input-field" placeholder="Name (EN)" value={form.name_en} onChange={e => setForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
+        <div>
+          <div style={{ minHeight: 14 }} />
+          <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        </div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
@@ -6954,11 +7022,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : "Edit service"}</div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                             <div>
-                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                                <TranslateBtn sourceText={editSvcForm.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setEditSvcForm(f => ({...f, name_nl: txt}))} />
+                              </div>
                               <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                                <TranslateBtn sourceText={editSvcForm.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setEditSvcForm(f => ({...f, name_en: txt}))} />
+                              </div>
                               <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                             <div>
@@ -7094,16 +7168,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                                             {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Volledige set" : "e.g. Full set"} /></div>
-                                              <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Full set" : "e.g. Full set"} /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><TranslateBtn sourceText={editVariantForm.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setEditVariantForm(f => ({...f, name_nl: txt}))} /></div><input className="input-field" value={editVariantForm.name_nl} onChange={e => setEditVariantForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Volledige set" : "e.g. Full set"} /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><TranslateBtn sourceText={editVariantForm.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setEditVariantForm(f => ({...f, name_en: txt}))} /></div><input className="input-field" value={editVariantForm.name_en} onChange={e => setEditVariantForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Full set" : "e.g. Full set"} /></div>
                                               <div><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" /></div>
                                               <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "min" : "min"} /></div>
                                             </div>
                                             ); })()}
                                             {(() => { const lbl2 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (Nederlands)" : "Description (Dutch)"}</label><input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} /></div>
-                                              <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (Engels)" : "Description (English)"}</label><input className="input-field" value={editVariantForm.description_en} onChange={e => setEditVariantForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="Description" /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl2}>{lang === "nl" ? "Omschrijving (Nederlands)" : "Description (Dutch)"}</label><TranslateBtn sourceText={editVariantForm.description_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setEditVariantForm(f => ({...f, description_nl: txt}))} /></div><input className="input-field" value={editVariantForm.description_nl} onChange={e => setEditVariantForm(f => ({...f, description_nl: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "Omschrijving" : "Description"} /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl2}>{lang === "nl" ? "Omschrijving (Engels)" : "Description (English)"}</label><TranslateBtn sourceText={editVariantForm.description_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setEditVariantForm(f => ({...f, description_en: txt}))} /></div><input className="input-field" value={editVariantForm.description_en} onChange={e => setEditVariantForm(f => ({...f, description_en: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="Description" /></div>
                                             </div>
                                             ); })()}
                                             <div style={{ display: "flex", gap: 6 }}>
@@ -7165,8 +7239,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                                             {(() => { const lbl3 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <div><label style={lbl3}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Nail art" : "e.g. Nail art"} /></div>
-                                              <div><label style={lbl3}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="e.g. Nail art" /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl3}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><TranslateBtn sourceText={editExtraForm.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setEditExtraForm(f => ({...f, name_nl: txt}))} /></div><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "bijv. Nail art" : "e.g. Nail art"} /></div>
+                                              <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><label style={lbl3}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><TranslateBtn sourceText={editExtraForm.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setEditExtraForm(f => ({...f, name_en: txt}))} /></div><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="e.g. Nail art" /></div>
                                               <div><label style={lbl3}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" /></div>
                                             </div>
                                             ); })()}
@@ -7322,11 +7396,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                          <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                          <TranslateBtn sourceText={newSvc.name_en} sourceLang="EN" targetLang="NL" accent={accent} onResult={txt => setNewSvc(s => ({...s, name_nl: txt}))} />
+                        </div>
                         <input className="input-field" placeholder="Gel Manicure" value={newSvc.name_nl} onChange={e => setNewSvc(s => ({...s, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                          <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                          <TranslateBtn sourceText={newSvc.name_nl} sourceLang="NL" targetLang="EN" accent={accent} onResult={txt => setNewSvc(s => ({...s, name_en: txt}))} />
+                        </div>
                         <input className="input-field" placeholder="Gel Manicure" value={newSvc.name_en} onChange={e => setNewSvc(s => ({...s, name_en: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
                       </div>
                       <div>
