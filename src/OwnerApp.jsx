@@ -7023,7 +7023,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                         ) : (
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
+                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
                                               {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
@@ -7088,7 +7088,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                         ) : (
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
-                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
+                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+€{e.price}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
@@ -7505,7 +7505,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 const isOn = editStaffForm.service_ids.includes(s.id);
                                 return (<div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
                                   style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
-                                  {s.name_nl || s.name}</div>);
+                                  {lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}</div>);
                               })}
                             </div>
                             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : "Empty = all services"}</div>
