@@ -332,17 +332,28 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
     const [yEH, mEH, dEH] = (dateStr || "").split("-").map(Number);
     const dayOfWeek = (yEH && mEH && dEH) ? new Date(yEH, mEH - 1, dEH).getDay() : new Date(dateStr).getDay();
+    // Staff-scoped exception day: one specific staff member is open on this
+    // date even though their weekly schedule says closed. Used to widen the
+    // per-staff windows below.
+    const dayOv = dayOverrides[dateStr];
+    const staffException = (dayOv?.type === "exception" && dayOv.staff_id)
+      ? { staff_id: dayOv.staff_id, open: dayOv.open, close: dayOv.close }
+      : null;
     // For team accounts, derive the day window from the staff schedule
     // rather than the salon/location business_hours. See getWeeklyHours
     // for the full rationale — same logic, just per-date here.
     if (initialSalon.account_type === "team") {
-      const staffDays = (initialSalon.staff || [])
-        .filter(s => s.active !== false)
-        .map(s => s.working_hours?.[dayOfWeek])
-        .filter(Boolean);
-      if (staffDays.length > 0) {
-        const openWindows = staffDays.filter(d => !d.closed);
-        if (openWindows.length === 0) return { closed: true };
+      const staffMembers = (initialSalon.staff || []).filter(s => s.active !== false);
+      const staffDayWindows = staffMembers.map(s => {
+        // Staff-scoped exception overrides the weekly schedule for this date.
+        if (staffException && staffException.staff_id === s.id) {
+          return { open: staffException.open, close: staffException.close };
+        }
+        const w = s.working_hours?.[dayOfWeek];
+        if (!w || w.closed) return null;
+        return w;
+      }).filter(Boolean);
+      if (staffDayWindows.length > 0) {
         // Salon/location business_hours for this day, used as a fallback
         // when a staff entry has closed:false but is missing an open or
         // close time (a legacy bug in the toggle UI could persist such rows).
@@ -353,7 +364,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         const fbOpen = salonFallback.open || "09:00";
         const fbClose = salonFallback.close || "17:30";
         let open = "23:59", close = "00:00";
-        for (const w of openWindows) {
+        for (const w of staffDayWindows) {
           const o = w.open || fbOpen;
           const cl = w.close || fbClose;
           if (o < open) open = o;
@@ -361,8 +372,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         }
         return { closed: false, open, close };
       }
+      // Team account with no staff windows and no matching exception → closed.
+      if (staffMembers.length > 0) return { closed: true };
     }
-    return activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+    // Non-team: if the salon is closed this weekday but a staff-scoped
+    // exception opens someone up, honour it.
+    const salonDay = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
+    if (staffException && (!salonDay || salonDay.closed)) {
+      return { closed: false, open: staffException.open, close: staffException.close };
+    }
+    return salonDay;
   };
 
   // Check if a staff member works on a given day
@@ -414,7 +433,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const salonDayFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
     const fbOpen = salonDayFallback.open || "09:00";
     const fbClose = salonDayFallback.close || "17:30";
+    // Staff-scoped exception day widens THIS specific staff on THIS date.
+    const dayOv = dayOverrides[dateStr];
+    const staffException = (dayOv?.type === "exception" && dayOv.staff_id)
+      ? { staff_id: dayOv.staff_id, open: dayOv.open, close: dayOv.close }
+      : null;
     const staffWindow = (staff) => {
+      if (staffException && staffException.staff_id === staff?.id) {
+        return { open: staffException.open || fbOpen, close: staffException.close || fbClose };
+      }
       if (!staff?.working_hours) return null;
       const day = staff.working_hours[dayOfWeek];
       if (!day) return null;
