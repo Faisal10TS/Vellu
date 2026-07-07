@@ -4878,11 +4878,49 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                           );
                         })}
-                        {dayAppts.length === 0 && rawBlocks.length === 0 && (
-                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16 }}>
-                            {lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day"}
-                          </div>
-                        )}
+                        {dayAppts.length === 0 && rawBlocks.length === 0 && (() => {
+                          // If the current staff filter targets someone whose
+                          // working_hours mark this weekday closed, or the
+                          // whole salon is closed and no staff overrides it,
+                          // say "unavailable" instead of "no appointments".
+                          const dow = new Date(calDate + "T12:00:00").getDay();
+                          let unavailable = false;
+                          let unavailableName = "";
+                          if (agendaStaff) {
+                            const sm = (salonData.staff || []).find(s => s.id === agendaStaff);
+                            const wh = sm?.working_hours?.[dow];
+                            if (sm && (!wh || wh.closed)) { unavailable = true; unavailableName = sm.name; }
+                          } else if (salonData.account_type === "team") {
+                            const anyOpen = (salonData.staff || []).some(s => {
+                              const wh = s.working_hours?.[dow];
+                              return wh && !wh.closed;
+                            });
+                            if (!anyOpen) unavailable = true;
+                          } else {
+                            const bh = salonData.business_hours?.[dow];
+                            if (!bh || bh.closed) unavailable = true;
+                          }
+                          return (
+                            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16, gap: 6 }}>
+                              {unavailable ? (
+                                <>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
+                                    {lang === "nl"
+                                      ? (unavailableName ? `${unavailableName} werkt niet op deze dag` : "Niet beschikbaar op deze dag")
+                                      : (unavailableName ? `${unavailableName} doesn't work on this day` : "Unavailable on this day")}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: c.textMuted, maxWidth: 320, lineHeight: 1.4 }}>
+                                    {lang === "nl"
+                                      ? "Volgens de ingestelde werkuren. Pas ze aan in Team of Salon-instellingen als dit klopt niet."
+                                      : "Based on the current working hours. Change them in Team or Salon settings if this is wrong."}
+                                  </div>
+                                </>
+                              ) : (
+                                <div>{lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day"}</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {dayAppts.map(a => {
                           const startMin = toMin(a.time);
                           const durMin = Math.max(15, parseInt(a.service_duration || 60));
@@ -5342,14 +5380,51 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
                 </button>
-                {calAppts.length === 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
-                    <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={36} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>
-                      {calDate === fmt(getToday()) ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}
+                {calAppts.length === 0 ? (() => {
+                  // Same logic as the day-timeline empty state: if working
+                  // hours say nobody works this day, call it "unavailable"
+                  // instead of the ambiguous "no appointments".
+                  const dow = new Date(calDate + "T12:00:00").getDay();
+                  let unavailable = false;
+                  let unavailableName = "";
+                  if (agendaStaff) {
+                    const sm = (salonData.staff || []).find(s => s.id === agendaStaff);
+                    const wh = sm?.working_hours?.[dow];
+                    if (sm && (!wh || wh.closed)) { unavailable = true; unavailableName = sm.name; }
+                  } else if (salonData.account_type === "team") {
+                    const anyOpen = (salonData.staff || []).some(s => {
+                      const wh = s.working_hours?.[dow];
+                      return wh && !wh.closed;
+                    });
+                    if (!anyOpen) unavailable = true;
+                  } else {
+                    const bh = salonData.business_hours?.[dow];
+                    if (!bh || bh.closed) unavailable = true;
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                      <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={36} color={c.textMuted} /></div>
+                      {unavailable ? (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text, textAlign: "center" }}>
+                            {lang === "nl"
+                              ? (unavailableName ? `${unavailableName} werkt niet op deze dag` : "Niet beschikbaar op deze dag")
+                              : (unavailableName ? `${unavailableName} doesn't work on this day` : "Unavailable on this day")}
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 340, lineHeight: 1.4 }}>
+                            {lang === "nl"
+                              ? "Volgens de ingestelde werkuren. Pas ze aan in Team of Salon-instellingen als dit niet klopt."
+                              : "Based on the current working hours. Change them in Team or Salon settings if this is wrong."}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>
+                          {calDate === fmt(getToday()) ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
+                  );
+                })() : (
                   calAppts.map(a => renderApptCard(a))
                 )}
                 {calAppts.length > 0 && (
