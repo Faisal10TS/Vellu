@@ -68,8 +68,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ position: "absolute", top: "-20%", left: "20%", width: "60%", height: "60%", background: `radial-gradient(ellipse at center, ${ACCENT}0a 0%, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "10%", right: "-10%", width: "40%", height: "40%", background: `radial-gradient(ellipse at center, ${ACCENT}06 0%, transparent 60%)`, pointerEvents: "none" }} />
 
-        {/* Navigation */}
-        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px clamp(16px, 4vw, 32px)", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
+        {/* Navigation — extra top padding for iOS Dynamic Island / notch. */}
+        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(16px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 32px) 16px", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
@@ -666,13 +666,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           pointerEvents: "none"
         }} />
 
-        {/* Back button */}
-        <div style={{ position: "absolute", top: 32, left: 32 }}>
+        {/* Back button — top offset accounts for iOS Dynamic Island / notch. */}
+        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", left: 32 }}>
           <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {t.back}</button>
         </div>
-        
-        {/* Lang toggle */}
-        <div style={{ position: "absolute", top: 32, right: 32, display: "flex", alignItems: "center", gap: 8 }}>
+
+        {/* Lang toggle — same safe-area offset. */}
+        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", alignItems: "center", gap: 8 }}>
           <ThemeToggle />
           <LangToggle lang={lang} setLang={setLang} />
         </div>
