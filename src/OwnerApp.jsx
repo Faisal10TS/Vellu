@@ -1950,18 +1950,28 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   // from source's manual_clients row when target lacks them, then drop the
   // source manual_clients row so it disappears from the aggregation.
   const mergeClientInto = async (source, target) => {
-    if (!source || !target || source.email === target.email) return;
+    if (!source || !target) return;
+    // Reject only same-row merges. Same-email duplicates ARE valid: they
+    // typically come from two manual_clients rows entered separately for
+    // the same person, and the whole point of Samenvoegen is to collapse
+    // them into one.
+    if (source.manualId && source.manualId === target.manualId) return;
+    if (!source.manualId && !target.manualId && source.email && source.email === target.email && source.key === target.key) return;
     setMerging(true);
     try {
       // 1. Rewrite appointments belonging to source → target's email.
       //    Only touch this salon (owner_id) so a shared-email case at
-      //    another Vellu salon is untouched.
-      const { error: apptErr } = await supabase
-        .from("appointments")
-        .update({ client_email: target.email })
-        .eq("owner_id", ownerId)
-        .eq("client_email", source.email);
-      if (apptErr) throw apptErr;
+      //    another Vellu salon is untouched. Skip when both share the
+      //    same email — nothing to rewrite and the update is a no-op that
+      //    would also match target's rows.
+      if (source.email && target.email && source.email !== target.email) {
+        const { error: apptErr } = await supabase
+          .from("appointments")
+          .update({ client_email: target.email })
+          .eq("owner_id", ownerId)
+          .eq("client_email", source.email);
+        if (apptErr) throw apptErr;
+      }
 
       // 2. Merge manual_clients rows. If source has notes/phone/birthday
       //    that target doesn't, move them over so nothing is lost.
