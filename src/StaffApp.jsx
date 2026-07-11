@@ -6,7 +6,7 @@ import {
   Skeleton, DashboardSkeleton,
   compressImage, sendEmails, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
-  getToday, fmt, getDays,
+  getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
@@ -545,9 +545,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
             const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
             const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
-            const weekRevenue = completedAppts.filter(a => new Date(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-            const prevWeekRevenue = completedAppts.filter(a => new Date(a.date) >= prevWeekStart && new Date(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-            const monthRevenue = completedAppts.filter(a => new Date(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const weekRevenue = completedAppts.filter(a => parseDate(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const prevWeekRevenue = completedAppts.filter(a => parseDate(a.date) >= prevWeekStart && parseDate(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const monthRevenue = completedAppts.filter(a => parseDate(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
             const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
@@ -556,7 +556,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
             const revByDay = {};
             completedAppts.forEach(a => {
-              const d = new Date(a.date);
+              const d = parseDate(a.date);
               revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
             });
             const weekDaily = [];
@@ -709,7 +709,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const weekEnd = new Date(weekStart);
                     weekEnd.setDate(weekStart.getDate() + 7);
                     const rev = completedAppts
-                      .filter(a => new Date(a.date) >= weekStart && new Date(a.date) < weekEnd)
+                      .filter(a => parseDate(a.date) >= weekStart && parseDate(a.date) < weekEnd)
                       .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                     const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                     weeks.push({ label, revenue: rev });

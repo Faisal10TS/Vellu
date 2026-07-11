@@ -314,6 +314,14 @@ const fmt = (d) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
+// Inverse of fmt: parse "YYYY-MM-DD" as LOCAL midnight. `new Date("YYYY-MM-DD")`
+// parses as UTC midnight, so formatting it back with toLocaleDateString shows
+// the PREVIOUS day for every user in a timezone behind UTC (e.g. Caribbean
+// Netherlands, UTC-4). Always use this before displaying a date-only string.
+const parseDate = (ds) => {
+  const [y, m, d] = (ds || "").split("-").map(Number);
+  return (y && m && d) ? new Date(y, m - 1, d) : new Date(ds);
+};
 const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
 const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];
@@ -1544,7 +1552,7 @@ function ThemeToggle() {
   return (
     <div className="lang-toggle">
       {[["light","sun"], ["dark","moon"]].map(([m, icon]) => (
-        <button key={m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
+        <button key={m} aria-label={m === "light" ? "Light mode" : "Dark mode"} aria-pressed={theme === m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
       ))}
     </div>
   );
@@ -1589,7 +1597,7 @@ export {
   compressImage, sendEmails, sendSMS,
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
-  getToday, fmt, getDays,
+  getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS,
   T,

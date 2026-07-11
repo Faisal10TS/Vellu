@@ -2,7 +2,7 @@ import { useState, useEffect, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS, fmt
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -233,7 +233,9 @@ function SalonRoute({ lang, setLang }) {
         supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position"),
         supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
         supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position"),
-        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", new Date().toISOString().split("T")[0]),
+        // fmt = LOCAL date. toISOString() is UTC: late-evening in a UTC-negative
+        // timezone it says "tomorrow" and silently drops TODAY's staff blocks.
+        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", fmt(new Date())),
       ]);
       setSalon({
         id: data.slug,

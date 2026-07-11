@@ -8,7 +8,7 @@ import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
-  getToday, fmt, getDays,
+  getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
@@ -253,6 +253,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const MON = lang === "nl" ? MON_NL : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
+  // Display duration for a service row. Services with variants often have a
+  // meaningless parent duration (0 min) because the real durations live on the
+  // variants — show the variant range instead ("40–80 min"), collapsing to a
+  // single value when they're all equal.
+  const svcDuration = (s) => {
+    const varDurations = (s.variants || []).map(v => parseInt(v.duration)).filter(d => Number.isFinite(d) && d > 0);
+    if (varDurations.length > 0) {
+      const lo = Math.min(...varDurations), hi = Math.max(...varDurations);
+      return lo === hi ? `${lo} ${t.min}` : `${lo}–${hi} ${t.min}`;
+    }
+    return `${s.duration} ${t.min}`;
+  };
 
   // Security: salon_instagram is owner-controlled text. Before interpolating it into an
   // href, strip to the charset Instagram allows for handles (alphanumeric, ., _). This
@@ -1567,7 +1579,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div className="profile-service-meta">
                         <span className="profile-service-duration-pill">
                           <NavIcon name="clock" size={10} color={c.textSub} />
-                          {s.duration} {t.min}
+                          {svcDuration(s)}
                         </span>
                       </div>
                     </div>
@@ -2103,7 +2115,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       {date && time && (
         <div style={{ marginBottom: 16, paddingTop: selectedServices.length > 0 ? 16 : 0, borderTop: selectedServices.length > 0 ? "1px solid " + c.border : "none" }}>
           <div style={{ fontSize: 12, color: c.textSub }}>
-            {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+            {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
           </div>
           <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
           {selectedServices.length > 0 && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
@@ -2352,9 +2364,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <div style={{ fontWeight: 500, fontSize: 14, color: c.text, marginBottom: 4 }}>{svcName(s)}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <NavIcon name="clock" size={10} color={c.textLabel} /> {s.duration} {t.min}
+                            <NavIcon name="clock" size={10} color={c.textLabel} /> {svcDuration(s)}
                           </span>
-                          {s.variants?.length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{s.variants.length} {t.variants?.toLowerCase()}</span>}
+                          {s.variants?.length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{s.variants.length} {s.variants.length === 1 ? "variant" : t.variants?.toLowerCase()}</span>}
                           {s.photos?.length > 1 && <span style={{ fontSize: 10, color: c.textMuted }}>{s.photos.length} {t.photos?.toLowerCase()}</span>}
                         </div>
                       </div>
@@ -2777,7 +2789,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     ))}
                   </div>
-                  {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                  {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
@@ -2858,7 +2870,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     const msg = getWhatsAppBookingMsg(lang, {
                       clientName: form.firstName,
                       salonName: initialSalon.name,
-                      date: new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                      date: parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
                       time, serviceName: getServiceLabel(), price: getPrice().toFixed(2)
                     });
                     window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
@@ -2901,7 +2913,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 2 && (
                 <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {time ? (
-                    <>{t.next} · {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
+                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
                   ) : (
                     <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
                   )}
@@ -3089,9 +3101,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div>
                                 <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
                                 <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
-                                  {s.duration} {t.min}
+                                  {svcDuration(s)}
                                   {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
-                                  {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {t.variants.toLowerCase()}</span>}
+                                  {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {s.variants.length === 1 ? "variant" : t.variants.toLowerCase()}</span>}
                                 </div>
                               </div>
                             </div>
@@ -3356,7 +3368,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                         ))}
                       </div>
-                      {[[t.date, new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                      {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
@@ -3410,7 +3422,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
                   <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
-                    {t.confirmedSub} {new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                    {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
                   </p>
                   <p style={{ fontSize: 12, color: c.textLabel, marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
                   <div style={{ marginBottom: 32 }}>
@@ -3546,7 +3558,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 6 }}>{T[lang].waitlistTitle}</div>
                   <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 16, lineHeight: 1.5 }}>
                     {T[lang].waitlistSub}
-                    {date && <><br/><b>{fmt(new Date(date), lang)}</b></>}
+                    {date && <><br/><b>{parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</b></>}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

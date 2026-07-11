@@ -473,8 +473,8 @@ function SavingsCalculator({ lang, t, c }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 18px", background: c.bg, borderRadius: 14, marginBottom: 16 }}>
         <Row label={t.calcRevenue} value={fmt(revenue)} c={c} />
-        <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}/mo`} c={c} negative />
-        <Row label={t.calcVelluCost} value={`− €${velluMonthly}/mo`} c={c} negative />
+        <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${lang === "nl" ? "/mnd" : "/mo"}`} c={c} negative />
+        <Row label={t.calcVelluCost} value={`− €${velluMonthly}${lang === "nl" ? "/mnd" : "/mo"}`} c={c} negative />
       </div>
       <div style={{ textAlign: "center", padding: "18px 18px", background: `${ACCENT}10`, border: `1px solid ${ACCENT}33`, borderRadius: 14 }}>
         <div style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{t.calcSavingsYear}</div>

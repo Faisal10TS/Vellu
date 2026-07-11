@@ -12,7 +12,7 @@ import {
   Skeleton, DashboardSkeleton,
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
-  getToday, fmt, getDays,
+  getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
@@ -298,7 +298,7 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
               type="date"
               className="input-field"
               value={newDate}
-              min={new Date().toISOString().slice(0, 10)}
+              min={fmt(new Date())}
               onChange={e => setNewDate(e.target.value)}
               style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}
             />
@@ -3840,7 +3840,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 10px", color: "#25d366", borderColor: "rgba(37,211,102,0.2)" }} onClick={() => {
               const msg = getWhatsAppBookingMsg(lang, {
                 clientName: a.client_name, salonName: salonData.name,
-                date: new Date(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
                 time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2)
               });
               window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
@@ -8048,7 +8048,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span>{new Date(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
+                        <span>{parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
                         {v.staff_id ? (
                           <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                             {(salonData.staff || []).find(sm => sm.id === v.staff_id)?.name || (lang === "nl" ? "Medewerker" : "Staff")}
@@ -8151,8 +8151,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const o = {...(d.day_overrides || {})};
                           // Remove all dates in range
                           if (v.to) {
-                            let cur = new Date(date);
-                            const end = new Date(v.to);
+                            // parseDate: local-midnight parsing. new Date("YYYY-MM-DD") is UTC
+                            // midnight, and fmt() reads local components — in any UTC-negative
+                            // timezone that combination deleted the day BEFORE each intended key.
+                            let cur = parseDate(v.from || date);
+                            const end = parseDate(v.to);
                             while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
                           } else { delete o[date]; }
                           d.day_overrides = o; return d;

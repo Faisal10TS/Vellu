@@ -113,7 +113,8 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl" }) {
 
   // Trigger download via Blob.
   const fnSalon = (salonName || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
-  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const filename = `${fnSalon}-klanten-${today}.csv`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
