@@ -2696,7 +2696,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Multi-service structure: services is an array of {id, service_id,
   // variant_id, staff_id}. The owner can add or remove rows to build a
   // combined booking (nails with X + toes with Y, one client, one row).
-  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
+  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [clientList, setClientList] = useState([]);
@@ -2970,7 +2970,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               first_name: (a.client_name || "").split(" ")[0],
               last_name: (a.client_name || "").split(" ").slice(1).join(" "),
               email: a.client_email,
-              phone: a.client_phone || ""
+              phone: a.client_phone || "",
+              allergies: a.client_allergies || ""
             };
           }
         });
@@ -2980,7 +2981,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // migration to split shared rows. Until then, RLS is the only barrier here.
         const emails = Object.keys(uniqueClients);
         if (emails.length > 0) {
-          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone").in("email", emails);
+          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone, allergies").in("email", emails);
           if (fullClients) {
             fullClients.forEach(cl => {
               uniqueClients[cl.email] = { ...uniqueClients[cl.email], ...cl };
@@ -4542,7 +4543,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -5561,7 +5562,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     every day so the owner can add multiple bookings without
                     having to first empty the day. */}
                 <button className="btn-ghost" style={{ width: "100%", marginBottom: 12, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
                 </button>
                 {calAppts.length === 0 ? (() => {
@@ -9424,7 +9425,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     ...f,
                                     client_name: `${cl.first_name || ""} ${cl.last_name || ""}`.trim(),
                                     client_email: cl.email || "",
-                                    client_phone: cl.phone || ""
+                                    client_phone: cl.phone || "",
+                                    client_allergies: cl.allergies || ""
                                   }));
                                   setClientSearch(`${cl.first_name || ""} ${cl.last_name || ""}`.trim());
                                 }} style={{
@@ -9454,6 +9456,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
                       </div>
                     )}
+                    {/* Allergies — shown for both client modes; prefilled from the
+                        selected client's record. Health data (AVG art. 9): only
+                        record what the client shared for treatment safety. */}
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.allergies} ({t.allergiesOptional})</div>
+                      <textarea className="input-field" rows={2} placeholder={t.allergiesPlaceholder} value={addApptForm.client_allergies} onChange={e => setAddApptForm(f => ({...f, client_allergies: e.target.value}))} style={{ fontSize: 12, resize: "vertical", width: "100%" }} />
+                    </div>
                   </div>
                 </div>
                 <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !(addApptForm.services || []).length || (addApptForm.services || []).some(r => !r.service_id) || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
@@ -9504,12 +9513,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // don't scope by owner_id. See TODO on the data model in book-appointment.
                     const email = addApptForm.client_email.toLowerCase().trim();
                     const nameTrim = addApptForm.client_name.trim();
+                    const allergiesTrim = (addApptForm.client_allergies || "").trim();
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
-                    if (existing) { clientId = existing.id; }
+                    const { data: existing } = await supabase.from("clients").select("id, allergies").eq("email", email).maybeSingle();
+                    if (existing) {
+                      clientId = existing.id;
+                      // Keep the client record in sync when the owner typed or
+                      // corrected allergy info during this booking.
+                      if (allergiesTrim && allergiesTrim !== (existing.allergies || "")) {
+                        await supabase.from("clients").update({ allergies: allergiesTrim }).eq("id", existing.id);
+                      }
+                    }
                     else {
                       const nameParts = nameTrim.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
+                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null, allergies: allergiesTrim || null }).select("id").single();
                       if (nc) clientId = nc.id;
                     }
                     // Insert appointment — primary service_id is the first row so
@@ -9520,6 +9537,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       service_price: totalPrice, service_duration: totalDuration,
                       date: addApptForm.date, time: addApptForm.time,
                       client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
+                      client_allergies: allergiesTrim || null,
                       payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
                       staff_id: primaryStaff?.id || null,
                       staff_name: staffNames.length > 0 ? staffNames.join(", ") : null,
