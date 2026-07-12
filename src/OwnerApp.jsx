@@ -607,6 +607,25 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
   );
 }
 
+// Shown in place of a Professional-only feature for salons on the PAID
+// Starter plan. Trials and comped accounts (plan == null) deliberately see
+// everything — a full-featured trial converts better than a crippled one,
+// and the loss of these features is what sells the upgrade at conversion.
+function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
+  return (
+    <div style={{ background: c.bgCard, border: `1.5px dashed ${accent}55`, borderRadius: 20, padding: compact ? "18px 16px" : "34px 24px", textAlign: "center", marginBottom: 12 }}>
+      <div style={{ marginBottom: 10 }}><NavIcon name="crown" size={compact ? 20 : 28} color={accent} /></div>
+      <div style={{ fontSize: compact ? 13 : 16, fontWeight: 600, marginBottom: 4, color: c.text }}>{feature}</div>
+      <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
+        {lang === "nl" ? "Beschikbaar in het Professional plan." : "Available on the Professional plan."}
+      </div>
+      <button className="btn-primary" style={{ width: "auto", padding: "11px 24px", fontSize: 11 }} onClick={onUpgrade}>
+        {lang === "nl" ? "Upgraden naar Professional" : "Upgrade to Professional"}
+      </button>
+    </div>
+  );
+}
+
 // Client CSV export block — sits in Instellingen → Overig. One button,
 // no options: generates a CSV of every unique client who has booked at
 // this salon, aggregated with visit/spend stats. Useful for marketing
@@ -1285,14 +1304,14 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
       id: "starter",
       name: t.planStarter,
       desc: t.planStarterDesc,
-      features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureStaff + " (max 3)"],
+      features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureCustomBranding, t.planFeatureStaff + " (max 3)"],
       popular: false,
     },
     {
       id: "professional",
       name: t.planProfessional,
       desc: t.planProfessionalDesc,
-      features: [t.planFeatureBookings, t.planFeatureEmail, t.planFeatureReminders, t.planFeatureReviews, t.planFeatureUnlimited, t.planFeatureAnalytics, t.planFeatureCustomBranding, t.planFeatureDiscounts, t.planFeatureCategories, t.planFeaturePriority],
+      features: [t.planFeatureAllStarter, t.planFeatureUnlimited, t.planFeatureTeamLogins, t.planFeatureAnalytics, t.planFeatureDiscounts, t.planFeatureNewsletter, t.planFeatureLocations, t.planFeaturePriority],
       popular: true,
     },
   ];
@@ -2713,6 +2732,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [settingsTab, setSettingsTab] = useState("salon");
+  // Plan gating: ONLY the paid Starter plan is limited. Trials and comped
+  // accounts (plan == null) get the full Professional experience so they
+  // feel what they'd lose by picking Starter at conversion time.
+  const isStarter = salonData.plan === "starter";
+  const goUpgrade = () => { setView("instellingen"); setSettingsTab("abonnement"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
   const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
   // Account section state (Overig tab). Keep everything local so a dirty
   // change-email/change-password form never taints salonData or the main
@@ -5951,8 +5975,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             );
           })()}
 
-          {/* ANALYTICS */}
-          {view === "analytics" && (
+          {/* ANALYTICS — Professional-only; paid Starter sees the upgrade card */}
+          {view === "analytics" && isStarter && (
+            <div className="fade-up" style={{ maxWidth: 520, margin: "0 auto" }}>
+              {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
+              <UpgradeCard feature={t.analytics} lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+            </div>
+          )}
+          {view === "analytics" && !isStarter && (
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflowX: "hidden" }}>
               {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
 
@@ -6807,9 +6837,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     })}
                   </div>
                 )}
+                {/* Multiple locations are a Professional feature; Starter
+                    keeps its first location but can't add a second one. */}
+                {isStarter && (salonData.locations || []).length >= 1 ? (
+                  <UpgradeCard feature={lang === "nl" ? "Meerdere locaties" : "Multiple locations"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+                ) : (
                 <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
                   update(d => { d.locations = [...(d.locations || []), loc]; return d; });
                 }} />
+                )}
               </div>
 
               {/* Salon Contact Details */}
@@ -7890,7 +7926,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : "Empty = all services"}</div>
                           </div>
                         )}
-                        {salonData.account_type === "team" && !m.user_id && (
+                        {/* Staff own-login invites are a Professional feature. */}
+                        {salonData.account_type === "team" && !m.user_id && isStarter && (
+                          <div style={{ padding: "12px", background: `${accent}08`, border: `1px dashed ${accent}33`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 10, color: c.textSub }}><NavIcon name="key" size={10} color={accent} /> {lang === "nl" ? "Eigen login per medewerker zit in Professional." : "Per-staff logins are a Professional feature."}</div>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: accent, borderColor: `${accent}44` }} onClick={goUpgrade}>{lang === "nl" ? "Upgraden" : "Upgrade"}</button>
+                          </div>
+                        )}
+                        {salonData.account_type === "team" && !m.user_id && !isStarter && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}><NavIcon name="key" size={10} color={accent} /> {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -7941,9 +7984,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                     )}
                   </div>
-                ))}                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
+                ))}
+                {/* Starter caps at 3 staff members (as advertised) — the
+                    adder is swapped for an upgrade card at the limit. */}
+                {isStarter && (salonData.staff || []).length >= 3 ? (
+                  <UpgradeCard feature={lang === "nl" ? "Meer dan 3 medewerkers" : "More than 3 staff members"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+                ) : (
+                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
                 }} />
+                )}
               </div>
               </>}
 
@@ -9058,7 +9108,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
-              {/* Discount Codes Section */}
+              {/* Discount Codes Section — Professional-only */}
+              {isStarter ? (
+                <UpgradeCard feature={t.discountCodes} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+              ) : (
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.discountCodes}</div>
@@ -9135,6 +9188,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </button>
                 </div>
               </div>
+              )}
 
               {/* Birthday email — opt-in per salon. Cron runs daily server-
                   side and picks up any client whose birthday matches today,
@@ -9206,7 +9260,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
-                  who have booked here. Recipients derived server-side. */}
+                  who have booked here. Recipients derived server-side.
+                  Professional-only. */}
+              {isStarter ? (
+                <UpgradeCard feature={lang === "nl" ? "Nieuwsbrief" : "Newsletter"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+              ) : (
               <NewsletterBlock
                 ownerId={salonData.owner_id}
                 lang={lang}
@@ -9214,10 +9272,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 accent={accent}
                 toast={toast}
               />
+              )}
 
               {/* CSV client export — downloadable client list for marketing,
                   GDPR portability requests, accountant handoff, or switching
-                  platforms. Runs client-side via clientExport.js. */}
+                  platforms. Runs client-side via clientExport.js.
+                  Professional-only. */}
+              {isStarter ? (
+                <UpgradeCard feature={lang === "nl" ? "Klantenlijst exporteren" : "Export clients"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+              ) : (
               <ClientExportBlock
                 ownerId={salonData.owner_id}
                 salonName={salonData.name}
@@ -9226,6 +9289,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 accent={accent}
                 toast={toast}
               />
+              )}
 
               {/* Referral program — each owner has a unique 8-char code. When
                   a new salon signs up via /owner?ref=CODE, both sides get
