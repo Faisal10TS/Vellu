@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
@@ -89,21 +89,38 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </nav>
         <style>{`@media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }`}</style>
 
-        {/* ─── HERO ─── */}
-        <div style={{ padding: "clamp(32px, 8vw, 80px) 24px 40px", textAlign: "center", position: "relative", zIndex: 10, maxWidth: 700, margin: "0 auto" }}>
-          <div className="fade-up">
-            <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 28 }}>
+        {/* ─── HERO — copy left, live product mockup right (stacks on mobile) ─── */}
+        <style>{`
+          .hero-grid { display: grid; grid-template-columns: 1fr; gap: 48px; align-items: center; max-width: 1040px; margin: 0 auto; padding: clamp(28px, 6vw, 64px) 24px 48px; position: relative; z-index: 10; }
+          .hero-copy { text-align: center; }
+          .hero-copy .hero-sub { margin-left: auto; margin-right: auto; }
+          .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+          .hero-stats { justify-content: center; }
+          @media (min-width: 880px) {
+            .hero-grid { grid-template-columns: 1.08fr 0.92fr; gap: 28px; }
+            .hero-copy { text-align: left; }
+            .hero-copy .hero-sub { margin-left: 0; margin-right: 0; }
+            .hero-ctas { justify-content: flex-start; }
+            .hero-stats { justify-content: flex-start; }
+          }
+          @keyframes heroFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+          .hero-phone-float { animation: heroFloat 7s ease-in-out infinite; }
+          @media (prefers-reduced-motion: reduce) { .hero-phone-float { animation: none; } }
+        `}</style>
+        <div className="hero-grid">
+          <div className="hero-copy fade-up">
+            <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 26 }}>
               <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
             </div>
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(44px, 9vw, 72px)", fontWeight: 300, letterSpacing: "0.06em", lineHeight: 1.05, marginBottom: 24 }}>
+            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(42px, 7.5vw, 64px)", fontWeight: 300, letterSpacing: "0.05em", lineHeight: 1.06, marginBottom: 22 }}>
               {t.heroTitle}
               <br />
               <span style={{ color: ACCENT }}>{t.heroBrand}</span>
             </h1>
-            <p style={{ fontSize: "clamp(14px, 2vw, 17px)", color: c.textSub, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 40px", letterSpacing: "0.01em" }}>
+            <p className="hero-sub" style={{ fontSize: "clamp(14px, 2vw, 16px)", color: c.textSub, lineHeight: 1.7, maxWidth: 440, marginBottom: 34, letterSpacing: "0.01em" }}>
               {t.heroSub}
             </p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <div className="hero-ctas">
               <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => navigate("/owner")}>
                 {t.startFree}
               </button>
@@ -111,22 +128,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 {t.howItWork}
               </button>
             </div>
+            {/* Stats — full strength, they carry the pitch */}
+            <div className="hero-stats" style={{ display: "flex", gap: "14px 36px", flexWrap: "wrap", marginTop: 40 }}>
+              {[
+                { num: "0%", nl: "Commissie", en: "Commission" },
+                { num: "24/7", nl: "Online boekbaar", en: "Bookable online" },
+                { num: "€19", nl: "Vast per maand", en: "Fixed per month" },
+              ].map((s, i) => (
+                <div key={i}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>{s.num}</div>
+                  <div style={{ fontSize: 10, color: c.textSub, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>{lang === "nl" ? s.nl : s.en}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* ─── SOCIAL PROOF ─── */}
-        <div style={{ padding: "20px 24px 60px", position: "relative", zIndex: 10 }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 40, flexWrap: "wrap", opacity: 0.6 }}>
-            {[
-              { num: "0%", nl: "Commissie", en: "Commission" },
-              { num: "24/7", nl: "Online beschikbaar", en: "Available online" },
-              { num: "€19", nl: "Vast per maand", en: "Fixed per month" },
-            ].map((s, i) => (
-              <div key={i} style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: ACCENT }}>{s.num}</div>
-                <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{lang === "nl" ? s.nl : s.en}</div>
-              </div>
-            ))}
+          <div className="fade-up">
+            <HeroPhoneMockup lang={lang} c={c} />
           </div>
         </div>
 
@@ -156,18 +173,18 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             visitor to engage with the number, which is the real selling
             point of the 0% commission model. */}
         <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "32px clamp(20px, 4vw, 36px)" }}>
+          <Reveal><div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "32px clamp(20px, 4vw, 36px)" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 300, marginBottom: 6 }}>{t.calcTitle}</h2>
               <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.55, maxWidth: 460, margin: "0 auto" }}>{t.calcSub}</div>
             </div>
             <SavingsCalculator lang={lang} t={t} c={c} />
-          </div>
+          </div></Reveal>
         </div>
 
-        {/* ─── HOW IT WORKS ─── */}
-        <div id="how-it-works" style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        {/* ─── HOW IT WORKS — subtle tint band breaks the page rhythm ─── */}
+        <div id="how-it-works" style={{ padding: "64px 24px", position: "relative", zIndex: 10, background: `linear-gradient(180deg, transparent, ${ACCENT}07 18%, ${ACCENT}07 82%, transparent)` }}>
+          <Reveal><div style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {t.liveIn3}
@@ -192,37 +209,75 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
               ))}
             </div>
-          </div>
+          </div></Reveal>
         </div>
 
         {/* ─── FEATURES ─── */}
-        <div style={{ padding: "40px 24px 60px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ padding: "48px 24px 64px", position: "relative", zIndex: 10 }}>
+          <Reveal><div style={{ maxWidth: 900, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {t.everythingNeeded}
               </h2>
               <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+            {/* Bento grid — two anchor cards with real visual weight, then
+                supporting tiles. Breaks the uniform-tile monotony and gives
+                the eye a hierarchy to follow. */}
+            <style>{`
+              .bento { display: grid; gap: 14px; grid-template-columns: 1fr; }
+              .bento-card { transition: transform 0.25s ease, border-color 0.25s ease; }
+              .bento-card:hover { transform: translateY(-3px); }
+              @media (min-width: 720px) {
+                .bento { grid-template-columns: repeat(3, 1fr); }
+                .bento-wide { grid-column: span 2; }
+              }
+            `}</style>
+            <div className="bento">
+              {/* Anchor 1 — your own branded page, with a mini URL + row mock */}
+              <div className="bento-card bento-wide" style={{ padding: "24px 22px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20 }}>
+                <NavIcon name="calendar" size={24} color={ACCENT} />
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? "Eigen boekingspagina" : "Your own booking page"}</div>
+                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6, marginBottom: 16 }}>{lang === "nl" ? "Jouw merk, jouw kleuren, jouw link. Klanten boeken direct bij jou — zonder tussenpartij." : "Your brand, your colors, your link. Clients book directly with you — no middleman."}</div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", background: c.bg, border: `1px solid ${ACCENT}33`, borderRadius: 100, fontSize: 12 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+                  <span style={{ color: c.textSub }}>vellu.cc/</span><span style={{ color: ACCENT, fontWeight: 600 }}>{lang === "nl" ? "jouw-naam" : "your-name"}</span>
+                </div>
+              </div>
+              {/* Anchor 2 — 0% commission, oversized numeral */}
+              <div className="bento-card" style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${ACCENT}14, transparent 70%)`, border: `1px solid ${ACCENT}33`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 64, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>0%</div>
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>{lang === "nl" ? "Commissie" : "Commission"}</div>
+                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke euro van elke boeking blijft van jou." : "Flat monthly fee. Every euro of every booking stays yours."}</div>
+              </div>
+              {/* Supporting tiles */}
               {[
-                { icon: "calendar", nl: "Eigen boekingspagina", en: "Your own booking page", sub: { nl: "vellu.cc/jouw-naam — jouw merk, jouw link", en: "vellu.cc/your-name — your brand, your link" } },
                 { icon: "team", nl: "Team accounts", en: "Team accounts", sub: { nl: "Elke medewerker een eigen login, agenda en diensten", en: "Each staff member gets their own login, schedule and services" } },
                 { icon: "mail", nl: "Automatische emails", en: "Automatic emails", sub: { nl: "Bevestigingen, herinneringen en follow-ups", en: "Confirmations, reminders and follow-ups" } },
-                { icon: "chart", nl: "0% commissie", en: "0% commission", sub: { nl: "Vast maandtarief. Geen verborgen kosten, geen commissie per boeking", en: "Fixed monthly price. No hidden fees, no commission per booking" } },
-                { icon: "star2", nl: "Reviews", en: "Reviews", sub: { nl: "Automatisch reviews verzamelen na bezoek", en: "Automatically collect reviews after visits" } },
-                { icon: "palette", nl: "Eigen branding", en: "Custom branding", sub: { nl: "Jouw logo, kleuren en stijl", en: "Your logo, colors and style" } },
+                { icon: "star2", nl: "Reviews", en: "Reviews", sub: { nl: "Automatisch reviews verzamelen na elk bezoek", en: "Automatically collect reviews after every visit" }, stars: true },
+                { icon: "palette", nl: "Eigen branding", en: "Custom branding", sub: { nl: "Jouw logo, kleuren en stijl", en: "Your logo, colors and style" }, swatch: true },
                 { icon: "camera", nl: "Portfolio", en: "Portfolio", sub: { nl: "Foto's per behandeling tonen", en: "Show photos per treatment" } },
-                { icon: "tag", nl: "Kortingscodes", en: "Discount codes", sub: { nl: "Maak en deel korting met je klanten", en: "Create and share discounts with clients" } },
+                { icon: "tag", nl: "Kortingscodes", en: "Discount codes", sub: { nl: "Maak en deel korting met je klanten", en: "Create and share discounts with clients" }, code: true },
               ].map((f, i) => (
-                <div key={i} style={{ padding: "20px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 18 }}>
-                  <NavIcon name={f.icon} size={24} color={ACCENT} />
+                <div key={i} className="bento-card" style={{ padding: "20px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20 }}>
+                  <NavIcon name={f.icon} size={22} color={ACCENT} />
                   <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? f.nl : f.en}</div>
-                  <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.5 }}>{lang === "nl" ? f.sub.nl : f.sub.en}</div>
+                  <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.55 }}>{lang === "nl" ? f.sub.nl : f.sub.en}</div>
+                  {f.stars && <div style={{ marginTop: 10, fontSize: 12, color: ACCENT, letterSpacing: "0.2em" }}>★★★★★</div>}
+                  {f.swatch && (
+                    <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
+                      {["#d98ba3", "#c9a96e", "#8fb5a0", "#9a8fd9"].map(col => (
+                        <span key={col} style={{ width: 16, height: 16, borderRadius: "50%", background: col, border: `2px solid ${c.bg}`, boxShadow: `0 0 0 1px ${c.border}` }} />
+                      ))}
+                    </div>
+                  )}
+                  {f.code && (
+                    <div style={{ marginTop: 12, display: "inline-block", padding: "4px 10px", border: `1px dashed ${ACCENT}66`, borderRadius: 8, fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", color: ACCENT }}>WELKOM10</div>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
+          </div></Reveal>
         </div>
 
         {/* TESTIMONIALS section removed — the previous hardcoded names/quotes are
@@ -230,9 +285,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             creates real legal exposure. Re-add this section only when you have real,
             opt-in reviews with written consent from the people named. */}
 
-        {/* ─── PRICING ─── */}
-        <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 700, margin: "0 auto" }}>
+        {/* ─── PRICING — tinted band, mirrors the how-it-works section ─── */}
+        <div style={{ padding: "64px 24px", position: "relative", zIndex: 10, background: `linear-gradient(180deg, transparent, ${ACCENT}07 18%, ${ACCENT}07 82%, transparent)` }}>
+          <Reveal><div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {t.simplePricing}
@@ -341,12 +396,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <div style={{ marginTop: 20 }}>
               <PlanCompareTable lang={lang} accent={ACCENT} />
             </div>
-          </div>
+          </div></Reveal>
         </div>
 
         {/* ─── FAQ ─── */}
         <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 700, margin: "0 auto" }}>
+          <Reveal><div style={{ maxWidth: 700, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
                 {t.faqTitle}
@@ -364,12 +419,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 )}
               </div>
             ))}
-          </div>
+          </div></Reveal>
         </div>
 
         {/* ─── FINAL CTA ─── */}
         <div style={{ padding: "20px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 600, margin: "0 auto", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 28, padding: "48px 32px" }}>
+          <Reveal><div style={{ maxWidth: 600, margin: "0 auto", background: `linear-gradient(160deg, ${ACCENT}10, transparent 60%), ${c.bgCard}`, border: `1px solid ${ACCENT}33`, borderRadius: 28, padding: "52px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
               {t.ctaTitle}
             </div>
@@ -379,7 +434,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <button className="btn-primary" style={{ width: "auto", padding: "16px 44px", fontSize: 14 }} onClick={() => navigate("/owner")}>
               {t.startFree}
             </button>
-          </div>
+          </div></Reveal>
         </div>
 
         {/* Footer */}
@@ -439,6 +494,97 @@ function StickyStartPill({ onClick, label }) {
     >
       {label}
     </button>
+  );
+}
+
+// Scroll-reveal wrapper: children fade/slide in the first time they enter
+// the viewport. No-ops (instantly visible) when IntersectionObserver is
+// unavailable or the user prefers reduced motion.
+function Reveal({ children, delay = 0 }) {
+  const ref = useRef(null);
+  const [vis, setVis] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduced || typeof IntersectionObserver === "undefined") { setVis(true); return; }
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setVis(true); io.disconnect(); }
+    }, { threshold: 0.1, rootMargin: "0px 0px -40px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(22px)", transition: `opacity 0.65s ease ${delay}ms, transform 0.65s ease ${delay}ms` }}>
+      {children}
+    </div>
+  );
+}
+
+// CSS-only product mockup for the hero: a phone frame showing a fictional
+// salon's booking page. Built from plain divs so it always matches the real
+// product's design language without needing screenshot assets. The demo
+// salon uses a rose accent (NOT Vellu gold) on purpose — it demonstrates
+// that every salon gets its own branding.
+function HeroPhoneMockup({ lang, c }) {
+  const rose = "#d98ba3";
+  const services = [
+    [lang === "nl" ? "Gel manicure" : "Gel manicure", "45 min", "€38"],
+    [lang === "nl" ? "BIAB nieuwe set" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : "From €52"],
+    [lang === "nl" ? "Brow lift & verf" : "Brow lift & tint", "30 min", "€29"],
+  ];
+  const cats = lang === "nl" ? ["Nagels", "Brows", "Lashes"] : ["Nails", "Brows", "Lashes"];
+  return (
+    <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+      <div style={{ position: "absolute", inset: "-14%", background: `radial-gradient(ellipse at center, ${ACCENT}16 0%, transparent 65%)`, pointerEvents: "none" }} />
+      <div className="hero-phone-float" style={{ position: "relative", width: 272, borderRadius: 44, border: `1px solid ${c.border}`, background: c.bgCard, boxShadow: "0 34px 70px -24px rgba(0,0,0,0.4)", padding: 10 }}>
+        <div style={{ borderRadius: 35, overflow: "hidden", background: c.bg, border: `1px solid ${c.border}`, position: "relative" }}>
+          {/* Cover + notch */}
+          <div style={{ height: 86, background: `linear-gradient(135deg, ${rose}66, ${rose}1f)`, position: "relative" }}>
+            <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 74, height: 16, borderRadius: 100, background: "rgba(0,0,0,0.85)" }} />
+          </div>
+          {/* Salon header */}
+          <div style={{ padding: "0 14px", marginTop: -22, position: "relative" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: c.bgCard, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: rose, marginBottom: 8 }}>SN</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1.1, color: c.text }}>Studio Nova</div>
+            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2, letterSpacing: "0.04em" }}>Amsterdam · ★ 4.9 (127)</div>
+          </div>
+          {/* Category pills */}
+          <div style={{ display: "flex", gap: 5, padding: "12px 14px 4px" }}>
+            {cats.map((cat, i) => (
+              <div key={cat} style={{ fontSize: 8.5, fontWeight: 600, padding: "5px 11px", borderRadius: 100, background: i === 0 ? rose : "transparent", color: i === 0 ? "#fff" : c.textSub, border: `1px solid ${i === 0 ? rose : c.border}` }}>{cat}</div>
+            ))}
+          </div>
+          {/* Services */}
+          <div style={{ padding: "8px 12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+            {services.map(([name, dur, price]) => (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 13 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: `${rose}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 12, height: 12, borderRadius: "50%", border: `1.5px solid ${rose}` }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                  <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 1 }}>{dur}</div>
+                </div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color: rose, flexShrink: 0 }}>{price}</div>
+              </div>
+            ))}
+            {/* Booking CTA */}
+            <div style={{ marginTop: 3, padding: "10px 0", borderRadius: 100, background: rose, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textAlign: "center", textTransform: "uppercase" }}>
+              {lang === "nl" ? "Boeken" : "Book"}
+            </div>
+          </div>
+        </div>
+        {/* Floating "new booking" toast — a little life on top of the frame */}
+        <div style={{ position: "absolute", top: 96, right: -14, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "8px 12px", boxShadow: "0 12px 30px -12px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: `${ACCENT}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: ACCENT }}>✓</div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Nieuwe boeking" : "New booking"}</div>
+            <div style={{ fontSize: 8, color: c.textMuted }}>{lang === "nl" ? "zojuist · Gel manicure" : "just now · Gel manicure"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
