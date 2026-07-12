@@ -766,11 +766,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
   };
 
+  // Provisional pricing while no variant is chosen yet: fall back to the
+  // CHEAPEST variant instead of the (often 0) parent price, so step 1 shows
+  // "Vanaf €30.00" rather than a misleading €0.00. Once every variant-service
+  // has a variant picked (enforced before step 2) these equal the exact values.
+  const itemBasePrice = (item) => {
+    if (item.variant) return parseFloat(item.variant.price);
+    const vs = item.service.variants || [];
+    if (vs.length > 0) return Math.min(...vs.map(v => parseFloat(v.price)));
+    return parseFloat(item.service.price || 0);
+  };
+  const itemBaseDuration = (item) => {
+    if (item.variant) return item.variant.duration;
+    const vs = (item.service.variants || []).map(v => parseInt(v.duration)).filter(d => Number.isFinite(d) && d > 0);
+    if (vs.length > 0) return Math.min(...vs);
+    return item.service.duration || 0;
+  };
+  const hasUnchosenVariant = selectedServices.some(it => (it.service.variants || []).length > 0 && !it.variant);
+  // "Vanaf €30.00" prefix for totals while any variant is still unchosen.
+  const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : "from ") : "";
   const getPrice = () => {
     let total = selectedServices.reduce((sum, item) => {
-      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
-      return sum + base + extrasTotal;
+      return sum + itemBasePrice(item) + extrasTotal;
     }, 0);
     if (appliedDiscount) {
       if (appliedDiscount.type === "percent") {
@@ -783,15 +801,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   };
   const getOriginalPrice = () => {
     return selectedServices.reduce((sum, item) => {
-      const base = item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0);
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0);
-      return sum + base + extrasTotal;
+      return sum + itemBasePrice(item) + extrasTotal;
     }, 0);
   };
   const getDuration = () => {
-    return selectedServices.reduce((sum, item) => {
-      return sum + (item.variant ? item.variant.duration : (item.service.duration || 0));
-    }, 0);
+    return selectedServices.reduce((sum, item) => sum + itemBaseDuration(item), 0);
   };
   const getServiceLabel = () => {
     return selectedServices.map(item => {
@@ -1586,9 +1601,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div className="profile-service-price">
                       {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                     </div>
-                    <div className="profile-service-book-btn" onClick={e => { e.stopPropagation(); enterBooking(s); }}>
+                    <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                       {t.book}
-                    </div>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1930,6 +1945,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   if (override?.type === "blocked") continue;
                   const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
                   if (hrs.closed) continue;
+                  // Respect the booking window: with e.g. a 24h minimum advance,
+                  // "Vandaag beschikbaar" would promise a day the client can't
+                  // actually book. Skip days that fall before now + min advance
+                  // (a day only counts when a slot can still START before close).
+                  if (minAdvanceHours > 0) {
+                    const [ch, cm] = String(hrs.close || "0:0").split(":").map(Number);
+                    const dayClose = new Date(checkDate);
+                    dayClose.setHours(ch || 0, cm || 0, 0, 0);
+                    if (new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000) >= dayClose) continue;
+                  }
                   // Found an open day
                   const isToday = offset === 0;
                   const isTomorrow = offset === 1;
@@ -2099,8 +2124,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {item.variant && <span style={{ fontWeight: 400, color: c.textSub }}> — {lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}</span>}
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
-                <span>{item.variant ? item.variant.duration : item.service.duration} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
+                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : "from ") : ""}€{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
@@ -2133,7 +2158,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
-            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent }}>€{getPrice().toFixed(2)}</span>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</span>
           </div>
         </div>
       )}
@@ -2321,7 +2346,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
                       <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                     </span>
-                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</span>
+                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}€{getOriginalPrice().toFixed(2)}</span>
                   </div>
                 )}
 
@@ -2537,6 +2562,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           const isToday = ds === fmt(getToday());
                           return (
                             <div key={i} role="button" tabIndex={isClosed ? -1 : 0}
+                              aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : "closed"})` : ""}`}
+                              aria-disabled={isClosed}
+                              onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }}
                               onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
                               style={{
                                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
@@ -2904,7 +2932,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {selectedServices.length > 0 ? (
-                    <>{t.next} · {getDuration()} {t.min} · €{getOriginalPrice().toFixed(2)}</>
+                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}€{getOriginalPrice().toFixed(2)}</>
                   ) : (
                     <>{t.noServicesSelected}</>
                   )}
@@ -3466,7 +3494,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
                     {time && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>€{getPrice().toFixed(2)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</div>
                 </div>
                 {step === 1 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
