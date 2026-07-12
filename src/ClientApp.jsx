@@ -1,9 +1,9 @@
-// NOTE: PWA install prompt moved to src/InstallAppPrompt.jsx (shared by
-// both the customer-facing salon profile page and the owner dashboard).
+// NOTE: the PWA install prompt (src/InstallAppPrompt.jsx) is deliberately
+// NOT shown on the customer-facing salon page anymore — clients just use the
+// link; the installable app is for salon owners (see OwnerApp).
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
-import InstallAppPrompt from "./InstallAppPrompt.jsx";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   compressImage, sendEmails, sendSMS, ACCENT,
@@ -1456,20 +1456,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     <Layout accent={accent}>
 
       <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
-
-        {/* PWA install prompt — sits above the sticky header. Self-hides on
-            desktop, when already installed, when the user is viewing this
-            page in review mode (?review=true), or when dismissed previously. */}
-        {!reviewMode && (
-          <InstallAppPrompt
-            dismissKey={`vellu_install_dismissed_${initialSalon.slug || "_"}`}
-            title={lang === "nl" ? "Installeer Vellu" : "Install Vellu"}
-            subtitle={lang === "nl"
-              ? (initialSalon.name ? `Snellere toegang tot ${initialSalon.name}` : "Snellere toegang")
-              : (initialSalon.name ? `Faster access to ${initialSalon.name}` : "Faster access")}
-            lang={lang} accent={accent} c={c}
-          />
-        )}
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
