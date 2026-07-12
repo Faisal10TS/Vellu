@@ -324,6 +324,19 @@ const parseDate = (ds) => {
 };
 const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
 const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+// Candidate appointment START times on the salon's own slot grid
+// (profiles.slot_interval_minutes, default 30). Wider range than TIMES —
+// the salon's open/close bounds filter it down, so early birds (06:00)
+// and late-night salons (until 22:00) both work.
+const genTimes = (intervalMin = 30, startHour = 6, endHour = 22) => {
+  const step = Math.max(5, parseInt(intervalMin) || 30);
+  const out = [];
+  for (let m = startHour * 60; m <= endHour * 60; m += step) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  return out;
+};
+const SLOT_INTERVALS = [10, 15, 20, 30, 60];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];
 const DAY_EN = ["su","mo","tu","we","th","fr","sa"];
 const DAY_FULL_NL = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
@@ -489,6 +502,7 @@ const _T_RAW = {
     breakNone:"Geen pauze", breakMin:"min pauze",
     noShow:"Niet verschenen", markNoShow:"No-show", noShowWarning:"Let op: deze klant is eerder niet verschenen",
     noShowCount:"keer niet verschenen",
+    slotInterval:"Tijdslot interval", slotIntervalDesc:"Om de hoeveel minuten kunnen klanten (en jijzelf) een starttijd kiezen?", slotIntervalMin:"min",
     allergies:"Allergieën / bijzonderheden", allergiesPlaceholder:"Bijv. latex allergie, gevoelige huid...",
     allergiesOptional:"optioneel", clientAllergies:"Allergie-info",
     // Multi-service booking
@@ -759,6 +773,7 @@ const _T_RAW = {
     breakNone:"No break", breakMin:"min break",
     noShow:"No-show", markNoShow:"No-show", noShowWarning:"Note: this client has missed appointments before",
     noShowCount:"times no-show",
+    slotInterval:"Time slot interval", slotIntervalDesc:"How many minutes apart can clients (and you) pick a start time?", slotIntervalMin:"min",
     allergies:"Allergies / notes", allergiesPlaceholder:"E.g. latex allergy, sensitive skin...",
     allergiesOptional:"optional", clientAllergies:"Allergy info",
     // Multi-service booking
@@ -1598,7 +1613,7 @@ export {
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
-  TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,

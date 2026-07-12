@@ -9,7 +9,7 @@ import {
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
-  TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  genTimes, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
 
@@ -1073,7 +1073,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const salonClose = toMin(dayHours.close);
     const totalDuration = serviceSlots.reduce((sum, s) => sum + s.duration, 0) || 30;
 
-    return TIMES.filter(tt => {
+    // Candidate start times follow the salon's own slot grid (owner setting,
+    // default 30 min) instead of a hardcoded half-hour raster.
+    return genTimes(initialSalon.slot_interval_minutes || 30).filter(tt => {
       const startMin = toMin(tt);
 
       // Salon-wide bounds: start within open hours, end before close.

@@ -13,7 +13,7 @@ import {
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
-  TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
 
@@ -2812,6 +2812,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
           birthday_email_code_prefix: data.birthday_email_code_prefix || "",
           break_minutes: data.break_minutes || 0,
+          slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           cover_focal_y: data.cover_focal_y ?? 50,
@@ -3962,12 +3963,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
                       <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                        {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{tt}</option>)}
                       </select>
                     </div>
                     <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
                       <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                        {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{tt}</option>)}
                       </select>
                     </div>
                   </div>
@@ -8003,6 +8004,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Slot interval — grid for bookable start times (client flow +
+                  owner appointment forms). Persisted on OPSLAAN like the rest
+                  of this tab. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{t.slotInterval}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.slotIntervalDesc}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {SLOT_INTERVALS.map(mins => (
+                    <div key={mins} onClick={() => update(d => { d.slot_interval_minutes = mins; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.slot_interval_minutes || 30) === mins ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.slot_interval_minutes || 30) === mins ? accent : c.inputBorder}`,
+                        color: (salonData.slot_interval_minutes || 30) === mins ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{mins} {t.slotIntervalMin}</div>
+                  ))}
+                </div>
+              </div>
+
               {/* Reminder timing */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.reminderTiming}</SL>
@@ -8187,11 +8209,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                     {newBlocked.mode === "time" && (<>
                       <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                       </select>
                       <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
                       <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                       </select>
                     </>)}
                   </div>
@@ -9215,6 +9237,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
                   birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,
                   break_minutes: salonData.break_minutes || 0,
+                  slot_interval_minutes: salonData.slot_interval_minutes || 30,
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
                   cover_focal_y: salonData.cover_focal_y ?? 50,
@@ -9373,7 +9396,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <input type="date" className="input-field" value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
                       <select className="input-field" value={addApptForm.time} onChange={e => setAddApptForm(f => ({...f, time: e.target.value}))} style={{ fontSize: 12, flex: 1 }}>
                         <option value="" style={{ background: c.selectBg }}>—</option>
-                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                       </select>
                     </div>
                   </div>
