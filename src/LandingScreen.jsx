@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  useTheme, useSEO, ACCENT, T, COUNTRIES, Layout, NavIcon, LangToggle, ThemeToggle, Header
+  useTheme, useSEO, ACCENT, T, COUNTRIES, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -334,6 +334,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
                 );
               })}
+            </div>
+            {/* Full feature comparison — collapsed by default so the pricing
+                section stays scannable; the table answers "what exactly do I
+                miss on Starter?" without a support question. */}
+            <div style={{ marginTop: 20 }}>
+              <PlanCompareTable lang={lang} accent={ACCENT} />
             </div>
           </div>
         </div>

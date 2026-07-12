@@ -14,7 +14,7 @@ import {
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -1441,6 +1441,12 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* Full feature comparison so the plan choice never needs a
+              support question — collapsed by default. */}
+          <div style={{ marginBottom: 20 }}>
+            <PlanCompareTable lang={lang} accent={accent} />
           </div>
 
           <div style={{ textAlign: "center", color: c.textMuted, fontSize: 11 }}>

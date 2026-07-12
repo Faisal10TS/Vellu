@@ -1577,6 +1577,99 @@ function ThemeToggle() {
   );
 }
 
+// ─── PLAN COMPARISON TABLE ───────────────────────────────────
+// Single source of truth for "what does each plan actually include".
+// Rendered on the landing page (under pricing) and in the in-app plan
+// picker. Keep in sync with the real gating in OwnerApp (isStarter).
+// Cell values: true = included, false = not included, string = shown as-is.
+const planMatrix = (lang) => {
+  const nl = lang === "nl";
+  return [
+    { group: nl ? "Boekingen & agenda" : "Bookings & calendar", rows: [
+      [nl ? "Eigen boekingspagina (vellu.cc/jouw-naam)" : "Your own booking page (vellu.cc/your-name)", true, true],
+      [nl ? "Onbeperkte boekingen, 0% commissie" : "Unlimited bookings, 0% commission", true, true],
+      [nl ? "Agenda (dag / week / maand)" : "Calendar (day / week / month)", true, true],
+      [nl ? "Wachtlijst" : "Waitlist", true, true],
+      [nl ? "Instelbaar tijdslot-interval" : "Custom time slot interval", true, true],
+      [nl ? "Blokkeer- & uitzonderingsdagen" : "Blocked & exception days", true, true],
+    ]},
+    { group: nl ? "Communicatie" : "Communication", rows: [
+      [nl ? "Bevestigings- & herinneringsmails" : "Confirmation & reminder emails", true, true],
+      [nl ? "Review-verzoek na bezoek" : "Post-visit review request", true, true],
+      [nl ? "Verjaardagsmail met kortingscode" : "Birthday email with discount code", true, true],
+      [nl ? "Nieuwsbrief naar al je klanten" : "Newsletter to all your clients", false, true],
+      [nl ? "Klantenlijst exporteren (CSV)" : "Client export (CSV)", false, true],
+    ]},
+    { group: "Team", rows: [
+      [nl ? "Medewerkers" : "Staff members", nl ? "Max 3" : "Up to 3", nl ? "Onbeperkt" : "Unlimited"],
+      [nl ? "Werktijden & diensten per medewerker" : "Per-staff schedules & services", true, true],
+      [nl ? "Eigen login per medewerker" : "Own login per staff member", false, true],
+    ]},
+    { group: nl ? "Salon & branding" : "Salon & branding", rows: [
+      [nl ? "Eigen logo & kleuren" : "Your logo & colors", true, true],
+      [nl ? "Categorieën, varianten & extra's" : "Categories, variants & extras", true, true],
+      [nl ? "Portfolio foto's per behandeling" : "Portfolio photos per treatment", true, true],
+      [nl ? "Meerdere locaties" : "Multiple locations", false, true],
+    ]},
+    { group: nl ? "Klanten & inzicht" : "Clients & insights", rows: [
+      [nl ? "Klantenbeheer met historie" : "Client management with history", true, true],
+      [nl ? "Facturen met BTW" : "VAT invoices", true, true],
+      [nl ? "Kortingscodes" : "Discount codes", false, true],
+      ["Analytics dashboard", false, true],
+    ]},
+    { group: "Support", rows: [
+      [nl ? "Email support" : "Email support", true, true],
+      [nl ? "Prioriteit support" : "Priority support", false, true],
+    ]},
+  ];
+};
+
+function PlanCompareTable({ lang, accent = ACCENT, defaultOpen = false }) {
+  const { colors: c } = useTheme();
+  const [open, setOpen] = useState(defaultOpen);
+  const nl = lang === "nl";
+  const cell = (v) => {
+    if (v === true) return <NavIcon name="check" size={14} color={accent} />;
+    if (v === false) return <span style={{ color: c.textMuted, opacity: 0.6 }}>—</span>;
+    return <span style={{ fontSize: 11, color: c.textSub, fontWeight: 500 }}>{v}</span>;
+  };
+  return (
+    <div style={{ maxWidth: 700, margin: "0 auto", width: "100%" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="btn-ghost"
+        style={{ width: "100%", padding: "12px 18px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+      >
+        {nl ? "Vergelijk alle features" : "Compare all features"}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
+      </button>
+      {open && (
+        <div style={{ marginTop: 14, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, overflow: "hidden" }}>
+          {/* Header */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.border}`, position: "sticky", top: 0, background: c.bgCard, zIndex: 1 }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{nl ? "Feature" : "Feature"}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: c.text }}>Starter<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€19{nl ? "/mnd" : "/mo"}</div></div>
+            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: accent }}>Professional<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€39{nl ? "/mnd" : "/mo"}</div></div>
+          </div>
+          {planMatrix(lang).map((g, gi) => (
+            <div key={gi}>
+              <div style={{ padding: "12px 16px 6px", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{g.group}</div>
+              {g.rows.map(([label, starter, pro], ri) => (
+                <div key={ri} style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "8px 16px", borderBottom: (gi === planMatrix(lang).length - 1 && ri === g.rows.length - 1) ? "none" : `1px solid ${c.border}55` }}>
+                  <div style={{ fontSize: 12, color: c.textSub, paddingRight: 8 }}>{label}</div>
+                  <div style={{ textAlign: "center" }}>{cell(starter)}</div>
+                  <div style={{ textAlign: "center" }}>{cell(pro)}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LangToggle({ lang, setLang }) {
   // Reads from the LANGUAGES registry so adding a new UI language is just an
   // entry in that array + a matching T.xx object — no edits here needed.
@@ -1622,6 +1715,6 @@ export {
   T,
   LANGUAGES, COUNTRIES,
   makeCSS,
-  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
+  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   supabase,
 };
