@@ -11,6 +11,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder } from "./OwnerApp.jsx";
+import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { colors: c } = useTheme();
@@ -439,6 +440,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+      {/* Mobile-only PWA install banner — staff are Vellu users just like
+          owners (they open their agenda daily), so they get the same install
+          nudge. Deliberately NOT shown to salon clients (see ClientApp). */}
+      <InstallAppPrompt
+        dismissKey="vellu_install_dismissed_staff"
+        title={lang === "nl" ? "Installeer Vellu" : "Install Vellu"}
+        subtitle={lang === "nl" ? "Snelle toegang tot je agenda" : "Quick access to your agenda"}
+        lang={lang} accent={accent} c={c}
+      />
       {/* Wrapper: on desktop, use fixed 100dvh + overflow:hidden so the sidebar
           stays put while only the main pane scrolls. On mobile, use natural page
           scroll — nesting a scroll container inside 100dvh prevents iOS Safari
