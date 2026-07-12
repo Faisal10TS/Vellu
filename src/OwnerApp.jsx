@@ -3206,6 +3206,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
     }
   };
+  // Same pattern as handleServiceDragEnd — categories drive the order of the
+  // filter pills on the public profile and in the booking flow.
+  const handleCategoryDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const cats = salonData.categories || [];
+    const oldIdx = cats.findIndex(x => x.id === active.id);
+    const newIdx = cats.findIndex(x => x.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(cats, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
+    update(d => { d.categories = reordered; return d; });
+    try {
+      await Promise.all(reordered.map((x, idx) =>
+        supabase.from("service_categories")
+          .update({ position: idx })
+          .eq("id", x.id)
+          .eq("owner_id", salonData.owner_id)
+      ));
+    } catch (e) {
+      console.error("Category reorder save failed:", e);
+      toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
+    }
+  };
   const markComplete = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -6939,9 +6962,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {lang === "nl" ? "Nog geen categorieën. Groepeer je diensten (bv. Nagels, Brows) zodat klanten makkelijker kunnen kiezen." : "No categories yet. Group your services (e.g. Nails, Brows) so clients can browse faster."}
                   </div>
                 )}
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                <SortableContext items={(salonData.categories || []).map(x => x.id)} strategy={verticalListSortingStrategy}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
                   {(salonData.categories || []).map(cat => (
-                    <div key={cat.id}>
+                    <SortableService key={cat.id} id={cat.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
+                    <div ref={setNodeRef} style={sortStyle}>
                       {editingCategoryId === cat.id ? (
                         <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
                           <div style={{ marginBottom: 8 }}>
@@ -6970,7 +6996,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                          {(salonData.categories || []).length > 1 && (
+                            <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
+                          )}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? (cat.name_nl || cat.name_en) : (cat.name_en || cat.name_nl)}</div>
                           </div>
@@ -7001,8 +7030,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       )}
                     </div>
+                    )}</SortableService>
                   ))}
                 </div>
+                </SortableContext>
+                </DndContext>
                 {showNewCategoryForm ? (
                   <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
                     <div style={{ marginBottom: 8 }}>
