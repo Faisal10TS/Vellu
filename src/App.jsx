@@ -2,7 +2,7 @@ import { useState, useEffect, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS, fmt
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS, fmt, Layout
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -425,6 +425,7 @@ function CancelRoute({ lang }) {
   };
 
   return (
+    <Layout accent={ACCENT}>
     <div style={{ minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
 
       <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
@@ -463,7 +464,7 @@ function CancelRoute({ lang }) {
               style={{ minHeight: 80, marginBottom: 16, resize: "none" }}
             />
             
-            <button className="btn-primary" style={{ background: "#ef4444", width: "100%" }} onClick={handleCancel}>
+            <button className="btn-primary" style={{ background: "#ef4444", color: "#fff", width: "100%" }} onClick={handleCancel}>
               {t.confirmCancel}
             </button>
             
@@ -517,6 +518,7 @@ function CancelRoute({ lang }) {
         )}
       </div>
     </div>
+    </Layout>
   );
 }
 
