@@ -266,7 +266,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   {f.stars && <div style={{ marginTop: 10, fontSize: 12, color: ACCENT, letterSpacing: "0.2em" }}>★★★★★</div>}
                   {f.swatch && (
                     <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
-                      {["#d98ba3", "#c9a96e", "#8fb5a0", "#9a8fd9"].map(col => (
+                      {["#c9a96e", "#b7a29a", "#8fa596", "#a49ab8"].map(col => (
                         <span key={col} style={{ width: 16, height: 16, borderRadius: "50%", background: col, border: `2px solid ${c.bg}`, boxShadow: `0 0 0 1px ${c.border}` }} />
                       ))}
                     </div>
@@ -523,64 +523,76 @@ function Reveal({ children, delay = 0 }) {
 
 // CSS-only product mockup for the hero: a phone frame showing a fictional
 // salon's booking page. Built from plain divs so it always matches the real
-// product's design language without needing screenshot assets. The demo
-// salon uses a rose accent (NOT Vellu gold) on purpose — it demonstrates
-// that every salon gets its own branding.
+// product's design language without needing screenshot assets. Stays fully
+// inside the site's gold palette so the hero reads as one composition.
 function HeroPhoneMockup({ lang, c }) {
-  const rose = "#d98ba3";
   const services = [
     [lang === "nl" ? "Gel manicure" : "Gel manicure", "45 min", "€38"],
     [lang === "nl" ? "BIAB nieuwe set" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : "From €52"],
     [lang === "nl" ? "Brow lift & verf" : "Brow lift & tint", "30 min", "€29"],
   ];
   const cats = lang === "nl" ? ["Nagels", "Brows", "Lashes"] : ["Nails", "Brows", "Lashes"];
+  const slots = ["10:00", "11:30", "13:00", "15:30"];
+  const darkOnGold = "#1a1713";
   return (
-    <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center" }}>
-      <div style={{ position: "absolute", inset: "-14%", background: `radial-gradient(ellipse at center, ${ACCENT}16 0%, transparent 65%)`, pointerEvents: "none" }} />
-      <div className="hero-phone-float" style={{ position: "relative", width: 272, borderRadius: 44, border: `1px solid ${c.border}`, background: c.bgCard, boxShadow: "0 34px 70px -24px rgba(0,0,0,0.4)", padding: 10 }}>
-        <div style={{ borderRadius: 35, overflow: "hidden", background: c.bg, border: `1px solid ${c.border}`, position: "relative" }}>
-          {/* Cover + notch */}
-          <div style={{ height: 86, background: `linear-gradient(135deg, ${rose}66, ${rose}1f)`, position: "relative" }}>
-            <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 74, height: 16, borderRadius: 100, background: "rgba(0,0,0,0.85)" }} />
+    <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "8px 0 18px" }}>
+      <div style={{ position: "absolute", inset: "-10%", background: `radial-gradient(ellipse at center, ${ACCENT}1a 0%, transparent 62%)`, pointerEvents: "none" }} />
+      <div className="hero-phone-float" style={{ position: "relative", width: 262, borderRadius: 38, background: "#111", border: "1px solid rgba(255,255,255,0.09)", boxShadow: `0 44px 80px -32px rgba(0,0,0,0.6), 0 0 44px -18px ${ACCENT}40`, padding: 7 }}>
+        <div style={{ borderRadius: 31, overflow: "hidden", background: c.bg, border: `1px solid ${c.border}` }}>
+          {/* Status bar + notch — instantly reads "phone" */}
+          <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 18px 6px" }}>
+            <span style={{ fontSize: 9, fontWeight: 600, color: c.textSub, letterSpacing: "0.02em" }}>9:41</span>
+            <div style={{ position: "absolute", top: 7, left: "50%", transform: "translateX(-50%)", width: 58, height: 13, borderRadius: 100, background: "#000" }} />
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 2 }}>
+              {[3, 5, 7, 9].map(h => <span key={h} style={{ width: 2.5, height: h, borderRadius: 1, background: c.textSub }} />)}
+            </div>
           </div>
-          {/* Salon header */}
-          <div style={{ padding: "0 14px", marginTop: -22, position: "relative" }}>
-            <div style={{ width: 44, height: 44, borderRadius: 14, background: c.bgCard, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: rose, marginBottom: 8 }}>SN</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1.1, color: c.text }}>Studio Nova</div>
-            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2, letterSpacing: "0.04em" }}>Amsterdam · ★ 4.9 (127)</div>
+          {/* Salon header — monogram + name, no dead cover space */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px 0" }}>
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: `linear-gradient(135deg, ${ACCENT}33, ${ACCENT}0f)`, border: `1px solid ${ACCENT}55`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 17, color: ACCENT, flexShrink: 0 }}>SN</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1.05, color: c.text }}>Studio Nova</div>
+              <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 2, letterSpacing: "0.05em" }}>Amsterdam · <span style={{ color: ACCENT }}>★ 4.9</span> (127)</div>
+            </div>
           </div>
           {/* Category pills */}
-          <div style={{ display: "flex", gap: 5, padding: "12px 14px 4px" }}>
+          <div style={{ display: "flex", gap: 5, padding: "12px 16px 2px" }}>
             {cats.map((cat, i) => (
-              <div key={cat} style={{ fontSize: 8.5, fontWeight: 600, padding: "5px 11px", borderRadius: 100, background: i === 0 ? rose : "transparent", color: i === 0 ? "#fff" : c.textSub, border: `1px solid ${i === 0 ? rose : c.border}` }}>{cat}</div>
+              <div key={cat} style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.04em", padding: "5px 12px", borderRadius: 100, background: i === 0 ? ACCENT : "transparent", color: i === 0 ? darkOnGold : c.textSub, border: `1px solid ${i === 0 ? ACCENT : c.border}` }}>{cat}</div>
             ))}
           </div>
           {/* Services */}
-          <div style={{ padding: "8px 12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
-            {services.map(([name, dur, price]) => (
-              <div key={name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 13 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 9, background: `${rose}22`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ width: 12, height: 12, borderRadius: "50%", border: `1.5px solid ${rose}` }} />
-                </div>
+          <div style={{ padding: "10px 14px 4px", display: "flex", flexDirection: "column", gap: 6 }}>
+            {services.map(([name, dur, price], i) => (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: c.bgCard, border: `1px solid ${i === 0 ? `${ACCENT}44` : c.border}`, borderRadius: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 10.5, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
-                  <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 1 }}>{dur}</div>
+                  <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 2 }}>{dur}</div>
                 </div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color: rose, flexShrink: 0 }}>{price}</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 14, color: ACCENT, flexShrink: 0 }}>{price}</div>
               </div>
             ))}
-            {/* Booking CTA */}
-            <div style={{ marginTop: 3, padding: "10px 0", borderRadius: 100, background: rose, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textAlign: "center", textTransform: "uppercase" }}>
+          </div>
+          {/* Time slots — the detail that says "booking product" */}
+          <div style={{ display: "flex", gap: 5, padding: "8px 14px 4px" }}>
+            {slots.map((tt, i) => (
+              <div key={tt} style={{ flex: 1, textAlign: "center", fontSize: 8.5, fontWeight: 600, padding: "6px 0", borderRadius: 9, background: i === 1 ? ACCENT : "transparent", color: i === 1 ? darkOnGold : c.textSub, border: `1px solid ${i === 1 ? ACCENT : c.border}` }}>{tt}</div>
+            ))}
+          </div>
+          {/* Booking CTA */}
+          <div style={{ padding: "8px 14px 16px" }}>
+            <div style={{ padding: "10px 0", borderRadius: 100, background: ACCENT, color: darkOnGold, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.16em", textAlign: "center", textTransform: "uppercase" }}>
               {lang === "nl" ? "Boeken" : "Book"}
             </div>
           </div>
         </div>
-        {/* Floating "new booking" toast — a little life on top of the frame */}
-        <div style={{ position: "absolute", top: 96, right: -14, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "8px 12px", boxShadow: "0 12px 30px -12px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 7 }}>
-          <div style={{ width: 20, height: 20, borderRadius: "50%", background: `${ACCENT}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: ACCENT }}>✓</div>
+        {/* Floating "new booking" toast — anchored at the bottom edge, where
+            a confirmation naturally appears, clear of the salon header */}
+        <div style={{ position: "absolute", bottom: 30, left: -20, background: c.bgCard, border: `1px solid ${ACCENT}40`, borderRadius: 13, padding: "9px 13px", boxShadow: "0 18px 40px -14px rgba(0,0,0,0.55)", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 22, height: 22, borderRadius: "50%", background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: darkOnGold, fontWeight: 700, flexShrink: 0 }}>✓</div>
           <div>
-            <div style={{ fontSize: 9, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Nieuwe boeking" : "New booking"}</div>
-            <div style={{ fontSize: 8, color: c.textMuted }}>{lang === "nl" ? "zojuist · Gel manicure" : "just now · Gel manicure"}</div>
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Nieuwe boeking" : "New booking"}</div>
+            <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 1 }}>{lang === "nl" ? "zojuist · Gel manicure" : "just now · Gel manicure"}</div>
           </div>
         </div>
       </div>
