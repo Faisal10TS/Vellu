@@ -293,7 +293,12 @@ function SalonRoute({ lang, setLang }) {
         appointments: [],
         reviews: reviews || [],
         staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
-        staff_blocks: staffBlocksData || [],
+        // One table, two meanings: kind='block' rows make a stylist (or the
+        // whole salon) unavailable; kind='exception' rows are EXTRA open
+        // windows (block_time_start/end double as open/close). Split here so
+        // the booking engine never confuses the two.
+        staff_blocks: (staffBlocksData || []).filter(r => (r.kind || "block") !== "exception"),
+        staff_exceptions: (staffBlocksData || []).filter(r => r.kind === "exception"),
         categories: categories || [],
         locations: locData || []
       });

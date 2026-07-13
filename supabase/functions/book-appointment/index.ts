@@ -327,6 +327,27 @@ serve(async (req) => {
   // ---------- 9. Validate business hours + day overrides ----------
   const dayOfWeek = apptStart.getDay();
   const override = salon.day_overrides?.[date];
+
+  // Exception days (extra availability), merged from BOTH sources:
+  // - staff_day_overrides rows with kind='exception' (the current model —
+  //   many per date, block_time_start/end double as open/close, staff_id
+  //   NULL = salon-wide)
+  // - the legacy profiles.day_overrides JSON entry (one per date)
+  const { data: excRows, error: excErr } = await supabase
+    .from("staff_day_overrides")
+    .select("staff_id, block_time_start, block_time_end")
+    .eq("owner_id", salon.id)
+    .eq("date", date)
+    .eq("kind", "exception");
+  if (excErr) return err(500, "db_error_exceptions", origin);
+  const exceptions: { staff_id: string | null; open: string; close: string }[] =
+    (excRows || [])
+      .filter((r: any) => r.block_time_start && r.block_time_end)
+      .map((r: any) => ({ staff_id: r.staff_id || null, open: r.block_time_start, close: r.block_time_end }));
+  if (override?.type === "exception" && override.open && override.close) {
+    exceptions.push({ staff_id: override.staff_id || null, open: override.open, close: override.close });
+  }
+  const exceptionsForStaff = (sid: string) => exceptions.filter(e => !e.staff_id || e.staff_id === sid);
   if (override?.type === "blocked") {
     if (override.block_time_start && override.block_time_end) {
       // time-slot block
@@ -380,6 +401,19 @@ serve(async (req) => {
     }
   }
 
+  // Any exception window widens the salon-level day bounds — the per-staff
+  // fit is enforced right below, so the outer bounds only need to contain
+  // the union of everything that's open today.
+  if (exceptions.length > 0) {
+    let open = dayHours && !dayHours.closed ? dayHours.open : "23:59";
+    let close = dayHours && !dayHours.closed ? dayHours.close : "00:00";
+    for (const e of exceptions) {
+      if (e.open < open) open = e.open;
+      if (e.close > close) close = e.close;
+    }
+    dayHours = { closed: false, open, close };
+  }
+
   if (!dayHours || dayHours.closed) return err(400, "closed", origin);
   const openMin = toMinutes(dayHours.open);
   const closeMin = toMinutes(dayHours.close);
@@ -390,22 +424,22 @@ serve(async (req) => {
   // Also verify each picked stylist is personally open at the booked time. A
   // team salon can be "open" because one staff works while a DIFFERENT staff
   // (the one this booking picked) is off that weekday — booking her should
-  // still fail. Skips joint accounts (no per-staff schedule) and any staff
-  // with an exception override that covers this date, since exceptions widen
-  // that specific stylist's hours for the day.
+  // still fail. Exception windows REPLACE the weekly schedule for that date:
+  // when a stylist has one or more (own or salon-wide), the appointment must
+  // fit inside one of them. Same whole-appointment-window strictness as the
+  // weekly check below.
   if (salon.account_type === "team" && staffIdsFlat.length > 0) {
     const { data: pickedStaff } = await supabase
       .from("staff_members")
       .select("id, name, working_hours")
       .in("id", staffIdsFlat);
-    // Exception for THIS date on the salon (staff-scoped or not)
-    const excStaffId = override?.type === "exception" ? (override.staff_id || null) : undefined;
     for (const s of pickedStaff || []) {
-      // A staff-scoped exception on this date widens THIS stylist's hours —
-      // treat them as available.
-      if (excStaffId === s.id) continue;
-      // Salon-wide exception widens everyone's hours; skip the per-staff check.
-      if (override?.type === "exception" && !override.staff_id) continue;
+      const exc = exceptionsForStaff(s.id);
+      if (exc.length > 0) {
+        const fits = exc.some(e => apptStartMin >= toMinutes(e.open) && apptEndMin <= toMinutes(e.close));
+        if (!fits) return err(400, "staff_not_available", origin);
+        continue;
+      }
       const day = s.working_hours?.[dayOfWeek];
       if (!day || day.closed) return err(400, "staff_not_available", origin);
       const sOpen = toMinutes(day.open || dayHours.open);
@@ -423,7 +457,10 @@ serve(async (req) => {
       .from("staff_day_overrides")
       .select("staff_id, block_time_start, block_time_end")
       .in("staff_id", staffIdsFlat)
-      .eq("date", date);
+      .eq("date", date)
+      // kind='exception' rows are EXTRA availability, not blocks — without
+      // this filter every exception day would reject its own bookings.
+      .eq("kind", "block");
     if (sbErr) return err(500, "db_error_staff_blocks", origin);
     for (const b of staffBlocks || []) {
       if (!b.block_time_start) return err(400, "staff_day_blocked", origin);
@@ -440,7 +477,8 @@ serve(async (req) => {
     .select("block_time_start, block_time_end")
     .is("staff_id", null)
     .eq("owner_id", salon.id)
-    .eq("date", date);
+    .eq("date", date)
+    .eq("kind", "block");
   if (sbErrAll) return err(500, "db_error_salon_blocks", origin);
   for (const b of salonBlocks || []) {
     if (!b.block_time_start || !b.block_time_end) continue;

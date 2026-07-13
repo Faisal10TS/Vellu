@@ -2848,7 +2848,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           cover_focal_y: data.cover_focal_y ?? 50,
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
-          staff_blocks: staffBlocksData || [],
+          // kind='block' rows are unavailability (agenda banners, slot
+          // filtering); kind='exception' rows are EXTRA open windows shown
+          // in Planning → Uitzonderingsdagen. Keep them apart everywhere.
+          staff_blocks: (staffBlocksData || []).filter(r => (r.kind || "block") !== "exception"),
+          staff_exceptions: (staffBlocksData || []).filter(r => r.kind === "exception"),
           account_type: data.account_type || "joint",
           show_owner_on_booking: data.show_owner_on_booking || false,
           min_advance_hours: data.min_advance_hours || 0,
@@ -8193,27 +8197,48 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
-                {Object.entries(salonData.day_overrides || {}).filter(([_k, v]) => v.type === "exception").map(([date, v]) => (
-                  <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span>{parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
-                        {v.staff_id ? (
-                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                            {(salonData.staff || []).find(sm => sm.id === v.staff_id)?.name || (lang === "nl" ? "Medewerker" : "Staff")}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: c.inputBg, color: c.textMuted, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                            {lang === "nl" ? "Iedereen" : "Everyone"}
-                          </span>
-                        )}
+                {/* Merged list: legacy JSON entries (one per date — the old
+                    model) + staff_day_overrides rows with kind='exception'
+                    (the new model: as many per date as the team needs, so
+                    Esther's and Lady's extra days no longer overwrite each
+                    other). */}
+                {(() => {
+                  const legacy = Object.entries(salonData.day_overrides || {})
+                    .filter(([_k, v]) => v.type === "exception")
+                    .map(([date, v]) => ({ key: `json:${date}`, date, open: v.open, close: v.close, staff_id: v.staff_id || null, legacy: true }));
+                  const rows = (salonData.staff_exceptions || [])
+                    .map(r => ({ key: r.id, id: r.id, date: r.date, open: r.block_time_start, close: r.block_time_end, staff_id: r.staff_id || null, legacy: false }));
+                  const all = [...legacy, ...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.open || "") < (b.open || "") ? -1 : 1));
+                  return all.map(x => (
+                    <div key={x.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span>{parseDate(x.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
+                          {x.staff_id ? (
+                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                              {(salonData.staff || []).find(sm => sm.id === x.staff_id)?.name || (lang === "nl" ? "Medewerker" : "Staff")}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: c.inputBg, color: c.textMuted, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                              {lang === "nl" ? "Iedereen" : "Everyone"}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 10, color: c.textLabel }}>{x.open} — {x.close}</div>
                       </div>
-                      <div style={{ fontSize: 10, color: c.textLabel }}>{v.open} — {v.close}</div>
+                      <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
+                        onClick={async () => {
+                          if (x.legacy) {
+                            update(d => { const o = {...(d.day_overrides || {})}; delete o[x.date]; d.day_overrides = o; return d; });
+                            return;
+                          }
+                          const { error } = await supabase.from("staff_day_overrides").delete().eq("id", x.id).eq("owner_id", salonData.owner_id);
+                          if (error) { toast.show(t.somethingWrong, "error"); return; }
+                          update(d => { d.staff_exceptions = (d.staff_exceptions || []).filter(r => r.id !== x.id); return d; });
+                        }}>×</button>
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
-                      onClick={() => update(d => { const o = {...(d.day_overrides || {})}; delete o[date]; d.day_overrides = o; return d; })}>×</button>
-                  </div>
-                ))}
+                  ));
+                })()}
                 {showExceptionForm ? (<>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                     <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
@@ -8244,17 +8269,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   )}
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newException.date) return;
-                        const entry = { type: "exception", open: newException.open, close: newException.close };
-                        if (newException.staff_id) {
-                          const staffName = (salonData.staff || []).find(sm => sm.id === newException.staff_id)?.name || "";
-                          entry.staff_id = newException.staff_id;
-                          entry.staff_name = staffName;
-                        }
-                        update(d => { d.day_overrides = {...(d.day_overrides || {}), [newException.date]: entry }; return d; });
+                        if (newException.close <= newException.open) { toast.show(lang === "nl" ? "Sluittijd moet na openingstijd liggen" : "Close time must be after open time", "error"); return; }
+                        // Row-per-exception in staff_day_overrides (saved
+                        // immediately, no OPSLAAN needed). Multiple entries
+                        // per date are fine — each stylist keeps her own.
+                        const { data: row, error } = await supabase.from("staff_day_overrides").insert({
+                          owner_id: salonData.owner_id,
+                          staff_id: newException.staff_id || null,
+                          date: newException.date,
+                          kind: "exception",
+                          block_time_start: newException.open,
+                          block_time_end: newException.close,
+                          reason: (salonData.staff || []).find(sm => sm.id === newException.staff_id)?.name || null,
+                        }).select("*").single();
+                        if (error || !row) { toast.show(t.somethingWrong, "error"); return; }
+                        update(d => { d.staff_exceptions = [...(d.staff_exceptions || []), row]; return d; });
                         setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" });
                         setShowExceptionForm(false);
+                        toast.show(lang === "nl" ? "Uitzonderingsdag toegevoegd" : "Exception day added");
                       }}>{t.addException}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
                       onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" }); setShowExceptionForm(false); }}>×</button>

@@ -339,39 +339,46 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }
     return false;
   };
-  // Only SALON-WIDE exceptions (no staff_id) widen the whole-day bounds.
-  // Staff-scoped exceptions are applied inside staffCoversWindow so they
-  // don't accidentally shrink the salon bounds for other stylists.
-  const isDayException = (dateStr) => {
+  // ── Exceptions (extra open days) ──
+  // Two sources, merged: the legacy profiles.day_overrides JSON (at most ONE
+  // entry per date — the reason Esther's and Lady's exception days used to
+  // overwrite each other) and staff_day_overrides rows with kind='exception'
+  // (many per date; block_time_start/end double as open/close; staff_id NULL
+  // means salon-wide). Every consumer below works off this merged list.
+  const getExceptionsFor = (dateStr) => {
+    const out = [];
     const ov = dayOverrides[dateStr];
-    return ov?.type === "exception" && !ov.staff_id;
+    if (ov?.type === "exception") out.push({ staff_id: ov.staff_id || null, open: ov.open, close: ov.close });
+    for (const r of initialSalon.staff_exceptions || []) {
+      if (r.date !== dateStr) continue;
+      if (!r.block_time_start || !r.block_time_end) continue;
+      out.push({ staff_id: r.staff_id || null, open: r.block_time_start, close: r.block_time_end });
+    }
+    return out;
   };
+  // Exceptions that apply to one specific stylist (their own + salon-wide).
+  const staffExceptionsFor = (dateStr, staffId) =>
+    getExceptionsFor(dateStr).filter(e => !e.staff_id || e.staff_id === staffId);
+
   const getEffectiveHours = (dateStr) => {
     if (isDayBlocked(dateStr)) return { closed: true };
-    if (isDayException(dateStr)) return { closed: false, open: dayOverrides[dateStr].open, close: dayOverrides[dateStr].close };
     const [yEH, mEH, dEH] = (dateStr || "").split("-").map(Number);
     const dayOfWeek = (yEH && mEH && dEH) ? new Date(yEH, mEH - 1, dEH).getDay() : new Date(dateStr).getDay();
-    // Staff-scoped exception day: one specific staff member is open on this
-    // date even though their weekly schedule says closed. Used to widen the
-    // per-staff windows below.
-    const dayOv = dayOverrides[dateStr];
-    const staffException = (dayOv?.type === "exception" && dayOv.staff_id)
-      ? { staff_id: dayOv.staff_id, open: dayOv.open, close: dayOv.close }
-      : null;
+    const exceptions = getExceptionsFor(dateStr);
     // For team accounts, derive the day window from the staff schedule
     // rather than the salon/location business_hours. See getWeeklyHours
     // for the full rationale — same logic, just per-date here.
     if (initialSalon.account_type === "team") {
       const staffMembers = (initialSalon.staff || []).filter(s => s.active !== false);
-      const staffDayWindows = staffMembers.map(s => {
-        // Staff-scoped exception overrides the weekly schedule for this date.
-        if (staffException && staffException.staff_id === s.id) {
-          return { open: staffException.open, close: staffException.close };
-        }
+      const staffDayWindows = staffMembers.flatMap(s => {
+        // Exception windows (own or salon-wide) REPLACE the weekly schedule
+        // for this date; a stylist can have several extra windows.
+        const exc = exceptions.filter(e => !e.staff_id || e.staff_id === s.id);
+        if (exc.length > 0) return exc.map(e => ({ open: e.open, close: e.close }));
         const w = s.working_hours?.[dayOfWeek];
-        if (!w || w.closed) return null;
-        return w;
-      }).filter(Boolean);
+        if (!w || w.closed) return [];
+        return [w];
+      });
       if (staffDayWindows.length > 0) {
         // Salon/location business_hours for this day, used as a fallback
         // when a staff entry has closed:false but is missing an open or
@@ -391,14 +398,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         }
         return { closed: false, open, close };
       }
-      // Team account with no staff windows and no matching exception → closed.
+      // Team account with no staff windows and no exception → closed.
       if (staffMembers.length > 0) return { closed: true };
     }
-    // Non-team: if the salon is closed this weekday but a staff-scoped
-    // exception opens someone up, honour it.
+    // Non-team: any exception widens/opens the day (union with salon hours
+    // when those are open, or on its own when the salon is closed).
     const salonDay = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek];
-    if (staffException && (!salonDay || salonDay.closed)) {
-      return { closed: false, open: staffException.open, close: staffException.close };
+    if (exceptions.length > 0) {
+      let open = "23:59", close = "00:00";
+      const windows = [...exceptions];
+      if (salonDay && !salonDay.closed) windows.push({ open: salonDay.open, close: salonDay.close });
+      for (const w of windows) {
+        if ((w.open || "23:59") < open) open = w.open || "23:59";
+        if ((w.close || "00:00") > close) close = w.close || "00:00";
+      }
+      return { closed: false, open, close };
     }
     return salonDay;
   };
@@ -406,12 +420,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Check if a staff member works on a given day
   const isStaffAvailable = (staffMember, dateStr) => {
     // Exception days override the weekly schedule: salon-wide exceptions
-    // (no staff_id) open EVERY stylist, staff-scoped ones only that stylist.
-    // Without this, picking an exception date silently RESET the client's
-    // staff choice (see the selectedServices effect), dropping the booking
-    // into no-preference mode with the wrong availability.
-    const ov = dayOverrides[dateStr];
-    if (ov?.type === "exception" && (!ov.staff_id || ov.staff_id === staffMember?.id)) return true;
+    // open EVERY stylist, staff-scoped ones only that stylist. Without this,
+    // picking an exception date silently RESET the client's staff choice
+    // (see the selectedServices effect), dropping the booking into
+    // no-preference mode with the wrong availability.
+    if (staffExceptionsFor(dateStr, staffMember?.id).length > 0) return true;
     if (!staffMember?.working_hours) return true;
     // Parse as local-date to match the rest of the app (avoid UTC-shifted getDay()).
     const [y, m, d] = (dateStr || "").split("-").map(Number);
@@ -459,19 +472,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const salonDayFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
     const fbOpen = salonDayFallback.open || "09:00";
     const fbClose = salonDayFallback.close || "17:30";
-    // Exception day widens staff on THIS date. A staff-scoped exception
-    // (staff_id set) applies only to that stylist; a salon-wide exception
-    // (no staff_id) applies to EVERYONE — same rule as staffCoversWindow in
-    // getAvailableTimes. These two used to disagree: the day chip said
-    // "closed" (weekly hours won) while the slot engine said "open", so an
-    // owner-added exception day never showed up as bookable.
-    const dayOv = dayOverrides[dateStr];
-    const staffException = (dayOv?.type === "exception")
-      ? { staff_id: dayOv.staff_id || null, open: dayOv.open, close: dayOv.close }
-      : null;
+    // Exception day widens staff on THIS date (merged legacy JSON + table
+    // rows — see getExceptionsFor). A staff-scoped exception applies only to
+    // that stylist; a salon-wide one to everyone — same rule as
+    // staffCoversWindow in getAvailableTimes. With several exception windows
+    // for one stylist we take the outer bounds; per-slot precision happens
+    // in staffCoversWindow.
     const staffWindow = (staff) => {
-      if (staffException && (!staffException.staff_id || staffException.staff_id === staff?.id)) {
-        return { open: staffException.open || fbOpen, close: staffException.close || fbClose };
+      const exc = staffExceptionsFor(dateStr, staff?.id);
+      if (exc.length > 0) {
+        let open = "23:59", close = "00:00";
+        for (const e of exc) {
+          if ((e.open || fbOpen) < open) open = e.open || fbOpen;
+          if ((e.close || fbClose) > close) close = e.close || fbClose;
+        }
+        return { open, close };
       }
       if (!staff?.working_hours) return null;
       const day = staff.working_hours[dayOfWeek];
@@ -1065,19 +1080,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         end: b.block_time_end ? toMin(b.block_time_end) : 24 * 60,
       });
     }
-    // Exception on this date, if any. When it has a staff_id it only widens
-    // that specific stylist's hours (letting them be booked even if their
-    // weekly working_hours mark the day as closed). Without a staff_id it's
-    // a salon-wide exception — getEffectiveHours already widened dayHours.
-    const dayExc = (dayOverride && dayOverride.type === "exception") ? dayOverride : null;
+    // Exceptions on this date (merged legacy JSON + staff_day_overrides
+    // rows via getExceptionsFor). When a stylist has one or more exception
+    // windows they REPLACE the weekly schedule for this date: the slot must
+    // fit entirely inside one of the windows. Several stylists can each
+    // bring their own exception on the same day.
+    const dayExceptions = getExceptionsFor(forDate);
     const staffCoversWindow = (staff, startMin, endMin) => {
-      const staffExceptionApplies = dayExc && (!dayExc.staff_id || dayExc.staff_id === staff?.id);
-      if (staffExceptionApplies) {
-        // Use the exception window as this staff's effective hours, ignoring
-        // their weekly working_hours which would normally close the day.
-        const excOpen = toMin(dayExc.open || gatFbOpen);
-        const excClose = toMin(dayExc.close || gatFbClose);
-        if (startMin < excOpen || endMin > excClose) return false;
+      const exc = dayExceptions.filter(e => !e.staff_id || e.staff_id === staff?.id);
+      if (exc.length > 0) {
+        const fits = exc.some(e => {
+          const excOpen = toMin(e.open || gatFbOpen);
+          const excClose = toMin(e.close || gatFbClose);
+          return startMin >= excOpen && endMin <= excClose;
+        });
+        if (!fits) return false;
       } else {
         if (!staff?.working_hours) return true;
         const day = staff.working_hours[dayOfWeek];

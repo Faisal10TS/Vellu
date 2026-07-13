@@ -71,6 +71,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockSaving, setBlockSaving] = useState(false);
   const [blockForm, setBlockForm] = useState({ mode: "time", from: fmt(getToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" });
+  // Own exception days (extra werkdagen) — kind='exception' rows in the same
+  // table; block_time_start/end double as open/close. Each stylist manages
+  // her own, so two teammates can add one for the SAME date independently.
+  const [staffExceptions, setStaffExceptions] = useState([]);
+  const [excModalOpen, setExcModalOpen] = useState(false);
+  const [excSaving, setExcSaving] = useState(false);
+  const [excForm, setExcForm] = useState({ date: fmt(getToday()), open: "09:00", close: "17:00" });
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     const url = `${window.location.origin}/${salonProfile.slug || ""}`;
@@ -112,7 +119,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           return false;
         };
         setAppointments((apptsAll || []).filter(isMine));
-        setStaffBlocks(blocks || []);
+        setStaffBlocks((blocks || []).filter(r => (r.kind || "block") !== "exception"));
+        setStaffExceptions((blocks || []).filter(r => r.kind === "exception"));
         const notesMap = {};
         for (const m of manual || []) {
           if (m.email && m.notes) notesMap[m.email.toLowerCase()] = m.notes;
@@ -347,6 +355,39 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
     setStaffBlocks(prev => prev.filter(b => b.id !== id));
     toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
+  };
+
+  // Save an exception day (extra werkdag) for THIS staff member. Immediately
+  // bookable by clients for this stylist's services, independent of the
+  // weekly schedule and of any teammate's exception on the same date.
+  const saveStaffException = async () => {
+    if (!excForm.date) return;
+    if (!(excForm.close > excForm.open)) {
+      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : "End time must be after start time", "error");
+      return;
+    }
+    setExcSaving(true);
+    try {
+      const { data, error } = await supabase.from("staff_day_overrides").insert({
+        owner_id: salonProfile.id, staff_id: staffMember.id, date: excForm.date,
+        kind: "exception", block_time_start: excForm.open, block_time_end: excForm.close,
+        reason: staffMember.name || null,
+      }).select("*").single();
+      if (error || !data) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+      setStaffExceptions(prev => [...prev, data]);
+      setExcModalOpen(false);
+      toast.show(lang === "nl" ? "Extra werkdag toegevoegd" : "Extra workday added");
+    } finally {
+      setExcSaving(false);
+    }
+  };
+
+  const removeStaffException = async (id) => {
+    if (!await showConfirm(lang === "nl" ? "Extra werkdag verwijderen?" : "Remove extra workday?")) return;
+    const { error } = await supabase.from("staff_day_overrides").delete().eq("id", id);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    setStaffExceptions(prev => prev.filter(b => b.id !== id));
+    toast.show(lang === "nl" ? "Extra werkdag verwijderd" : "Extra workday removed");
   };
 
   // Compute this staff member's own time-window inside a combined booking.
@@ -952,6 +993,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
                     {lang === "nl" ? "Blokkeer tijd" : "Block time"}
                   </button>
+                  <button
+                    onClick={() => {
+                      setExcForm({ date: calDate || todayFmt, open: "09:00", close: "17:00" });
+                      setExcModalOpen(true);
+                    }}
+                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    title={lang === "nl" ? "Werk eenmalig op een dag die normaal vrij is" : "Work once on a day you're normally off"}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    {lang === "nl" ? "Extra werkdag" : "Extra workday"}
+                  </button>
                   {staffWeekOffset !== 0 && (
                     <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
                       padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -1250,6 +1302,29 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   );
                 })}
+              {/* Extra-workday banner — this stylist's own exception windows
+                  on the selected date, with a one-tap remove. */}
+              {calViewMode !== "year" && staffExceptions
+                .filter(b => b.date === calDate)
+                .map(b => (
+                  <div key={b.id} style={{ marginBottom: 12, padding: "12px 14px", background: `${accent}0f`, border: `1px solid ${accent}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${accent}22`, flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
+                        {lang === "nl" ? `Extra werkdag ${b.block_time_start}–${b.block_time_end}` : `Extra workday ${b.block_time_start}–${b.block_time_end}`}
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
+                        {lang === "nl" ? "Klanten kunnen je op deze tijden boeken." : "Clients can book you during these hours."}
+                      </div>
+                    </div>
+                    <button className="btn-ghost" onClick={() => removeStaffException(b.id)}
+                      style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                      {lang === "nl" ? "Verwijder" : "Remove"}
+                    </button>
+                  </div>
+                ))}
               {/* Appointments list + export (week/month views) */}
               {calViewMode !== "year" && (<>
                 {calAppts.length === 0 ? (
@@ -2210,6 +2285,53 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Blokkeer" : "Block")}
                 </button>
                 <button className="btn-ghost" disabled={blockSaving} onClick={() => setBlockModalOpen(false)} style={{ padding: "0 18px" }}>
+                  {lang === "nl" ? "Annuleer" : "Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ), document.body)}
+
+        {/* Extra-workday (exception) modal — the stylist's own counterpart to
+            the owner's Uitzonderingsdagen. Stored as its own row, so it never
+            collides with a teammate's exception on the same date. */}
+        {excModalOpen && createPortal((
+          <div onClick={() => !excSaving && setExcModalOpen(false)}
+               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+            <div onClick={(e) => e.stopPropagation()}
+                 style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 400, width: "100%", color: c.text }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+                {lang === "nl" ? "Extra werkdag" : "Extra workday"}
+              </div>
+              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
+                {lang === "nl"
+                  ? "Werk eenmalig op een dag (of tijden) buiten je vaste rooster. Klanten kunnen je dan gewoon boeken — ook als een collega diezelfde dag een eigen uitzondering heeft."
+                  : "Work once outside your weekly schedule. Clients can book you as normal — even if a teammate has her own exception that same day."}
+              </div>
+              {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+                <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label>
+                  <input className="input-field" type="date" value={excForm.date} onChange={e => setExcForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                    <select className="input-field" value={excForm.open} onChange={e => setExcForm(f => ({ ...f, open: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
+                    <select className="input-field" value={excForm.close} onChange={e => setExcForm(f => ({ ...f, close: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                      {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              ); })()}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-primary" disabled={excSaving} onClick={saveStaffException} style={{ flex: 1 }}>
+                  {excSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Toevoegen" : "Add")}
+                </button>
+                <button className="btn-ghost" disabled={excSaving} onClick={() => setExcModalOpen(false)} style={{ padding: "0 18px" }}>
                   {lang === "nl" ? "Annuleer" : "Cancel"}
                 </button>
               </div>
