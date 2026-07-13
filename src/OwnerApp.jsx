@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { supabase } from "./supabase.js";
+import { supabase, supabaseUrl } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 // Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
 // ~15KB gzipped for the three packages combined.
@@ -2691,6 +2691,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [svcError, setSvcError] = useState("");
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Phone-calendar (iCal feed) subscription card state.
+  const [calFeedCopied, setCalFeedCopied] = useState(false);
+  const [calFeedBusy, setCalFeedBusy] = useState(false);
+  const [calHelpOpen, setCalHelpOpen] = useState(false);
   const [hasSharedLink, setHasSharedLink] = useState(() => {
     try { return !!localStorage.getItem(`vellu_shared_${salonData.id}`); } catch { return false; }
   });
@@ -2866,6 +2870,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           reminder_hours: data.reminder_hours ?? 24,
           rebook_nudge_days: data.rebook_nudge_days ?? 28,
           google_calendar_connected: data.google_calendar_connected || false,
+          calendar_feed_token: data.calendar_feed_token || null,
           google_place_id: data.google_place_id || "",
           auto_block_no_show_threshold: data.auto_block_no_show_threshold ?? 0,
           client_no_shows: clientNoShowsMap,
@@ -3804,6 +3809,59 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setTimeout(() => setCopied(false), 2000);
     try { localStorage.setItem(`vellu_shared_${salonData.id}`, "1"); } catch {}
     setHasSharedLink(true);
+  };
+
+  // Build the public iCal subscription URL from the owner's feed token.
+  // https:// for copy-paste (Outlook/Android), webcal:// to hand off
+  // straight into Apple/iOS Calendar's "subscribe" prompt.
+  const calFeedHttpUrl = salonData.calendar_feed_token
+    ? `${supabaseUrl}/functions/v1/calendar-feed?token=${salonData.calendar_feed_token}`
+    : "";
+  const calFeedWebcalUrl = calFeedHttpUrl.replace(/^https?:\/\//, "webcal://");
+
+  // Lazily mint a feed token on first activation and persist it. The token
+  // is a bearer secret (anyone with it can read the agenda), so it's long
+  // and random; owners can rotate it via the "nieuwe link" button.
+  const ensureCalendarToken = async () => {
+    if (salonData.calendar_feed_token) return;
+    setCalFeedBusy(true);
+    try {
+      const rnd = () => (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "");
+      const token = (rnd() + rnd()).slice(0, 48);
+      const { error } = await supabase.from("profiles").update({ calendar_feed_token: token }).eq("id", salonData.owner_id);
+      if (error) throw error;
+      update(d => { d.calendar_feed_token = token; return d; });
+    } catch (e) {
+      toast(lang === "nl" ? "Kon de agenda-link niet aanmaken" : "Could not create the calendar link", "error");
+    } finally {
+      setCalFeedBusy(false);
+    }
+  };
+
+  // Rotate the token — invalidates any previously shared subscription link.
+  const rotateCalendarToken = async () => {
+    if (!await showConfirm(lang === "nl"
+      ? "Nieuwe link maken? De oude agenda-link stopt dan met werken op alle apparaten."
+      : "Create a new link? The old calendar link will stop working on all devices.")) return;
+    setCalFeedBusy(true);
+    try {
+      const rnd = () => (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "");
+      const token = (rnd() + rnd()).slice(0, 48);
+      const { error } = await supabase.from("profiles").update({ calendar_feed_token: token }).eq("id", salonData.owner_id);
+      if (error) throw error;
+      update(d => { d.calendar_feed_token = token; return d; });
+      toast(lang === "nl" ? "Nieuwe agenda-link aangemaakt" : "New calendar link created", "success");
+    } catch (e) {
+      toast(lang === "nl" ? "Kon de link niet vernieuwen" : "Could not refresh the link", "error");
+    } finally {
+      setCalFeedBusy(false);
+    }
+  };
+
+  const copyCalFeed = () => {
+    navigator.clipboard.writeText(calFeedHttpUrl).catch(() => {});
+    setCalFeedCopied(true);
+    setTimeout(() => setCalFeedCopied(false), 2000);
   };
 
   const exportCalendar = (apptList) => {
@@ -8625,6 +8683,109 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     }}>
                     <NavIcon name="calendar" size={14} color={accent} /> {t.googleCalendarConnect}
                   </button>
+                )}
+              </div>
+
+              {/* Phone-calendar subscription (iCal feed) — a read-only,
+                  auto-refreshing subscription to the salon agenda that works
+                  in Apple Calendar / iPhone, Android and Outlook, not just
+                  Google. Backed by the public `calendar-feed` edge function
+                  authenticated with a per-owner token (calendar_feed_token). */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Agenda in je telefoon" : "Calendar on your phone"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Abonneer je op je Vellu-agenda vanaf je iPhone, Android of Outlook. Nieuwe en gewijzigde afspraken verschijnen automatisch in je eigen agenda-app — geen Google nodig."
+                    : "Subscribe to your Vellu agenda from your iPhone, Android or Outlook. New and changed appointments appear automatically in your own calendar app — no Google needed."}
+                </div>
+
+                {!salonData.calendar_feed_token ? (
+                  <button className="btn-ghost" style={{ width: "100%", fontSize: 12, borderColor: `${accent}33`, color: accent }}
+                    disabled={calFeedBusy}
+                    onClick={ensureCalendarToken}>
+                    <NavIcon name="calendar" size={14} color={accent} /> {calFeedBusy
+                      ? (lang === "nl" ? "Bezig..." : "Working...")
+                      : (lang === "nl" ? "Telefoon-agenda activeren" : "Enable phone calendar")}
+                  </button>
+                ) : (
+                  <div>
+                    {/* Read-only subscription link + copy */}
+                    <div style={{ display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }}>
+                      <div style={{
+                        flex: 1, minWidth: 0, padding: "10px 12px", background: c.inputBg,
+                        border: `1px solid ${c.inputBorder}`, borderRadius: 12, fontSize: 11,
+                        fontFamily: "monospace", color: c.textSub, whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis",
+                      }} title={calFeedHttpUrl}>{calFeedHttpUrl}</div>
+                      <button className="btn-ghost" style={{
+                        padding: "0 14px", fontSize: 11, whiteSpace: "nowrap",
+                        color: calFeedCopied ? c.success : accent,
+                        borderColor: calFeedCopied ? `${c.success}55` : `${accent}33`,
+                      }} onClick={copyCalFeed}>
+                        <NavIcon name="link" size={13} color={calFeedCopied ? c.success : accent} />{" "}
+                        {calFeedCopied ? (lang === "nl" ? "Gekopieerd" : "Copied") : (lang === "nl" ? "Kopieer" : "Copy")}
+                      </button>
+                    </div>
+
+                    {/* One-tap subscribe on Apple / iOS via webcal:// */}
+                    <a href={calFeedWebcalUrl}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                        width: "100%", padding: "11px 14px", borderRadius: 12, boxSizing: "border-box",
+                        background: `${accent}14`, border: `1px solid ${accent}33`, color: accent,
+                        fontSize: 12, fontWeight: 600, textDecoration: "none", marginBottom: 8,
+                      }}>
+                      <NavIcon name="calendar" size={14} color={accent} />
+                      {lang === "nl" ? "Openen in Apple / iPhone agenda" : "Open in Apple / iPhone Calendar"}
+                    </a>
+
+                    {/* Expandable per-platform instructions */}
+                    <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border }}
+                      onClick={() => setCalHelpOpen(o => !o)}>
+                      {calHelpOpen
+                        ? (lang === "nl" ? "Uitleg verbergen ▲" : "Hide instructions ▲")
+                        : (lang === "nl" ? "Hoe koppel ik dit? ▼" : "How do I connect this? ▼")}
+                    </button>
+
+                    {calHelpOpen && (
+                      <div style={{ marginTop: 12, fontSize: 11, color: c.textSub, lineHeight: 1.6 }}>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "iPhone / iPad" : "iPhone / iPad"}</div>
+                          {lang === "nl"
+                            ? "Tik hierboven op \"Openen in Apple / iPhone agenda\" en bevestig met Abonneren. Klaar. (Handmatig kan ook: Instellingen → Agenda → Accounts → Account toevoegen → Anders → Agenda-abonnement toevoegen, en plak de gekopieerde link.)"
+                            : "Tap \"Open in Apple / iPhone Calendar\" above and confirm with Subscribe. Done. (Or manually: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, and paste the copied link.)"}
+                        </div>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Mac (Agenda-app)" : "Mac (Calendar app)"}</div>
+                          {lang === "nl"
+                            ? "Agenda openen → menu Archief → Nieuw agenda-abonnement → plak de gekopieerde link → Abonneer."
+                            : "Open Calendar → File menu → New Calendar Subscription → paste the copied link → Subscribe."}
+                        </div>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Android" : "Android"}</div>
+                          {lang === "nl"
+                            ? "Android's eigen agenda leest alleen Google-agenda's. Ga op een computer naar calendar.google.com → naast \"Andere agenda's\" op + → Via URL → plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
+                            : "Android's calendar reads Google calendars only. On a computer go to calendar.google.com → next to \"Other calendars\" click + → From URL → paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
+                        </div>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Outlook" : "Outlook"}</div>
+                          {lang === "nl"
+                            ? "Outlook op het web → Agenda → Agenda toevoegen → Abonneren via internet → plak de gekopieerde link → Importeren."
+                            : "Outlook on the web → Calendar → Add calendar → Subscribe from web → paste the copied link → Import."}
+                        </div>
+                        <div style={{ padding: "8px 10px", background: c.inputBg, borderRadius: 10, color: c.textMuted, fontSize: 10 }}>
+                          {lang === "nl"
+                            ? "Let op: dit is alleen-lezen — je agenda-app kan geen afspraken wijzigen. Afspraken worden meestal elk uur ververst. Deel deze link niet; iedereen met de link kan je agenda zien."
+                            : "Note: this is read-only — your calendar app can't change appointments. It usually refreshes hourly. Don't share this link; anyone with it can see your agenda."}
+                        </div>
+                        <button className="btn-ghost" style={{ width: "100%", fontSize: 10, marginTop: 10, color: c.danger, borderColor: `${c.danger}33` }}
+                          disabled={calFeedBusy}
+                          onClick={rotateCalendarToken}>
+                          {lang === "nl" ? "Nieuwe link maken (oude stopt)" : "Create a new link (old one stops)"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

@@ -1,19 +1,6 @@
 // supabase/functions/cancel-appointment/index.ts
-//
-// Server-side appointment cancellation via token. Replaces the previous
-// approach where the client could directly UPDATE appointments.status to
-// 'cancelled' (via the "Public can cancel appointments" RLS policy with
-// USING (true)) — which meant anyone with an appointment ID could nuke
-// any salon's appointments.
-//
-// This function:
-//   - looks up the token with service_role (cancellation_tokens locked down)
-//   - verifies the token is not already used
-//   - verifies expires_at > now()
-//   - verifies the appointment isn't already cancelled
-//   - flips appointment.status = cancelled + stores reason
-//   - marks the token used = true
-//   - returns metadata needed for email notifications
+// Server-side appointment cancellation via token. Returns metadata (incl.
+// salon accent/logo) needed for brand-coloured email notifications.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -50,7 +37,6 @@ function json(status: number, body: unknown, origin: string | null) {
   });
 }
 
-// Rate limit token validation per IP to prevent brute force
 const RATE_LIMIT: Map<string, { count: number; resetAt: number }> = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 20;
@@ -65,6 +51,93 @@ function rateLimit(ip: string): boolean {
   if (entry.count >= RATE_MAX) return false;
   entry.count++;
   return true;
+}
+
+// Notify the first waiting waitlist entry for this owner+date. Best-effort:
+// runs after the cancel succeeded, and swallows its own errors so a failure
+// here never makes the cancel appear to fail to the client.
+async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string }) {
+  try {
+    const { data: entries } = await supabase
+      .from("waitlist")
+      .select("id, client_name, client_email")
+      .eq("owner_id", ownerId)
+      .eq("date", date)
+      .eq("status", "waiting")
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const entry = entries?.[0];
+    if (!entry) return;
+    const { error: updErr } = await supabase
+      .from("waitlist")
+      .update({ status: "notified", notified_at: new Date().toISOString() })
+      .eq("id", entry.id)
+      .eq("status", "waiting");
+    if (updErr) return;
+    await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": SUPABASE_SERVICE_KEY,
+      },
+      body: JSON.stringify({
+        type: "waitlist_spot_open",
+        booking: {
+          client_name: entry.client_name,
+          client_email: entry.client_email,
+          salon_name: salonMeta.name || "",
+          salon_accent: salonMeta.accent || "",
+          salon_logo: salonMeta.logo || "",
+          salon_slug: salonMeta.slug || "",
+          date,
+          lang: "nl",
+        },
+      }),
+    }).catch((e) => console.error("waitlist notify email failed:", e));
+  } catch (e) {
+    console.error("notifyWaitlist error:", e);
+  }
+}
+
+// Notify the owner + assigned staff that a CLIENT cancelled. Fired SERVER-SIDE
+// (not from the client browser) so it lands reliably even when the client
+// closes the tab immediately after confirming the cancellation. Best-effort:
+// swallows its own errors so it never makes the cancel appear to fail.
+async function notifyOwnerCancellation(b: {
+  owner_email?: string; staff_email?: string; salon_name?: string;
+  salon_accent?: string; salon_logo?: string; lang?: string;
+  client_name?: string; client_phone?: string | null; service_name?: string;
+  date?: string; time?: string; reason?: string | null;
+}) {
+  try {
+    if (!b.owner_email) return;
+    await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": SUPABASE_SERVICE_KEY,
+      },
+      body: JSON.stringify({
+        type: "owner_cancellation",
+        booking: {
+          owner_email: b.owner_email,
+          staff_emails: b.staff_email ? [b.staff_email] : [],
+          client_name: b.client_name,
+          client_phone: b.client_phone || null,
+          service_name: b.service_name,
+          date: b.date,
+          time: b.time,
+          reason: b.reason || "",
+          salon_name: b.salon_name || "",
+          salon_accent: b.salon_accent || "",
+          salon_logo: b.salon_logo || "",
+          lang: b.lang || "nl",
+        },
+      }),
+    }).catch((e) => console.error("owner cancellation email failed:", e));
+  } catch (e) {
+    console.error("notifyOwnerCancellation error:", e);
+  }
 }
 
 serve(async (req) => {
@@ -86,7 +159,6 @@ serve(async (req) => {
   if (!token || typeof token !== "string") return json(400, { error: "missing_token" }, origin);
   if (token.length < 16 || token.length > 128) return json(400, { error: "invalid_token_format" }, origin);
 
-  // Look up token + appointment
   const { data: tokenRow, error: tokenErr } = await supabase
     .from("cancellation_tokens")
     .select("*, appointments(*)")
@@ -98,7 +170,6 @@ serve(async (req) => {
   const appt = tokenRow.appointments;
   if (!appt) return json(404, { error: "appointment_not_found" }, origin);
 
-  // Determine state
   if (tokenRow.used === true || appt.status === "cancelled") {
     if (action === "check") {
       return json(200, { status: "already_cancelled", appointment: sanitize(appt) }, origin);
@@ -113,12 +184,10 @@ serve(async (req) => {
     return json(410, { error: "expired" }, origin);
   }
 
-  // "check" only — return the appointment details so the confirm page can render them
   if (action === "check") {
     return json(200, { status: "valid", appointment: sanitize(appt) }, origin);
   }
 
-  // Actually cancel
   const cleanReason = reason ? String(reason).trim().slice(0, 500) : null;
 
   const { error: upErr } = await supabase
@@ -131,24 +200,27 @@ serve(async (req) => {
     .eq("id", appt.id);
   if (upErr) return json(500, { error: "cancel_failed" }, origin);
 
-  // Mark token used (best effort — if this fails the token is still one-shot
-  // because appointment.status === cancelled prevents re-use above)
   await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
 
-  // Look up notification recipients (owner + staff)
-  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string } = {};
+  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string } = {};
+  let salonSlug = "";
+  let waitlistEnabled = true;
   if (appt.owner_id) {
     const { data: owner } = await supabase
       .from("profiles")
-      .select("email, salon_email, business_name, accent_color, logo_url")
+      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code")
       .eq("id", appt.owner_id)
       .maybeSingle();
     if (owner) {
       notify.owner_email = owner.salon_email || owner.email || undefined;
       notify.salon_name = owner.business_name;
-      // Surfaced so the cancellation + owner-notification emails are brand-coloured.
       notify.salon_accent = owner.accent_color || "";
       notify.salon_logo = owner.logo_url || "";
+      notify.owner_id = appt.owner_id;
+      // Owner emails default to Dutch for NL/BE salons, English elsewhere.
+      notify.lang = (owner.country_code === "NL" || owner.country_code === "BE") ? "nl" : "en";
+      salonSlug = owner.slug || "";
+      waitlistEnabled = owner.waitlist_enabled !== false;
     }
   }
   if (appt.staff_id) {
@@ -160,6 +232,34 @@ serve(async (req) => {
     if (staff?.email) notify.staff_email = staff.email;
   }
 
+  // Owner/staff cancellation notification — sent server-side so it's reliable
+  // even if the client closes the tab. Fire-and-forget.
+  notifyOwnerCancellation({
+    owner_email: notify.owner_email,
+    staff_email: notify.staff_email,
+    salon_name: notify.salon_name,
+    salon_accent: notify.salon_accent,
+    salon_logo: notify.salon_logo,
+    lang: notify.lang,
+    client_name: appt.client_name,
+    client_phone: appt.client_phone || null,
+    service_name: appt.service_name,
+    date: appt.date,
+    time: appt.time,
+    reason: cleanReason,
+  });
+
+  // Fire-and-forget waitlist notify — skipped when the salon has disabled
+  // the feature in Settings.
+  if (waitlistEnabled && appt.owner_id && appt.date) {
+    notifyWaitlist(appt.owner_id, appt.date, {
+      name: notify.salon_name,
+      accent: notify.salon_accent,
+      logo: notify.salon_logo,
+      slug: salonSlug,
+    });
+  }
+
   return json(200, {
     status: "cancelled",
     appointment: sanitize(appt),
@@ -167,7 +267,6 @@ serve(async (req) => {
   }, origin);
 });
 
-// Strip internal fields before returning to client
 function sanitize(a: any) {
   return {
     id: a.id,

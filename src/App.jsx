@@ -405,20 +405,10 @@ function CancelRoute({ lang }) {
         }).catch(e => console.error("cancellation SMS failed:", e));
       }
 
-      // Notify owner + staff about cancellation
-      if (notify.owner_email) {
-        const staffEmails = notify.staff_email ? [notify.staff_email] : [];
-        await sendEmails("booking_notification", {
-          owner_email: notify.owner_email,
-          staff_emails: staffEmails,
-          client_name: a.client_name, client_phone: null,
-          service_name: `GEANNULEERD: ${a.service_name}`,
-          date: a.date, time: a.time,
-          price: a.service_price || 0,
-          salon_name: notify.salon_name || "",
-          salon_accent: notify.salon_accent || "", salon_logo: notify.salon_logo || "", lang,
-        });
-      }
+      // Owner + staff cancellation notification is now sent SERVER-SIDE
+      // inside the cancel-appointment edge function (type: owner_cancellation),
+      // so it lands reliably even if the client closes this tab. No client-side
+      // notification here anymore — that avoids a duplicate email.
 
       // Delete Google Calendar event if it exists (best effort)
       if (a.owner_id) {
