@@ -3048,6 +3048,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockForm, setBlockForm] = useState({ mode: "time", from: "", to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "" });
   const [blockSaving, setBlockSaving] = useState(false);
+  // When set, the block modal edits an existing staff_day_overrides time-block
+  // row (UPDATE) instead of inserting a new one.
+  const [blockEditId, setBlockEditId] = useState(null);
   const [editApptForm, setEditApptForm] = useState({ date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
@@ -3387,7 +3390,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // a day + this button gets the owner most of the way there.
   const openBlockModal = () => {
     const seed = calDate || fmt(getToday());
+    setBlockEditId(null);
     setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "" });
+    setBlockModalOpen(true);
+  };
+
+  // Open the modal to edit an existing staff_day_overrides time-block row.
+  const openBlockEdit = (b) => {
+    setBlockEditId(b.id);
+    setBlockForm({
+      mode: "time",
+      from: b.date,
+      to: "",
+      time_start: b.block_time_start || "09:00",
+      time_end: b.block_time_end || "17:30",
+      reason: b.reason || "",
+      staff_id: b.staff_id || "",
+      staff_name: (salonData.staff || []).find(s => s.id === b.staff_id)?.name || "",
+    });
     setBlockModalOpen(true);
   };
 
@@ -3407,6 +3427,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const staffName = staffId
       ? ((salonData.staff || []).find(s => s.id === staffId)?.name || "")
       : "";
+    // Editing an existing time-block row → UPDATE in place.
+    if (blockEditId) {
+      const { data: updated, error } = await supabase
+        .from("staff_day_overrides")
+        .update({ staff_id: staffId, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : "Blocked") })
+        .eq("id", blockEditId).eq("owner_id", salonData.owner_id)
+        .select("*").single();
+      setBlockSaving(false);
+      if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+      update(d => { d.staff_blocks = (d.staff_blocks || []).map(x => x.id === blockEditId ? updated : x); return d; });
+      setBlockModalOpen(false);
+      setBlockEditId(null);
+      toast.show(lang === "nl" ? "Blokkade bijgewerkt" : "Block updated");
+      return;
+    }
     // Time-mode blocks go into staff_day_overrides (row-per-block) so you can
     // stack multiple time windows on the same date (e.g. 10-11 AND 14-15).
     // Full-day blocks stay in profiles.day_overrides (one per date) because
@@ -3999,18 +4034,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           persists immediately so blocking from the agenda feels like a
           direct action. Portal'd to escape the .fade-up transform context. */}
       {blockModalOpen && createPortal((
-        <div onClick={() => !blockSaving && setBlockModalOpen(false)}
+        <div onClick={() => { if (!blockSaving) { setBlockModalOpen(false); setBlockEditId(null); } }}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-              {lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day"}
+              {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day")}
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
               {lang === "nl"
                 ? "Klanten kunnen dan geen afspraak boeken in dit tijdvak of op deze dag."
                 : "Clients won't be able to book during this window or on this day."}
             </div>
+            {/* Mode toggle hidden while editing a time-block row — switching to
+                "whole day" would write to a different store and orphan the row. */}
+            {!blockEditId && (
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
               {[
                 { key: "time", nl: "Tijdvak", en: "Time window" },
@@ -4032,6 +4070,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 );
               })}
             </div>
+            )}
             {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               {blockForm.mode === "time" ? (
@@ -4084,9 +4123,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             ); })()}
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" disabled={blockSaving} onClick={saveBlock} style={{ flex: 1, background: c.danger, color: "#fff" }}>
-                {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Blokkeer" : "Block")}
+                {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (blockEditId ? (lang === "nl" ? "Opslaan" : "Save") : (lang === "nl" ? "Blokkeer" : "Block"))}
               </button>
-              <button className="btn-ghost" disabled={blockSaving} onClick={() => setBlockModalOpen(false)} style={{ padding: "0 18px" }}>
+              <button className="btn-ghost" disabled={blockSaving} onClick={() => { setBlockModalOpen(false); setBlockEditId(null); }} style={{ padding: "0 18px" }}>
                 {lang === "nl" ? "Annuleer" : "Cancel"}
               </button>
             </div>
@@ -5650,10 +5689,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {b.reason || (lang === "nl" ? "Eigen blokkade — geen reden opgegeven" : "Own block — no reason given")}
                         </div>
                       </div>
-                      <button className="btn-ghost" onClick={removeBlock}
-                        style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
-                        {lang === "nl" ? "Deblokkeer" : "Unblock"}
-                      </button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {isTimeBlock && (
+                          <button className="btn-ghost" onClick={() => openBlockEdit(b)}
+                            style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
+                            {lang === "nl" ? "Bewerk" : "Edit"}
+                          </button>
+                        )}
+                        <button className="btn-ghost" onClick={removeBlock}
+                          style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                          {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

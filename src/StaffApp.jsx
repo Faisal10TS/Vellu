@@ -71,6 +71,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockSaving, setBlockSaving] = useState(false);
   const [blockForm, setBlockForm] = useState({ mode: "time", from: fmt(getToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" });
+  // When set, the block modal edits an existing time-block row (UPDATE).
+  const [blockEditId, setBlockEditId] = useState(null);
   // Own exception days (extra werkdagen) — kind='exception' rows in the same
   // table; block_time_start/end double as open/close. Each stylist manages
   // her own, so two teammates can add one for the SAME date independently.
@@ -307,6 +309,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     } finally { setProcessingApptId(null); }
   };
 
+  // Open the block modal to edit an existing time-block row.
+  const openBlockEdit = (b) => {
+    setBlockEditId(b.id);
+    setBlockForm({ mode: "time", from: b.date, to: "", time_start: b.block_time_start || "09:00", time_end: b.block_time_end || "17:00", reason: b.reason || "" });
+    setBlockModalOpen(true);
+  };
+
   // Save a staff block. Time-window mode inserts a single row on the chosen
   // date; whole-day mode inserts one row per date in the from→to range so
   // filtering (and later deletion) can act per-day.
@@ -319,6 +328,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setBlockSaving(true);
     try {
       const reason = blockForm.reason?.trim() || null;
+      // Editing an existing time-block row → UPDATE in place.
+      if (blockEditId) {
+        const { data: updated, error } = await supabase.from("staff_day_overrides")
+          .update({ date: blockForm.from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason })
+          .eq("id", blockEditId).eq("staff_id", staffMember.id).select("*").single();
+        if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+        setStaffBlocks(prev => prev.map(x => x.id === blockEditId ? updated : x));
+        setBlockModalOpen(false);
+        setBlockEditId(null);
+        toast.show(lang === "nl" ? "Blokkade bijgewerkt" : "Block updated");
+        return;
+      }
       const rows = [];
       if (blockForm.mode === "time") {
         rows.push({
@@ -984,6 +1005,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <button
                     onClick={() => {
+                      setBlockEditId(null);
                       setBlockForm({ mode: "time", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "" });
                       setBlockModalOpen(true);
                     }}
@@ -1295,10 +1317,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           {b.reason || (lang === "nl" ? "Geen reden opgegeven" : "No reason given")}
                         </div>
                       </div>
-                      <button className="btn-ghost" onClick={() => removeStaffBlock(b.id)}
-                        style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
-                        {lang === "nl" ? "Deblokkeer" : "Unblock"}
-                      </button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {isTimeBlock && (
+                          <button className="btn-ghost" onClick={() => openBlockEdit(b)}
+                            style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
+                            {lang === "nl" ? "Bewerk" : "Edit"}
+                          </button>
+                        )}
+                        <button className="btn-ghost" onClick={() => removeStaffBlock(b.id)}
+                          style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
+                          {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -2212,18 +2242,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
         {/* Mobile bottom nav */}
         {blockModalOpen && createPortal((
-          <div onClick={() => !blockSaving && setBlockModalOpen(false)}
+          <div onClick={() => { if (!blockSaving) { setBlockModalOpen(false); setBlockEditId(null); } }}
                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
             <div onClick={e => e.stopPropagation()}
                  style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-                {lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day"}
+                {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day")}
               </div>
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
                 {lang === "nl"
                   ? "Klanten kunnen dan geen afspraak bij jou boeken in dit tijdvak of op deze dag."
                   : "Clients won't be able to book you during this window or on this day."}
               </div>
+              {!blockEditId && (
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                 {[
                   { key: "time", nl: "Tijdvak", en: "Time window" },
@@ -2245,6 +2276,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   );
                 })}
               </div>
+              )}
               {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
                 {blockForm.mode === "time" ? (
@@ -2282,9 +2314,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               ); })()}
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn-primary" disabled={blockSaving} onClick={saveStaffBlock} style={{ flex: 1, background: c.danger, color: "#fff" }}>
-                  {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Blokkeer" : "Block")}
+                  {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (blockEditId ? (lang === "nl" ? "Opslaan" : "Save") : (lang === "nl" ? "Blokkeer" : "Block"))}
                 </button>
-                <button className="btn-ghost" disabled={blockSaving} onClick={() => setBlockModalOpen(false)} style={{ padding: "0 18px" }}>
+                <button className="btn-ghost" disabled={blockSaving} onClick={() => { setBlockModalOpen(false); setBlockEditId(null); }} style={{ padding: "0 18px" }}>
                   {lang === "nl" ? "Annuleer" : "Cancel"}
                 </button>
               </div>
