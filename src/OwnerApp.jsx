@@ -5373,31 +5373,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const color = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
                           const lane = laneStyle(`apt:${a._slotKey || a.id}`);
                           const compact = lane.width && !String(lane.width).includes("100%");
+                          const pad2 = n => String(n).padStart(2, "0");
+                          const endMinLocal = startMin + durMin;
+                          const endTime = `${pad2(Math.floor(endMinLocal / 60) % 24)}:${pad2(endMinLocal % 60)}`;
+                          // Fit the content to the card's height so nothing gets clipped:
+                          //  - stackFull: tall enough for the classic 4-row stack (staff pill at bottom).
+                          //  - medium: not tall enough for a bottom pill, so move the staff pill up
+                          //    onto the time row and keep name/service on single lines.
+                          //  - tight: too short to stack at all — lay everything out on ONE horizontal
+                          //    row that flows to the right (only for wide cards, not narrow lanes).
+                          const stackFull = height >= 80;
+                          const tight = height < 62 && !compact;
+                          const staffChip = a.staff_name ? (
+                            <div style={{ fontSize: 9, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 0 }}>
+                              <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
+                            </div>
+                          ) : null;
                           return (
-                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)} title={`${a.client_name} · ${a.service_name}`}
+                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
                               style={{
                                 position: "absolute", top, height, ...lane, zIndex: 2,
                                 background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
-                                padding: compact ? "5px 7px" : "6px 10px", overflow: "hidden", cursor: "pointer",
+                                padding: (compact || tight) ? "5px 7px" : "6px 10px", overflow: "hidden", cursor: "pointer",
                                 opacity: isCancelled ? 0.55 : 1
                               }}>
-                              {(() => {
-                                const pad2 = n => String(n).padStart(2, "0");
-                                const endMinLocal = startMin + durMin;
-                                const endTime = `${pad2(Math.floor(endMinLocal / 60) % 24)}:${pad2(endMinLocal % 60)}`;
-                                return (
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.time}{compact ? "" : `–${endTime}`}</div>
-                                    {!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>}
-                                  </div>
-                                );
-                              })()}
-                              <div style={{ fontSize: compact ? 11 : 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.3, ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>{a.client_name}</div>
-                              <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.3, ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>{a.service_name}</div>
-                              {a.staff_name && (
-                                <div style={{ fontSize: 9, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                                  <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
+                              {tight ? (
+                                <div style={{ display: "flex", alignItems: "baseline", gap: 8, whiteSpace: "nowrap", overflow: "hidden" }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: c.text, flexShrink: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
+                                  {a.service_name && <span style={{ fontSize: 10, color: c.textSub, flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>}
+                                  {staffChip && <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex", alignItems: "center", alignSelf: "center" }}>{staffChip}</span>}
                                 </div>
+                              ) : (
+                                <>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{a.time}{compact ? "" : `–${endTime}`}</div>
+                                    {/* Medium cards show the staff pill here (top-right) so it isn't
+                                        clipped by a bottom row; full-height cards keep the duration
+                                        here and the pill at the bottom. */}
+                                    {(!stackFull && staffChip)
+                                      ? staffChip
+                                      : (!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{durMin} {t.min}</div>)}
+                                  </div>
+                                  <div style={{ fontSize: compact ? 11 : 12, fontWeight: 500, color: c.text, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.client_name}</div>
+                                  <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.service_name}</div>
+                                  {stackFull && staffChip && <div style={{ marginTop: 4 }}>{staffChip}</div>}
+                                </>
                               )}
                             </div>
                           );
