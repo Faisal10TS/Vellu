@@ -5091,6 +5091,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   if (agendaStaff && b.staff_id !== agendaStaff) continue;
                   rawBlocks.push({
                     key: `sb-${b.id}`,
+                    row: b, // staff_day_overrides row → editable from the calendar
                     staffName: staffNameById[b.staff_id] || "",
                     reason: b.reason || "",
                     timeStart: b.block_time_start || null,
@@ -5128,6 +5129,56 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   if (nowStr !== calDate) return null;
                   return now.getHours() * 60 + now.getMinutes();
                 })();
+
+                // ── Overlap → side-by-side lanes ──
+                // A team salon runs two stylists at once, so two appointments
+                // (and time-blocks) can share a time. Rendering them all full
+                // width stacks them on top of each other. Assign each event to
+                // the lowest free column within its overlap cluster and size to
+                // 1/N so they sit next to each other instead. Full-day blocks
+                // stay a full-width background behind everything.
+                const fullDayBlocks = rawBlocks.filter(b => !(b.timeStart && b.timeEnd));
+                const laneEvents = [];
+                for (const b of rawBlocks) {
+                  if (b.timeStart && b.timeEnd) laneEvents.push({ _key: `blk:${b.key}`, start: toMin(b.timeStart), end: toMin(b.timeEnd) });
+                }
+                for (const a of dayAppts) {
+                  const s = toMin(a.time);
+                  laneEvents.push({ _key: `apt:${a._slotKey || a.id}`, start: s, end: s + Math.max(15, parseInt(a.service_duration || 60)) });
+                }
+                const laneMap = new Map();
+                {
+                  const sorted = [...laneEvents].sort((x, y) => x.start - y.start || x.end - y.end);
+                  let cluster = [], clusterEnd = -1;
+                  const flush = () => {
+                    if (!cluster.length) return;
+                    const colEnds = [];
+                    for (const ev of cluster) {
+                      let col = 0;
+                      while (col < colEnds.length && colEnds[col] > ev.start) col++;
+                      colEnds[col] = ev.end;
+                      ev._col = col;
+                    }
+                    const cols = colEnds.length;
+                    for (const ev of cluster) laneMap.set(ev._key, { col: ev._col, cols });
+                    cluster = []; clusterEnd = -1;
+                  };
+                  for (const ev of sorted) {
+                    if (cluster.length && ev.start >= clusterEnd) flush();
+                    cluster.push(ev);
+                    clusterEnd = Math.max(clusterEnd, ev.end);
+                  }
+                  flush();
+                }
+                // Positioning style for an event key. gap between columns = 4px,
+                // outer margin = 6px each side (matching the old left/right:6).
+                const laneStyle = (key) => {
+                  const info = laneMap.get(key);
+                  if (!info || info.cols <= 1) return { left: 6, right: 6 };
+                  const g = 4, cols = info.cols;
+                  const colW = `((100% - 12px - ${g * (cols - 1)}px) / ${cols})`;
+                  return { left: `calc(6px + ${info.col} * (${colW} + ${g}px))`, width: `calc(${colW})`, right: "auto" };
+                };
                 return (
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                     <div style={{ padding: "10px 14px", borderBottom: `1px solid ${c.border}`, background: c.inputBg, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -5168,27 +5219,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const endMin = isTime ? toMin(b.timeEnd) : endHour * 60;
                           const top = ((startMin - dayStartMin) / 60) * HOUR_HEIGHT;
                           const height = Math.max(24, ((endMin - startMin) / 60) * HOUR_HEIGHT - 2);
-                          const pad2 = n => String(n).padStart(2, "0");
                           const label = isTime
                             ? `${b.timeStart}–${b.timeEnd}`
                             : (lang === "nl" ? "Hele dag" : "All day");
+                          // Time blocks share width with overlapping events (lanes)
+                          // and are editable when they're a staff_day_overrides
+                          // row. Full-day blocks stay a full-width background.
+                          const editable = isTime && !!b.row;
+                          const lane = isTime ? laneStyle(`blk:${b.key}`) : { left: 6, right: 6 };
+                          const compact = lane.width && !String(lane.width).includes("100%");
                           return (
                             <div key={b.key} title={b.reason || label}
+                              onClick={editable ? (e) => { e.stopPropagation(); openBlockEdit(b.row); } : undefined}
                               style={{
-                                position: "absolute", top, left: 6, right: 6, height,
+                                position: "absolute", top, height, ...lane,
                                 background: `${c.danger}18`,
                                 backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}22 8px 12px)`,
                                 border: `1px dashed ${c.danger}66`,
-                                borderRadius: 6, padding: "6px 10px", overflow: "hidden", zIndex: 1
+                                borderRadius: 6, padding: compact ? "5px 7px" : "6px 10px", overflow: "hidden", zIndex: 1,
+                                cursor: editable ? "pointer" : "default"
                               }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.04em", fontVariantNumeric: "tabular-nums" }}>{label}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+                                {editable && <NavIcon name="edit" size={10} color={c.danger} />}
                               </div>
-                              <div style={{ fontSize: 11, color: c.text, fontWeight: 500 }}>
+                              <div style={{ fontSize: compact ? 10 : 11, color: c.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {b.staffName || (lang === "nl" ? "Iedereen" : "Everyone")}
                               </div>
-                              {b.reason && (
+                              {b.reason && !compact && (
                                 <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", wordBreak: "break-word", lineHeight: 1.35 }}>{b.reason}</div>
                               )}
                             </div>
@@ -5254,12 +5313,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const height = Math.max(28, (durMin / 60) * HOUR_HEIGHT - 2);
                           const isCancelled = a.status === "cancelled" || a.status === "no_show";
                           const color = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
+                          const lane = laneStyle(`apt:${a._slotKey || a.id}`);
+                          const compact = lane.width && !String(lane.width).includes("100%");
                           return (
-                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)}
+                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)} title={`${a.client_name} · ${a.service_name}`}
                               style={{
-                                position: "absolute", top, left: 6, right: 6, height,
+                                position: "absolute", top, height, ...lane, zIndex: 2,
                                 background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
-                                padding: "6px 10px", overflow: "hidden", cursor: "pointer",
+                                padding: compact ? "5px 7px" : "6px 10px", overflow: "hidden", cursor: "pointer",
                                 opacity: isCancelled ? 0.55 : 1
                               }}>
                               {(() => {
@@ -5268,15 +5329,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 const endTime = `${pad2(Math.floor(endMinLocal / 60) % 24)}:${pad2(endMinLocal % 60)}`;
                                 return (
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{a.time}–{endTime}</div>
-                                    <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>
+                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.time}{compact ? "" : `–${endTime}`}</div>
+                                    {!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums" }}>{durMin} {t.min}</div>}
                                   </div>
                                 );
                               })()}
-                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.35 }}>{a.client_name}</div>
-                              <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.35 }}>{a.service_name}</div>
+                              <div style={{ fontSize: compact ? 11 : 12, fontWeight: 500, color: c.text, wordBreak: "break-word", lineHeight: 1.3, ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>{a.client_name}</div>
+                              <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, wordBreak: "break-word", lineHeight: 1.3, ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>{a.service_name}</div>
                               {a.staff_name && (
-                                <div style={{ fontSize: 9, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em" }}>
+                                <div style={{ fontSize: 9, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
                                   <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
                                 </div>
                               )}
