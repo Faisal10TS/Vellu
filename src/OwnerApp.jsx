@@ -2733,6 +2733,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" });
   const [showExceptionForm, setShowExceptionForm] = useState(false);
   const [showBlockedForm, setShowBlockedForm] = useState(false);
+  // Edit targets. When set, the add-form doubles as an edit-form and its save
+  // handler updates the existing entry instead of inserting a new one.
+  //   exception: { legacy:boolean, id?:string, date:string }
+  //   blocked:   { origFrom, origTo, mode, staff_id, staff_name }
+  const [editingException, setEditingException] = useState(null);
+  const [editingBlocked, setEditingBlocked] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
   const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "" });
   const [editingExtra, setEditingExtra] = useState(null);
@@ -8226,16 +8232,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                         <div style={{ fontSize: 10, color: c.textLabel }}>{x.open} — {x.close}</div>
                       </div>
-                      <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
-                        onClick={async () => {
-                          if (x.legacy) {
-                            update(d => { const o = {...(d.day_overrides || {})}; delete o[x.date]; d.day_overrides = o; return d; });
-                            return;
-                          }
-                          const { error } = await supabase.from("staff_day_overrides").delete().eq("id", x.id).eq("owner_id", salonData.owner_id);
-                          if (error) { toast.show(t.somethingWrong, "error"); return; }
-                          update(d => { d.staff_exceptions = (d.staff_exceptions || []).filter(r => r.id !== x.id); return d; });
-                        }}>×</button>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
+                          title={lang === "nl" ? "Bewerken" : "Edit"}
+                          onClick={() => {
+                            setEditingException({ legacy: x.legacy, id: x.id, date: x.date });
+                            setNewException({ date: x.date, open: x.open || "09:00", close: x.close || "17:30", staff_id: x.staff_id || "" });
+                            setShowExceptionForm(true);
+                          }}>
+                          <NavIcon name="edit" size={11} color="currentColor" />
+                        </button>
+                        <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
+                          title={lang === "nl" ? "Verwijderen" : "Delete"}
+                          onClick={async () => {
+                            if (x.legacy) {
+                              update(d => { const o = {...(d.day_overrides || {})}; delete o[x.date]; d.day_overrides = o; return d; });
+                              return;
+                            }
+                            const { error } = await supabase.from("staff_day_overrides").delete().eq("id", x.id).eq("owner_id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.staff_exceptions = (d.staff_exceptions || []).filter(r => r.id !== x.id); return d; });
+                          }}>×</button>
+                      </div>
                     </div>
                   ));
                 })()}
@@ -8272,30 +8290,55 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       onClick={async () => {
                         if (!newException.date) return;
                         if (newException.close <= newException.open) { toast.show(lang === "nl" ? "Sluittijd moet na openingstijd liggen" : "Close time must be after open time", "error"); return; }
-                        // Row-per-exception in staff_day_overrides (saved
-                        // immediately, no OPSLAAN needed). Multiple entries
-                        // per date are fine — each stylist keeps her own.
-                        const { data: row, error } = await supabase.from("staff_day_overrides").insert({
-                          owner_id: salonData.owner_id,
-                          staff_id: newException.staff_id || null,
-                          date: newException.date,
-                          kind: "exception",
-                          block_time_start: newException.open,
-                          block_time_end: newException.close,
-                          reason: (salonData.staff || []).find(sm => sm.id === newException.staff_id)?.name || null,
-                        }).select("*").single();
-                        if (error || !row) { toast.show(t.somethingWrong, "error"); return; }
-                        update(d => { d.staff_exceptions = [...(d.staff_exceptions || []), row]; return d; });
+                        const reason = (salonData.staff || []).find(sm => sm.id === newException.staff_id)?.name || null;
+                        if (editingException) {
+                          if (editingException.legacy) {
+                            // Migrate a legacy JSON exception to the modern
+                            // table-row model on first edit: insert the row and
+                            // drop the JSON key (persisted immediately so there's
+                            // no OPSLAAN limbo). Future edits are pure UPDATEs.
+                            const { data: row, error } = await supabase.from("staff_day_overrides").insert({
+                              owner_id: salonData.owner_id, staff_id: newException.staff_id || null,
+                              date: newException.date, kind: "exception",
+                              block_time_start: newException.open, block_time_end: newException.close, reason,
+                            }).select("*").single();
+                            if (error || !row) { toast.show(t.somethingWrong, "error"); return; }
+                            const nextOverrides = { ...(salonData.day_overrides || {}) };
+                            delete nextOverrides[editingException.date];
+                            await supabase.from("profiles").update({ day_overrides: nextOverrides }).eq("id", salonData.owner_id);
+                            update(d => { d.day_overrides = nextOverrides; d.staff_exceptions = [...(d.staff_exceptions || []), row]; return d; });
+                          } else {
+                            const { error } = await supabase.from("staff_day_overrides").update({
+                              staff_id: newException.staff_id || null, date: newException.date,
+                              block_time_start: newException.open, block_time_end: newException.close, reason,
+                            }).eq("id", editingException.id).eq("owner_id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.staff_exceptions = (d.staff_exceptions || []).map(r => r.id === editingException.id ? { ...r, staff_id: newException.staff_id || null, date: newException.date, block_time_start: newException.open, block_time_end: newException.close, reason } : r); return d; });
+                          }
+                          toast.show(lang === "nl" ? "Uitzonderingsdag bijgewerkt" : "Exception day updated");
+                        } else {
+                          // Row-per-exception in staff_day_overrides (saved
+                          // immediately, no OPSLAAN needed). Multiple entries
+                          // per date are fine — each stylist keeps her own.
+                          const { data: row, error } = await supabase.from("staff_day_overrides").insert({
+                            owner_id: salonData.owner_id, staff_id: newException.staff_id || null,
+                            date: newException.date, kind: "exception",
+                            block_time_start: newException.open, block_time_end: newException.close, reason,
+                          }).select("*").single();
+                          if (error || !row) { toast.show(t.somethingWrong, "error"); return; }
+                          update(d => { d.staff_exceptions = [...(d.staff_exceptions || []), row]; return d; });
+                          toast.show(lang === "nl" ? "Uitzonderingsdag toegevoegd" : "Exception day added");
+                        }
                         setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" });
                         setShowExceptionForm(false);
-                        toast.show(lang === "nl" ? "Uitzonderingsdag toegevoegd" : "Exception day added");
-                      }}>{t.addException}</button>
+                        setEditingException(null);
+                      }}>{editingException ? (lang === "nl" ? "Opslaan" : "Save") : t.addException}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
-                      onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" }); setShowExceptionForm(false); }}>×</button>
+                      onClick={() => { setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" }); setShowExceptionForm(false); setEditingException(null); }}>×</button>
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${accent}33`, color: accent }}
-                    onClick={() => setShowExceptionForm(true)}>{t.addException}</button>
+                    onClick={() => { setEditingException(null); setNewException({ date: "", open: "09:00", close: "17:30", staff_id: "" }); setShowExceptionForm(true); }}>{t.addException}</button>
                 )}
               </div>
 
@@ -8328,22 +8371,42 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       )}
                       {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
                     </div>
-                    <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
-                      onClick={() => {
-                        update(d => {
-                          const o = {...(d.day_overrides || {})};
-                          // Remove all dates in range
-                          if (v.to) {
-                            // parseDate: local-midnight parsing. new Date("YYYY-MM-DD") is UTC
-                            // midnight, and fmt() reads local components — in any UTC-negative
-                            // timezone that combination deleted the day BEFORE each intended key.
-                            let cur = parseDate(v.from || date);
-                            const end = parseDate(v.to);
-                            while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
-                          } else { delete o[date]; }
-                          d.day_overrides = o; return d;
-                        });
-                      }}>×</button>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
+                        title={lang === "nl" ? "Bewerken" : "Edit"}
+                        onClick={() => {
+                          const isTime = !!v.block_time_start;
+                          setEditingBlocked({ origFrom: v.from || date, origTo: v.to || null, mode: isTime ? "time" : "day", staff_id: v.staff_id || null, staff_name: v.staff_name || null });
+                          setNewBlocked({
+                            from: v.from || date,
+                            to: (v.to && v.to !== date) ? v.to : "",
+                            reason: v.reason || "",
+                            mode: isTime ? "time" : "day",
+                            time_start: v.block_time_start || "09:00",
+                            time_end: v.block_time_end || "17:30",
+                          });
+                          setShowBlockedForm(true);
+                        }}>
+                        <NavIcon name="edit" size={11} color="currentColor" />
+                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
+                        title={lang === "nl" ? "Verwijderen" : "Delete"}
+                        onClick={() => {
+                          update(d => {
+                            const o = {...(d.day_overrides || {})};
+                            // Remove all dates in range
+                            if (v.to) {
+                              // parseDate: local-midnight parsing. new Date("YYYY-MM-DD") is UTC
+                              // midnight, and fmt() reads local components — in any UTC-negative
+                              // timezone that combination deleted the day BEFORE each intended key.
+                              let cur = parseDate(v.from || date);
+                              const end = parseDate(v.to);
+                              while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
+                            } else { delete o[date]; }
+                            d.day_overrides = o; return d;
+                          });
+                        }}>×</button>
+                    </div>
                   </div>
                 ))}
                 {showBlockedForm ? (<>
@@ -8382,33 +8445,50 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
                       onClick={() => {
                         if (!newBlocked.from) return;
+                        if (newBlocked.mode === "time" && newBlocked.time_end <= newBlocked.time_start) { toast.show(lang === "nl" ? "Eindtijd moet na starttijd liggen" : "End time must be after start time", "error"); return; }
                         const endDate = newBlocked.to || newBlocked.from;
+                        // Preserve the block's scope (per-staff) across an edit —
+                        // the form has no staff picker, so carry it from the row.
+                        const scope = editingBlocked?.staff_id
+                          ? { staff_id: editingBlocked.staff_id, staff_name: editingBlocked.staff_name || null }
+                          : {};
                         update(d => {
                           const o = {...(d.day_overrides || {})};
+                          // Editing: drop the ORIGINAL entry/range first so a
+                          // changed date or shrunk range leaves no orphan keys.
+                          if (editingBlocked) {
+                            if (editingBlocked.origTo) {
+                              let cur = parseDate(editingBlocked.origFrom);
+                              const end = parseDate(editingBlocked.origTo);
+                              while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
+                            } else { delete o[editingBlocked.origFrom]; }
+                          }
                           if (newBlocked.mode === "time") {
                             // Time-slot block: store on single date with time range
-                            o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30" };
+                            o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30", ...scope };
                           } else {
                             // Whole day block
-                            let cur = new Date(newBlocked.from);
-                            const end = new Date(endDate);
+                            let cur = parseDate(newBlocked.from);
+                            const end = parseDate(endDate);
                             const first = fmt(cur);
                             while (cur <= end) {
-                              o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate };
+                              o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate, ...scope };
                               cur.setDate(cur.getDate() + 1);
                             }
                           }
                           d.day_overrides = o; return d;
                         });
+                        toast.show(editingBlocked ? (lang === "nl" ? "Blokkade bijgewerkt" : "Block updated") : (lang === "nl" ? "Blokkade toegevoegd" : "Block added"));
                         setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30" });
                         setShowBlockedForm(false);
-                      }}>{t.addBlocked}</button>
+                        setEditingBlocked(null);
+                      }}>{editingBlocked ? (lang === "nl" ? "Opslaan" : "Save") : t.addBlocked}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
-                      onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(false); }}>×</button>
+                      onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(false); setEditingBlocked(null); }}>×</button>
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
-                    onClick={() => setShowBlockedForm(true)}>{t.addBlocked}</button>
+                    onClick={() => { setEditingBlocked(null); setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(true); }}>{t.addBlocked}</button>
                 )}
               </div>
 
