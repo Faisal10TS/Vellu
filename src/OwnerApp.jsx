@@ -5286,27 +5286,50 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const editable = isTime && !!b.row;
                           const lane = isTime ? laneStyle(`blk:${b.key}`) : { left: 6, right: 6 };
                           const compact = lane.width && !String(lane.width).includes("100%");
+                          const staffLabel = b.staffName || (lang === "nl" ? "Iedereen" : "Everyone");
+                          // Same height-adaptive layout as the appointment cards so short
+                          // blocks don't clip the staff name / reason:
+                          //  - stackFull: room for time + staff + reason on their own rows.
+                          //  - medium: only time + staff rows (reason lives in the tooltip).
+                          //  - tight: too short to stack — everything on ONE horizontal row.
+                          const stackFull = height >= 60;
+                          const tight = height < 46 && !compact;
+                          const warnIcon = (
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                          );
                           return (
-                            <div key={b.key} title={b.reason || label}
+                            <div key={b.key} title={`${label} · ${staffLabel}${b.reason ? ` · ${b.reason}` : ""}`}
                               onClick={editable ? (e) => { e.stopPropagation(); openBlockEdit(b.row); } : undefined}
                               style={{
                                 position: "absolute", top, height, ...lane,
                                 background: `${c.danger}18`,
                                 backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}22 8px 12px)`,
                                 border: `1px dashed ${c.danger}66`,
-                                borderRadius: 6, padding: compact ? "5px 7px" : "6px 10px", overflow: "hidden", zIndex: 1,
+                                borderRadius: 6, padding: (compact || tight) ? "5px 7px" : "6px 10px", overflow: "hidden", zIndex: 1,
                                 cursor: editable ? "pointer" : "default"
                               }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
-                                {editable && <NavIcon name="edit" size={10} color={c.danger} />}
-                              </div>
-                              <div style={{ fontSize: compact ? 10 : 11, color: c.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {b.staffName || (lang === "nl" ? "Iedereen" : "Everyone")}
-                              </div>
-                              {b.reason && !compact && (
-                                <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", wordBreak: "break-word", lineHeight: 1.35 }}>{b.reason}</div>
+                              {tight ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", overflow: "hidden" }}>
+                                  {warnIcon}
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{label}</span>
+                                  <span style={{ fontSize: 11, color: c.text, fontWeight: 500, flexShrink: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{staffLabel}</span>
+                                  {b.reason && <span style={{ fontSize: 10, color: c.textSub, fontStyle: "italic", flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{b.reason}</span>}
+                                  {editable && <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex" }}><NavIcon name="edit" size={10} color={c.danger} /></span>}
+                                </div>
+                              ) : (
+                                <>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                                    {warnIcon}
+                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+                                    {editable && <NavIcon name="edit" size={10} color={c.danger} />}
+                                  </div>
+                                  <div style={{ fontSize: compact ? 10 : 11, color: c.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {staffLabel}
+                                  </div>
+                                  {b.reason && stackFull && !compact && (
+                                    <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", wordBreak: "break-word", lineHeight: 1.35 }}>{b.reason}</div>
+                                  )}
+                                </>
                               )}
                             </div>
                           );
