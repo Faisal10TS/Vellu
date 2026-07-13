@@ -405,6 +405,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   // Check if a staff member works on a given day
   const isStaffAvailable = (staffMember, dateStr) => {
+    // Exception days override the weekly schedule: salon-wide exceptions
+    // (no staff_id) open EVERY stylist, staff-scoped ones only that stylist.
+    // Without this, picking an exception date silently RESET the client's
+    // staff choice (see the selectedServices effect), dropping the booking
+    // into no-preference mode with the wrong availability.
+    const ov = dayOverrides[dateStr];
+    if (ov?.type === "exception" && (!ov.staff_id || ov.staff_id === staffMember?.id)) return true;
     if (!staffMember?.working_hours) return true;
     // Parse as local-date to match the rest of the app (avoid UTC-shifted getDay()).
     const [y, m, d] = (dateStr || "").split("-").map(Number);
@@ -452,13 +459,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const salonDayFallback = activeHours[dayOfWeek] || DEFAULT_HOURS[dayOfWeek] || {};
     const fbOpen = salonDayFallback.open || "09:00";
     const fbClose = salonDayFallback.close || "17:30";
-    // Staff-scoped exception day widens THIS specific staff on THIS date.
+    // Exception day widens staff on THIS date. A staff-scoped exception
+    // (staff_id set) applies only to that stylist; a salon-wide exception
+    // (no staff_id) applies to EVERYONE — same rule as staffCoversWindow in
+    // getAvailableTimes. These two used to disagree: the day chip said
+    // "closed" (weekly hours won) while the slot engine said "open", so an
+    // owner-added exception day never showed up as bookable.
     const dayOv = dayOverrides[dateStr];
-    const staffException = (dayOv?.type === "exception" && dayOv.staff_id)
-      ? { staff_id: dayOv.staff_id, open: dayOv.open, close: dayOv.close }
+    const staffException = (dayOv?.type === "exception")
+      ? { staff_id: dayOv.staff_id || null, open: dayOv.open, close: dayOv.close }
       : null;
     const staffWindow = (staff) => {
-      if (staffException && staffException.staff_id === staff?.id) {
+      if (staffException && (!staffException.staff_id || staffException.staff_id === staff?.id)) {
         return { open: staffException.open || fbOpen, close: staffException.close || fbClose };
       }
       if (!staff?.working_hours) return null;
@@ -923,28 +935,51 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const breakBuffer = activeBreakMinutes;
   
   const isTimeSlotBooked = (slotTime) => {
-    const slotMinutes = parseInt(slotTime.split(":")[0]) * 60 + parseInt(slotTime.split(":")[1]);
-    const myDuration = Math.max(getDuration(), 30); // Minimum 30 min block
-    const selectedStaffIds = selectedServices.filter(item => item.staff).map(item => item.staff.id);
-    const hasStaffSelection = selectedStaffIds.length > 0;
-    
-    for (const booked of bookedSlots) {
-      if (!booked.time) continue;
-      // Multi-staff filtering: if staff is selected, only check overlaps with same staff
-      // If no staff selected (solo salon), check all appointments
-      if (hasStaffSelection && booked.staff_id && !selectedStaffIds.includes(booked.staff_id)) continue;
-      
-      const bookedMinutes = parseInt(booked.time.split(":")[0]) * 60 + parseInt(booked.time.split(":")[1]);
-      const bookedDuration = Math.max(booked.service_duration || 30, 30);
-      // Overlap check with symmetric break buffer on BOTH sides so the break applies
-      // whether the new slot precedes or follows the existing booking. Previously the
-      // buffer was only added to the trailing side, letting back-to-back slots squeak
-      // through the UI that the server would then reject.
-      const slotEnd = slotMinutes + myDuration;
-      const bookedEnd = bookedMinutes + bookedDuration;
-      if (slotMinutes - breakBuffer < bookedEnd && slotEnd + breakBuffer > bookedMinutes) {
-        return true;
+    const toMin = (hm) => { const [h, m] = (hm || "0:0").split(":").map(Number); return h * 60 + m; };
+    const slotStart = toMin(slotTime);
+    const allStaff = initialSalon.staff || [];
+
+    // Mirror getAvailableTimes' eligibility model: an explicit staff pick
+    // narrows to that person; "no preference" means anyone who can PERFORM
+    // this service. Previously "no preference" counted appointments of ALL
+    // staff as conflicts — so a fully-free Lady slot showed as booked purely
+    // because Esther (who can't even do the service) had a client then.
+    const rows = selectedServices.length > 0
+      ? selectedServices.map(item => ({
+          duration: (item.variant ? item.variant.duration : item.service.duration) || 30,
+          eligible: item.staff
+            ? [item.staff]
+            : allStaff.filter(s => !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)),
+        }))
+      : [{ duration: Math.max(getDuration(), 30), eligible: [] }];
+
+    // Does this staff member have a conflicting appointment in [start, end)?
+    // Appointments without staff_id (solo-era / unassigned) block everyone —
+    // they occupy "the salon" and we can't tell who takes them.
+    const staffBusy = (staffId, startMin, endMin) => {
+      for (const b of bookedSlots) {
+        if (!b.time) continue;
+        if (b.staff_id && staffId && b.staff_id !== staffId) continue;
+        const bStart = toMin(b.time);
+        const bEnd = bStart + Math.max(b.service_duration || 30, 30);
+        // Symmetric break buffer on BOTH sides so the pause applies whether
+        // the new slot precedes or follows the existing booking.
+        if (startMin - breakBuffer < bEnd && endMin + breakBuffer > bStart) return true;
       }
+      return false;
+    };
+
+    // Walk the services sequentially (same sub-window model as
+    // getAvailableTimes): each sub-window needs at least one eligible
+    // staff member without an appointment conflict.
+    let cur = slotStart;
+    for (const r of rows) {
+      const end = cur + r.duration;
+      const free = r.eligible.length === 0
+        ? !staffBusy(null, cur, end) // no staff configured → any appointment blocks
+        : r.eligible.some(sm => !staffBusy(sm.id, cur, end));
+      if (!free) return true;
+      cur = end;
     }
     return false;
   };
