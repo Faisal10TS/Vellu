@@ -614,6 +614,9 @@ serve(async (req) => {
     salon_name: salon.business_name,
     salon_accent: salon.accent_color || "",
     salon_logo: salon.logo_url || "",
+    // Reply-To for the client-facing emails: a customer replying to their
+    // confirmation reaches the salon's inbox, not the dead noreply@ box.
+    salon_email: ownerEmail || "",
     lang: emailLang,
   };
   let emailsSent = false;

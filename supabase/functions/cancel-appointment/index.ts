@@ -147,7 +147,7 @@ async function notifyOwnerCancellation(b: {
 async function notifyClientCancellation(b: {
   client_email?: string; client_phone?: string | null; owner_id?: string;
   salon_name?: string; salon_accent?: string; salon_logo?: string; lang?: string;
-  service_name?: string; date?: string; time?: string;
+  salon_email?: string; service_name?: string; date?: string; time?: string;
 }) {
   const internalHeaders = { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY };
   const base = {
@@ -158,6 +158,8 @@ async function notifyClientCancellation(b: {
     salon_name: b.salon_name || "",
     salon_accent: b.salon_accent || "",
     salon_logo: b.salon_logo || "",
+    // Reply-To so the client's cancellation email routes to the salon.
+    salon_email: b.salon_email || "",
     lang: b.lang || "nl",
   };
   try {
@@ -309,6 +311,7 @@ serve(async (req) => {
     salon_name: notify.salon_name,
     salon_accent: notify.salon_accent,
     salon_logo: notify.salon_logo,
+    salon_email: notify.owner_email,
     lang: notify.lang,
     service_name: appt.service_name,
     date: appt.date,
