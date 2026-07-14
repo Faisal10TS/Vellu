@@ -12,7 +12,13 @@ entrypoint = "./functions/send-invoice/index.ts"
 
 [functions.send-emails]
 enabled = true
-verify_jwt = true
+# MUST stay false: send-emails does its OWN auth (x-internal-secret for
+# server-to-server callers, or a verified user JWT). With verify_jwt=true the
+# gateway rejects internal calls (book-appointment, cancel-appointment,
+# mollie-webhook, crons) that carry x-internal-secret but no Authorization
+# header — silently killing every transactional email. See memory
+# email_must_be_server_side.
+verify_jwt = false
 import_map = "./functions/send-emails/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
