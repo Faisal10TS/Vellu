@@ -2,7 +2,7 @@ import { useState, useEffect, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, sendEmails, sendSMS, fmt, Layout
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -378,37 +378,13 @@ function CancelRoute({ lang }) {
       }
 
       const a = data.appointment;
-      const notify = data.notify || {};
 
-      await sendEmails("booking_cancelled", {
-        client_name: a.client_name,
-        client_email: a.client_email,
-        service_name: a.service_name,
-        date: a.date,
-        time: a.time,
-        salon_name: notify.salon_name || "",
-        salon_accent: notify.salon_accent || "", salon_logo: notify.salon_logo || "", lang,
-      });
-
-      // SMS mirror — gated server-side to Pro plan + valid phone. The
-      // cancellation flow returns the notify.owner_id we need for the gate.
-      if (a.client_phone && notify.owner_id) {
-        sendSMS("booking_cancelled", {
-          client_name: a.client_name,
-          client_phone: a.client_phone,
-          service_name: a.service_name,
-          date: a.date,
-          time: a.time,
-          salon_name: notify.salon_name || "",
-          owner_id: notify.owner_id,
-          lang,
-        }).catch(e => console.error("cancellation SMS failed:", e));
-      }
-
-      // Owner + staff cancellation notification is now sent SERVER-SIDE
-      // inside the cancel-appointment edge function (type: owner_cancellation),
-      // so it lands reliably even if the client closes this tab. No client-side
-      // notification here anymore — that avoids a duplicate email.
+      // All cancellation messaging is now sent SERVER-SIDE inside the
+      // cancel-appointment edge function: the client's "afspraak geannuleerd"
+      // email + SMS, and the owner/staff notification. This page is used by the
+      // anonymous customer, whose browser can't authenticate to send-emails/
+      // send-sms (they 401), so doing it here never worked. Nothing to send
+      // client-side anymore.
 
       // Delete Google Calendar event if it exists (best effort)
       if (a.owner_id) {

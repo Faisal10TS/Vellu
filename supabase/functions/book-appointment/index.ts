@@ -142,7 +142,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -593,15 +593,16 @@ serve(async (req) => {
     expires_at: expiresAt.toISOString(),
   });
 
-  // ---------- 15. Send booking emails SERVER-SIDE ----------
-  // send-emails is locked down (verify_jwt + a user-token/internal-secret
-  // check), so the anonymous customer's browser CANNOT call it — the
-  // client-side fallback in ClientApp always 401s. We fire both emails here
-  // with the internal secret so every real booking actually notifies people.
-  // Best-effort: an email hiccup must never fail an otherwise-valid booking.
+  // ---------- 15. Send booking emails + SMS SERVER-SIDE ----------
+  // send-emails / send-sms do their own auth (internal-secret or a user JWT)
+  // and are deployed verify_jwt=false, so the anonymous customer's browser
+  // CANNOT call them (its anon key 401s). We fire everything here with the
+  // internal secret so every real booking actually reaches people.
+  // Best-effort: a messaging hiccup must never fail an otherwise-valid booking.
   const ownerEmail = salon.salon_email || salon.email || null;
   const staffEmails = Object.values(staffById).map((s: any) => s.email).filter(Boolean);
   const emailLang = lang === "en" ? "en" : "nl";
+  const isOnline = payment_method === "online";
   const emailBase = {
     client_name: `${firstName} ${lastName}`,
     client_email: email,
@@ -617,16 +618,17 @@ serve(async (req) => {
   };
   let emailsSent = false;
   try {
+    const internalHeaders = { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY };
     const sendMail = (type: string, extra: Record<string, unknown>) =>
       fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY },
+        headers: internalHeaders,
         body: JSON.stringify({ type, booking: { ...emailBase, ...extra } }),
       });
     const jobs = [
       // Confirmation to the client (with the cancel link).
       sendMail("booking_confirmation", {
-        payment: payment_method === "online" ? "online" : "on-arrival",
+        payment: isOnline ? "online" : "on-arrival",
         cancel_url: `https://vellu.cc/cancel/${cancelToken}`,
       }),
     ];
@@ -637,12 +639,44 @@ serve(async (req) => {
         staff_emails: staffEmails,
       }));
     }
+    // Receipt/invoice to the client when they chose to pay online. Carries the
+    // salon's business + BTW details so the email can render a proper invoice.
+    if (isOnline) {
+      jobs.push(sendMail("invoice", {
+        salon_address: salon.address || "",
+        salon_kvk: salon.kvk_number || "",
+        salon_btw: salon.btw_id || "",
+        salon_iban: salon.iban || "",
+        salon_btw_rate: salon.btw_rate ?? 21,
+      }));
+    }
+    // Confirmation SMS to the client. send-sms silently no-ops for non-Pro
+    // salons / invalid phones, so it's safe to always fire when a phone exists.
+    if (phone) {
+      jobs.push(fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+        method: "POST",
+        headers: internalHeaders,
+        body: JSON.stringify({
+          type: "booking_confirmation",
+          booking: {
+            client_name: `${firstName} ${lastName}`,
+            client_phone: phone,
+            service_name: combinedName,
+            date, time,
+            price: totalPrice,
+            salon_name: salon.business_name,
+            owner_id: salon.id,
+            lang: emailLang,
+          },
+        }),
+      }));
+    }
     await Promise.allSettled(jobs);
     // We attempted the server-side sends; tell the client not to run its
-    // (auth-doomed) fallback regardless of Resend's per-message outcome.
+    // (auth-doomed) fallback regardless of each message's per-provider outcome.
     emailsSent = true;
   } catch (e) {
-    console.error("booking emails failed:", e);
+    console.error("booking messaging failed:", e);
   }
 
   return ok({

@@ -140,6 +140,57 @@ async function notifyOwnerCancellation(b: {
   }
 }
 
+// Client-facing "your appointment is cancelled" email + SMS. The cancel page
+// is used by the anonymous customer, so their browser can't call send-emails /
+// send-sms (it 401s) — these MUST be sent server-side. send-sms silently
+// no-ops for non-Pro salons / invalid phones. Best-effort, fire-and-forget.
+async function notifyClientCancellation(b: {
+  client_email?: string; client_phone?: string | null; owner_id?: string;
+  salon_name?: string; salon_accent?: string; salon_logo?: string; lang?: string;
+  service_name?: string; date?: string; time?: string;
+}) {
+  const internalHeaders = { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY };
+  const base = {
+    client_name: undefined as unknown,
+    service_name: b.service_name,
+    date: b.date,
+    time: b.time,
+    salon_name: b.salon_name || "",
+    salon_accent: b.salon_accent || "",
+    salon_logo: b.salon_logo || "",
+    lang: b.lang || "nl",
+  };
+  try {
+    if (b.client_email) {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+        method: "POST",
+        headers: internalHeaders,
+        body: JSON.stringify({ type: "booking_cancelled", booking: { ...base, client_email: b.client_email } }),
+      }).catch((e) => console.error("client cancellation email failed:", e));
+    }
+    if (b.client_phone && b.owner_id) {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+        method: "POST",
+        headers: internalHeaders,
+        body: JSON.stringify({
+          type: "booking_cancelled",
+          booking: {
+            client_phone: b.client_phone,
+            service_name: b.service_name,
+            date: b.date,
+            time: b.time,
+            salon_name: b.salon_name || "",
+            owner_id: b.owner_id,
+            lang: b.lang || "nl",
+          },
+        }),
+      }).catch((e) => console.error("client cancellation SMS failed:", e));
+    }
+  } catch (e) {
+    console.error("notifyClientCancellation error:", e);
+  }
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
@@ -247,6 +298,21 @@ serve(async (req) => {
     date: appt.date,
     time: appt.time,
     reason: cleanReason,
+  });
+
+  // Client-facing cancellation confirmation (email + SMS) — also server-side,
+  // because the anonymous cancel page can't authenticate to send-emails/send-sms.
+  notifyClientCancellation({
+    client_email: appt.client_email,
+    client_phone: appt.client_phone || null,
+    owner_id: appt.owner_id,
+    salon_name: notify.salon_name,
+    salon_accent: notify.salon_accent,
+    salon_logo: notify.salon_logo,
+    lang: notify.lang,
+    service_name: appt.service_name,
+    date: appt.date,
+    time: appt.time,
   });
 
   // Fire-and-forget waitlist notify — skipped when the salon has disabled

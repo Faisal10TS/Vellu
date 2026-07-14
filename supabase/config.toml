@@ -10,6 +10,13 @@ entrypoint = "./functions/send-invoice/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/send-invoice/*.html" ]
 
+[functions.send-sms]
+enabled = true
+# Same reason as send-emails: send-sms does its own auth, and book-appointment
+# / cancel-appointment call it server-side with x-internal-secret and no
+# Authorization header. verify_jwt=true would 401 them at the gateway.
+verify_jwt = false
+
 [functions.send-emails]
 enabled = true
 # MUST stay false: send-emails does its OWN auth (x-internal-secret for

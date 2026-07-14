@@ -1291,13 +1291,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         }).catch(e => console.error("notification email failed:", e));
       }
 
-      // SMS to the client — fired regardless of whether emails were sent
-      // server-side, because the current book-appointment doesn't dispatch
-      // SMS. The send-sms edge function silently no-ops for salons on the
-      // Starter plan or clients without a phone, so this is safe to call
-      // for every booking; only Pro-tier salons with mobile-phone clients
-      // will actually see a message go out.
-      if (form.phone) {
+      // SMS to the client — only as a fallback for older server versions.
+      // book-appointment now dispatches the confirmation SMS server-side (and
+      // signals emails_sent), so on current servers we skip this to avoid a
+      // double SMS. send-sms silently no-ops for Starter-plan salons / clients
+      // without a phone either way.
+      if (!result.emails_sent && form.phone) {
         sendSMS("booking_confirmation", {
           client_name: clientFullName,
           client_phone: form.phone,
@@ -1328,7 +1327,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         },
       }).catch(e => console.error("Google Calendar error:", e));
 
-      if (form.payment === "online") {
+      // Invoice/receipt for online payment — also handled server-side by
+      // book-appointment now (it 401s from an anonymous browser anyway), so
+      // this only runs as a fallback on older servers.
+      if (!result.emails_sent && form.payment === "online") {
         sendEmails("invoice", {
           client_name: clientFullName, client_email: clientEmail, service_name: combinedServiceName,
           date, time, price: serverPrice, salon_name: result.salon_name || initialSalon.name,
