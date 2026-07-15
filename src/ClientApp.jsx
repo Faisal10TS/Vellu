@@ -1,7 +1,7 @@
 // NOTE: the PWA install prompt (src/InstallAppPrompt.jsx) is deliberately
 // NOT shown on the customer-facing salon page anymore — clients just use the
 // link; the installable app is for salon owners (see OwnerApp).
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import {
@@ -583,6 +583,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [waitlistNotes, setWaitlistNotes] = useState("");
   const [waitlistError, setWaitlistError] = useState("");
   const [bookedSlots, setBookedSlots] = useState([]);
+  // Booked slots for the WHOLE visible window (keyed by date), so the day
+  // strip can grey out fully-booked days — not just the selected date.
+  const [rangeBooked, setRangeBooked] = useState({});
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
   const [showReviewForm, setShowReviewForm] = useState(reviewMode);
@@ -945,11 +948,41 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return () => { cancelled = true; };
   }, [date, initialSalon.id, slotsRefreshKey, selectedLocation?.id]);
 
+  // Load booked slots across the whole booking window in ONE query so the day
+  // strip can mark fully-booked days grey (and we can point to the first free
+  // day). Grouped by date. Refreshes when a booking is made (slotsRefreshKey).
+  useEffect(() => {
+    if (!initialSalon.id) return;
+    let cancelled = false;
+    const loadRange = async () => {
+      const from = fmt(getToday());
+      const toD = new Date(getToday());
+      toD.setDate(toD.getDate() + Math.min(maxAdvanceDays + 1, 90));
+      const { data, error } = await supabase.rpc("get_booked_slots_range", {
+        p_slug: initialSalon.id,
+        p_from: from,
+        p_to: fmt(toD),
+        p_location_id: selectedLocation?.id || null,
+      });
+      if (cancelled) return;
+      const map = {};
+      if (!error && Array.isArray(data)) {
+        for (const r of data) {
+          const key = String(r.date);
+          (map[key] = map[key] || []).push({ time: r.time, service_duration: r.service_duration, staff_id: r.staff_id });
+        }
+      }
+      setRangeBooked(map);
+    };
+    loadRange();
+    return () => { cancelled = true; };
+  }, [initialSalon.id, slotsRefreshKey, selectedLocation?.id, maxAdvanceDays]);
+
   // Check if a time slot overlaps with existing bookings (including break time)
   // For multi-staff salons: only check slots for the same staff member(s)
   const breakBuffer = activeBreakMinutes;
   
-  const isTimeSlotBooked = (slotTime) => {
+  const isTimeSlotBooked = (slotTime, bookedList = bookedSlots) => {
     const toMin = (hm) => { const [h, m] = (hm || "0:0").split(":").map(Number); return h * 60 + m; };
     const slotStart = toMin(slotTime);
     const allStaff = initialSalon.staff || [];
@@ -972,7 +1005,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // Appointments without staff_id (solo-era / unassigned) block everyone —
     // they occupy "the salon" and we can't tell who takes them.
     const staffBusy = (staffId, startMin, endMin) => {
-      for (const b of bookedSlots) {
+      for (const b of bookedList) {
         if (!b.time) continue;
         if (b.staff_id && staffId && b.staff_id !== staffId) continue;
         const bStart = toMin(b.time);
@@ -1160,6 +1193,54 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       }
       return true;
     });
+  };
+
+  // Availability per day for the whole strip: 'closed' | 'full' | 'open'.
+  // 'full' = the salon is open but every bookable slot is already taken. Built
+  // off the range-loaded bookings so we can grey full days like closed ones and
+  // point the customer at the first free day. Memoised on the inputs that move
+  // availability — the per-slot maths is too heavy to re-run every render.
+  const servicesSig = selectedServices.map(i =>
+    `${i.service.id}:${i.variant?.id || ""}:${i.staff?.id || ""}:${(i.extras || []).map(e => e.id).join("+")}`
+  ).join("|");
+  const dayAvailability = useMemo(() => {
+    const map = {};
+    for (const d of days) {
+      const ds = fmt(d);
+      const dayHours = getEffectiveHours(ds);
+      const staffWindow = getStaffTimeWindow(ds);
+      if (dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds)) { map[ds] = "closed"; continue; }
+      const times = getAvailableTimes(ds);
+      if (times.length === 0) { map[ds] = "closed"; continue; }
+      const booked = rangeBooked[ds] || [];
+      map[ds] = times.some(tt => !isTimeSlotBooked(tt, booked)) ? "open" : "full";
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeBooked, servicesSig, selectedLocation?.id, maxAdvanceDays, minAdvanceHours]);
+
+  // First day (from today) that actually has a free slot — used for the "next
+  // available" hint shown when the chosen day turns out to be full or closed.
+  const firstOpenDate = useMemo(() => {
+    for (const d of days) {
+      const ds = fmt(d);
+      if (dayAvailability[ds] === "open") return ds;
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayAvailability]);
+
+  // A tappable "first available: <date>" hint. Jumps the picker to that day.
+  const FirstAvailableHint = () => {
+    if (!firstOpenDate || firstOpenDate === date) return null;
+    const label = parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+    return (
+      <button type="button" onClick={() => { setDate(firstOpenDate); setTime(null); }}
+        style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accent, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
+        <NavIcon name="calendar" size={14} color={accent} />
+        <span>{lang === "nl" ? "Eerste beschikbare dag: " : "First available: "}<b style={{ textTransform: "capitalize" }}>{label}</b> →</span>
+      </button>
+    );
   };
 
   // Confirm booking — calls the book-appointment edge function which validates
@@ -2601,10 +2682,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           const dayHours = getEffectiveHours(ds);
                           const staffWindow = getStaffTimeWindow(ds);
                           const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                          // Fully booked: salon is open but no free slot. Greyed like a
+                          // closed day, but still tappable so the customer can select it
+                          // and join the waitlist for that specific day.
+                          const isFull = !isClosed && dayAvailability[ds] === "full";
                           const isToday = ds === fmt(getToday());
                           return (
                             <div key={i} role="button" tabIndex={isClosed ? -1 : 0}
-                              aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : "closed"})` : ""}`}
+                              aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : "closed"})` : isFull ? ` (${lang === "nl" ? "volgeboekt" : "fully booked"})` : ""}`}
                               aria-disabled={isClosed}
                               onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }}
                               onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
@@ -2613,17 +2698,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 padding: "10px 14px", borderRadius: 12, cursor: isClosed ? "not-allowed" : "pointer",
                                 background: isSel ? accent : c.bgCard,
                                 border: `1.5px solid ${isSel ? accent : isToday ? `${accent}55` : c.border}`,
-                                opacity: isClosed ? 0.3 : 1,
+                                opacity: isClosed ? 0.3 : isFull ? 0.5 : 1,
                                 transition: "all 0.2s", flexShrink: 0, minWidth: 52, position: "relative"
                               }}>
                               {isToday && !isSel && <div style={{ position: "absolute", top: 5, right: 5, width: 4, height: 4, borderRadius: "50%", background: accent }} />}
                               <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                               <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: isSel ? c.btnOnDark : c.text, lineHeight: 1 }}>{d.getDate()}</span>
-                              {!isClosed && (
+                              {!isClosed && !isFull && (
                                 <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}bb` : c.textMuted, fontWeight: 500, marginTop: 1 }}>
                                   {dayHours.open?.slice(0,5)}–{dayHours.close?.slice(0,5)}
                                 </span>
                               )}
+                              {isFull && <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}cc` : c.danger, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "vol" : "full"}</span>}
                               {isClosed && <span style={{ fontSize: 8, color: c.textMuted }}>—</span>}
                             </div>
                           );
@@ -2655,9 +2741,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
                       <div style={{ marginBottom: 8, opacity: 0.4 }}><NavIcon name="clock" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 13, marginBottom: 16 }}>{t.noTimesAvailable}</div>
-                      {initialSalon.waitlist_enabled !== false && (
-                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
-                      )}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                        <FirstAvailableHint />
+                        {initialSalon.waitlist_enabled !== false && (
+                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                        )}
+                      </div>
                     </div>
                   );
                   if (freeCount === 0) return (
@@ -2666,12 +2755,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
                       <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5, marginBottom: 16 }}>
                         {lang === "nl"
-                          ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt. Kies een andere datum.`
-                          : `All ${totalSlots} time slots on this day are booked. Please pick another date.`}
+                          ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt.`
+                          : `All ${totalSlots} time slots on this day are booked.`}
                       </div>
-                      {initialSalon.waitlist_enabled !== false && (
-                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
-                      )}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                        <FirstAvailableHint />
+                        {initialSalon.waitlist_enabled !== false && (
+                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                        )}
+                      </div>
                     </div>
                   );
                   // Group into morning / afternoon / evening
@@ -3276,11 +3368,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         const dayHours = getEffectiveHours(ds);
                         const staffWindow = getStaffTimeWindow(ds);
                         const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                        // Fully booked → greyed like a closed day, but still tappable so
+                        // the customer can select it and join that day's waitlist.
+                        const isFull = !isClosed && dayAvailability[ds] === "full";
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textMuted }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : MON[d.getMonth()]}</span>
+                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : isFull ? (lang === "nl" ? "vol" : "full") : MON[d.getMonth()]}</span>
                           </div>
                         );
                       })}
@@ -3297,7 +3392,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         );
                       }
                       const availableTimes = getAvailableTimes(date);
-                      return availableTimes.length > 0 ? (
+                      const anyFree = availableTimes.some(tt => !isTimeSlotBooked(tt));
+                      return (availableTimes.length > 0 && anyFree) ? (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 20 }}>
                           {availableTimes.map(tt => {
                             const booked = isTimeSlotBooked(tt);
@@ -3311,10 +3407,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       ) : (
                         <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, marginBottom: 20 }}>
-                          <div style={{ fontSize: 13, marginBottom: 14 }}>{t.noTimesAvailable}</div>
-                          {initialSalon.waitlist_enabled !== false && (
-                        <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
-                      )}
+                          {availableTimes.length > 0
+                            ? <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
+                            : null}
+                          <div style={{ fontSize: 13, marginBottom: 16 }}>
+                            {availableTimes.length > 0
+                              ? (lang === "nl" ? `Alle ${availableTimes.length} tijden op deze dag zijn geboekt.` : `All ${availableTimes.length} times on this day are booked.`)
+                              : t.noTimesAvailable}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                            <FirstAvailableHint />
+                            {initialSalon.waitlist_enabled !== false && (
+                              <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
