@@ -536,7 +536,7 @@ function HeroPhoneMockup({ lang, c }) {
   const darkOnGold = "#1a1713";
   const check = (sz, col) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
   return (
-    <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "26px 0 18px" }}>
+    <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "14px 0 18px" }}>
       {/* Ambient gold glow behind the device */}
       <div style={{ position: "absolute", inset: "-16%", background: `radial-gradient(58% 52% at 50% 42%, ${ACCENT}26 0%, transparent 62%)`, pointerEvents: "none" }} />
 
@@ -544,8 +544,8 @@ function HeroPhoneMockup({ lang, c }) {
         {/* Device — brushed-metal frame with a soft edge highlight */}
         <div style={{
           position: "relative", width: 276, borderRadius: 50, padding: 11,
-          background: "linear-gradient(145deg, #45454a 0%, #17171a 26%, #0c0c0e 62%, #34343a 100%)",
-          boxShadow: `0 54px 96px -36px rgba(0,0,0,0.72), 0 0 66px -24px ${ACCENT}4d, inset 0 0 0 1px rgba(255,255,255,0.07)`,
+          background: "linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%)",
+          boxShadow: `0 52px 92px -30px rgba(0,0,0,0.78), 0 0 84px -20px ${ACCENT}5c, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)`,
         }}>
           {/* Physical side buttons */}
           <div style={{ position: "absolute", left: -2, top: 116, width: 3, height: 24, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
@@ -555,6 +555,8 @@ function HeroPhoneMockup({ lang, c }) {
 
           {/* Screen */}
           <div style={{ position: "relative", borderRadius: 39, overflow: "hidden", background: c.bg, boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)" }}>
+            {/* Glass sheen — a faint diagonal reflection across the top of the display */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(153deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.02) 20%, transparent 40%)", pointerEvents: "none", zIndex: 6 }} />
             {/* Status bar with Dynamic Island + real icons */}
             <div style={{ position: "relative", height: 36, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 20px" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: c.text, letterSpacing: "0.02em" }}>9:41</span>
@@ -619,15 +621,6 @@ function HeroPhoneMockup({ lang, c }) {
                 <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: darkOnGold }}>€38</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Floating "new booking" push — sits above the top-left, clear of everything */}
-        <div className="hero-phone-toast" style={{ position: "absolute", top: -18, left: -26, background: c.bgCard, border: `1px solid ${ACCENT}40`, borderRadius: 15, padding: "9px 13px", boxShadow: "0 22px 46px -16px rgba(0,0,0,0.6)", display: "flex", alignItems: "center", gap: 9, backdropFilter: "blur(8px)" }}>
-          <div style={{ width: 24, height: 24, borderRadius: "50%", background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{check(12, darkOnGold)}</div>
-          <div>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Nieuwe boeking" : "New booking"}</div>
-            <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 1 }}>{lang === "nl" ? "zojuist · Gel manicure" : "just now · Gel manicure"}</div>
           </div>
         </div>
       </div>
