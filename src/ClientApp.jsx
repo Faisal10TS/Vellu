@@ -582,6 +582,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [waitlistDone, setWaitlistDone] = useState(false);
   const [waitlistNotes, setWaitlistNotes] = useState("");
   const [waitlistError, setWaitlistError] = useState("");
+  // Days the customer wants to be notified about (multi-select). Seeded with
+  // the day they were looking at; they can add more full days in the modal.
+  const [waitlistDates, setWaitlistDates] = useState([]);
   const [bookedSlots, setBookedSlots] = useState([]);
   // Booked slots for the WHOLE visible window (keyed by date), so the day
   // strip can grey out fully-booked days — not just the selected date.
@@ -852,14 +855,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
-  // Submit a waitlist entry. Kept lightweight — insert only, no server-side
-  // dedup: someone joining twice for the same date is fine, the owner sees
-  // both rows and can dismiss. If the client hasn't filled in their name yet
-  // (they haven't been through step 3), we require them to fill it in the
-  // modal. When they HAVE, we prefill from `form`.
+  // Seed the day multi-select when the waitlist modal opens (with the day the
+  // customer was looking at), and clear it when it closes.
+  useEffect(() => {
+    if (waitlistOpen) setWaitlistDates(date ? [date] : []);
+    else setWaitlistDates([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitlistOpen]);
+
+  const toggleWaitlistDate = (ds) =>
+    setWaitlistDates(prev => prev.includes(ds) ? prev.filter(x => x !== ds) : [...prev, ds].sort());
+
+  // Submit a waitlist entry — ONE row per chosen day, so the customer can ask
+  // to be told about several specific days at once. No server-side dedup:
+  // someone joining twice for the same date is fine, the owner sees both rows
+  // and can dismiss. If the client hasn't filled in their name yet (they
+  // haven't been through step 3), we require it in the modal; otherwise we
+  // prefill from `form`.
   const submitWaitlist = async () => {
     if (waitlistSubmitting) return;
-    if (!date) { setWaitlistError(T[lang].waitlistNoDate); return; }
+    const dates = (waitlistDates.length ? waitlistDates : (date ? [date] : []));
+    if (!dates.length) { setWaitlistError(T[lang].waitlistNoDate); return; }
     const first = form.firstName.trim();
     const last = form.lastName.trim();
     const email = form.email.trim().toLowerCase();
@@ -874,16 +890,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // context for the owner.
     const staffId = selectedServices.find(s => s.staff)?.staff?.id || null;
     const serviceIds = selectedServices.map(s => s.service?.id).filter(Boolean);
-    const { error } = await supabase.from("waitlist").insert({
+    const rows = dates.map(d => ({
       owner_id: initialSalon.owner_id,
       staff_id: staffId,
-      date,
+      date: d,
       client_name: `${first} ${last}`,
       client_email: email,
       client_phone: form.phone?.trim() || null,
       service_ids: serviceIds.length ? serviceIds : null,
       notes: waitlistNotes.trim() || null,
-    });
+    }));
+    const { error } = await supabase.from("waitlist").insert(rows);
     setWaitlistSubmitting(false);
     if (error) { setWaitlistError(T[lang].waitlistSubmitError); return; }
     setWaitlistDone(true);
@@ -3732,10 +3749,48 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               ) : (
                 <>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 6 }}>{T[lang].waitlistTitle}</div>
-                  <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 16, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                     {T[lang].waitlistSub}
-                    {date && <><br/><b>{parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</b></>}
                   </div>
+                  {/* Pick one or more specific days to be notified about. Seeded with
+                      the day they were on; other fully-booked days are offered too. */}
+                  {(() => {
+                    const wlCandidates = Array.from(new Set([
+                      ...(date ? [date] : []),
+                      ...days.filter(d => dayAvailability[fmt(d)] === "full").map(fmt),
+                    ])).sort();
+                    return (
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                          {lang === "nl" ? "Voor welke dag(en)?" : "Which day(s)?"}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {wlCandidates.map(ds => {
+                            const on = waitlistDates.includes(ds);
+                            const dd = parseDate(ds);
+                            return (
+                              <button key={ds} type="button" onClick={() => toggleWaitlistDate(ds)}
+                                style={{
+                                  display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 100,
+                                  border: `1.5px solid ${on ? accent : c.inputBorder}`,
+                                  background: on ? `${accent}18` : "transparent",
+                                  color: on ? accent : c.textSub, fontSize: 12, fontWeight: on ? 600 : 500, cursor: "pointer",
+                                  transition: "all 0.15s", fontFamily: "'Jost',sans-serif",
+                                }}>
+                                {on && <NavIcon name="check" size={11} color={accent} />}
+                                <span style={{ textTransform: "capitalize" }}>{dd.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: c.textMuted, marginTop: 8, lineHeight: 1.4 }}>
+                          {lang === "nl"
+                            ? `We appen of mailen je zodra er een plek vrijkomt op ${waitlistDates.length === 1 ? "deze dag" : `een van deze ${waitlistDates.length} dagen`}.`
+                            : `We'll message you as soon as a spot opens on ${waitlistDates.length === 1 ? "this day" : `one of these ${waitlistDates.length} days`}.`}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <input className="input-field" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
@@ -3750,7 +3805,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   )}
                   <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
                     <button className="btn-ghost" style={{ flex: 1 }} disabled={waitlistSubmitting} onClick={() => setWaitlistOpen(false)}>{T[lang].cancel}</button>
-                    <button className="btn-primary" style={{ flex: 1 }} disabled={waitlistSubmitting} onClick={submitWaitlist}>{waitlistSubmitting ? "..." : T[lang].joinWaitlist}</button>
+                    <button className="btn-primary" style={{ flex: 1 }} disabled={waitlistSubmitting || waitlistDates.length === 0} onClick={submitWaitlist}>{waitlistSubmitting ? "..." : T[lang].joinWaitlist}</button>
                   </div>
                 </>
               )}
