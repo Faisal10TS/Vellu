@@ -285,49 +285,56 @@ serve(async (req) => {
     if (staff?.email) notify.staff_email = staff.email;
   }
 
-  // Owner/staff cancellation notification — sent server-side so it's reliable
-  // even if the client closes the tab. Fire-and-forget.
-  notifyOwnerCancellation({
-    owner_email: notify.owner_email,
-    staff_email: notify.staff_email,
-    salon_name: notify.salon_name,
-    salon_accent: notify.salon_accent,
-    salon_logo: notify.salon_logo,
-    lang: notify.lang,
-    client_name: appt.client_name,
-    client_phone: appt.client_phone || null,
-    service_name: appt.service_name,
-    date: appt.date,
-    time: appt.time,
-    reason: cleanReason,
-  });
-
-  // Client-facing cancellation confirmation (email + SMS) — also server-side,
-  // because the anonymous cancel page can't authenticate to send-emails/send-sms.
-  notifyClientCancellation({
-    client_email: appt.client_email,
-    client_phone: appt.client_phone || null,
-    owner_id: appt.owner_id,
-    salon_name: notify.salon_name,
-    salon_accent: notify.salon_accent,
-    salon_logo: notify.salon_logo,
-    salon_email: notify.owner_email,
-    lang: notify.lang,
-    service_name: appt.service_name,
-    date: appt.date,
-    time: appt.time,
-  });
-
-  // Fire-and-forget waitlist notify — skipped when the salon has disabled
-  // the feature in Settings.
-  if (waitlistEnabled && appt.owner_id && appt.date) {
-    notifyWaitlist(appt.owner_id, appt.date, {
-      name: notify.salon_name,
-      accent: notify.salon_accent,
-      logo: notify.salon_logo,
-      slug: salonSlug,
-    });
-  }
+  // Fire all cancellation notifications and AWAIT them before returning.
+  // Supabase's edge runtime tears the isolate down as soon as the HTTP
+  // response is returned, so anything left fire-and-forget here (the owner's
+  // "client cancelled" email, the client's confirmation email + SMS, the
+  // waitlist ping) was being killed mid-flight — which is why salons stopped
+  // receiving the cancellation email even though this code path existed.
+  // book-appointment already awaits its sends, which is why NEW-booking
+  // notifications arrive reliably but cancellations did not. Each helper
+  // swallows its own errors, so Promise.all never rejects and a slow/failed
+  // email can't make the cancel itself appear to fail.
+  await Promise.all([
+    // Owner + assigned staff: "your client cancelled".
+    notifyOwnerCancellation({
+      owner_email: notify.owner_email,
+      staff_email: notify.staff_email,
+      salon_name: notify.salon_name,
+      salon_accent: notify.salon_accent,
+      salon_logo: notify.salon_logo,
+      lang: notify.lang,
+      client_name: appt.client_name,
+      client_phone: appt.client_phone || null,
+      service_name: appt.service_name,
+      date: appt.date,
+      time: appt.time,
+      reason: cleanReason,
+    }),
+    // Client-facing cancellation confirmation (email + SMS).
+    notifyClientCancellation({
+      client_email: appt.client_email,
+      client_phone: appt.client_phone || null,
+      owner_id: appt.owner_id,
+      salon_name: notify.salon_name,
+      salon_accent: notify.salon_accent,
+      salon_logo: notify.salon_logo,
+      salon_email: notify.owner_email,
+      lang: notify.lang,
+      service_name: appt.service_name,
+      date: appt.date,
+      time: appt.time,
+    }),
+    // Waitlist notify — skipped when the salon disabled the feature.
+    (waitlistEnabled && appt.owner_id && appt.date)
+      ? notifyWaitlist(appt.owner_id, appt.date, {
+          name: notify.salon_name,
+          accent: notify.salon_accent,
+          logo: notify.salon_logo,
+          slug: salonSlug,
+        })
+      : Promise.resolve(),
+  ]);
 
   return json(200, {
     status: "cancelled",
