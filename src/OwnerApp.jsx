@@ -3070,7 +3070,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // When set, the block modal edits an existing staff_day_overrides time-block
   // row (UPDATE) instead of inserting a new one.
   const [blockEditId, setBlockEditId] = useState(null);
-  const [editApptForm, setEditApptForm] = useState({ date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
+  const [editApptForm, setEditApptForm] = useState({ service_id: "", date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
@@ -3395,6 +3395,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const storedDiscount = parseFloat(a.discount_amount) || 0;
     const finalPrice = a.service_price != null ? parseFloat(a.service_price) : null;
     setEditApptForm({
+      service_id: a.service_id || "",
       date: a.date || "",
       time: (a.time || "").slice(0, 5),
       price: finalPrice != null ? String(finalPrice + storedDiscount) : "",
@@ -3543,6 +3544,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       discount_amount: discountNum > 0 ? discountNum : null,
       discount_reason: discountNum > 0 ? ((editApptForm.discount_reason || "").trim() || null) : null,
     };
+    // Service change: when the owner picks a different treatment, replace the
+    // whole service the same shape a fresh booking uses — primary service_id,
+    // a rolled-up name (keeping the assigned stylist), a single-entry
+    // service_breakdown and a matching staff_assignments map. For a booking
+    // that had several treatments this collapses them to the one chosen (the
+    // modal warns about that). Price/duration come from the form fields, which
+    // were pre-filled from the new service when it was selected.
+    const serviceChanged = editApptForm.service_id && editApptForm.service_id !== orig.service_id;
+    const newSvc = serviceChanged ? (salonData.services || []).find(s => s.id === editApptForm.service_id) : null;
+    if (newSvc) {
+      const locName = lang === "nl" ? (newSvc.name_nl || newSvc.name) : (newSvc.name_en || newSvc.name_nl || newSvc.name);
+      payload.service_id = newSvc.id;
+      payload.service_name = locName + (orig.staff_name ? ` (${orig.staff_name})` : "");
+      payload.service_breakdown = [{ service_id: newSvc.id, staff_id: orig.staff_id || null, duration: durationNum, offset_min: 0, label: locName }];
+      payload.staff_assignments = orig.staff_id ? { [newSvc.id]: orig.staff_id } : {};
+    }
     const { error } = await supabase.from("appointments").update(payload).eq("id", editingAppt.id);
     if (error) {
       setEditApptSaving(false);
@@ -3559,7 +3576,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const timeChanged = (orig.time || "").slice(0, 5) !== payload.time;
     const priceChanged = parseFloat(orig.service_price || 0) !== priceNum;
     const skipEmail = orig.status === "cancelled" || orig.status === "no_show";
-    if ((dateChanged || timeChanged || priceChanged) && !skipEmail && orig.client_email) {
+    if ((dateChanged || timeChanged || priceChanged || serviceChanged) && !skipEmail && orig.client_email) {
       try {
         // Try to surface an existing cancellation token so the client can
         // bail if the new slot doesn't work for them. Best-effort: a missing
@@ -3579,7 +3596,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           client_name: orig.client_name,
           client_email: orig.client_email,
           client_phone: orig.client_phone || null,
-          service_name: orig.service_name,
+          // Send the new service name when it changed so the client's update
+          // email shows what they're actually now booked in for.
+          service_name: payload.service_name || orig.service_name,
+          old_service_name: serviceChanged ? orig.service_name : null,
           // New values:
           date: payload.date,
           time: payload.time,
@@ -4278,6 +4298,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const finalPrice = Math.max(0, basePrice - discountNum);
               return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              <div style={cell}>
+                <label style={lbl}>{lang === "nl" ? "Dienst" : "Service"}</label>
+                <select className="input-field" value={editApptForm.service_id} style={inp}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const svc = (salonData.services || []).find((s) => s.id === id);
+                    // Pre-fill price + duration from the chosen service; both stay
+                    // editable in the fields below.
+                    setEditApptForm((f) => ({ ...f, service_id: id, price: svc ? String(svc.price) : f.price, duration: svc ? String(svc.duration) : f.duration }));
+                  }}>
+                  {!(salonData.services || []).some((s) => s.id === editApptForm.service_id) && (
+                    <option value={editApptForm.service_id}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
+                  )}
+                  {(salonData.services || []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {(lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name))} — €{parseFloat(s.price || 0).toFixed(0)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {editApptForm.service_id !== (editingAppt.service_id || "") && (editingAppt.service_breakdown?.length || 0) > 1 && (
+                <div style={{ fontSize: 10, color: accent, background: `${accent}12`, border: `1px solid ${accent}33`, borderRadius: 10, padding: "8px 12px", lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Deze afspraak heeft meerdere behandelingen. Bij het wijzigen worden ze vervangen door de gekozen dienst."
+                    : "This booking has multiple treatments — changing the service replaces them all with the one you pick."}
+                </div>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label><input className="input-field" type="date" value={editApptForm.date} onChange={(e) => setEditApptForm((f) => ({ ...f, date: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Tijd" : "Time"}</label><input className="input-field" type="time" value={editApptForm.time} onChange={(e) => setEditApptForm((f) => ({ ...f, time: e.target.value }))} style={inp} /></div>
