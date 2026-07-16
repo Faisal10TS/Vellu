@@ -4298,26 +4298,54 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const finalPrice = Math.max(0, basePrice - discountNum);
               return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
+              {(() => {
+                // Services priced via variants store 0 on the base row — showing
+                // "— €0" reads as broken. Use the cheapest variant as "vanaf €X"
+                // instead, and skip the price entirely when nothing is priced.
+                const cheapestVariant = (s) => {
+                  const priced = (s.variants || []).map((v) => ({ p: parseFloat(v.price || 0), d: parseInt(v.duration || 0) })).filter((v) => v.p > 0);
+                  if (priced.length === 0) return null;
+                  return priced.reduce((min, v) => (v.p < min.p ? v : min));
+                };
+                const priceLabel = (s) => {
+                  const base = parseFloat(s.price || 0);
+                  if (base > 0) return ` — €${base.toFixed(0)}`;
+                  const cv = cheapestVariant(s);
+                  if (cv) return ` — ${lang === "nl" ? "vanaf" : "from"} €${cv.p.toFixed(0)}`;
+                  return "";
+                };
+                // Native dropdown menus ignore the select's dark styling, so each
+                // option needs explicit theme colours (same pattern as the other
+                // selects in this file) — otherwise it's grey-on-white.
+                const optStyle = { background: c.selectBg, color: c.text };
+                return (
               <div style={cell}>
                 <label style={lbl}>{lang === "nl" ? "Dienst" : "Service"}</label>
                 <select className="input-field" value={editApptForm.service_id} style={inp}
                   onChange={(e) => {
                     const id = e.target.value;
                     const svc = (salonData.services || []).find((s) => s.id === id);
-                    // Pre-fill price + duration from the chosen service; both stay
-                    // editable in the fields below.
-                    setEditApptForm((f) => ({ ...f, service_id: id, price: svc ? String(svc.price) : f.price, duration: svc ? String(svc.duration) : f.duration }));
+                    // Pre-fill price + duration from the chosen service (falling
+                    // back to its cheapest variant when the base row is €0); both
+                    // stay editable in the fields below.
+                    const cv = svc ? cheapestVariant(svc) : null;
+                    const basePrice = parseFloat(svc?.price || 0);
+                    const price = svc ? (basePrice > 0 ? String(basePrice) : (cv ? String(cv.p) : "0")) : null;
+                    const duration = svc ? String(basePrice > 0 || !cv ? svc.duration : (cv.d || svc.duration)) : null;
+                    setEditApptForm((f) => ({ ...f, service_id: id, price: price ?? f.price, duration: duration ?? f.duration }));
                   }}>
                   {!(salonData.services || []).some((s) => s.id === editApptForm.service_id) && (
-                    <option value={editApptForm.service_id}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
+                    <option value={editApptForm.service_id} style={optStyle}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
                   )}
                   {(salonData.services || []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {(lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name))} — €{parseFloat(s.price || 0).toFixed(0)}
+                    <option key={s.id} value={s.id} style={optStyle}>
+                      {(lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name))}{priceLabel(s)}
                     </option>
                   ))}
                 </select>
               </div>
+                );
+              })()}
               {editApptForm.service_id !== (editingAppt.service_id || "") && (editingAppt.service_breakdown?.length || 0) > 1 && (
                 <div style={{ fontSize: 10, color: accent, background: `${accent}12`, border: `1px solid ${accent}33`, borderRadius: 10, padding: "8px 12px", lineHeight: 1.5 }}>
                   {lang === "nl"
