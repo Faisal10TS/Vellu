@@ -48,7 +48,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [gallery, setGallery] = useState(null);
   const [showAddAppt, setShowAddAppt] = useState(false);
-  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" });
+  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", notify_client: true });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -765,7 +765,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* Primary CTA */}
               <button className="btn-primary" style={{ width: "100%", marginBottom: 16, padding: "14px 24px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "" }); }}>
+                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", notify_client: true }); }}>
                 <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
               </button>
 
@@ -2171,6 +2171,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
                       <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
                     </div>
+                    {/* Opt-out for the client's confirmation email — useful when
+                        back-filling a booking the client already knows about. */}
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer", fontSize: 12, color: c.textSub, userSelect: "none" }}>
+                      <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+                      {lang === "nl" ? "Stuur bevestiging naar de klant" : "Send confirmation to the client"}
+                    </label>
                   </div>
                 </div>
                 <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
@@ -2209,17 +2215,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       return;
                     }
                     setAppointments(a => [appt, ...a]);
-                    // Cancellation token so the client's email gets the same
-                    // cancel button a self-booked client gets. Null when the
-                    // appointment is within 24h — then the button is omitted.
-                    const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
-                    await sendEmails("booking_confirmation", {
-                      client_name: addApptForm.client_name, client_email: email,
-                      service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
-                      payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
-                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang,
-                      cancel_url: cancelUrl || null
-                    });
+                    // Client confirmation — skipped when "notify client" is
+                    // unticked (e.g. back-filling a phone booking). The
+                    // cancellation token only feeds this email's cancel button,
+                    // so it's skipped along with it.
+                    if (addApptForm.notify_client !== false) {
+                      // Null when the appointment is within 24h — button omitted.
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
+                      await sendEmails("booking_confirmation", {
+                        client_name: addApptForm.client_name, client_email: email,
+                        service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
+                        payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
+                        salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang,
+                        cancel_url: cancelUrl || null
+                      });
+                    }
                     // Notify owner about new booking
                     await sendEmails("booking_notification", {
                       owner_email: salonProfile.email || null, staff_emails: [],

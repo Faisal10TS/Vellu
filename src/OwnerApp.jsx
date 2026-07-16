@@ -2739,7 +2739,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Multi-service structure: services is an array of {id, service_id,
   // variant_id, staff_id}. The owner can add or remove rows to build a
   // combined booking (nails with X + toes with Y, one client, one row).
-  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" });
+  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [clientList, setClientList] = useState([]);
@@ -4841,7 +4841,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -5973,7 +5973,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     every day so the owner can add multiple bookings without
                     having to first empty the day. */}
                 <button className="btn-ghost" style={{ width: "100%", marginBottom: 12, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "" }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
                 </button>
                 {calAppts.length === 0 ? (() => {
@@ -10152,6 +10152,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.allergies} ({t.allergiesOptional})</div>
                       <textarea className="input-field" rows={2} placeholder={t.allergiesPlaceholder} value={addApptForm.client_allergies} onChange={e => setAddApptForm(f => ({...f, client_allergies: e.target.value}))} style={{ fontSize: 12, resize: "vertical", width: "100%" }} />
                     </div>
+                    {/* Opt-out for the client-facing confirmation (email + SMS).
+                        Useful when back-filling a phone booking the client
+                        already knows about. Internal notifications to staff
+                        are not affected by this toggle. */}
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer", fontSize: 12, color: c.textSub, userSelect: "none" }}>
+                      <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+                      {lang === "nl" ? "Stuur bevestiging naar de klant (e-mail" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : "Send confirmation to the client (email" + (salonData.plan === "professional" ? " + SMS" : "") + ")"}
+                    </label>
                   </div>
                 </div>
                 <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !(addApptForm.services || []).length || (addApptForm.services || []).some(r => !r.service_id) || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
@@ -10240,23 +10248,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       return;
                     }
                     update(d => { d.appointments = [appt, ...d.appointments]; return d; });
-                    // Cancellation token so the client's email gets the same
-                    // cancel button a self-booked client gets. Null when the
-                    // appointment is within 24h — then the button is omitted.
-                    const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
-                    // Send confirmation email
-                    const bookingConfirmPayload = {
-                      client_name: addApptForm.client_name, client_email: email,
-                      client_phone: addApptForm.client_phone || null,
-                      service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
-                      payment: "on-arrival", price: totalPrice,
-                      salon_name: salonData.name, owner_email: null,
-                      salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
-                      owner_id: salonData.owner_id, lang,
-                      cancel_url: cancelUrl || null
-                    };
-                    await sendEmails("booking_confirmation", bookingConfirmPayload);
-                    sendSMS("booking_confirmation", bookingConfirmPayload).catch(() => { /* logged in helper */ });
+                    // Client-facing confirmation (email + SMS) — skipped when the
+                    // owner unticked "notify client" (e.g. back-filling a phone
+                    // booking). The cancellation token only feeds the email's
+                    // cancel button, so it's skipped along with it; the owner can
+                    // always cancel from the dashboard.
+                    if (addApptForm.notify_client !== false) {
+                      // Null when the appointment is within 24h — button omitted.
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
+                      const bookingConfirmPayload = {
+                        client_name: addApptForm.client_name, client_email: email,
+                        client_phone: addApptForm.client_phone || null,
+                        service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
+                        payment: "on-arrival", price: totalPrice,
+                        salon_name: salonData.name, owner_email: null,
+                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
+                        owner_id: salonData.owner_id, lang,
+                        cancel_url: cancelUrl || null
+                      };
+                      await sendEmails("booking_confirmation", bookingConfirmPayload);
+                      sendSMS("booking_confirmation", bookingConfirmPayload).catch(() => { /* logged in helper */ });
+                    }
                     // Notify every assigned staff — combined bookings can have
                     // more than one, dedupe on email so nobody gets it twice.
                     const staffEmails = Array.from(new Set(rows.map(r => r.staff?.email).filter(Boolean)));
