@@ -10,7 +10,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   Skeleton, DashboardSkeleton,
-  compressImage, sendEmails, sendSMS, ACCENT,
+  compressImage, sendEmails, sendSMS, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
@@ -10240,6 +10240,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       return;
                     }
                     update(d => { d.appointments = [appt, ...d.appointments]; return d; });
+                    // Cancellation token so the client's email gets the same
+                    // cancel button a self-booked client gets. Null when the
+                    // appointment is within 24h — then the button is omitted.
+                    const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
                     // Send confirmation email
                     const bookingConfirmPayload = {
                       client_name: addApptForm.client_name, client_email: email,
@@ -10248,7 +10252,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       payment: "on-arrival", price: totalPrice,
                       salon_name: salonData.name, owner_email: null,
                       salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
-                      owner_id: salonData.owner_id, lang
+                      owner_id: salonData.owner_id, lang,
+                      cancel_url: cancelUrl || null
                     };
                     await sendEmails("booking_confirmation", bookingConfirmPayload);
                     sendSMS("booking_confirmation", bookingConfirmPayload).catch(() => { /* logged in helper */ });

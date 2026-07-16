@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import {
   useTheme, useToast, ToastContainer, useConfirm, ConfirmModal,
   Skeleton, DashboardSkeleton,
-  compressImage, sendEmails, ACCENT,
+  compressImage, sendEmails, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
@@ -2209,11 +2209,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       return;
                     }
                     setAppointments(a => [appt, ...a]);
+                    // Cancellation token so the client's email gets the same
+                    // cancel button a self-booked client gets. Null when the
+                    // appointment is within 24h — then the button is omitted.
+                    const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
                     await sendEmails("booking_confirmation", {
                       client_name: addApptForm.client_name, client_email: email,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                       payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
-                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang
+                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang,
+                      cancel_url: cancelUrl || null
                     });
                     // Notify owner about new booking
                     await sendEmails("booking_notification", {

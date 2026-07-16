@@ -251,6 +251,34 @@ async function sendEmails(type, booking) {
   }
 }
 
+// Create a cancellation token for a manually-booked appointment so the
+// client's confirmation email carries the same cancel button a self-booked
+// client gets (book-appointment creates these server-side; dashboard bookings
+// insert directly, allowed by the owner/staff RLS policy on the table).
+// Same shape as the edge function: 64-char hex token, valid until 24h before
+// the appointment. Returns the cancel URL, or null when the appointment is
+// already within 24h (a cancel link that lands on "too late" is worse than
+// none) or when the insert fails — callers just omit the button then.
+async function createCancellationToken(appointmentId, date, time) {
+  try {
+    const expiresAt = new Date(new Date(`${date}T${time}:00`).getTime() - 24 * 60 * 60 * 1000);
+    if (expiresAt <= new Date()) return null;
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const { error } = await supabase.from("cancellation_tokens").insert({
+      appointment_id: appointmentId,
+      token,
+      expires_at: expiresAt.toISOString(),
+    });
+    if (error) { console.error("cancellation token insert failed:", error); return null; }
+    return `https://vellu.cc/cancel/${token}`;
+  } catch (e) {
+    console.error("cancellation token error:", e);
+    return null;
+  }
+}
+
 // SMS counterpart to sendEmails. The edge function silently no-ops when the
 // salon is not on the Professional plan or the client has no phone number,
 // so callers can safely fire this alongside sendEmails without duplicating
@@ -1706,7 +1734,7 @@ export {
   useToast, ToastContainer,
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
-  compressImage, sendEmails, sendSMS,
+  compressImage, sendEmails, sendSMS, createCancellationToken,
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
