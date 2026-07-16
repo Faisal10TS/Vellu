@@ -3070,7 +3070,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // When set, the block modal edits an existing staff_day_overrides time-block
   // row (UPDATE) instead of inserting a new one.
   const [blockEditId, setBlockEditId] = useState(null);
-  const [editApptForm, setEditApptForm] = useState({ service_id: "", date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
+  const [editApptForm, setEditApptForm] = useState({ service_id: "", variant_id: "", date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
@@ -3396,6 +3396,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const finalPrice = a.service_price != null ? parseFloat(a.service_price) : null;
     setEditApptForm({
       service_id: a.service_id || "",
+      // Appointments don't record which variant was booked (only the label),
+      // so this always starts empty; the dropdown shows the stored
+      // service_name as the "current" option until the owner picks anew.
+      variant_id: "",
       date: a.date || "",
       time: (a.time || "").slice(0, 5),
       price: finalPrice != null ? String(finalPrice + storedDiscount) : "",
@@ -3551,10 +3555,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // that had several treatments this collapses them to the one chosen (the
     // modal warns about that). Price/duration come from the form fields, which
     // were pre-filled from the new service when it was selected.
-    const serviceChanged = editApptForm.service_id && editApptForm.service_id !== orig.service_id;
+    // A variant pick counts as a change even when the base service is the
+    // same (the appointment never stored which variant was booked, so any
+    // explicit pick rebuilds the name/breakdown — rebuilding to the same
+    // variant is harmless).
+    const serviceChanged = editApptForm.service_id && (editApptForm.service_id !== orig.service_id || !!editApptForm.variant_id);
     const newSvc = serviceChanged ? (salonData.services || []).find(s => s.id === editApptForm.service_id) : null;
     if (newSvc) {
-      const locName = lang === "nl" ? (newSvc.name_nl || newSvc.name) : (newSvc.name_en || newSvc.name_nl || newSvc.name);
+      const newVar = editApptForm.variant_id ? (newSvc.variants || []).find(v => v.id === editApptForm.variant_id) : null;
+      // Same "Service — Variant" label shape as the manual-booking flow.
+      const locName = (lang === "nl" ? (newSvc.name_nl || newSvc.name) : (newSvc.name_en || newSvc.name_nl || newSvc.name))
+        + (newVar ? " — " + (lang === "nl" ? newVar.name_nl : (newVar.name_en || newVar.name_nl)) : "");
       payload.service_id = newSvc.id;
       payload.service_name = locName + (orig.staff_name ? ` (${orig.staff_name})` : "");
       payload.service_breakdown = [{ service_id: newSvc.id, staff_id: orig.staff_id || null, duration: durationNum, offset_min: 0, label: locName }];
@@ -4299,21 +4310,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               {(() => {
-                // Services priced via variants store 0 on the base row — showing
-                // "— €0" reads as broken. Use the cheapest variant as "vanaf €X"
-                // instead, and skip the price entirely when nothing is priced.
-                const cheapestVariant = (s) => {
-                  const priced = (s.variants || []).map((v) => ({ p: parseFloat(v.price || 0), d: parseInt(v.duration || 0) })).filter((v) => v.p > 0);
-                  if (priced.length === 0) return null;
-                  return priced.reduce((min, v) => (v.p < min.p ? v : min));
-                };
-                const priceLabel = (s) => {
-                  const base = parseFloat(s.price || 0);
-                  if (base > 0) return ` — €${base.toFixed(0)}`;
-                  const cv = cheapestVariant(s);
-                  if (cv) return ` — ${lang === "nl" ? "vanaf" : "from"} €${cv.p.toFixed(0)}`;
-                  return "";
-                };
+                const svcLabel = (s) => lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name);
+                const varLabel = (v) => lang === "nl" ? v.name_nl : (v.name_en || v.name_nl);
+                const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — €${n.toFixed(0)}` : ""; };
+                // One option per bookable thing: services with variants expand
+                // to one option per variant (value "serviceId::variantId") so
+                // each entry carries its real price; plain services stay one
+                // option (value = serviceId).
+                const options = (salonData.services || []).flatMap((s) => {
+                  const vars = (s.variants || []);
+                  if (vars.length > 0) return vars.map((v) => ({ value: `${s.id}::${v.id}`, text: `${svcLabel(s)} — ${varLabel(v)}${priceSuffix(v.price)}` }));
+                  return [{ value: s.id, text: `${svcLabel(s)}${priceSuffix(s.price)}` }];
+                });
+                const curValue = editApptForm.variant_id ? `${editApptForm.service_id}::${editApptForm.variant_id}` : editApptForm.service_id;
                 // Native dropdown menus ignore the select's dark styling, so each
                 // option needs explicit theme colours (same pattern as the other
                 // selects in this file) — otherwise it's grey-on-white.
@@ -4321,32 +4330,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 return (
               <div style={cell}>
                 <label style={lbl}>{lang === "nl" ? "Dienst" : "Service"}</label>
-                <select className="input-field" value={editApptForm.service_id} style={inp}
+                <select className="input-field" value={curValue} style={inp}
                   onChange={(e) => {
-                    const id = e.target.value;
-                    const svc = (salonData.services || []).find((s) => s.id === id);
-                    // Pre-fill price + duration from the chosen service (falling
-                    // back to its cheapest variant when the base row is €0); both
-                    // stay editable in the fields below.
-                    const cv = svc ? cheapestVariant(svc) : null;
-                    const basePrice = parseFloat(svc?.price || 0);
-                    const price = svc ? (basePrice > 0 ? String(basePrice) : (cv ? String(cv.p) : "0")) : null;
-                    const duration = svc ? String(basePrice > 0 || !cv ? svc.duration : (cv.d || svc.duration)) : null;
-                    setEditApptForm((f) => ({ ...f, service_id: id, price: price ?? f.price, duration: duration ?? f.duration }));
+                    const [sid, vid] = e.target.value.split("::");
+                    const svc = (salonData.services || []).find((s) => s.id === sid);
+                    const variant = vid ? (svc?.variants || []).find((v) => v.id === vid) : null;
+                    // Pre-fill price + duration from the chosen service/variant;
+                    // both stay editable in the fields below.
+                    const price = variant ? parseFloat(variant.price || 0) : parseFloat(svc?.price || 0);
+                    const duration = variant ? parseInt(variant.duration || svc?.duration || 60) : parseInt(svc?.duration || 60);
+                    setEditApptForm((f) => ({ ...f, service_id: sid, variant_id: vid || "", price: svc ? String(price) : f.price, duration: svc ? String(duration) : f.duration }));
                   }}>
-                  {!(salonData.services || []).some((s) => s.id === editApptForm.service_id) && (
-                    <option value={editApptForm.service_id} style={optStyle}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
+                  {!options.some((o) => o.value === curValue) && (
+                    <option value={curValue} style={optStyle}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
                   )}
-                  {(salonData.services || []).map((s) => (
-                    <option key={s.id} value={s.id} style={optStyle}>
-                      {(lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name))}{priceLabel(s)}
-                    </option>
+                  {options.map((o) => (
+                    <option key={o.value} value={o.value} style={optStyle}>{o.text}</option>
                   ))}
                 </select>
               </div>
                 );
               })()}
-              {editApptForm.service_id !== (editingAppt.service_id || "") && (editingAppt.service_breakdown?.length || 0) > 1 && (
+              {(editApptForm.service_id !== (editingAppt.service_id || "") || !!editApptForm.variant_id) && (editingAppt.service_breakdown?.length || 0) > 1 && (
                 <div style={{ fontSize: 10, color: accent, background: `${accent}12`, border: `1px solid ${accent}33`, borderRadius: 10, padding: "8px 12px", lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Deze afspraak heeft meerdere behandelingen. Bij het wijzigen worden ze vervangen door de gekozen dienst."
