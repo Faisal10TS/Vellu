@@ -33,3 +33,18 @@ entrypoint = "./functions/send-emails/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/send-emails/*.html" ]
+
+[functions.send-reminders]
+enabled = true
+# Cron-triggered (pg_cron + Vercel proxy) with no Authorization header —
+# verify_jwt=true would 401 it at the gateway before it runs.
+verify_jwt = false
+import_map = "./functions/send-reminders/deno.json"
+entrypoint = "./functions/send-reminders/index.ts"
+
+[functions.reschedule-appointment]
+enabled = true
+# Does its own Bearer-token validation in-function (verifyUser); deployed
+# verify_jwt=false since v1.
+verify_jwt = false
+entrypoint = "./functions/reschedule-appointment/index.ts"
