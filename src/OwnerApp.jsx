@@ -2900,6 +2900,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           btw_id: data.btw_id || "",
           btw_rate: data.btw_rate ?? 21,
           iban: data.iban || "",
+          iban_holder: data.iban_holder || "",
+          payment_link: data.payment_link || "",
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
           invoice_profiles: Array.isArray(data.invoice_profiles) ? data.invoice_profiles : [],
@@ -3721,6 +3723,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_kvk: (p ? p.kvk_number : salonData.kvk_number) || "",
           salon_btw: (p ? p.btw_id : salonData.btw_id) || "",
           salon_iban: (p ? p.iban : salonData.iban) || "",
+          // Payment block: extra invoice profiles are separate people with
+          // their own IBAN, so the account-holder name follows the profile and
+          // the salon-wide pay link is only attached to the primary profile —
+          // otherwise money would route to the wrong person.
+          iban_holder: p ? (p.label || salonData.name) : (salonData.iban_holder || ""),
+          payment_link: p ? "" : (salonData.payment_link || ""),
           salon_accent: salonData.accent || "",
           salon_btw_rate: salonData.btw_rate ?? 21,
           salon_logo: salonData.logo_url || "",
@@ -3771,6 +3779,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (state === "hidden") toast.show(lang === "nl" ? "Factuur verborgen" : "Invoice hidden");
     else if (state === "deleted") toast.show(lang === "nl" ? "Factuur verwijderd" : "Invoice deleted");
     else toast.show(lang === "nl" ? "Factuur teruggezet" : "Invoice restored");
+  };
+
+  // Toggle the paid flag on an invoice row — light bookkeeping so the owner
+  // can see who still owes after a payment request went out.
+  const togglePaid = async (a) => {
+    const newVal = a.paid_at ? null : new Date().toISOString();
+    const { error } = await supabase.from("appointments").update({ paid_at: newVal }).eq("id", a.id);
+    if (error) {
+      toast.show(lang === "nl" ? "Kon betaalstatus niet bijwerken" : "Could not update payment status", "error");
+      return;
+    }
+    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, paid_at: newVal } : x); return d; });
+    toast.show(newVal ? (lang === "nl" ? "Gemarkeerd als betaald" : "Marked as paid") : (lang === "nl" ? "Betaling teruggezet naar open" : "Payment set back to open"));
   };
 
   const addService = async () => {
@@ -6331,6 +6352,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   {isSending ? "..." : t.send}
                                 </button>
                               )}
+                              {/* Paid toggle — bookkeeping for payment requests */}
+                              <button
+                                aria-label={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : "Mark as paid")}
+                                onClick={() => togglePaid(a)}
+                                style={{ height: 30, minWidth: 30, padding: a.paid_at ? "0 10px" : 0, borderRadius: 8, border: `1px solid ${a.paid_at ? `${c.success}44` : c.inputBorder}`, background: a.paid_at ? `${c.success}14` : "transparent", color: a.paid_at ? c.success : c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif" }}
+                                title={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : "Mark as paid")}
+                              >
+                                €{a.paid_at ? (lang === "nl" ? " Betaald" : " Paid") : ""}
+                              </button>
+                              {/* WhatsApp payment request — prefilled with amount + pay
+                                  link (or IBAN details). This is also the Tikkie flow:
+                                  make the Tikkie in the app, paste it in this chat. */}
+                              {a.client_phone && (salonData.payment_link || salonData.iban) && (
+                                <a
+                                  href={getWhatsAppUrl(a.client_phone, lang === "nl"
+                                    ? `Hoi ${(a.client_name || "").split(" ")[0]}! Bedankt voor je bezoek bij ${salonData.name}. Het totaalbedrag is €${parseFloat(a.service_price || 0).toFixed(2)}. ${salonData.payment_link ? `Je kunt betalen via: ${salonData.payment_link}` : `Je kunt het overmaken naar ${salonData.iban}${salonData.iban_holder ? ` t.n.v. ${salonData.iban_holder}` : ""} o.v.v. ${a.date}`}`
+                                    : `Hi ${(a.client_name || "").split(" ")[0]}! Thanks for your visit at ${salonData.name}. The total is €${parseFloat(a.service_price || 0).toFixed(2)}. ${salonData.payment_link ? `You can pay via: ${salonData.payment_link}` : `You can transfer it to ${salonData.iban}${salonData.iban_holder ? ` (${salonData.iban_holder})` : ""} ref: ${a.date}`}`)}
+                                  target="_blank" rel="noopener noreferrer"
+                                  aria-label={lang === "nl" ? "Betaalverzoek via WhatsApp" : "Payment request via WhatsApp"}
+                                  title={lang === "nl" ? "Betaalverzoek via WhatsApp" : "Payment request via WhatsApp"}
+                                  style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${accent}33`, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                </a>
+                              )}
                               <button
                                 aria-label={lang === "nl" ? "Verbergen" : "Hide"}
                                 onClick={() => setInvoiceViewState(a.id, "hidden")}
@@ -7292,6 +7338,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
                     <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                  </div>
+                  {/* Payment-request settings: with an IBAN the invoice email
+                      gets a SEPA QR the client scans with their banking app;
+                      the pay link adds a one-tap button (bunq.me / PayPal.me —
+                      links where the payer can enter the amount themselves). */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
+                      <input className="input-field" placeholder={lang === "nl" ? "bijv. Bloom Studio" : "e.g. Bloom Studio"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
+                      <input className="input-field" placeholder="https://bunq.me/..." value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: -6, lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "Met een IBAN krijgt de factuur-mail automatisch een scan-en-betaal QR-code (werkt met ING, Rabobank, ABN, bunq). Een betaallink (bunq.me, PayPal.me) voegt een betaalknop toe. Klanten betalen ná de behandeling."
+                      : "With an IBAN the invoice email automatically gets a scan-to-pay QR code (works with all Dutch banking apps). A payment link (bunq.me, PayPal.me) adds a pay button. Clients pay after their treatment."}
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "BTW-percentage" : "VAT percentage"}</div>
@@ -9956,6 +10021,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   btw_id: salonData.btw_id || null,
                   btw_rate: salonData.btw_rate === "" || salonData.btw_rate == null ? 21 : salonData.btw_rate,
                   iban: salonData.iban || null,
+                  iban_holder: salonData.iban_holder || null,
+                  payment_link: salonData.payment_link || null,
                   invoice_prefix: salonData.invoice_prefix || "INV",
                   // Extras are stored in ONE jsonb column so we have to write
                   // the whole array — including each extra's next_invoice_number

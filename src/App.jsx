@@ -263,6 +263,10 @@ function SalonRoute({ lang, setLang }) {
 
         phone_required: data.phone_required || false,
         waitlist_enabled: data.waitlist_enabled !== false,
+        // Whether the "pay afterwards via payment request" option makes sense:
+        // the salon set up a pay link and/or an IBAN for the invoice email.
+        // Boolean only — the actual details never enter the public payload.
+        payment_configured: !!(data.payment_link || data.iban),
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",

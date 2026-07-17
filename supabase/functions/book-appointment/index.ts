@@ -642,17 +642,11 @@ serve(async (req) => {
         staff_emails: staffEmails,
       }));
     }
-    // Receipt/invoice to the client when they chose to pay online. Carries the
-    // salon's business + BTW details so the email can render a proper invoice.
-    if (isOnline) {
-      jobs.push(sendMail("invoice", {
-        salon_address: salon.address || "",
-        salon_kvk: salon.kvk_number || "",
-        salon_btw: salon.btw_id || "",
-        salon_iban: salon.iban || "",
-        salon_btw_rate: salon.btw_rate ?? 21,
-      }));
-    }
+    // NOTE: no invoice at booking time anymore. "online" now means "payment
+    // request afterwards": the price can still change during the visit, so
+    // the invoice (with the pay link + SEPA QR block) is sent by the owner
+    // from the dashboard once the appointment is completed. The confirmation
+    // above already tells the client payment happens after the visit.
     // Confirmation SMS to the client. send-sms silently no-ops for non-Pro
     // salons / invalid phones, so it's safe to always fire when a phone exists.
     if (phone) {

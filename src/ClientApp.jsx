@@ -1425,18 +1425,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         },
       }).catch(e => console.error("Google Calendar error:", e));
 
-      // Invoice/receipt for online payment — also handled server-side by
-      // book-appointment now (it 401s from an anonymous browser anyway), so
-      // this only runs as a fallback on older servers.
-      if (!result.emails_sent && form.payment === "online") {
-        sendEmails("invoice", {
-          client_name: clientFullName, client_email: clientEmail, service_name: combinedServiceName,
-          date, time, price: serverPrice, salon_name: result.salon_name || initialSalon.name,
-          salon_address: initialSalon.address || "", salon_kvk: initialSalon.kvk_number || "",
-          salon_btw: initialSalon.btw_id || "", salon_iban: initialSalon.iban || "",
-          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
-        }).catch(e => console.error("invoice email failed:", e));
-      }
+      // No invoice at booking time anymore: "online" now means "payment
+      // request afterwards" — the owner sends the invoice (with the pay
+      // link / SEPA QR block) from the dashboard after the appointment is
+      // completed, when the final price is known.
     } catch (err) {
       console.error("Booking error:", err);
       // Map the server's specific error code to a friendly message. Any code we don't
@@ -2896,7 +2888,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
+                  {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : [])].map(([v,icon,label]) => (
                     <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                       <div className={`radio ${form.payment === v ? "on" : ""}`} />
                       <NavIcon name={icon} size={15} color={c.textSub} />
@@ -3495,7 +3487,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                     <SL>{t.payMethod}</SL>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                      {[["on-arrival","home",t.payArrival],["online","creditcard",t.payOnline]].map(([v,icon,label]) => (
+                      {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : [])].map(([v,icon,label]) => (
                         <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                           <div className={`radio ${form.payment === v ? "on" : ""}`} />
                           <NavIcon name={icon} size={15} color={c.textSub} />
