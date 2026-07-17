@@ -10,7 +10,7 @@ import {
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
 } from "./shared.jsx";
-import { VariantAdder, ExtraAdder } from "./OwnerApp.jsx";
+import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
@@ -1601,6 +1601,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
                   </div>
                 </div>
+
+                {/* Own revenue report — appointments here are already scoped to
+                    this stylist (isMine), so fixedStaffName just stamps their
+                    name on the PDF and hides the team chips. salonProfile is
+                    the raw profiles row, which carries the company block
+                    fields (business_name, address, kvk, btw, iban). */}
+                <RevenueReportBlock
+                  salonData={salonProfile}
+                  completedAppts={completedAppts}
+                  lang={lang}
+                  c={c}
+                  accent={accent}
+                  toast={toast}
+                  fixedStaffName={myStaff.name}
+                />
 
                 {/* Search + filter toolbar */}
                 <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>

@@ -684,21 +684,26 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast }) {
 // Revenue report block — renders inside the Facturen view. Owner picks a
 // period (this/last month, this/last year, or custom range) and clicks
 // download; jsPDF generates and triggers a browser download instantly.
-function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast }) {
+// An appointment counts for a stylist when they're the primary staff OR
+// assigned to any service in a combined booking — same rule as the agenda's
+// per-staff filter. Shared by the revenue report and the invoice stat tiles.
+const apptInvolvesStaff = (a, id) =>
+  a.staff_id === id ||
+  Object.values(a.staff_assignments || {}).includes(id) ||
+  (Array.isArray(a.service_breakdown) && a.service_breakdown.some(b => b.staff_id === id));
+
+// `fixedStaffName`: set by the staff app, where the appointments are already
+// scoped to one team member — hides the team chips and stamps that name on
+// the PDF instead.
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "" }) {
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   // "" = whole team; otherwise a staff id — the PDF then only contains that
   // team member's treatments (header + filename say whose it is).
   const [staffFilter, setStaffFilter] = useState("");
-  const staffList = salonData.staff || [];
-  // An appointment counts for a stylist when they're the primary staff OR
-  // assigned to any service in a combined booking — same rule as the agenda's
-  // per-staff filter.
-  const involvesStaff = (a, id) =>
-    a.staff_id === id ||
-    Object.values(a.staff_assignments || {}).includes(id) ||
-    (Array.isArray(a.service_breakdown) && a.service_breakdown.some(b => b.staff_id === id));
+  const staffList = fixedStaffName ? [] : (salonData.staff || []);
+  const involvesStaff = apptInvolvesStaff;
 
   const presets = [
     { key: "this_month", label: lang === "nl" ? "Deze maand" : "This month" },
@@ -743,7 +748,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
       // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
       // chunk downloads; subsequent clicks are instant (browser-cached).
       const mod = await import("./revenueReport.js");
-      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang, staffName: selectedStaff?.name || "" });
+      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang, staffName: fixedStaffName || selectedStaff?.name || "" });
       toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
       console.error("PDF error:", e);
@@ -2776,6 +2781,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all"); // "all" | "sent" | "unsent" | "hidden"
+  // "" = whole team; otherwise a staff id — scopes the invoice stat tiles AND
+  // the invoice list to treatments that team member was involved in.
+  const [invoiceStaffFilter, setInvoiceStaffFilter] = useState("");
   const [invoicesExpanded, setInvoicesExpanded] = useState(false);
   const [analyticsReviewsExpanded, setAnalyticsReviewsExpanded] = useState(false);
   // Multi-service structure: services is an array of {id, service_id,
@@ -6081,8 +6089,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // invoices so the stat cards line up with the rows the owner sees
             // in the Alles/Open/Verstuurd tabs. The Verborgen tab gets its own
             // bucket from `hiddenAppts`.
-            const visibleCompleted = completedAppts.filter(a => a.invoice_view_state !== "hidden" && a.invoice_view_state !== "deleted");
-            const hiddenAppts = completedAppts.filter(a => a.invoice_view_state === "hidden");
+            // The team-member chips scope EVERYTHING below them (tiles + list)
+            // to that stylist's treatments; the revenue-report block keeps its
+            // own independent staff filter.
+            const staffScoped = invoiceStaffFilter
+              ? completedAppts.filter(a => apptInvolvesStaff(a, invoiceStaffFilter))
+              : completedAppts;
+            const visibleCompleted = staffScoped.filter(a => a.invoice_view_state !== "hidden" && a.invoice_view_state !== "deleted");
+            const hiddenAppts = staffScoped.filter(a => a.invoice_view_state === "hidden");
             const unsent = visibleCompleted.filter(a => !a.invoice_sent);
             const sent = visibleCompleted.filter(a => a.invoice_sent);
             const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
@@ -6107,6 +6121,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
               {completedAppts.length > 0 && (<>
+                {/* Team-member scope for the tiles + list below. Whole team by
+                    default; the report block further down has its own filter. */}
+                {(salonData.staff || []).length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                    {[{ id: "", name: lang === "nl" ? "Hele team" : "Whole team" }, ...(salonData.staff || [])].map(st => (
+                      <button
+                        key={st.id || "all"}
+                        onClick={() => setInvoiceStaffFilter(st.id)}
+                        style={{
+                          padding: "8px 14px", borderRadius: 100, fontSize: 11,
+                          fontWeight: invoiceStaffFilter === st.id ? 600 : 400,
+                          background: invoiceStaffFilter === st.id ? `${accent}18` : c.inputBg,
+                          border: `1px solid ${invoiceStaffFilter === st.id ? accent : c.inputBorder}`,
+                          color: invoiceStaffFilter === st.id ? accent : c.textSub,
+                          cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s",
+                        }}
+                      >{st.name}</button>
+                    ))}
+                  </div>
+                )}
                 {/* Stat cards — scoped to visible invoices so the percentages
                     match the rows the owner sees in the tabs below. Hidden
                     invoices live in their own bucket; deleted ones are excluded
@@ -10392,5 +10426,5 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
 // ─── STAFF APP (team member view) ─────────────────────────────
 
-export { OwnerApp, PlanSelection, OnboardingWizard, VariantAdder, ExtraAdder, StaffAdder, LocationAdder };
+export { OwnerApp, PlanSelection, OnboardingWizard, VariantAdder, ExtraAdder, StaffAdder, LocationAdder, RevenueReportBlock };
 export default OwnerApp;
