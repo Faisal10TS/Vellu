@@ -41,7 +41,9 @@ const fmtDateNL = (isoDate) => {
 //   appointments: array of appointment rows (status=completed, date within range)
 //   range: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", label: "April 2026" }
 //   lang: "nl" | "en"  (column headers only; numeric formatting stays NL)
-export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl" }) {
+//   staffName: optional — set when the report is filtered to one team member;
+//     shown in the header and appended to the filename.
+export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "" }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595.28 x 841.89 pt
 
   const pageW = doc.internal.pageSize.getWidth();
@@ -58,6 +60,11 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFontSize(11);
   doc.setTextColor(120, 120, 120);
   doc.text(range.label || `${fmtDateNL(range.from)} — ${fmtDateNL(range.to)}`, margin, 78);
+  if (staffName) {
+    doc.setFontSize(10);
+    doc.setTextColor(...ACCENT);
+    doc.text(`${lang === "nl" ? "Medewerker" : "Team member"}: ${s(staffName)}`, margin, 94);
+  }
 
   // Vellu wordmark top-right (just text, no image — keeps PDF tiny)
   doc.setFont("helvetica", "normal");
@@ -212,8 +219,9 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
 
   // ── FILENAME ─────────────────────────────────────────────
   const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
+  const fnStaff = staffName ? "-" + s(staffName).replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 30) : "";
   const fnRange = (range.from || "").slice(0, 7); // YYYY-MM for month files
-  const filename = `${fnSalon}-omzet-${fnRange || range.from || "rapport"}.pdf`;
+  const filename = `${fnSalon}${fnStaff}-omzet-${fnRange || range.from || "rapport"}.pdf`;
 
   doc.save(filename);
 

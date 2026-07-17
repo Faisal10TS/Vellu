@@ -688,6 +688,17 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  // "" = whole team; otherwise a staff id — the PDF then only contains that
+  // team member's treatments (header + filename say whose it is).
+  const [staffFilter, setStaffFilter] = useState("");
+  const staffList = salonData.staff || [];
+  // An appointment counts for a stylist when they're the primary staff OR
+  // assigned to any service in a combined booking — same rule as the agenda's
+  // per-staff filter.
+  const involvesStaff = (a, id) =>
+    a.staff_id === id ||
+    Object.values(a.staff_assignments || {}).includes(id) ||
+    (Array.isArray(a.service_breakdown) && a.service_breakdown.some(b => b.staff_id === id));
 
   const presets = [
     { key: "this_month", label: lang === "nl" ? "Deze maand" : "This month" },
@@ -718,7 +729,11 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
       toast.show(lang === "nl" ? "Kies een datumbereik" : "Pick a date range", "error");
       return;
     }
-    const inRange = completedAppts.filter(a => a.date >= range.from && a.date <= range.to);
+    const selectedStaff = staffFilter ? staffList.find(st => st.id === staffFilter) : null;
+    const inRange = completedAppts.filter(a =>
+      a.date >= range.from && a.date <= range.to &&
+      (!selectedStaff || involvesStaff(a, selectedStaff.id))
+    );
     if (inRange.length === 0) {
       toast.show(lang === "nl" ? "Geen afgeronde afspraken in deze periode" : "No completed appointments in this period", "error");
       return;
@@ -728,7 +743,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
       // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
       // chunk downloads; subsequent clicks are instant (browser-cached).
       const mod = await import("./revenueReport.js");
-      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang });
+      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang, staffName: selectedStaff?.name || "" });
       toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
       console.error("PDF error:", e);
@@ -772,6 +787,33 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast 
           >{p.label}</button>
         ))}
       </div>
+      {staffList.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
+            {lang === "nl" ? "Medewerker" : "Team member"}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[{ id: "", name: lang === "nl" ? "Hele team" : "Whole team" }, ...staffList].map(st => (
+              <button
+                key={st.id || "all"}
+                onClick={() => setStaffFilter(st.id)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 100,
+                  fontSize: 11,
+                  fontWeight: staffFilter === st.id ? 600 : 400,
+                  background: staffFilter === st.id ? `${accent}18` : c.inputBg,
+                  border: `1px solid ${staffFilter === st.id ? accent : c.inputBorder}`,
+                  color: staffFilter === st.id ? accent : c.textSub,
+                  cursor: "pointer",
+                  fontFamily: "'Jost',sans-serif",
+                  transition: "all 0.2s",
+                }}
+              >{st.name}</button>
+            ))}
+          </div>
+        </div>
+      )}
       {period === "custom" && (
         <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
           <input
