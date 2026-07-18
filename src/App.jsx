@@ -296,7 +296,12 @@ function SalonRoute({ lang, setLang }) {
           })),
         appointments: [],
         reviews: reviews || [],
-        staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
+        // Owner first, then the rest in their drag/position order — the salon
+        // owner should lead the team list and the staff picker.
+        staff: (staffData || [])
+          .slice()
+          .sort((a, b) => ((b.user_id === data.id) - (a.user_id === data.id)) || ((a.position ?? 0) - (b.position ?? 0)))
+          .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
         // One table, two meanings: kind='block' rows make a stylist (or the
         // whole salon) unavailable; kind='exception' rows are EXTRA open
         // windows (block_time_start/end double as open/close). Split here so

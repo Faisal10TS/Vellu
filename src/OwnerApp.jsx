@@ -2966,7 +2966,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             })),
           appointments: appts || [],
           reviews: reviews || [],
-          staff: (staffData || []).map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
+          // Owner first, then the rest in their position order — the salon
+          // owner should lead the team list and every staff picker.
+          staff: (staffData || [])
+            .slice()
+            .sort((a, b) => ((b.user_id === data.id) - (a.user_id === data.id)) || ((a.position ?? 0) - (b.position ?? 0)))
+            .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
           categories: catData || [],
           locations: locData || []
         }));
