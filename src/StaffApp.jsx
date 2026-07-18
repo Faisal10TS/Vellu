@@ -36,6 +36,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     kvk_number: staffMember.kvk_number || "",
     btw_id: staffMember.btw_id || "",
     iban: staffMember.iban || "",
+    iban_holder: staffMember.iban_holder || "",
+    payment_link: staffMember.payment_link || "",
     invoice_prefix: staffMember.invoice_prefix || "INV",
     next_invoice_number: staffMember.next_invoice_number || 1
   });
@@ -281,6 +283,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_kvk: invoiceForm.kvk_number || salonProfile.kvk_number || "",
         salon_btw: invoiceForm.btw_id || salonProfile.btw_id || "",
         salon_iban: invoiceForm.iban || salonProfile.iban || "",
+        // Pay block: only for clients who chose "payment request afterwards"
+        // at booking; routes to THIS worker's own account details.
+        payment_request: a.payment_method === "online",
+        iban_holder: invoiceForm.iban_holder || myStaff.name || "",
+        payment_link: invoiceForm.payment_link || "",
         salon_accent: salonProfile.accent_color || "",
         salon_btw_rate: salonProfile.btw_rate ?? 21,
         salon_logo: salonProfile.logo_url || "",
@@ -1876,11 +1883,34 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
                       </div>
                     </div>
+                    {/* Payment requests — own sub-section: only rendered in
+                        the invoice email when the client picked "payment
+                        request afterwards" at booking, and it routes to THIS
+                        worker's own account. */}
+                    <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 14, marginTop: 4 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+                        {lang === "nl"
+                          ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok: een scan-en-betaal QR-code op basis van jouw IBAN en optioneel een knop via je eigen betaallink (bunq.me, PayPal.me)."
+                          : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block: a scan-to-pay QR code based on your IBAN plus an optional button via your own payment link (bunq.me, PayPal.me)."}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
+                          <input className="input-field" placeholder={myStaff.name || ""} value={invoiceForm.iban_holder} onChange={e => setInvoiceForm(f => ({...f, iban_holder: e.target.value}))} style={{ width: "100%" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
+                          <input className="input-field" placeholder="https://bunq.me/..." value={invoiceForm.payment_link} onChange={e => setInvoiceForm(f => ({...f, payment_link: e.target.value}))} style={{ width: "100%" }} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
                     const { error } = await supabase.from("staff_members").update({
                       address: invoiceForm.address || null, kvk_number: invoiceForm.kvk_number || null,
                       btw_id: invoiceForm.btw_id || null, iban: invoiceForm.iban || null,
+                      iban_holder: invoiceForm.iban_holder || null, payment_link: invoiceForm.payment_link || null,
                       invoice_prefix: invoiceForm.invoice_prefix || "INV", next_invoice_number: invoiceForm.next_invoice_number || 1
                     }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
                     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }

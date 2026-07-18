@@ -11,7 +11,7 @@ import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   Skeleton, DashboardSkeleton,
   compressImage, sendEmails, sendSMS, createCancellationToken, ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable
@@ -3723,12 +3723,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_kvk: (p ? p.kvk_number : salonData.kvk_number) || "",
           salon_btw: (p ? p.btw_id : salonData.btw_id) || "",
           salon_iban: (p ? p.iban : salonData.iban) || "",
-          // Payment block: extra invoice profiles are separate people with
-          // their own IBAN, so the account-holder name follows the profile and
-          // the salon-wide pay link is only attached to the primary profile —
-          // otherwise money would route to the wrong person.
-          iban_holder: p ? (p.label || salonData.name) : (salonData.iban_holder || ""),
-          payment_link: p ? "" : (salonData.payment_link || ""),
+          // Pay block: only for clients who chose "payment request afterwards"
+          // at booking — clients who pay in the salon get a plain invoice.
+          // Each invoice profile carries its OWN holder name + pay link so a
+          // second worker's requests route to their own account, never the
+          // salon-wide one.
+          payment_request: a.payment_method === "online",
+          iban_holder: p ? (p.iban_holder || p.label || "") : (salonData.iban_holder || ""),
+          payment_link: p ? (p.payment_link || "") : (salonData.payment_link || ""),
           salon_accent: salonData.accent || "",
           salon_btw_rate: salonData.btw_rate ?? 21,
           salon_logo: salonData.logo_url || "",
@@ -6363,12 +6365,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:
-                                  make the Tikkie in the app, paste it in this chat. */}
-                              {a.client_phone && (salonData.payment_link || salonData.iban) && (
+                                  make the Tikkie in the app, paste it in this chat.
+                                  Only for clients who chose "payment request afterwards"
+                                  at booking — clients who pay in the salon don't get
+                                  payment requests. */}
+                              {a.payment_method === "online" && a.client_phone && (salonData.payment_link || salonData.iban) && (
                                 <a
-                                  href={getWhatsAppUrl(a.client_phone, lang === "nl"
-                                    ? `Hoi ${(a.client_name || "").split(" ")[0]}! Bedankt voor je bezoek bij ${salonData.name}. Het totaalbedrag is €${parseFloat(a.service_price || 0).toFixed(2)}. ${salonData.payment_link ? `Je kunt betalen via: ${salonData.payment_link}` : `Je kunt het overmaken naar ${salonData.iban}${salonData.iban_holder ? ` t.n.v. ${salonData.iban_holder}` : ""} o.v.v. ${a.date}`}`
-                                    : `Hi ${(a.client_name || "").split(" ")[0]}! Thanks for your visit at ${salonData.name}. The total is €${parseFloat(a.service_price || 0).toFixed(2)}. ${salonData.payment_link ? `You can pay via: ${salonData.payment_link}` : `You can transfer it to ${salonData.iban}${salonData.iban_holder ? ` (${salonData.iban_holder})` : ""} ref: ${a.date}`}`)}
+                                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: a.service_price, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name }))}
                                   target="_blank" rel="noopener noreferrer"
                                   aria-label={lang === "nl" ? "Betaalverzoek via WhatsApp" : "Payment request via WhatsApp"}
                                   title={lang === "nl" ? "Betaalverzoek via WhatsApp" : "Payment request via WhatsApp"}
@@ -7339,25 +7342,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
                     <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
                   </div>
-                  {/* Payment-request settings: with an IBAN the invoice email
-                      gets a SEPA QR the client scans with their banking app;
-                      the pay link adds a one-tap button (bunq.me / PayPal.me —
-                      links where the payer can enter the amount themselves). */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
-                      <input className="input-field" placeholder={lang === "nl" ? "bijv. Bloom Studio" : "e.g. Bloom Studio"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
-                      <input className="input-field" placeholder="https://bunq.me/..." value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: -6, lineHeight: 1.5 }}>
-                    {lang === "nl"
-                      ? "Met een IBAN krijgt de factuur-mail automatisch een scan-en-betaal QR-code (werkt met ING, Rabobank, ABN, bunq). Een betaallink (bunq.me, PayPal.me) voegt een betaalknop toe. Klanten betalen ná de behandeling."
-                      : "With an IBAN the invoice email automatically gets a scan-to-pay QR code (works with all Dutch banking apps). A payment link (bunq.me, PayPal.me) adds a pay button. Clients pay after their treatment."}
-                  </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "BTW-percentage" : "VAT percentage"}</div>
                     <input className="input-field" type="number" min="0" max="100" step="1" placeholder="21" value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
@@ -7376,6 +7360,53 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Payment requests — own section, separate from the legal
+                  invoice details. The pay block (button + SEPA QR) is ONLY
+                  added to the invoice email when the client chose "payment
+                  request afterwards" at booking — clients who pay in the
+                  salon never get it. Each extra invoice profile has its own
+                  fields so every worker's requests route to their own
+                  account. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok: een scan-en-betaal QR-code op basis van je IBAN (werkt met ING, Rabobank, ABN, bunq) en optioneel een betaalknop via je eigen link (bunq.me, PayPal.me). Klanten die in de salon betalen krijgen dit blok niet."
+                    : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block: a scan-to-pay QR code based on your IBAN (works with all Dutch banking apps) plus an optional pay button via your own link (bunq.me, PayPal.me). Clients who pay in the salon never get this block."}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
+                    <input className="input-field" placeholder={lang === "nl" ? "bijv. Bloom Studio" : "e.g. Bloom Studio"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
+                    <input className="input-field" placeholder="https://bunq.me/..." value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
+                  </div>
+                </div>
+                {(salonData.invoice_profiles || []).length > 0 && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                    {(salonData.invoice_profiles || []).map((p, idx) => (
+                      <div key={p.id || idx} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
+                          {p.label || (lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`)}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
+                            <input className="input-field" placeholder={p.label || ""} value={p.iban_holder || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, iban_holder: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
+                            <input className="input-field" placeholder="https://bunq.me/..." value={p.payment_link || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, payment_link: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Extra invoice profiles — shared-account use case where two
@@ -7442,7 +7473,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <button className="btn-ghost" style={{ width: "100%", padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", fontSize: 11 }}
                   onClick={() => update(d => {
                     const rid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `p_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-                    d.invoice_profiles = [...(d.invoice_profiles || []), { id: rid, label: "", address: "", kvk_number: "", btw_id: "", iban: "", invoice_prefix: "INV", next_invoice_number: 1 }];
+                    d.invoice_profiles = [...(d.invoice_profiles || []), { id: rid, label: "", address: "", kvk_number: "", btw_id: "", iban: "", iban_holder: "", payment_link: "", invoice_prefix: "INV", next_invoice_number: 1 }];
                     return d;
                   })}>
                   <NavIcon name="plus" size={13} color={accent} /> {lang === "nl" ? "Extra profiel toevoegen" : "Add extra profile"}

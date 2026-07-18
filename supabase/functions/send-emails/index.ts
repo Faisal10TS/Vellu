@@ -107,6 +107,9 @@ const invDate=fmtD(new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Amste
 // an IBAN. The QR is a SEPA (EPC) code served by our payment-qr function —
 // banking apps scan it and pre-fill the transfer with IBAN + amount + ref.
 const payBlock=(()=>{
+// Only for clients who chose "payment request afterwards" at booking —
+// clients paying in the salon get a plain invoice without a pay block.
+if(!b.payment_request)return"";
 const link=safeImgSrc(b.payment_link);
 const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
 if(!link&&!ibanP)return"";

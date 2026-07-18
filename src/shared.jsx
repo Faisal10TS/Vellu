@@ -325,6 +325,23 @@ function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, servic
   return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nSee you then! 🙏`;
 }
 
+// Payment request after the visit — sent manually by the owner/staff from a
+// completed appointment. Includes the pay link when the salon has one,
+// otherwise the IBAN transfer details.
+function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder }) {
+  const firstName = (clientName || "").split(" ")[0] || clientName || "";
+  const amount = `€${parseFloat(price || 0).toFixed(2)}`;
+  const payVia = paymentLink
+    ? (lang === "nl" ? `Je kunt betalen via: ${paymentLink}` : `You can pay via: ${paymentLink}`)
+    : (lang === "nl"
+      ? `Je kunt het overmaken naar ${iban}${ibanHolder ? ` t.n.v. ${ibanHolder}` : ""}.`
+      : `You can transfer it to ${iban}${ibanHolder ? ` (${ibanHolder})` : ""}.`);
+  if (lang === "nl") {
+    return `Hoi ${firstName}! 💛\n\nBedankt voor je bezoek bij ${salonName}. Het totaalbedrag is ${amount}.\n\n${payVia}\n\nTot de volgende keer! ✨`;
+  }
+  return `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. The total is ${amount}.\n\n${payVia}\n\nSee you next time! ✨`;
+}
+
 function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName }) {
   if (lang === "nl") {
     return `Hoi ${clientName}! 👋\n\nHerinnering: je hebt morgen een afspraak bij ${salonName}.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nTot morgen! ✨`;
@@ -1736,7 +1753,7 @@ export {
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken,
   ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS,
