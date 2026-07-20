@@ -6,6 +6,7 @@ import {
   Skeleton, DashboardSkeleton,
   compressImage, sendEmails, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
+  getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
@@ -287,7 +288,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // at booking; routes to THIS worker's own account details.
         payment_request: a.payment_method === "online",
         iban_holder: invoiceForm.iban_holder || myStaff.name || "",
-        payment_link: invoiceForm.payment_link || "",
+        // Exact invoice amount appended for bunq.me/PayPal.Me links.
+        payment_link: getPaymentLinkWithAmount(invoiceForm.payment_link || "", a.service_price),
         salon_accent: salonProfile.accent_color || "",
         salon_btw_rate: salonProfile.btw_rate ?? 21,
         salon_logo: salonProfile.logo_url || "",

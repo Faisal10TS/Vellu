@@ -12,6 +12,7 @@ import {
   Skeleton, DashboardSkeleton,
   compressImage, sendEmails, sendSMS, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
+  getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable
@@ -3779,7 +3780,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // salon-wide one.
           payment_request: a.payment_method === "online",
           iban_holder: p ? (p.iban_holder || p.label || "") : (salonData.iban_holder || ""),
-          payment_link: p ? (p.payment_link || "") : (salonData.payment_link || ""),
+          // bunq.me/PayPal.Me links get this invoice's exact amount appended,
+          // so the client never has to type it (other providers pass through).
+          payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (salonData.payment_link || ""), a.service_price),
           salon_accent: salonData.accent || "",
           salon_btw_rate: salonData.btw_rate ?? 21,
           salon_logo: salonData.logo_url || "",
