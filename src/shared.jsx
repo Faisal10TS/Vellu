@@ -325,14 +325,39 @@ function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, servic
   return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nSee you then! 🙏`;
 }
 
+// bunq.me and PayPal.Me accept the amount as a path segment
+// (bunq.me/name/48.50, paypal.me/name/48.50), so a salon's static link can
+// still request the EXACT amount of each invoice. Unknown providers get the
+// link untouched — the client types the amount, which the email/WhatsApp text
+// states right next to it.
+function getPaymentLinkWithAmount(link, price) {
+  const clean = String(link || "").trim().replace(/\/+$/, "");
+  if (!clean) return "";
+  const amount = parseFloat(price || 0);
+  if (!(amount > 0)) return clean;
+  try {
+    const u = new URL(clean);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    // Only append when the link is the bare profile (no amount segment yet).
+    const segs = u.pathname.split("/").filter(Boolean);
+    if ((host === "bunq.me" || host === "paypal.me") && segs.length === 1) {
+      return `${clean}/${amount.toFixed(2)}`;
+    }
+    return clean;
+  } catch {
+    return clean;
+  }
+}
+
 // Payment request after the visit — sent manually by the owner/staff from a
 // completed appointment. Includes the pay link when the salon has one,
 // otherwise the IBAN transfer details.
 function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder }) {
   const firstName = (clientName || "").split(" ")[0] || clientName || "";
   const amount = `€${parseFloat(price || 0).toFixed(2)}`;
-  const payVia = paymentLink
-    ? (lang === "nl" ? `Je kunt betalen via: ${paymentLink}` : `You can pay via: ${paymentLink}`)
+  const linkWithAmount = getPaymentLinkWithAmount(paymentLink, price);
+  const payVia = linkWithAmount
+    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
     : (lang === "nl"
       ? `Je kunt het overmaken naar ${iban}${ibanHolder ? ` t.n.v. ${ibanHolder}` : ""}.`
       : `You can transfer it to ${iban}${ibanHolder ? ` (${ibanHolder})` : ""}.`);

@@ -7378,17 +7378,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
-                    ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok: een scan-en-betaal QR-code op basis van je IBAN (werkt met ING, Rabobank, ABN, bunq) en optioneel een betaalknop via je eigen link (bunq.me, PayPal.me). Klanten die in de salon betalen krijgen dit blok niet."
-                    : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block: a scan-to-pay QR code based on your IBAN (works with all Dutch banking apps) plus an optional pay button via your own link (bunq.me, PayPal.me). Clients who pay in the salon never get this block."}
+                    ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met het exacte factuurbedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Klanten die in de salon betalen krijgen dit blok niet."
+                    : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with the exact invoice amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Clients who pay in the salon never get this block."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
-                    <input className="input-field" placeholder={lang === "nl" ? "bijv. Bloom Studio" : "e.g. Bloom Studio"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
+                    <input className="input-field" placeholder={lang === "nl" ? "Naam op je bankrekening, bijv. TTNB Den Haag" : "Name on your bank account"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Wordt bij de QR en het IBAN getoond zodat de klant weet aan wie die betaalt." : "Shown with the QR and IBAN so the client knows who they're paying."}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
-                    <input className="input-field" placeholder="https://bunq.me/..." value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
+                    <input className="input-field" placeholder="https://bunq.me/jouwnaam" value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Je persoonlijke bunq.me- of PayPal.Me-link, zónder bedrag — het factuurbedrag wordt er automatisch achter gezet. Alleen een QR is ook prima: laat dit dan leeg." : "Your personal bunq.me or PayPal.Me link, without an amount — the invoice amount is appended automatically. QR-only is fine too: just leave this empty."}</div>
                   </div>
                 </div>
                 {(salonData.invoice_profiles || []).length > 0 && (
@@ -8643,6 +8645,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         fontSize: 12, fontWeight: 500
                       }}
                     >{mins} {t.slotIntervalMin}</div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Booking window — how close to the start a client can still
+                  book (min_advance_hours) and how far ahead the calendar is
+                  open (max_advance_days). The booking engine already enforced
+                  both; this card finally makes them settable. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Boekingsvenster" : "Booking window"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
+                  {lang === "nl" ? "Tot hoe kort van tevoren kan een klant nog boeken?" : "How close to the appointment can a client still book?"}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[0, 1, 2, 4, 12, 24, 48].map(hrs => (
+                    <div key={hrs} onClick={() => update(d => { d.min_advance_hours = hrs; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.min_advance_hours || 0) === hrs ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.min_advance_hours || 0) === hrs ? accent : c.inputBorder}`,
+                        color: (salonData.min_advance_hours || 0) === hrs ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u van tevoren` : `Min. ${hrs}h ahead`)}</div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
+                  {lang === "nl" ? "Hoe ver vooruit kunnen klanten boeken?" : "How far ahead can clients book?"}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[[7, lang === "nl" ? "1 week" : "1 week"], [14, lang === "nl" ? "2 weken" : "2 weeks"], [30, lang === "nl" ? "1 maand" : "1 month"], [60, lang === "nl" ? "2 maanden" : "2 months"], [90, lang === "nl" ? "3 maanden" : "3 months"], [180, lang === "nl" ? "6 maanden" : "6 months"]].map(([days, label]) => (
+                    <div key={days} onClick={() => update(d => { d.max_advance_days = days; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.max_advance_days || 60) === days ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.max_advance_days || 60) === days ? accent : c.inputBorder}`,
+                        color: (salonData.max_advance_days || 60) === days ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{label}</div>
                   ))}
                 </div>
               </div>

@@ -1891,8 +1891,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
                         {lang === "nl"
-                          ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok: een scan-en-betaal QR-code op basis van jouw IBAN en optioneel een knop via je eigen betaallink (bunq.me, PayPal.me)."
-                          : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block: a scan-to-pay QR code based on your IBAN plus an optional button via your own payment link (bunq.me, PayPal.me)."}
+                          ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met het exacte factuurbedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet."
+                          : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with the exact invoice amount: a scan-to-pay QR code based on your IBAN (amount + reference pre-filled) and optionally a button via your own bunq.me or PayPal.Me link, without an amount — it's appended automatically per invoice."}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>
@@ -1901,7 +1901,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
                         <div>
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
-                          <input className="input-field" placeholder="https://bunq.me/..." value={invoiceForm.payment_link} onChange={e => setInvoiceForm(f => ({...f, payment_link: e.target.value}))} style={{ width: "100%" }} />
+                          <input className="input-field" placeholder="https://bunq.me/jouwnaam" value={invoiceForm.payment_link} onChange={e => setInvoiceForm(f => ({...f, payment_link: e.target.value}))} style={{ width: "100%" }} />
                         </div>
                       </div>
                     </div>

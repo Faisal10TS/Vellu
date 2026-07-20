@@ -113,11 +113,16 @@ if(!b.payment_request)return"";
 const link=safeImgSrc(b.payment_link);
 const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
 if(!link&&!ibanP)return"";
+// bunq.me / PayPal.Me accept the amount as a path segment, so the salon's
+// static profile link can still request the EXACT amount of this invoice.
+// Only appended when the link is a bare profile (no amount segment yet).
+let linkAmt=link;
+if(link&&gross>0){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
 const holder=esc(b.iban_holder||b.salon_name||"");
 const payRef=String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100);
 let h=`<div style="background:${AC}10;border:1px solid ${AC}44;border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">`;
 h+=`<div style="font-size:14px;font-weight:600;margin-bottom:12px;">${txt(lang,"Betalen","Payment")} · ${fP(gross)}</div>`;
-if(link)h+=`<a href="${esc(link)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">${txt(lang,"Betaal online","Pay online")}</a>`;
+if(link)h+=`<a href="${esc(linkAmt)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">${txt(lang,"Betaal online","Pay online")}</a>`;
 if(ibanP&&gross>0){
 const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}`;
 h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of scan met je bank-app:":"Scan met je bank-app:",link?"Or scan with your banking app:":"Scan with your banking app:")}</div>`;
