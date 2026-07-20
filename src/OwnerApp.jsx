@@ -3123,6 +3123,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // skips the smart-slot validation that Verplaats uses, since the owner is
   // intentionally writing values that may not fit normal availability.
   const [editingAppt, setEditingAppt] = useState(null);
+  // Read-only appointment detail popup — opened by tapping a day-view card
+  // (cards can be too cramped to show everything on busy days).
+  const [apptDetail, setApptDetail] = useState(null);
   // Quick-block modal opened from the agenda toolbar. Same shape as the
   // Planning tab's blocker, but writes to profile.day_overrides straight
   // away so the owner doesn't have to remember to hit "Opslaan".
@@ -4412,6 +4415,123 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       ), document.body)}
 
+      {/* Appointment detail popup — read-only info for a tapped day-view card,
+          with the usual actions at the bottom. Cards on busy days are too
+          cramped to show everything; this is where the full story lives. */}
+      {apptDetail && createPortal((() => {
+        const a = apptDetail;
+        const toM = (tt) => { const [h, m] = (tt || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const fmtT = (min) => `${pad2(Math.floor(min / 60) % 24)}:${pad2(min % 60)}`;
+        const startM = toM(a.time);
+        const durM = parseInt(a.service_duration || 60);
+        const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        const statusColor = a.status === "completed" ? c.success : (a.status === "cancelled" || a.status === "no_show") ? c.danger : accent;
+        const statusLabel = a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Completed")
+          : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled")
+          : a.status === "no_show" ? "No-show"
+          : (lang === "nl" ? "Bevestigd" : "Confirmed");
+        const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+        const staffNameOf = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
+        const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: `1px solid ${c.border}` };
+        const lblStyle = { fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, flexShrink: 0 };
+        const valStyle = { fontSize: 13, color: c.text, textAlign: "right", minWidth: 0, wordBreak: "break-word" };
+        const discount = parseFloat(a.discount_amount) || 0;
+        const closeThen = (fn) => { setApptDetail(null); fn(); };
+        return (
+        <div onClick={() => setApptDetail(null)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", color: c.text, maxHeight: "85dvh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, minWidth: 0, wordBreak: "break-word" }}>{a.client_name}</div>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: `${statusColor}1f`, color: statusColor, border: `1px solid ${statusColor}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0, marginTop: 6 }}>{statusLabel}</span>
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, textTransform: "capitalize" }}>{dateLabel}</div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={rowStyle}>
+                <span style={lblStyle}>{lang === "nl" ? "Tijd" : "Time"}</span>
+                <span style={{ ...valStyle, fontVariantNumeric: "tabular-nums" }}>{fmtT(startM)}–{fmtT(startM + durM)} <span style={{ color: c.textMuted, fontSize: 11 }}>· {durM} {t.min}</span></span>
+              </div>
+              {breakdown.length > 1 ? (
+                <div style={{ padding: "7px 0", borderBottom: `1px solid ${c.border}` }}>
+                  <div style={{ ...lblStyle, marginBottom: 6 }}>{lang === "nl" ? "Behandelingen" : "Treatments"}</div>
+                  {breakdown.map((b2, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: c.text, padding: "3px 0" }}>
+                      <span style={{ minWidth: 0, wordBreak: "break-word" }}>{b2.label}{b2.staff_id ? <span style={{ color: c.textMuted }}> · {staffNameOf(b2.staff_id)}</span> : null}</span>
+                      <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtT(startM + (b2.offset_min || 0))}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={rowStyle}>
+                  <span style={lblStyle}>{lang === "nl" ? "Behandeling" : "Treatment"}</span>
+                  <span style={valStyle}>{a.service_name}</span>
+                </div>
+              )}
+              {a.staff_name && (
+                <div style={rowStyle}>
+                  <span style={lblStyle}>{lang === "nl" ? "Medewerker" : "Staff"}</span>
+                  <span style={valStyle}>{a.staff_name}</span>
+                </div>
+              )}
+              <div style={rowStyle}>
+                <span style={lblStyle}>{lang === "nl" ? "Prijs" : "Price"}</span>
+                <span style={valStyle}>
+                  €{parseFloat(a.service_price || 0).toFixed(2)}
+                  {discount > 0 && <span style={{ color: c.textMuted, fontSize: 11 }}> ({lang === "nl" ? "korting" : "discount"} €{discount.toFixed(2)}{a.discount_reason ? ` · ${a.discount_reason}` : ""})</span>}
+                </span>
+              </div>
+              <div style={rowStyle}>
+                <span style={lblStyle}>{lang === "nl" ? "Betaling" : "Payment"}</span>
+                <span style={valStyle}>
+                  {a.paid_at
+                    ? <span style={{ color: c.success, fontWeight: 600 }}>{lang === "nl" ? "Betaald" : "Paid"}</span>
+                    : (a.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek na afloop" : "Payment request afterwards") : (lang === "nl" ? "Betalen bij afspraak" : "Pay at appointment"))}
+                </span>
+              </div>
+              {a.client_phone && (
+                <div style={rowStyle}>
+                  <span style={lblStyle}>{lang === "nl" ? "Telefoon" : "Phone"}</span>
+                  <span style={{ ...valStyle, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                    <a href={`tel:${a.client_phone}`} style={{ color: accent, textDecoration: "none" }}>{a.client_phone}</a>
+                    <a href={getWhatsAppUrl(a.client_phone, "")} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style={{ display: "inline-flex" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    </a>
+                  </span>
+                </div>
+              )}
+              {a.client_email && (
+                <div style={rowStyle}>
+                  <span style={lblStyle}>E-mail</span>
+                  <a href={`mailto:${a.client_email}`} style={{ ...valStyle, color: accent, textDecoration: "none" }}>{a.client_email}</a>
+                </div>
+              )}
+              {a.client_allergies && (
+                <div style={{ padding: "7px 0" }}>
+                  <div style={{ ...lblStyle, marginBottom: 4 }}>{lang === "nl" ? "Allergieën" : "Allergies"}</div>
+                  <div style={{ fontSize: 12, color: c.text, background: `${c.warning}12`, border: `1px solid ${c.warning}33`, borderRadius: 10, padding: "8px 12px", lineHeight: 1.5 }}>{a.client_allergies}</div>
+                </div>
+              )}
+            </div>
+
+            {a.status === "confirmed" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <button className="btn-ghost" style={{ padding: "10px 12px", fontSize: 11, color: c.success, borderColor: `${c.success}44` }} disabled={!!processingApptId} onClick={() => closeThen(() => markComplete(a.id))}>{lang === "nl" ? "Voltooid" : "Complete"}</button>
+                <button className="btn-ghost" style={{ padding: "10px 12px", fontSize: 11, color: c.danger, borderColor: `${c.danger}33` }} disabled={!!processingApptId} onClick={() => closeThen(() => markNoShow(a.id))}>No-show</button>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <button className="btn-ghost" style={{ padding: "10px 12px", fontSize: 11 }} onClick={() => closeThen(() => setRescheduling(a))}>{lang === "nl" ? "Verplaats" : "Reschedule"}</button>
+              <button className="btn-ghost" style={{ padding: "10px 12px", fontSize: 11 }} onClick={() => closeThen(() => openEditAppt(a))}>{lang === "nl" ? "Bewerk" : "Edit"}</button>
+            </div>
+            <button className="btn-primary" style={{ width: "100%", padding: "11px 16px", fontSize: 11 }} onClick={() => setApptDetail(null)}>{lang === "nl" ? "Sluiten" : "Close"}</button>
+          </div>
+        </div>
+        );
+      })(), document.body)}
+
       {editingAppt && createPortal((
         <div onClick={() => !editApptSaving && setEditingAppt(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
@@ -5636,8 +5756,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
                             </div>
                           ) : null;
+                          // Same compact pencil affordance the blocked-hour cards have —
+                          // opens the edit modal directly, while tapping the card itself
+                          // opens the read-only detail popup.
+                          const editBtn = (
+                            <button
+                              aria-label={lang === "nl" ? "Bewerk afspraak" : "Edit appointment"}
+                              onClick={(e) => { e.stopPropagation(); openEditAppt(a); }}
+                              style={{ background: "transparent", border: "none", padding: 2, margin: -2, cursor: "pointer", display: "inline-flex", alignItems: "center", flexShrink: 0, color }}
+                            ><NavIcon name="edit" size={10} color="currentColor" /></button>
+                          );
                           return (
-                            <div key={a._slotKey || a.id} onClick={() => openEditAppt(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
+                            <div key={a._slotKey || a.id} onClick={() => setApptDetail(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
                               style={{
                                 position: "absolute", top, height, ...lane, zIndex: 2,
                                 background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
@@ -5650,6 +5780,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   <span style={{ fontSize: 12, fontWeight: 500, color: c.text, flexShrink: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
                                   {a.service_name && <span style={{ fontSize: 10, color: c.textSub, flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>}
                                   {staffChip && <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex", alignItems: "center", alignSelf: "center" }}>{staffChip}</span>}
+                                  <span style={{ ...(staffChip ? {} : { marginLeft: "auto" }), flexShrink: 0, display: "inline-flex", alignSelf: "center" }}>{editBtn}</span>
                                 </div>
                               ) : (
                                 <>
@@ -5658,9 +5789,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     {/* Medium cards show the staff pill here (top-right) so it isn't
                                         clipped by a bottom row; full-height cards keep the duration
                                         here and the pill at the bottom. */}
-                                    {(!stackFull && staffChip)
-                                      ? staffChip
-                                      : (!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{durMin} {t.min}</div>)}
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                                      {(!stackFull && staffChip)
+                                        ? staffChip
+                                        : (!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{durMin} {t.min}</div>)}
+                                      {editBtn}
+                                    </div>
                                   </div>
                                   <div style={{ fontSize: compact ? 11 : 12, fontWeight: 500, color: c.text, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.client_name}</div>
                                   <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.service_name}</div>
