@@ -292,7 +292,7 @@ function SalonRoute({ lang, setLang }) {
             name_en: s.name_en || s.name || "",
             photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-            extras: s.service_extras || []
+            extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
           })),
         appointments: [],
         reviews: reviews || [],

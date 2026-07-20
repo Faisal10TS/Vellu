@@ -135,7 +135,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         setServices(filtered.map(s => ({
           ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-          extras: s.service_extras || [],
+          extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)),
           photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
         })));
       } catch (e) {
@@ -2066,7 +2066,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       </div>
                                     </div>
                                   ))}
-                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
                                     setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: [...(sv.variants||[]), variant]} : sv));
                                   }} />
                                 </div>
@@ -2115,7 +2115,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       </div>
                                     </div>
                                   ))}
-                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
                                     setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: [...(sv.extras||[]), extra]} : sv));
                                   }} />
                                 </div>

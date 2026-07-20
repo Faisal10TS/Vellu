@@ -982,7 +982,7 @@ async function autoFillTranslations(form, pairs, currentLang) {
   return updated;
 }
 
-function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
+function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -997,7 +997,9 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
     const { data, error } = await supabase.from("service_variants").insert({
       service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null,
       description_nl: filled.description_nl || null, description_en: filled.description_en || null,
-      price, duration: parseInt(filled.duration) || 60
+      price, duration: parseInt(filled.duration) || 60,
+      // Append at the end of the list so drag-reorder positions stay stable.
+      position: nextPosition
     }).select().single();
     if (error || !data) {
       toast.show(lang === "nl" ? "Toevoegen mislukt" : "Failed to add", "error");
@@ -1046,7 +1048,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd }) {
   );
 }
 
-function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
+function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -1060,7 +1062,9 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd }) {
     const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }], lang);
     const { data, error } = await supabase.from("service_extras").insert({
       service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null,
-      price
+      price,
+      // Append at the end of the list so drag-reorder positions stay stable.
+      position: nextPosition
     }).select().single();
     if (error || !data) {
       toast.show(lang === "nl" ? "Toevoegen mislukt" : "Failed to add", "error");
@@ -2962,7 +2966,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               name_en: s.name_en || s.name || "",
               photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
               variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-              extras: s.service_extras || []
+              extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
             })),
           appointments: appts || [],
           reviews: reviews || [],
@@ -3345,6 +3349,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       ));
     } catch (e) {
       console.error("Category reorder save failed:", e);
+      toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
+    }
+  };
+  // Reorder variants/extras inside ONE service card — same pattern as
+  // categories: optimistic local swap, then per-row position writes.
+  const handleVariantDragEnd = async (serviceId, event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const svc = (salonData.services || []).find(x => x.id === serviceId);
+    const list = svc?.variants || [];
+    const oldIdx = list.findIndex(x => x.id === active.id);
+    const newIdx = list.findIndex(x => x.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(list, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
+    update(d => { d.services = d.services.map(x => x.id === serviceId ? { ...x, variants: reordered } : x); return d; });
+    try {
+      await Promise.all(reordered.map((x, idx) =>
+        supabase.from("service_variants").update({ position: idx }).eq("id", x.id)
+      ));
+    } catch (e) {
+      console.error("Variant reorder save failed:", e);
+      toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
+    }
+  };
+  const handleExtraDragEnd = async (serviceId, event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const svc = (salonData.services || []).find(x => x.id === serviceId);
+    const list = svc?.extras || [];
+    const oldIdx = list.findIndex(x => x.id === active.id);
+    const newIdx = list.findIndex(x => x.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(list, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
+    update(d => { d.services = d.services.map(x => x.id === serviceId ? { ...x, extras: reordered } : x); return d; });
+    try {
+      await Promise.all(reordered.map((x, idx) =>
+        supabase.from("service_extras").update({ position: idx }).eq("id", x.id)
+      ));
+    } catch (e) {
+      console.error("Extra reorder save failed:", e);
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : "Could not save order", "error");
     }
   };
@@ -7886,9 +7930,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 {variantCount === 0 ? (
                                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "10px 0", fontStyle: "italic" }}>{lang === "nl" ? "Geen varianten" : "No variants"}</div>
                                 ) : (
+                                  <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(ev) => handleVariantDragEnd(s.id, ev)}>
+                                  <SortableContext items={(s.variants || []).map(x => x.id)} strategy={verticalListSortingStrategy}>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                     {(s.variants || []).map(v => (
-                                      <div key={v.id}>
+                                      <SortableService key={v.id} id={v.id}>
+                                        {({ setNodeRef, style: dragStyle, attributes, listeners }) => (
+                                      <div ref={setNodeRef} style={dragStyle}>
                                         {editingVariant === v.id ? (
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                                             <div style={{ marginBottom: 8 }}>
@@ -7929,6 +7977,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         ) : (
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                            <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
                                               {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
@@ -7951,11 +8000,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         )}
                                       </div>
+                                        )}
+                                      </SortableService>
                                     ))}
                                   </div>
+                                  </SortableContext>
+                                  </DndContext>
                                 )}
                                 <div style={{ marginTop: 8 }}>
-                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(variant) => {
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
                                     update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: [...(svc.variants||[]), variant]} : svc); return d; });
                                   }} />
                                 </div>
@@ -7970,9 +8023,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 {extrasCount === 0 ? (
                                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "10px 0", fontStyle: "italic" }}>{lang === "nl" ? "Geen extra's" : "No extras"}</div>
                                 ) : (
+                                  <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(ev) => handleExtraDragEnd(s.id, ev)}>
+                                  <SortableContext items={(s.extras || []).map(x => x.id)} strategy={verticalListSortingStrategy}>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                     {(s.extras || []).map(e => (
-                                      <div key={e.id}>
+                                      <SortableService key={e.id} id={e.id}>
+                                        {({ setNodeRef, style: dragStyle, attributes, listeners }) => (
+                                      <div ref={setNodeRef} style={dragStyle}>
                                         {editingExtra === e.id ? (
                                           <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                                             <div style={{ marginBottom: 8 }}>
@@ -8003,6 +8060,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         ) : (
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                            <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                             <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+€{e.price}</div>
@@ -8022,11 +8080,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         )}
                                       </div>
+                                        )}
+                                      </SortableService>
                                     ))}
                                   </div>
+                                  </SortableContext>
+                                  </DndContext>
                                 )}
                                 <div style={{ marginTop: 8 }}>
-                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} onAdd={(extra) => {
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
                                     update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: [...(svc.extras||[]), extra]} : svc); return d; });
                                   }} />
                                 </div>
