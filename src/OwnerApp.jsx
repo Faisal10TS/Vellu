@@ -2723,6 +2723,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
   const [agendaStaff, setAgendaStaff] = useState(null); // null = all, or staff member id
+  // Dashboard has its own staff scope (kept separate from the agenda's so
+  // switching tabs doesn't silently re-filter the other view).
+  const [dashStaff, setDashStaff] = useState(null);
   const [calViewMode, setCalViewMode] = useState("week"); // "week" or "month"
   const [calWeekOffset, setCalWeekOffset] = useState(0); // offset in weeks from current
   const [salonData, setSalonData] = useState(() => {
@@ -3023,7 +3026,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   const allVisibleAppts = appts.filter(a => a.status !== "cancelled");
   const completedAppts = appts.filter(a => a.status === "completed");
-  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
+  // Dashboard staff scope — everything on that tab (today's list, expected
+  // revenue, the week/month KPI cards and their sparklines) reads from these
+  // so the numbers always match the appointments shown right above them.
+  const dashAppts = dashStaff ? appts.filter(a => apptInvolvesStaff(a, dashStaff)) : appts;
+  const todayAppts = (dashStaff ? activeAppts.filter(a => apptInvolvesStaff(a, dashStaff)) : activeAppts)
+    .filter(a => a.date === fmt(getToday()));
   // A multi-service booking may have different staff per service. staff_id
   // only holds the "primary" (first service's) staff, so filtering on that
   // alone drops any appointment where the selected staff only handled a
@@ -4978,6 +4986,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               )}
 
+              {/* Staff scope — same chips as the agenda. Everything below
+                  (today's list, expected revenue, week/month KPIs) follows it
+                  so the numbers always match the appointments shown. */}
+              {(salonData.staff || []).length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  <div onClick={() => setDashStaff(null)} style={{
+                    padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                    background: !dashStaff ? accent : "transparent",
+                    color: !dashStaff ? c.btnOnDark : c.textSub,
+                    border: `1px solid ${!dashStaff ? accent : c.inputBorder}`
+                  }}>{t.everyone}</div>
+                  {(salonData.staff || []).map(m => (
+                    <div key={m.id} onClick={() => setDashStaff(dashStaff === m.id ? null : m.id)} style={{
+                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+                      background: dashStaff === m.id ? accent : "transparent",
+                      color: dashStaff === m.id ? c.btnOnDark : c.textSub,
+                      border: `1px solid ${dashStaff === m.id ? accent : c.inputBorder}`
+                    }}>{m.name}</div>
+                  ))}
+                </div>
+              )}
+
               {/* TODAY HERO — the first thing owners want to know */}
               {(() => {
                 const now = new Date();
@@ -4986,15 +5018,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
                 const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
                 const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
-                const weekRevenue = appts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const prevWeekRevenue = appts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const monthRevenue = appts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const weekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const prevWeekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const monthRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
 
                 // Daily revenue for sparklines — key by the LOCAL-time date string to match a.date.
                 const revByDay = {};
-                appts.forEach(a => {
+                dashAppts.forEach(a => {
                   if (a.status !== "completed") return;
                   revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
                 });
