@@ -3135,7 +3135,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // When set, the block modal edits an existing staff_day_overrides time-block
   // row (UPDATE) instead of inserting a new one.
   const [blockEditId, setBlockEditId] = useState(null);
-  const [editApptForm, setEditApptForm] = useState({ service_id: "", variant_id: "", date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
+  const [editApptForm, setEditApptForm] = useState({ service_id: "", variant_id: "", extra_ids: [], date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
@@ -3501,10 +3501,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const finalPrice = a.service_price != null ? parseFloat(a.service_price) : null;
     setEditApptForm({
       service_id: a.service_id || "",
-      // Appointments don't record which variant was booked (only the label),
-      // so this always starts empty; the dropdown shows the stored
+      // Appointments don't record which variant/extras were booked (only the
+      // label), so these always start empty; the dropdown shows the stored
       // service_name as the "current" option until the owner picks anew.
       variant_id: "",
+      extra_ids: [],
       date: a.date || "",
       time: (a.time || "").slice(0, 5),
       price: finalPrice != null ? String(finalPrice + storedDiscount) : "",
@@ -3660,17 +3661,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // that had several treatments this collapses them to the one chosen (the
     // modal warns about that). Price/duration come from the form fields, which
     // were pre-filled from the new service when it was selected.
-    // A variant pick counts as a change even when the base service is the
-    // same (the appointment never stored which variant was booked, so any
-    // explicit pick rebuilds the name/breakdown — rebuilding to the same
-    // variant is harmless).
-    const serviceChanged = editApptForm.service_id && (editApptForm.service_id !== orig.service_id || !!editApptForm.variant_id);
+    // A variant or extras pick counts as a change even when the base service
+    // is the same (the appointment never stored which variant/extras were
+    // booked, so any explicit pick rebuilds the name/breakdown — rebuilding
+    // to the same thing is harmless).
+    const serviceChanged = editApptForm.service_id && (editApptForm.service_id !== orig.service_id || !!editApptForm.variant_id || (editApptForm.extra_ids || []).length > 0);
     const newSvc = serviceChanged ? (salonData.services || []).find(s => s.id === editApptForm.service_id) : null;
     if (newSvc) {
       const newVar = editApptForm.variant_id ? (newSvc.variants || []).find(v => v.id === editApptForm.variant_id) : null;
-      // Same "Service — Variant" label shape as the manual-booking flow.
+      const pickedExtras = (editApptForm.extra_ids || []).map(id => (newSvc.extras || []).find(ex => ex.id === id)).filter(Boolean);
+      // Same "Service — Variant + Extra1, Extra2" label shape as the
+      // manual-booking flow.
       const locName = (lang === "nl" ? (newSvc.name_nl || newSvc.name) : (newSvc.name_en || newSvc.name_nl || newSvc.name))
-        + (newVar ? " — " + (lang === "nl" ? newVar.name_nl : (newVar.name_en || newVar.name_nl)) : "");
+        + (newVar ? " — " + (lang === "nl" ? newVar.name_nl : (newVar.name_en || newVar.name_nl)) : "")
+        + (pickedExtras.length > 0 ? " + " + pickedExtras.map(ex => lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)).join(", ") : "");
       payload.service_id = newSvc.id;
       payload.service_name = locName + (orig.staff_name ? ` (${orig.staff_name})` : "");
       payload.service_breakdown = [{ service_id: newSvc.id, staff_id: orig.staff_id || null, duration: durationNum, offset_min: 0, label: locName }];
@@ -4584,7 +4588,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // both stay editable in the fields below.
                     const price = variant ? parseFloat(variant.price || 0) : parseFloat(svc?.price || 0);
                     const duration = variant ? parseInt(variant.duration || svc?.duration || 60) : parseInt(svc?.duration || 60);
-                    setEditApptForm((f) => ({ ...f, service_id: sid, variant_id: vid || "", price: svc ? String(price) : f.price, duration: svc ? String(duration) : f.duration }));
+                    // Extras belong to a service — picking a different entry
+                    // resets them (and the price no longer includes them).
+                    setEditApptForm((f) => ({ ...f, service_id: sid, variant_id: vid || "", extra_ids: [], price: svc ? String(price) : f.price, duration: svc ? String(duration) : f.duration }));
                   }}>
                   {!options.some((o) => o.value === curValue) && (
                     <option value={curValue} style={optStyle}>{editingAppt.service_name || (lang === "nl" ? "Kies een dienst…" : "Choose a service…")}</option>
@@ -4593,10 +4599,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <option key={o.value} value={o.value} style={optStyle}>{o.text}</option>
                   ))}
                 </select>
+                {/* Extras of the selected service — toggling adjusts the price
+                    field by the extra's amount (price stays hand-editable). */}
+                {(() => {
+                  const selSvc = (salonData.services || []).find((s) => s.id === editApptForm.service_id);
+                  const svcExtras = selSvc?.extras || [];
+                  if (svcExtras.length === 0) return null;
+                  const toggleExtra = (ex) => setEditApptForm((f) => {
+                    const has = (f.extra_ids || []).includes(ex.id);
+                    const delta = (has ? -1 : 1) * (parseFloat(ex.price) || 0);
+                    const newPrice = Math.max(0, (parseFloat(f.price) || 0) + delta);
+                    return { ...f, extra_ids: has ? f.extra_ids.filter((i) => i !== ex.id) : [...(f.extra_ids || []), ex.id], price: String(newPrice) };
+                  });
+                  return (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 5 }}>{lang === "nl" ? "Extra's" : "Extras"}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {svcExtras.map((ex) => {
+                          const on = (editApptForm.extra_ids || []).includes(ex.id);
+                          return (
+                            <button key={ex.id} type="button" onClick={() => toggleExtra(ex)}
+                              style={{
+                                padding: "7px 12px", borderRadius: 100, fontSize: 11, cursor: "pointer",
+                                fontWeight: on ? 600 : 400, fontFamily: "'Jost',sans-serif", transition: "all 0.2s",
+                                background: on ? `${accent}18` : c.inputBg,
+                                border: `1px solid ${on ? accent : c.inputBorder}`,
+                                color: on ? accent : c.textSub,
+                              }}>
+                              + {lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)} · €{parseFloat(ex.price || 0).toFixed(0)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
                 );
               })()}
-              {(editApptForm.service_id !== (editingAppt.service_id || "") || !!editApptForm.variant_id) && (editingAppt.service_breakdown?.length || 0) > 1 && (
+              {(editApptForm.service_id !== (editingAppt.service_id || "") || !!editApptForm.variant_id || (editApptForm.extra_ids || []).length > 0) && (editingAppt.service_breakdown?.length || 0) > 1 && (
                 <div style={{ fontSize: 10, color: accent, background: `${accent}12`, border: `1px solid ${accent}33`, borderRadius: 10, padding: "8px 12px", lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Deze afspraak heeft meerdere behandelingen. Bij het wijzigen worden ze vervangen door de gekozen dienst."
