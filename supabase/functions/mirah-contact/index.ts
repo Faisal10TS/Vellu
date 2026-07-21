@@ -1,4 +1,4 @@
-// Public contact-form endpoint for mirah-ventures.vercel.app.
+// Public contact-form endpoint for the Mirah Ventures site.
 // No JWT: protected instead by a strict CORS allowlist, input validation,
 // length caps and a honeypot. Only ever emails the fixed internal inbox.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -7,6 +7,8 @@ const RESEND_KEY = Deno.env.get("RESEND_API_KEY");
 const TO = "mirahventures@vellu.cc";
 const FROM = "Mirah Ventures <noreply@vellu.cc>";
 const ALLOWED_ORIGINS = [
+  "https://mirahventures.com",
+  "https://www.mirahventures.com",
   "https://mirah-ventures.vercel.app",
   "http://localhost:4174",
 ];
@@ -55,7 +57,7 @@ serve(async (req) => {
   if (!RESEND_KEY) return json({ error: "not_configured" }, 500, headers);
 
   const html = `<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;padding:32px 20px;color:#1a1a1a;">
-    <h2 style="font-weight:400;font-size:20px;margin:0 0 4px;">New inquiry via mirah-ventures</h2>
+    <h2 style="font-weight:400;font-size:20px;margin:0 0 4px;">New inquiry via mirahventures.com</h2>
     <p style="color:#888;font-size:13px;margin:0 0 24px;">${esc(purpose)}</p>
     <div style="background:#f4f6f9;border-radius:12px;padding:20px;margin-bottom:20px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -68,7 +70,7 @@ serve(async (req) => {
     <p style="color:#aaa;font-size:11px;margin-top:20px;">Reply to this email to answer ${esc(name)} directly.</p>
   </div>`;
 
-  const text = `New inquiry via mirah-ventures (${purpose})\n\nName: ${name}\nEmail: ${email}\n${company ? `Company: ${company}\n` : ""}\n${message}`;
+  const text = `New inquiry via mirahventures.com (${purpose})\n\nName: ${name}\nEmail: ${email}\n${company ? `Company: ${company}\n` : ""}\n${message}`;
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -78,7 +80,7 @@ serve(async (req) => {
         from: FROM,
         to: TO,
         reply_to: email,
-        subject: `New inquiry — ${purpose} — ${name}`.slice(0, 150),
+        subject: `New inquiry - ${purpose} - ${name}`.slice(0, 150),
         html,
         text,
       }),
