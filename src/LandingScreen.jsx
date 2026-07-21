@@ -440,7 +440,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* Footer */}
         <footer style={{ padding: "24px 32px 32px", textAlign: "center", borderTop: "1px solid " + c.border, position: "relative", zIndex: 10 }}>
           <div style={{ fontSize: 10, color: c.textMuted, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", marginBottom: 12, letterSpacing: "0.04em" }}>
-            <span>Mirah Ventures</span>
+            <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: c.textMuted, textDecoration: "none" }}>Mirah Ventures</a>
             <span>·</span>
             <span>KVK 42045867</span>
             <span>·</span>
@@ -452,6 +452,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.dpa}</a>
             <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
+            <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Ontwikkeld door Mirah Ventures" : "Developed by Mirah Ventures"}</a>
           </div>
         </footer>
 
