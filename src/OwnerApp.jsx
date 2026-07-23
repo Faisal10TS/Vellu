@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase, supabaseUrl } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
+import AppTour from "./AppTour.jsx";
 // Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
 // ~15KB gzipped for the three packages combined.
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
@@ -2847,6 +2848,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const colorDebounceRef = useRef(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  // Guided tour. Runs once per account after the setup wizard; the "seen" flag
+  // is per-device on purpose — someone opening the dashboard on their phone
+  // for the first time gets the same introduction to the mobile layout.
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourRun, setTourRun] = useState(0); // remount key — always restart at step 1
+  const tourKey = `vellu_tour_v1_${salonData.id || "new"}`;
+  const startTour = () => { setView("dashboard"); setTourRun(n => n + 1); setTourOpen(true); };
+  const endTour = () => {
+    setTourOpen(false);
+    try { localStorage.setItem(tourKey, "1"); } catch { /* private mode */ }
+  };
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -4278,6 +4290,106 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     ["instellingen", "instellingen", t.settings]
   ];
 
+  // Guided tour steps. `before` moves the app to the right screen so the
+  // spotlight lands on the real UI; `target` matches the data-tour attributes
+  // on the sidebar (desktop) and bottom bar (mobile) — AppTour picks whichever
+  // is on screen, and falls back to a centred card if neither is.
+  const tourSteps = [
+    {
+      key: "welcome",
+      target: null,
+      before: () => setView("dashboard"),
+      title: lang === "nl" ? `Welkom bij Vellu, ${salonData.name || ""}` : `Welcome to Vellu, ${salonData.name || ""}`,
+      body: lang === "nl"
+        ? "In één minuut laten we zien waar alles staat. Je kunt op elk moment overslaan — de rondleiding staat later gewoon weer bij Instellingen → Overig."
+        : "In one minute we'll show you where everything lives. Skip whenever you like — you can restart the tour any time under Settings → Other."
+    },
+    {
+      key: "link",
+      // Desktop shows the link chip in the sidebar; on mobile there is no
+      // sidebar, so fall through to the dashboard's Preview / Copy-link row.
+      // Document order decides, and the chip comes first.
+      target: "[data-tour='salon-link'], [data-tour='quick-actions']",
+      before: () => setView("dashboard"),
+      title: lang === "nl" ? "Je boekingslink" : "Your booking link",
+      body: lang === "nl"
+        ? `Dit is jouw pagina: vellu.cc/${salonData.id}. Zet 'm in je Instagram-bio of stuur 'm via WhatsApp — klanten boeken daar zelf, ook 's nachts. Er is ook een QR-code om af te drukken.`
+        : `This is your page: vellu.cc/${salonData.id}. Put it in your Instagram bio or send it over WhatsApp — clients book themselves, day or night. There's a printable QR code too.`
+    },
+    {
+      key: "dashboard",
+      target: "[data-tour='nav-dashboard']",
+      before: () => setView("dashboard"),
+      title: lang === "nl" ? "Dashboard" : "Dashboard",
+      body: lang === "nl"
+        ? "Je startscherm: de afspraken van vandaag, wat je deze week en maand verdient, en hoeveel klanten er terugkomen."
+        : "Your home screen: today's appointments, what you're earning this week and month, and how many clients come back."
+    },
+    {
+      key: "agenda",
+      target: "[data-tour='nav-agenda']",
+      before: () => setView("agenda"),
+      title: lang === "nl" ? "Agenda" : "Agenda",
+      body: lang === "nl"
+        ? "Al je afspraken per dag, week of maand. Zelf een afspraak inplannen, verzetten, afronden, of een dag blokkeren als je vrij bent. Tik op een afspraak voor alle details."
+        : "All your appointments by day, week or month. Book one yourself, reschedule, complete it, or block a day off. Tap an appointment for the full details."
+    },
+    {
+      key: "klanten",
+      target: "[data-tour='nav-klanten']",
+      before: () => setView("klanten"),
+      title: lang === "nl" ? "Klanten" : "Clients",
+      body: lang === "nl"
+        ? "Iedereen die ooit bij je geboekt heeft, met hun historie en je eigen notities — zoals welke kleur ze de vorige keer had."
+        : "Everyone who ever booked with you, with their history and your own notes — like which colour they had last time."
+    },
+    {
+      key: "analytics",
+      target: "[data-tour='nav-analytics']",
+      before: () => setView("analytics"),
+      title: lang === "nl" ? "Analytics" : "Analytics",
+      body: lang === "nl"
+        ? "Je omzet over tijd, je populairste behandelingen en je drukste dagen. Werk je met een team, dan kun je per medewerker filteren."
+        : "Your revenue over time, your most popular treatments and your busiest days. Working with a team? Filter it per staff member."
+    },
+    {
+      key: "facturen",
+      target: "[data-tour='nav-facturen']",
+      before: () => setView("facturen"),
+      title: lang === "nl" ? "Facturen" : "Invoices",
+      body: lang === "nl"
+        ? "Elke afgeronde behandeling met btw erbij. Stuur de factuur direct naar je klant, of download een omzetrapport als PDF — voor het hele team of per medewerker."
+        : "Every completed treatment with VAT included. Email the invoice straight to your client, or download a revenue report as PDF — for the whole team or per staff member."
+    },
+    {
+      key: "instellingen",
+      target: "[data-tour='nav-instellingen']",
+      before: () => setView("instellingen"),
+      title: lang === "nl" ? "Instellingen" : "Settings",
+      body: lang === "nl"
+        ? "Hier stel je je salon in. De belangrijkste plek in de app — zeker in het begin."
+        : "This is where you set your salon up. The most important place in the app, especially at the start."
+    },
+    {
+      key: "settingstabs",
+      target: "[data-tour='settings-tabs']",
+      before: () => { setView("instellingen"); setSettingsTab("diensten"); },
+      title: lang === "nl" ? "Alles onder Instellingen" : "Everything under Settings",
+      body: lang === "nl"
+        ? "Salon: je naam, logo en kleuren. Diensten: behandelingen, prijzen en extra's. Team: je medewerkers. Planning: openingstijden en vrije dagen. Abonnement: je plan. Overig: btw, e-mail en deze rondleiding."
+        : "Salon: your name, logo and colours. Services: treatments, prices and extras. Team: your staff. Schedule: opening hours and days off. Billing: your plan. Other: VAT, email and this tour."
+    },
+    {
+      key: "done",
+      target: null,
+      before: () => { setView("dashboard"); setSettingsTab("salon"); },
+      title: lang === "nl" ? "Dat was 'm!" : "That's it!",
+      body: lang === "nl"
+        ? "Zet als eerste je behandelingen en openingstijden klaar, deel daarna je link. Vanaf dat moment lopen boekingen, bevestigingsmails en herinneringen vanzelf."
+        : "Start by adding your treatments and opening hours, then share your link. From then on bookings, confirmation emails and reminders run by themselves."
+    }
+  ];
+
   // Show loading skeleton while data is being fetched
   if (!dataLoaded) {
     return (
@@ -4292,13 +4404,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   // Show onboarding wizard for new salons
   if (showOnboarding) {
-    return <OnboardingWizard salonData={salonData} update={update} lang={lang} setLang={setLang} accent={accent} onFinish={() => setShowOnboarding(false)} />;
+    return <OnboardingWizard salonData={salonData} update={update} lang={lang} setLang={setLang} accent={accent} onFinish={() => {
+      setShowOnboarding(false);
+      // Straight from "your salon is ready" into the tour of where things
+      // live — but only the first time on this device.
+      let seen = "1";
+      try { seen = localStorage.getItem(tourKey); } catch { /* private mode */ }
+      if (!seen) setTimeout(startTour, 350);
+    }} />;
   }
 
   return (
     <Layout accent={accent}>
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+
+      {tourOpen && <AppTour key={tourRun} steps={tourSteps} lang={lang} c={c} accent={accent} onFinish={endTour} />}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
@@ -4817,7 +4938,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
               <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonData.name}</div>
               <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{salonData.city}</div>
-              <div style={{
+              <div data-tour="salon-link" style={{
                 fontSize: 11,
                 color: accent,
                 background: `${accent}12`,
@@ -4834,6 +4955,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {navItems.map(([k, icon, label]) => (
                 <div
                   key={k}
+                  data-tour={`nav-${k}`}
                   onClick={() => setView(k)}
                   style={{
                     display: "flex",
@@ -4984,6 +5106,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ fontSize: 12, color: step.done ? c.textSub : c.text, textDecoration: step.done ? "line-through" : "none" }}>{step.label}</div>
                     </div>
                   ))}
+                  <div onClick={startTour} style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 12, paddingLeft: 12 }}>
+                    {lang === "nl" ? "Of bekijk eerst de rondleiding →" : "Or take the tour first →"}
+                  </div>
                 </div>
               )}
 
@@ -5235,7 +5360,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Quick Actions — primary first, rest ghost */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
+              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
@@ -7305,7 +7430,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             borderBottom: "1px solid " + c.border,
             paddingTop: isMobile ? 10 : 20, paddingBottom: 12
           }}>
-            <div style={{
+            <div data-tour="settings-tabs" style={{
               maxWidth: 960,
               margin: "0 auto",
               padding: isMobile ? "0 14px" : "0 40px",
@@ -9901,6 +10026,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ FACTURATIE TAB ═══ */}
               {settingsTab === "facturatie" && <>
 
+              {/* ── GUIDED TOUR — replay ──────────────────────────────
+                  New accounts get this automatically right after the setup
+                  wizard; here so anyone can watch it again later, and so a
+                  second staff-owner on a shared salon can see it too. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Rondleiding" : "Guided tour"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Een korte rondleiding door de app: waar je agenda, klanten, facturen en instellingen staan. Duurt ongeveer een minuut."
+                    : "A short tour of the app: where to find your agenda, clients, invoices and settings. Takes about a minute."}
+                </div>
+                <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={startTour}>
+                  <NavIcon name="check" size={14} color={accent} />
+                  {lang === "nl" ? "Start de rondleiding" : "Start the tour"}
+                </button>
+              </div>
+
               {/* ── ACCOUNT — change email / password ─────────────────
                   Both changes re-authenticate with the current password
                   first so a stolen session can't silently swap the login.
@@ -10551,7 +10693,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             backfaceVisibility: "hidden"
           }}>
             {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
+              <div key={k} data-tour={`nav-${k}`} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
                 <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.01em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
               </div>
