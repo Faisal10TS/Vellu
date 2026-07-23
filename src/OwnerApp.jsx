@@ -2163,6 +2163,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const entries = g.entries.slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
       const latest = g.entries.slice().sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] || entries[0];
       const waitingIds = entries.filter(e => e.status === "waiting").map(e => e.id);
+      // Summary across all the dates, so a collapsed group still shows WHO and
+      // WHAT without having to expand it. Usually every request is for the same
+      // stylist, so this collapses to a single name.
+      const staffNames = [...new Set(entries.map(e => waitlistLabels.staffName(e.staff_id)).filter(Boolean))];
+      const svcNames = [...new Set(entries.flatMap(e => waitlistLabels.serviceNames(e.service_ids)))];
       return {
         key: g.key,
         entries,
@@ -2172,10 +2177,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         email: latest.client_email,
         phone: latest.client_phone,
         allNotified: waitingIds.length === 0,
-        firstDate: entries[0]?.date || ""
+        firstDate: entries[0]?.date || "",
+        staffSummary: staffNames.join(", "),
+        // Cap the service list — someone asking for four different treatments
+        // shouldn't push the client's name off the card.
+        svcSummary: svcNames.length > 2 ? `${svcNames.slice(0, 2).join(" + ")} +${svcNames.length - 2}` : svcNames.join(" + ")
       };
     }).sort((a, b) => (a.firstDate || "").localeCompare(b.firstDate || ""));
-  }, [waitlist]);
+  }, [waitlist, waitlistLabels]);
 
   const onCSVPicked = async (e) => {
     const file = e.target.files?.[0];
@@ -2723,7 +2732,20 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                             ? `${g.entries.length} voorkeursdata${open ? "" : ` — vanaf ${fmtD(g.firstDate)}`}`
                             : `${g.entries.length} preferred dates${open ? "" : ` — from ${fmtD(g.firstDate)}`}`}
                         </div>
-                      ) : (
+                      ) : null}
+
+                      {/* Collapsed groups still name the stylist and treatment —
+                          having to expand just to see who it's with was the
+                          whole point of the grouping getting in the way. */}
+                      {multi && !open && (g.svcSummary || g.staffSummary) && (
+                        <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>
+                          {g.svcSummary && <span>{g.svcSummary}</span>}
+                          {g.svcSummary && g.staffSummary && <span style={{ color: c.textMuted }}> · </span>}
+                          {g.staffSummary && <span>{lang === "nl" ? "bij " : "with "}<b style={{ color: accent }}>{g.staffSummary}</b></span>}
+                        </div>
+                      )}
+
+                      {!multi && (
                         <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 4 }}>
                           {lang === "nl" ? "Voorkeursdatum: " : "Preferred date: "}<b>{g.entries[0].date}</b>
                         </div>
