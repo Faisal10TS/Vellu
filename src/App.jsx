@@ -79,36 +79,49 @@ function OwnerEntryPage({ lang, setLang }) {
   // callbacks / magic links don't race the initial mount).
   useEffect(() => {
     let cancelled = false;
+    // Hard stop on the spinner. Every exit path below must clear `loading`,
+    // including the ones nobody plans for: a throw, or a supabase call that
+    // neither resolves nor rejects (a hung request leaves the finally-block
+    // unreached, which is exactly how this screen used to spin forever).
+    // Falling through to the login form is recoverable; an endless spinner
+    // is not.
+    const watchdog = setTimeout(() => { if (!cancelled) setLoading(false); }, 12000);
     const hydrate = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (session?.user) {
-        const resolved = await resolveUserRole(session.user);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (resolved.role === "staff") { setStaffUser(resolved.staffUser); setLoading(false); return; }
-        if (resolved.role === "owner") {
-          // Rebuild the owner view-model from the full profile.
-          const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
-          if (profile) {
-            setOwner({
-              name: profile.business_name || "Mijn Salon",
-              email: session.user.email,
-              slug: profile.slug || session.user.email.split("@")[0],
-              city: profile.city || "Nederland",
-              id: session.user.id,
-              accent: profile.accent_color,
-              plan: profile.plan || null,
-              plan_expires_at: profile.plan_expires_at || null,
-              account_type: profile.account_type || "joint"
-            });
+        if (session?.user) {
+          const resolved = await resolveUserRole(session.user);
+          if (cancelled) return;
+          if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
+          if (resolved.role === "owner") {
+            // Rebuild the owner view-model from the full profile.
+            const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+            if (cancelled) return;
+            if (profile) {
+              setOwner({
+                name: profile.business_name || "Mijn Salon",
+                email: session.user.email,
+                slug: profile.slug || session.user.email.split("@")[0],
+                city: profile.city || "Nederland",
+                id: session.user.id,
+                accent: profile.accent_color,
+                plan: profile.plan || null,
+                plan_expires_at: profile.plan_expires_at || null,
+                account_type: profile.account_type || "joint"
+              });
+            }
           }
         }
+      } catch (e) {
+        console.error("owner hydrate failed:", e);
+      } finally {
+        if (!cancelled) { clearTimeout(watchdog); setLoading(false); }
       }
-      setLoading(false);
     };
     hydrate();
     const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { hydrate(); });
-    return () => { cancelled = true; authSub?.subscription?.unsubscribe?.(); };
+    return () => { cancelled = true; clearTimeout(watchdog); authSub?.subscription?.unsubscribe?.(); };
   }, []);
 
   const handleLogin = async (u) => {
@@ -162,21 +175,29 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
   useEffect(() => {
     if (propStaffUser) return;
     let cancelled = false;
+    // Same watchdog as the owner entry — never leave a bare spinner up.
+    const watchdog = setTimeout(() => { if (!cancelled) { setLoading(false); navigate("/owner", { replace: true }); } }, 12000);
     const hydrate = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (session?.user) {
-        const resolved = await resolveUserRole(session.user);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (resolved.role === "staff") { setStaffUser(resolved.staffUser); setLoading(false); return; }
+        if (session?.user) {
+          const resolved = await resolveUserRole(session.user);
+          if (cancelled) return;
+          if (resolved.role === "staff") { setStaffUser(resolved.staffUser); setLoading(false); clearTimeout(watchdog); return; }
+        }
+      } catch (e) {
+        console.error("staff hydrate failed:", e);
       }
-      // Not a staff member — redirect to /owner
+      // Not a staff member (or the lookup failed) — fall back to /owner.
+      if (cancelled) return;
+      clearTimeout(watchdog);
       setLoading(false);
       navigate("/owner", { replace: true });
     };
     hydrate();
     const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { if (!propStaffUser) hydrate(); });
-    return () => { cancelled = true; authSub?.subscription?.unsubscribe?.(); };
+    return () => { cancelled = true; clearTimeout(watchdog); authSub?.subscription?.unsubscribe?.(); };
   }, []);
 
   const handleLogout = propOnLogout || (async () => {
@@ -600,6 +621,18 @@ function CookieConsent({ lang }) {
   );
 }
 
+// Route-level Suspense fallback. This used to be `null`, which renders a
+// completely blank page while a lazy chunk downloads — indistinguishable from
+// a crash on a slow mobile connection, and the reason the PWA looked "dead"
+// rather than "busy". A spinner says the app is alive.
+function RouteFallback() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: "#0d0b0a" }}>
+      <div style={{ width: 40, height: 40, border: "2px solid rgba(237,232,224,0.12)", borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
+}
+
 class ErrorBoundary extends Component {
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
@@ -644,7 +677,7 @@ export default function VelluApp() {
     <ErrorBoundary>
       <ThemeProvider>
         <BrowserRouter>
-          <Suspense fallback={null}>
+          <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<AppInner lang={lang} setLang={setLangPersist} />} />
               <Route path="/owner" element={<OwnerEntryPage lang={lang} setLang={setLangPersist} />} />
