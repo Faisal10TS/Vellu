@@ -20,6 +20,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = salonProfile.accent_color || ACCENT;
+  // When the owner enabled "team sees each other's agenda", the dashboard +
+  // agenda show the whole salon with a per-stylist filter; otherwise only
+  // this stylist's own appointments (the default).
+  const seeAll = salonProfile.staff_see_all === true;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const toast = useToast();
 
@@ -27,6 +31,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [calDate, setCalDate] = useState(fmt(getToday()));
   const [staffWeekOffset, setStaffWeekOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
+  // Active salon staff (for the filter chips + naming whose appointment it is)
+  // and the current chip selection. Default to self, so turning the feature on
+  // doesn't change a stylist's normal view — they opt into seeing colleagues.
+  const [salonStaff, setSalonStaff] = useState([]);
+  const [staffFilter, setStaffFilter] = useState(staffMember.id);
   const [services, setServices] = useState([]);
   const [myStaff, setMyStaff] = useState(staffMember);
   const [saved, setSaved] = useState(false);
@@ -109,11 +118,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // where this stylist owns only a non-primary service still surface in
         // their own agenda. We filter to "mine" client-side against staff_id,
         // staff_assignments and service_breakdown.
-        const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }] = await Promise.all([
+        const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }, { data: staffRows }] = await Promise.all([
           supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
           supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
           supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
           supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
+          // Team roster for the filter chips — only needed when the feature is on.
+          seeAll ? supabase.from("staff_members").select("id, name, position").eq("owner_id", salonProfile.id).eq("active", true).order("position") : Promise.resolve({ data: [] }),
         ]);
         const isMine = (a) => {
           if (a.staff_id === staffMember.id) return true;
@@ -123,7 +134,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           if (breakdown.some(p => p.staff_id === staffMember.id)) return true;
           return false;
         };
-        setAppointments((apptsAll || []).filter(isMine));
+        // Keep the WHOLE salon set when the feature is on (client-side filter
+        // chips scope it); otherwise only this stylist's own appointments.
+        setAppointments(seeAll ? (apptsAll || []) : (apptsAll || []).filter(isMine));
+        // Owner-first, then position order — matches the owner dashboard.
+        setSalonStaff((staffRows || []).slice().sort((a, b) => ((b.id === staffMember.id && staffMember.user_id === salonProfile.id) - (a.id === staffMember.id && staffMember.user_id === salonProfile.id)) || ((a.position ?? 0) - (b.position ?? 0))));
         setStaffBlocks((blocks || []).filter(r => (r.kind || "block") !== "exception"));
         setStaffExceptions((blocks || []).filter(r => r.kind === "exception"));
         const notesMap = {};
@@ -151,7 +166,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (!staffMember.id || !salonProfile.id) return;
     const channel = supabase
       .channel("staff-appointments")
-      .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `staff_id=eq.${staffMember.id}` }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: seeAll ? `owner_id=eq.${salonProfile.id}` : `staff_id=eq.${staffMember.id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
           setAppointments(a => [payload.new, ...a]);
         } else if (payload.eventType === "UPDATE") {
@@ -164,11 +179,52 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     return () => { supabase.removeChannel(channel); };
   }, [staffMember.id, salonProfile.id]);
 
-  const activeAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
+  // Does appointment `a` involve staff member `id` (primary, assignment map or
+  // any breakdown part)? Same rule the owner agenda/dashboard use.
+  const involvesStaff = (a, id) => {
+    if (a.staff_id === id) return true;
+    if (Object.values(a.staff_assignments || {}).includes(id)) return true;
+    const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+    return bd.some(p => p.staff_id === id);
+  };
+  const isMineAppt = (a) => involvesStaff(a, staffMember.id);
+  // Personal set (this stylist's own) — powers the Facturen tab + earnings,
+  // which stay personal regardless of the dashboard/agenda filter.
+  const myAppts = seeAll ? appointments.filter(isMineAppt) : appointments;
+  // Scoped set — dashboard + agenda follow the chip (Everyone or one stylist).
+  const scopedAppts = !seeAll ? appointments : (staffFilter ? appointments.filter(a => involvesStaff(a, staffFilter)) : appointments);
+
+  // The staff filter scopes the appointment LISTS (dashboard today + agenda).
+  // Earnings/analytics and the whole Facturen tab stay PERSONAL — a stylist
+  // sees the team's schedule, not the team's income.
+  const activeAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
-  const completedAppts = appointments.filter(a => a.status === "completed");
+  const completedAppts = myAppts.filter(a => a.status === "completed");
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-  const calAppts = appointments.filter(a => a.status !== "cancelled" && a.date === calDate);
+  const calAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.date === calDate);
+
+  // Everyone/<stylist> chips — only when the owner enabled team visibility and
+  // there's more than one active stylist. Shared by the dashboard + agenda.
+  const staffChips = seeAll && salonStaff.length > 1 ? (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+      <div onClick={() => setStaffFilter(null)} style={{
+        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+        letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+        background: !staffFilter ? accent : "transparent",
+        color: !staffFilter ? c.btnOnDark : c.textSub,
+        border: `1px solid ${!staffFilter ? accent : c.inputBorder}`,
+      }}>{lang === "nl" ? "Iedereen" : "Everyone"}</div>
+      {salonStaff.map(m => (
+        <div key={m.id} onClick={() => setStaffFilter(staffFilter === m.id ? null : m.id)} style={{
+          padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+          letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
+          background: staffFilter === m.id ? accent : "transparent",
+          color: staffFilter === m.id ? c.btnOnDark : c.textSub,
+          border: `1px solid ${staffFilter === m.id ? accent : c.inputBorder}`,
+        }}>{m.id === staffMember.id ? (lang === "nl" ? "Ik" : "Me") : m.name}</div>
+      ))}
+    </div>
+  ) : null;
   const days = getDays();
 
   const [processingApptId, setProcessingApptId] = useState(null);
@@ -442,12 +498,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const ApptCard = ({ a }) => {
     const note = clientNotes[(a.client_email || "").toLowerCase()];
     const phoneDigits = (a.client_phone || "").replace(/\D/g, "");
+    const mine = isMineAppt(a);
+    // When viewing the team (Everyone or a colleague), show whose appointment
+    // this is. mySlots() falls back to the full appointment for others.
     const slots = mySlots(a);
+    const showStaffChip = seeAll && a.staff_name && (!mine || staffFilter === null);
     return (
     <div className="appt-card" style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
+          {showStaffChip && (
+            <div style={{ fontSize: 9, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 700, letterSpacing: "0.04em", marginTop: 4 }}>
+              <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
+            </div>
+          )}
           {slots.map((s, i) => (
             <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}</div>
           ))}
@@ -471,7 +536,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
         </div>
       </div>
-      {a.status === "confirmed" && (
+      {a.status === "confirmed" && mine && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
           {phoneDigits && (
@@ -691,6 +756,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             return (
             <div className="fade-up">
               {isMobile && <PTitle sub={`${t.staffWelcome}, ${myStaff.name}`}>{t.dashboard}</PTitle>}
+              {staffChips}
 
               {/* Today hero + KPI cards */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 20 }}>
@@ -961,7 +1027,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const todayFmt = fmt(getToday());
             const todayDate = getToday();
 
-            const filteredAppts = appointments.filter(a => a.status !== "cancelled" && a.status !== "no_show");
+            // Agenda follows the staff-filter chip (scopedAppts); off = own only.
+            const filteredAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
 
             let periodAppts = [];
             let periodLabel = "";
@@ -996,6 +1063,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             return (
             <div className="fade-up">
               {isMobile && <PTitle sub={t.myAgenda}>{t.agenda}</PTitle>}
+              {staffChips}
 
               {/* Top toolbar — view toggle + export + period navigator */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
@@ -1389,7 +1457,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             // display names still collapses to one row.
             const byEmail = new Map();
             const nowMs = Date.now();
-            for (const a of appointments) {
+            // Personal (myAppts) — "your clients" stays your own even when the
+            // team-agenda feature is on.
+            for (const a of myAppts) {
               const email = String(a.client_email || "").toLowerCase();
               if (!email) continue;
               let agg = byEmail.get(email);

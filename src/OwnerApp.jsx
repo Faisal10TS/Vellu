@@ -2939,6 +2939,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           staff_exceptions: (staffBlocksData || []).filter(r => r.kind === "exception"),
           account_type: data.account_type || "joint",
           show_owner_on_booking: data.show_owner_on_booking || false,
+          staff_see_all: data.staff_see_all || false,
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
@@ -8610,6 +8611,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   </div>
                 )}
+                {/* Team-wide agenda visibility. Off by default — turning it on
+                    lets every team member see the whole salon's schedule (with
+                    a per-stylist filter) instead of only their own clients. A
+                    real privacy choice: client details incl. allergies become
+                    visible across the team, so the copy spells that out. */}
+                {(salonData.staff || []).length > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: c.text, marginBottom: 3 }}>
+                        {lang === "nl" ? "Team ziet elkaars agenda" : "Team sees each other's agenda"}
+                      </div>
+                      <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
+                        {lang === "nl"
+                          ? "Medewerkers zien de hele salon-agenda met een filter per persoon. Ze kunnen alleen hun eigen afspraken beheren. Let op: klantgegevens (incl. allergieën) worden dan zichtbaar voor het hele team."
+                          : "Team members see the whole salon agenda with a per-person filter. They can only manage their own appointments. Note: client details (incl. allergies) become visible to the whole team."}
+                      </div>
+                    </div>
+                    <div
+                      onClick={() => update(d => { d.staff_see_all = !d.staff_see_all; return d; })}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: salonData.staff_see_all ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.staff_see_all ? 18 : 2, transition: "left 0.2s" }} />
+                    </div>
+                  </div>
+                )}
                 {(salonData.staff || []).length === 0 && (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
@@ -10481,6 +10506,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",
                   show_owner_on_booking: !!salonData.show_owner_on_booking,
+                  staff_see_all: !!salonData.staff_see_all,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24,
