@@ -2742,12 +2742,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                                   <div style={{ fontSize: 11, color: c.text }}><b>{w.date}</b></div>
                                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                    {/* Imperative verb, not a bare "Contacted" —
+                                        the label sits on every WAITING row, so a
+                                        status-sounding word read as "already done". */}
                                     {w.status === "waiting" ? (
                                       <span onClick={() => markWaitlistNotified(w.id)} style={{ fontSize: 9, color: accent, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                                        {lang === "nl" ? "Benaderd" : "Contacted"}
+                                        {lang === "nl" ? "Markeer benaderd" : "Mark contacted"}
                                       </span>
                                     ) : (
-                                      <span style={{ fontSize: 9, color: c.success || accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>✓</span>
+                                      <span style={{ fontSize: 9, color: c.success || accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                        ✓ {lang === "nl" ? "Benaderd" : "Contacted"}
+                                      </span>
                                     )}
                                     <span onClick={() => { if (window.confirm(lang === "nl" ? "Verwijder deze datum?" : "Delete this date?")) deleteWaitlistEntry(w.id); }}
                                       style={{ fontSize: 9, color: c.danger, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
@@ -2760,7 +2765,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                                 <div style={{ fontSize: 11, color: c.textLabel, marginTop: multi ? 4 : 0, marginBottom: multi ? 0 : 4 }}>
                                   {svcNames.length > 0 && <span>{svcNames.join(" + ")}</span>}
                                   {svcNames.length > 0 && stfName && <span style={{ color: c.textMuted }}> · </span>}
-                                  {stfName && <span>{lang === "nl" ? "bij " : "with "}<b>{stfName}</b></span>}
+                                  {stfName && <span>{lang === "nl" ? "bij " : "with "}<b style={{ color: accent }}>{stfName}</b></span>}
                                 </div>
                               )}
                               {w.notes && <div style={{ fontSize: 11, color: c.textSub, marginTop: multi ? 4 : 0, marginBottom: multi ? 0 : 4, fontStyle: "italic" }}>&ldquo;{w.notes}&rdquo;</div>}
