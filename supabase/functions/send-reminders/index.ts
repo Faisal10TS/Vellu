@@ -18,6 +18,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+// Salons in these countries get Dutch-language emails, everyone else English.
+// Keep in sync with COUNTRIES (defaultLang: "nl") in SRC/shared.jsx — Aruba,
+// Curacao and Bonaire are Dutch-language markets too. Unset country = Dutch.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
+const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -129,7 +135,7 @@ serve(async (req) => {
     const remindedOwners = new Set<string>();
     for (const apt of appointments || []) {
       const p = apt.profiles || {};
-      const lang = (p.country_code === "NL" || p.country_code === "BE" || !p.country_code) ? "nl" : "en";
+      const lang = langFor(p.country_code);
       const booking = {
         client_name: apt.client_name,
         client_email: apt.client_email,
@@ -186,7 +192,7 @@ serve(async (req) => {
       const ok = await sendOwnerDigest({
         email: p.salon_email || p.email || "",
         salon_name: p.business_name || "je salon",
-        lang: (p.country_code === "NL" || p.country_code === "BE" || !p.country_code) ? "nl" : "en",
+        lang: langFor(p.country_code),
         date: tomorrowStr,
         appts: dayAppts || [],
       });

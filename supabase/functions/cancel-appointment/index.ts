@@ -20,6 +20,11 @@ const ALLOWED_ORIGINS = [
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+// Salons in these countries get Dutch-language emails, everyone else English.
+// Keep in sync with COUNTRIES (defaultLang: "nl") in SRC/shared.jsx — Aruba,
+// Curacao and Bonaire are Dutch-language markets too.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
+
 function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";
   return {
@@ -270,8 +275,9 @@ serve(async (req) => {
       notify.salon_accent = owner.accent_color || "";
       notify.salon_logo = owner.logo_url || "";
       notify.owner_id = appt.owner_id;
-      // Owner emails default to Dutch for NL/BE salons, English elsewhere.
-      notify.lang = (owner.country_code === "NL" || owner.country_code === "BE") ? "nl" : "en";
+      // Dutch for the Dutch-language markets, English elsewhere. Falls back to
+      // Dutch when country_code is unset (old rows), matching send-reminders.
+      notify.lang = DUTCH_COUNTRIES.has(owner.country_code || "NL") ? "nl" : "en";
       salonSlug = owner.slug || "";
       waitlistEnabled = owner.waitlist_enabled !== false;
     }
