@@ -1806,7 +1806,7 @@ function csvRowsToClients(rows) {
   return { records, skipped };
 }
 
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [] }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -1833,6 +1833,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
   // Waitlist — clients who left a request when there were no available slots.
   const [waitlist, setWaitlist] = useState([]);
   const [showWaitlist, setShowWaitlist] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState({}); // { [groupKey]: true } — expanded date lists
   const [waitlistEnabled, setWaitlistEnabled] = useState(true);
 
   useEffect(() => {
@@ -2115,6 +2116,66 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
     if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
     setWaitlist(list => list.filter(w => w.id !== id));
   };
+  // Group-level versions — one round-trip for every date the same client
+  // signed up for, instead of one per card.
+  const markWaitlistGroupNotified = async (ids) => {
+    if (!ids.length) return;
+    const at = new Date().toISOString();
+    const { error } = await supabase.from("waitlist").update({ status: "notified", notified_at: at }).in("id", ids);
+    if (error) { toast.show(lang === "nl" ? "Bijwerken mislukt" : "Update failed", "error"); return; }
+    setWaitlist(list => list.map(w => ids.includes(w.id) ? { ...w, status: "notified", notified_at: at } : w));
+  };
+  const deleteWaitlistGroup = async (ids) => {
+    if (!ids.length) return;
+    const { error } = await supabase.from("waitlist").delete().in("id", ids);
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    setWaitlist(list => list.filter(w => !ids.includes(w.id)));
+  };
+
+  // Waitlist rows store staff_id + service_ids; resolve them to names so the
+  // owner sees WHO and WHAT was requested without opening anything else.
+  const waitlistLabels = useMemo(() => {
+    const staffById = new Map((staffList || []).map(s => [s.id, s.name]));
+    const svcById = new Map((serviceList || []).map(s => [s.id, (lang === "nl" ? s.name_nl : s.name_en) || s.name_nl || s.name_en || s.name || ""]));
+    return {
+      staffName: (id) => (id ? staffById.get(id) || null : null),
+      serviceNames: (ids) => (Array.isArray(ids) ? ids.map(i => svcById.get(i)).filter(Boolean) : [])
+    };
+  }, [staffList, serviceList, lang]);
+
+  // One card per CLIENT instead of one per date — the same person asking for
+  // four different days was filling the modal with near-identical cards.
+  // Keyed on email (the only field the booking form always collects), falling
+  // back to phone and then name so entries without an email still group.
+  const waitlistGroups = useMemo(() => {
+    const byKey = new Map();
+    for (const w of waitlist) {
+      const key = (w.client_email || "").trim().toLowerCase()
+        || (w.client_phone || "").replace(/\D/g, "")
+        || (w.client_name || "").trim().toLowerCase()
+        || w.id;
+      if (!byKey.has(key)) byKey.set(key, { key, entries: [] });
+      byKey.get(key).entries.push(w);
+    }
+    return [...byKey.values()].map(g => {
+      // Newest signup wins for the display name/contact — if someone corrected
+      // a typo in a later request, show the corrected version.
+      const entries = g.entries.slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+      const latest = g.entries.slice().sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] || entries[0];
+      const waitingIds = entries.filter(e => e.status === "waiting").map(e => e.id);
+      return {
+        key: g.key,
+        entries,
+        ids: entries.map(e => e.id),
+        waitingIds,
+        name: latest.client_name,
+        email: latest.client_email,
+        phone: latest.client_phone,
+        allNotified: waitingIds.length === 0,
+        firstDate: entries[0]?.date || ""
+      };
+    }).sort((a, b) => (a.firstDate || "").localeCompare(b.firstDate || ""));
+  }, [waitlist]);
 
   const onCSVPicked = async (e) => {
     const file = e.target.files?.[0];
@@ -2254,7 +2315,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: accent }}>
               {(() => {
-                const n = waitlist.filter(w => w.status === "waiting").length;
+                // Count CLIENTS, not rows — one person asking for four dates is
+                // still one client waiting.
+                const n = waitlistGroups.filter(g => g.waitingIds.length > 0).length;
                 return lang === "nl" ? `${n} klant${n === 1 ? "" : "en"} op de wachtlijst` : `${n} client${n === 1 ? "" : "s"} on the waitlist`;
               })()}
             </div>
@@ -2611,8 +2674,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
       {showWaitlist && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setShowWaitlist(false)}>
           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 560, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
-              {lang === "nl" ? "Wachtlijst" : "Waitlist"}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400 }}>
+                {lang === "nl" ? "Wachtlijst" : "Waitlist"}
+              </div>
+              <button onClick={() => setShowWaitlist(false)}
+                aria-label={lang === "nl" ? "Sluiten" : "Close"}
+                style={{ background: "transparent", border: `1px solid ${c.border}`, borderRadius: 10, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: c.textSub, flexShrink: 0, padding: 0 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
@@ -2625,45 +2695,113 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast }) {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {waitlist.map(w => (
-                  <div key={w.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{w.client_name}</div>
-                      {w.status === "notified" && (
-                        <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 999, background: `${c.success || accent}22`, color: c.success || accent, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
-                          {lang === "nl" ? "Benaderd" : "Contacted"}
-                        </span>
+                {waitlistGroups.map(g => {
+                  const multi = g.entries.length > 1;
+                  const open = !!waitlistOpen[g.key];
+                  const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short" }); } catch { return d; } };
+                  return (
+                    <div key={g.key} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{g.name}</div>
+                        {g.allNotified && (
+                          <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 999, background: `${c.success || accent}22`, color: c.success || accent, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
+                            {lang === "nl" ? "Benaderd" : "Contacted"}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, wordBreak: "break-word" }}>{g.email}{g.phone ? ` • ${g.phone}` : ""}</div>
+
+                      {/* One line for the whole client. Multiple requests collapse
+                          behind a toggle so four dates don't read as four people. */}
+                      {multi ? (
+                        <div role="button" tabIndex={0}
+                          onClick={() => setWaitlistOpen(s => ({ ...s, [g.key]: !s[g.key] }))}
+                          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWaitlistOpen(s => ({ ...s, [g.key]: !s[g.key] })); } }}
+                          style={{ fontSize: 11, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                          <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }}>›</span>
+                          {lang === "nl"
+                            ? `${g.entries.length} voorkeursdata${open ? "" : ` — vanaf ${fmtD(g.firstDate)}`}`
+                            : `${g.entries.length} preferred dates${open ? "" : ` — from ${fmtD(g.firstDate)}`}`}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 4 }}>
+                          {lang === "nl" ? "Voorkeursdatum: " : "Preferred date: "}<b>{g.entries[0].date}</b>
+                        </div>
                       )}
-                    </div>
-                    <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, wordBreak: "break-word" }}>{w.client_email}{w.client_phone ? ` • ${w.client_phone}` : ""}</div>
-                    <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 4 }}>
-                      {lang === "nl" ? "Voorkeursdatum: " : "Preferred date: "}<b>{w.date}</b>
-                    </div>
-                    {w.notes && <div style={{ fontSize: 11, color: c.textSub, marginBottom: 4, fontStyle: "italic" }}>&ldquo;{w.notes}&rdquo;</div>}
-                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                      <a href={`mailto:${w.client_email}?subject=${encodeURIComponent(lang === "nl" ? "Er is een plek vrij bij ons" : "A spot has opened up")}`} className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                        <NavIcon name="mail" size={12} color="currentColor" /> {lang === "nl" ? "E-mail" : "Email"}
-                      </a>
-                      {w.client_phone && (
-                        <a href={`https://wa.me/${w.client_phone.replace(/\D/g, "")}`} target="_blank" rel="noopener" className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                          WhatsApp
+
+                      {/* Per-date detail: the date itself, its own note, and its
+                          own mark/delete so one day can be handled separately. */}
+                      {(!multi || open) && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: multi ? 8 : 0 }}>
+                          {g.entries.map(w => {
+                            const svcNames = waitlistLabels.serviceNames(w.service_ids);
+                            const stfName = waitlistLabels.staffName(w.staff_id);
+                            return (
+                            <div key={w.id} style={multi ? { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 10px" } : undefined}>
+                              {multi && (
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                  <div style={{ fontSize: 11, color: c.text }}><b>{w.date}</b></div>
+                                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                    {w.status === "waiting" ? (
+                                      <span onClick={() => markWaitlistNotified(w.id)} style={{ fontSize: 9, color: accent, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                        {lang === "nl" ? "Benaderd" : "Contacted"}
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: 9, color: c.success || accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>✓</span>
+                                    )}
+                                    <span onClick={() => { if (window.confirm(lang === "nl" ? "Verwijder deze datum?" : "Delete this date?")) deleteWaitlistEntry(w.id); }}
+                                      style={{ fontSize: 9, color: c.danger, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                      {lang === "nl" ? "Verwijder" : "Delete"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {(svcNames.length > 0 || stfName) && (
+                                <div style={{ fontSize: 11, color: c.textLabel, marginTop: multi ? 4 : 0, marginBottom: multi ? 0 : 4 }}>
+                                  {svcNames.length > 0 && <span>{svcNames.join(" + ")}</span>}
+                                  {svcNames.length > 0 && stfName && <span style={{ color: c.textMuted }}> · </span>}
+                                  {stfName && <span>{lang === "nl" ? "bij " : "with "}<b>{stfName}</b></span>}
+                                </div>
+                              )}
+                              {w.notes && <div style={{ fontSize: 11, color: c.textSub, marginTop: multi ? 4 : 0, marginBottom: multi ? 0 : 4, fontStyle: "italic" }}>&ldquo;{w.notes}&rdquo;</div>}
+                            </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Contact + bulk actions once per client, not per date. */}
+                      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                        <a href={`mailto:${g.email}?subject=${encodeURIComponent(lang === "nl" ? "Er is een plek vrij bij ons" : "A spot has opened up")}`} className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                          <NavIcon name="mail" size={12} color="currentColor" /> {lang === "nl" ? "E-mail" : "Email"}
                         </a>
-                      )}
-                      {w.status === "waiting" && (
-                        <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} onClick={() => markWaitlistNotified(w.id)}>
-                          {lang === "nl" ? "Markeer benaderd" : "Mark contacted"}
+                        {g.phone && (
+                          <a href={`https://wa.me/${g.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener" className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                            WhatsApp
+                          </a>
+                        )}
+                        {g.waitingIds.length > 0 && (
+                          <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }}
+                            onClick={() => (multi ? markWaitlistGroupNotified(g.waitingIds) : markWaitlistNotified(g.waitingIds[0]))}>
+                            {lang === "nl"
+                              ? (multi ? "Markeer alles benaderd" : "Markeer benaderd")
+                              : (multi ? "Mark all contacted" : "Mark contacted")}
+                          </button>
+                        )}
+                        <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: c.danger, borderColor: `${c.danger}55` }}
+                          onClick={() => {
+                            const msg = multi
+                              ? (lang === "nl" ? `Verwijder alle ${g.entries.length} aanmeldingen van ${g.name}?` : `Delete all ${g.entries.length} entries from ${g.name}?`)
+                              : (lang === "nl" ? "Verwijder deze aanmelding?" : "Delete this entry?");
+                            if (!window.confirm(msg)) return;
+                            multi ? deleteWaitlistGroup(g.ids) : deleteWaitlistEntry(g.ids[0]);
+                          }}>
+                          {lang === "nl" ? (multi ? "Verwijder alles" : "Verwijder") : (multi ? "Delete all" : "Delete")}
                         </button>
-                      )}
-                      <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: c.danger, borderColor: `${c.danger}55` }}
-                        onClick={() => {
-                          if (!window.confirm(lang === "nl" ? "Verwijder deze aanmelding?" : "Delete this entry?")) return;
-                          deleteWaitlistEntry(w.id);
-                        }}>
-                        {lang === "nl" ? "Verwijder" : "Delete"}
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             <button className="btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => setShowWaitlist(false)}>
@@ -5574,7 +5712,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} />
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} />
           )}
 
           {/* AGENDA */}
