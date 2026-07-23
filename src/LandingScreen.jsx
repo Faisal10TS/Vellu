@@ -939,9 +939,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
               }}>
                 {lang === "nl" ? (
-                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>1 maand gratis</strong>.</>
+                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>3 weken gratis</strong>.</>
                 ) : (
-                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>1 free month</strong>.</>
+                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>3 weeks free</strong>.</>
                 )}
               </div>
             )}
@@ -957,8 +957,11 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                   aria-label={lang === "nl" ? "Land" : "Country"}
                   style={{ appearance: "none", cursor: "pointer", paddingRight: 40 }}
                 >
+                  {/* Native dropdown menus ignore the select's dark styling, so
+                      each option needs explicit theme colours — otherwise it's
+                      unreadable grey-on-white. */}
                   {COUNTRIES.filter(c2 => c2.launched).map(c2 => (
-                    <option key={c2.code} value={c2.code}>{c2.name}</option>
+                    <option key={c2.code} value={c2.code} style={{ background: c.selectBg, color: c.text }}>{c2.name}</option>
                   ))}
                 </select>
                 <div style={{ position: "relative" }}>

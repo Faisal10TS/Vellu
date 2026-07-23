@@ -446,6 +446,12 @@ const LANGUAGES = [
 const COUNTRIES = [
   { code: "NL", name: "Nederland / Netherlands", defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
   { code: "BE", name: "België / Belgium",        defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
+  // Dutch Caribbean. NOTE: `vatRate`/`currency` are informational only — they
+  // are not read anywhere; each salon sets its own rate in Settings (btw_rate).
+  // Verify the local rate before ever wiring these up.
+  { code: "AW", name: "Aruba",                   defaultLang: "nl", currency: "AWG", vatRate: null, launched: true },
+  { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "ANG", vatRate: null, launched: true },
+  { code: "BQ", name: "Bonaire",                 defaultLang: "nl", currency: "USD", vatRate: null, launched: true },
   { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", vatRate: 0.19, launched: false },
   { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", vatRate: 0.20, launched: false },
   { code: "GB", name: "United Kingdom",          defaultLang: "en", currency: "GBP", vatRate: 0.20, launched: false },

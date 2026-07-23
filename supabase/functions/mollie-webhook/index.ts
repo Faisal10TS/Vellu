@@ -218,7 +218,7 @@ serve(async (req) => {
   // Pull current profile for context (mandate, subscription, etc.)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_months, email, business_name")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, email, business_name")
     .eq("id", ownerId)
     .maybeSingle();
   if (!profile) {
@@ -351,15 +351,16 @@ serve(async (req) => {
       } : {};
 
       // If owner had referral credits, decrement and extend expiry by extra
-      // periods at no charge. Done AFTER the actual paid renewal — credits
-      // ride on top, not instead of. (Alternative behaviour: skip the charge
-      // entirely. We'd need a Mollie subscription pause for that, which is
-      // more complex. Doing extension-on-top first.)
+      // free DAYS (3 weeks per referral) at no charge. Done AFTER the actual
+      // paid renewal — credits ride on top, not instead of. (Alternative
+      // behaviour: skip the charge entirely. We'd need a Mollie subscription
+      // pause for that, which is more complex. Doing extension-on-top first.)
       let extraEnd = periodEnd;
       let creditsUsed = 0;
-      if ((profile.referral_credit_months || 0) > 0) {
-        creditsUsed = profile.referral_credit_months || 0;
-        extraEnd = addInterval(periodEnd, "monthly", creditsUsed);
+      if ((profile.referral_credit_days || 0) > 0) {
+        creditsUsed = profile.referral_credit_days || 0;
+        extraEnd = new Date(periodEnd);
+        extraEnd.setDate(extraEnd.getDate() + creditsUsed);
       }
 
       const updates: Record<string, unknown> = {
@@ -367,7 +368,7 @@ serve(async (req) => {
         current_period_start: periodStart.toISOString(),
         plan_expires_at: extraEnd.toISOString(),
       };
-      if (creditsUsed > 0) updates.referral_credit_months = 0;
+      if (creditsUsed > 0) updates.referral_credit_days = 0;
       await supabase.from("profiles").update(updates).eq("id", ownerId);
 
       // Send recurring invoice email
