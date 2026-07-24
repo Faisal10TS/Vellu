@@ -883,6 +883,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       setWaitlistError(T[lang].waitlistSubmitError);
       return;
     }
+    // Honour the salon's "phone required" setting here too (same rule the
+    // booking form enforces via phoneValid).
+    if (initialSalon.phone_required && (form.phone || "").trim().length < 6) {
+      setWaitlistError(T[lang].phone_required);
+      return;
+    }
     setWaitlistSubmitting(true);
     setWaitlistError("");
     // Pick the first selected service's staff (if any) as the anchor — the
@@ -904,6 +910,28 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setWaitlistSubmitting(false);
     if (error) { setWaitlistError(T[lang].waitlistSubmitError); return; }
     setWaitlistDone(true);
+    // Fire the confirmation (to the client) + notification (to the salon)
+    // emails SERVER-SIDE. The recipient addresses — the salon's contact email
+    // and the stylist's email — are deliberately NOT in the public salon
+    // payload, so an anonymous visitor can't send these directly; the
+    // waitlist-notify edge function resolves them from the IDs. Best-effort:
+    // the entry is already saved, so a mail hiccup must not surface as an
+    // error to the client.
+    try {
+      await supabase.functions.invoke("waitlist-notify", {
+        body: {
+          owner_id: initialSalon.owner_id,
+          client_name: `${first} ${last}`,
+          client_email: email,
+          client_phone: form.phone?.trim() || null,
+          dates,
+          service_ids: serviceIds.length ? serviceIds : null,
+          staff_id: staffId,
+          notes: waitlistNotes.trim() || null,
+          lang,
+        },
+      });
+    } catch (e) { console.error("waitlist-notify failed:", e); }
   };
 
   // Enter booking mode (optionally pre-select a service)
@@ -3789,7 +3817,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <input className="input-field" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                     </div>
                     <input className="input-field" placeholder={T[lang].email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                    <input className="input-field" placeholder={`${T[lang].phone} (${T[lang].optional})`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+                    {/* Phone follows the salon's phone_required setting, exactly
+                        like the booking form — it made no sense for the same
+                        setting to be enforced at booking but ignored here. */}
+                    <input className="input-field" placeholder={`${T[lang].phone}${initialSalon.phone_required ? ` (${T[lang].required})` : ` (${T[lang].optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                     <textarea className="input-field" placeholder={T[lang].waitlistNotesPh} value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} rows={2} style={{ resize: "none" }} />
                   </div>
                   {waitlistError && (

@@ -137,6 +137,22 @@ await send(plainText(b.client_email),plainText(txt(lang,`Herinnering: Morgen afs
 if(type==="waitlist_spot_open"){
 const salonUrl=b.salon_slug?`https://vellu.cc/${eSl}`:"https://vellu.cc";
 await send(plainText(b.client_email),plainText(txt(lang,`Er is een plek vrij bij ${b.salon_name}`,`A spot opened up at ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Goed nieuws!","Great news!")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`Er is een plek vrijgekomen bij <strong>${eS}</strong> op <strong>${eD}</strong>. Wees er snel bij en boek je afspraak — wachtlijst-plekken zijn snel weg.`,`A spot has opened up at <strong>${eS}</strong> on <strong>${eD}</strong>. Book quickly to secure it — waitlist spots go fast.`)}</p><p style="text-align:center;margin:20px 0;"><a href="${esc(salonUrl)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Boek nu","Book now")}</a></p><p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Tot snel, ${eC}!`,`See you soon, ${eC}!`)}</p></div>`);}
+// Client-facing "you're on the waitlist" confirmation. b.dates is the list of
+// requested days (one waitlist row per day on the client side).
+if(type==="waitlist_confirmation"){
+const ds=(Array.isArray(b.dates)?b.dates:(b.date?[b.date]:[]));
+const rowsH=ds.map(d=>`<tr><td style="padding:6px 0;font-weight:500;">${esc(fmtD(d,lang))}</td></tr>`).join("");
+await send(plainText(b.client_email),plainText(txt(lang,`Je staat op de wachtlijst bij ${b.salon_name}`,`You're on the waitlist at ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je staat op de wachtlijst","You're on the waitlist")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`Bedankt ${eC}! We hebben je aanmelding voor <strong>${eS}</strong> ontvangen. Zodra er een plek vrijkomt op ${ds.length===1?"deze dag":"een van deze dagen"}, nemen we contact met je op.`,`Thanks ${eC}! We've received your waitlist request for <strong>${eS}</strong>. As soon as a spot opens up on ${ds.length===1?"this day":"one of these days"}, we'll reach out.`)}</p><div ${bS}><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:8px;">${txt(lang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days")}</div><table ${tS}>${rowsH}</table></div><p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Je hoeft verder niets te doen — we laten het je weten.","Nothing else to do — we'll let you know.")}</p></div>`);}
+// Salon-facing "someone joined your waitlist" notification. Goes to the owner
+// and the anchored stylist (if any).
+if(type==="waitlist_joined"){
+const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>0)rcp.push(...b.staff_emails);
+const ds=(Array.isArray(b.dates)?b.dates:(b.date?[b.date]:[]));
+const daysStr=ds.map(d=>esc(fmtD(d,lang))).join("<br/>");
+const eNo=b.notes?esc(String(b.notes).slice(0,300)):"";
+const eEm=esc(b.client_email);
+const subj=txt(lang,`Nieuwe wachtlijst-aanmelding: ${b.client_name}`,`New waitlist request: ${b.client_name}`);
+for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Nieuwe wachtlijst-aanmelding","New waitlist request")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(lang,"Klant","Client"),eC)}${row(txt(lang,"E-mail","Email"),eEm)}${b.client_phone?row(txt(lang,"Telefoon","Phone"),ePh):""}${b.service_name?row(txt(lang,"Behandeling","Treatment"),eSv):""}${b.staff_name?row(txt(lang,"Medewerker","Staff"),esc(b.staff_name)):""}${row(txt(lang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days"),daysStr)}${eNo?`<tr><td ${cL}>${txt(lang,"Notitie","Note")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div></div>`);}}
 // Vellu's own subscription invoice — issued from Mirah Ventures (KVK 42045867) to the salon owner.
 // Distinct from the salon→client `invoice` handler above. 21% BTW hardcoded for now;
 // becomes dynamic once KOR is confirmed or a BTW-id arrives.
