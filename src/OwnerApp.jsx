@@ -10287,6 +10287,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {lang === "nl" ? "Betaalmethode bijwerken" : "Update payment method"}
                         </button>
                       )}
+                      {willCancel && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto", flex: "0 0 auto" }}
+                          onClick={async () => {
+                            // Restart billing after a soft cancel. The Mollie
+                            // subscription is already deleted (cancel-subscription
+                            // does that immediately), so this goes through a fresh
+                            // first-payment checkout — WHOEVER pays that checkout
+                            // becomes the account future renewals are pulled from,
+                            // which is exactly how a salon takes over billing.
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", {
+                                body: { plan: bp.plan || "starter", billing_interval: bp.billing_interval || "monthly" },
+                              });
+                              if (error || !data?.checkout_url) {
+                                toast.show(lang === "nl" ? "Checkout kon niet starten" : "Could not start checkout", "error");
+                                return;
+                              }
+                              window.location.href = data.checkout_url;
+                            } catch { toast.show(t.somethingWrong, "error"); }
+                          }}
+                        >
+                          {lang === "nl" ? "Opnieuw abonneren" : "Resubscribe"}
+                        </button>
+                      )}
                       {isCancelled && (
                         <button
                           className="btn-primary"
@@ -10301,8 +10327,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {willCancel && (
                       <div style={{ marginTop: 14, padding: 12, background: `${c.warning}11`, border: `1px solid ${c.warning}33`, borderRadius: 12, fontSize: 12, color: c.text }}>
                         {lang === "nl"
-                          ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken.`
-                          : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then.`}
+                          ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken en je gegevens blijven altijd bewaard. Opnieuw abonneren kan op elk moment — ook met een andere bankrekening.`
+                          : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then and your data is always kept. You can resubscribe at any time — with a different bank account too.`}
                       </div>
                     )}
                   </div>
