@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { supabase, supabaseUrl } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 import AppTour from "./AppTour.jsx";
+import SupportChat from "./SupportChat.jsx";
 // Drag-and-drop for service reordering. dnd-kit is modular + keyboard-accessible;
 // ~15KB gzipped for the three packages combined.
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
@@ -4626,6 +4627,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
 
       {tourOpen && <AppTour key={tourRun} steps={tourSteps} lang={lang} c={c} accent={accent} onFinish={endTour} />}
+
+      {/* Floating AI help assistant — knowledge-only support for the owner.
+          Hidden while the guided tour is running so they don't overlap. */}
+      {!tourOpen && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
