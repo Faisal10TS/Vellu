@@ -3507,10 +3507,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
       update(d => { d.plan = newPlan; return d; });
       setUpgradeConfirm(false);
+      const charged = parseFloat(data.prorated_charge || 0);
       toast.show(
-        lang === "nl"
-          ? "Abonnement gewijzigd. Nieuwe prijs gaat in op de volgende renewal."
-          : "Plan changed. New price applies from the next renewal.",
+        charged > 0
+          ? (lang === "nl"
+              ? `Upgrade gelukt — €${charged.toFixed(2)} voor de rest van deze periode wordt eenmalig afgeschreven, daarna €35/maand.`
+              : `Upgraded — a one-off €${charged.toFixed(2)} for the rest of this period will be charged, then €35/month.`)
+          : (lang === "nl"
+              ? "Abonnement gewijzigd. Nieuwe prijs gaat in op de volgende renewal."
+              : "Plan changed. New price applies from the next renewal."),
       );
     } catch (e) {
       console.error("change-plan error:", e);
@@ -7683,8 +7688,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 16 }}>
                       {lang === "nl"
-                        ? "Je krijgt direct toegang tot alle Professional functies. Je betaalt deze maand niets extra — vanaf de volgende afschrijving wordt er €35/maand in plaats van €19/maand afgeschreven."
-                        : "You get instant access to all Professional features. No extra charge this month — from the next renewal you'll be billed €35/month instead of €19/month."}
+                        ? "Je krijgt direct toegang tot alle Professional functies. Het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven; vanaf de volgende afschrijving is het €35/maand in plaats van €19/maand."
+                        : "You get instant access to all Professional features. The price difference for the rest of your current period is charged once; from the next renewal it's €35/month instead of €19/month."}
                     </div>
                     {salonData.plan_expires_at && (
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10 }}>

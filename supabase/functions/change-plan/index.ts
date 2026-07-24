@@ -9,14 +9,14 @@
 // subscription can be created server-side without bouncing the owner through
 // a hosted-checkout page.
 //
-// Charging strategy (intentionally simple, no proration):
+// Charging strategy:
 //   • Old subscription is cancelled at Mollie immediately so no double charge.
-//   • New subscription is scheduled to start on `plan_expires_at` (= the
-//     already-paid-through date). Mollie's first auto-charge on the new sub
-//     happens on that date at the new amount.
-//   • profile.plan flips to the new tier RIGHT NOW so the owner gets the new
-//     features immediately. They effectively get the upgrade "free" until the
-//     next renewal — fine for our tier diff and far simpler than proration.
+//   • New subscription starts on `plan_expires_at` (= the already-paid-through
+//     date), so the next auto-charge lands there at the new amount.
+//   • profile.plan flips to the new tier RIGHT NOW so features unlock.
+//   • On an UPGRADE within the same interval, the pro-rata price difference
+//     for the remaining PAID days is charged AFTER the upgrade is applied
+//     (never before — we don't take money for a tier we haven't delivered).
 //
 // Auth: requires a valid Supabase JWT.
 
@@ -91,6 +91,13 @@ function ymd(d: Date) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+function addInterval(from: Date, interval: "monthly" | "yearly", n = 1): Date {
+  const d = new Date(from);
+  if (interval === "monthly") d.setMonth(d.getMonth() + n);
+  else d.setFullYear(d.getFullYear() + n);
+  return d;
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
@@ -152,6 +159,47 @@ serve(async (req) => {
     const valid = list.find((x) => x.status === "valid");
     if (!valid) return err(409, "no_valid_mandate", origin);
     mandateId = valid.id;
+  }
+
+  // ── Pro-rata upgrade: compute only (money is charged LAST) ───
+  // On an UPGRADE within the same billing interval we collect the price
+  // difference for the remaining PAID days. Computed here, charged only AFTER
+  // the upgrade is applied — we never take payment for a tier we haven't yet
+  // delivered. Downgrades and interval switches keep the no-charge model.
+  let proratedCharge = 0;               // intended amount
+  let prorationPeriodStart: Date | null = null;
+  let prorationPeriodEnd: Date | null = null;
+  {
+    const oldAmount = PLAN_PRICES[profile.plan as string]?.[
+      (profile.billing_interval || "monthly") as "monthly" | "yearly"
+    ] ?? 0;
+    const sameInterval = (profile.billing_interval || "monthly") === newInterval;
+    const newAmount = PLAN_PRICES[newPlan][newInterval as "monthly" | "yearly"];
+    if (sameInterval && oldAmount > 0 && newAmount > oldAmount && profile.plan_expires_at) {
+      const expiresAt = new Date(profile.plan_expires_at);
+      // Period start: the stored value, or derived as expiry minus one interval
+      // for older rows that never recorded current_period_start.
+      const rawStart = profile.current_period_start
+        ? new Date(profile.current_period_start)
+        : addInterval(expiresAt, newInterval as "monthly" | "yearly", -1);
+      // Cap at the PAID window. Referral credit can push plan_expires_at past
+      // one interval; those bonus days were free, so never charge a slice of
+      // them.
+      const oneInterval = addInterval(rawStart, newInterval as "monthly" | "yearly", 1);
+      const paidEnd = expiresAt.getTime() < oneInterval.getTime() ? expiresAt : oneInterval;
+      const nowMs = Date.now();
+      if (paidEnd.getTime() > nowMs && paidEnd.getTime() > rawStart.getTime()) {
+        const periodDays = (paidEnd.getTime() - rawStart.getTime()) / 86400000;
+        const remainingDays = Math.max(0, (paidEnd.getTime() - nowMs) / 86400000);
+        const frac = Math.min(1, remainingDays / Math.max(1, periodDays));
+        const amt = +((newAmount - oldAmount) * frac).toFixed(2);
+        if (amt >= 1) {                 // don't bother the bank for cents
+          proratedCharge = amt;
+          prorationPeriodStart = new Date(nowMs);
+          prorationPeriodEnd = paidEnd;
+        }
+      }
+    }
   }
 
   // Cancel the old Mollie subscription. 404 is fine — means it was already
@@ -229,6 +277,41 @@ serve(async (req) => {
     return err(500, "profile_update_failed", origin);
   }
 
+  // Collect the pro-rata difference NOW — AFTER the upgrade is live. If it
+  // fails we do NOT roll back: the owner already has the tier, and under-
+  // collecting a few euros beats charging for nothing. Logged for follow-up;
+  // never surfaced to the owner as an error. A retry can't double-charge —
+  // profile.plan is already the new plan, so the no_change guard stops it.
+  let proratedCharged = 0;
+  if (proratedCharge > 0 && prorationPeriodStart && prorationPeriodEnd) {
+    const chargeRes = await mollieFetch("/payments", {
+      method: "POST",
+      body: JSON.stringify({
+        amount: { currency: "EUR", value: proratedCharge.toFixed(2) },
+        customerId: profile.mollie_customer_id,
+        sequenceType: "recurring",
+        mandateId,
+        description: `Vellu ${newPlan === "professional" ? "Professional" : "Starter"} upgrade — pro rata`,
+        webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
+        metadata: {
+          owner_id: userId,
+          plan: newPlan,
+          billing_interval: newInterval,
+          // The webhook keys on this: invoice WITHOUT extending plan_expires_at
+          // or consuming referral credits.
+          kind: "upgrade_proration",
+          period_start: prorationPeriodStart.toISOString(),
+          period_end: prorationPeriodEnd.toISOString(),
+        },
+      }),
+    });
+    if (chargeRes.ok && chargeRes.data && typeof chargeRes.data === "object") {
+      proratedCharged = proratedCharge;
+    } else {
+      console.error("proration charge failed (upgrade kept):", chargeRes.status, chargeRes.raw);
+    }
+  }
+
   // Audit
   await supabase.from("payment_events").insert({
     owner_id: userId,
@@ -247,6 +330,7 @@ serve(async (req) => {
       mandate_id: mandateId,
       new_subscription_id: newSubId,
       cancelled_subscription_id: profile.mollie_subscription_id || null,
+      prorated_charge: proratedCharged,
     } as Record<string, unknown>,
   });
 
@@ -256,6 +340,7 @@ serve(async (req) => {
     billing_interval: newInterval,
     next_charge_on: ymd(startDate),
     next_charge_amount: amount,
+    prorated_charge: proratedCharged,
     new_subscription_id: newSubId,
   }, origin);
 });
