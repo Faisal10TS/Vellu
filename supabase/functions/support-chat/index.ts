@@ -12,8 +12,9 @@
 //  • Knowledge-only (no DB tools yet). The model can't read or change the
 //    salon's data — it answers from the KB + the small context block below.
 //    That keeps it safe (no data exposure, no destructive actions) and cheap.
-//  • Model: claude-opus-4-8 (most capable). For a high-volume FAQ bot Haiku
-//    4.5 is far cheaper and plenty smart — swap MODEL to "claude-haiku-4-5".
+//  • Model: claude-haiku-4-5 — fastest/cheapest, plenty smart for a FAQ bot.
+//    Switch MODEL to "claude-opus-4-8" for the most capable answers (the
+//    adaptive-thinking + effort params below re-enable automatically for it).
 //  • Needs the ANTHROPIC_API_KEY secret; without it we return a friendly
 //    "not configured" error instead of crashing.
 
@@ -25,9 +26,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 
-// The model. Opus 4.8 is the most capable; switch to "claude-haiku-4-5" to cut
-// cost/latency substantially for a support bot (recommended once volume grows).
-const MODEL = "claude-opus-4-8";
+// The model. Haiku 4.5 is fastest/cheapest and smart enough for FAQ help;
+// switch to "claude-opus-4-8" for the most capable answers.
+const MODEL = "claude-haiku-4-5";
 
 const ALLOWED_ORIGINS = [
   "https://vellu.cc",
@@ -221,14 +222,19 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
     const params: any = {
       model: MODEL,
       max_tokens: 1024,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "low" }, // snappy + economical for FAQ help
       system: [
         { type: "text", text: KNOWLEDGE, cache_control: { type: "ephemeral" } },
         ...(ctx ? [{ type: "text", text: ctx }] : []),
       ],
       messages,
     };
+    // Adaptive thinking + low effort keep Opus/Sonnet-tier answers snappy and
+    // cheap. Haiku 4.5 doesn't take these fields, so we omit them there — a
+    // plain call is both valid and already optimal for a fast FAQ bot.
+    if (!MODEL.startsWith("claude-haiku")) {
+      params.thinking = { type: "adaptive" };
+      params.output_config = { effort: "low" };
+    }
     const msg: any = await anthropic.messages.create(params);
 
     if (msg.stop_reason === "refusal") {
