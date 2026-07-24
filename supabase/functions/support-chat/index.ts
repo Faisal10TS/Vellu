@@ -217,6 +217,18 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
 
   try {
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+    // Reply in the SAME language the owner wrote in — that's what users expect,
+    // and it overrides the KB's "default Dutch". The UI-language hint (body.lang,
+    // from the language toggle) is only a tiebreaker for messages too short to
+    // detect. Kept as its own high-salience system block placed LAST.
+    const uiLang = body.lang === "en" ? "Engels (English)" : "Nederlands";
+    const langDirective =
+      `TAALREGEL — deze gaat vóór alle andere taalinstructies hierboven, inclusief "standaard Nederlands":\n` +
+      `Antwoord ALTIJD volledig in dezelfde taal als het LAATSTE bericht van de gebruiker. ` +
+      `Schrijft de gebruiker in het Engels, antwoord dan volledig in het Engels; schrijft die in het Nederlands, antwoord in het Nederlands. Meng nooit talen binnen één antwoord.\n` +
+      `(Ter info: de interface van deze gebruiker staat op ${uiLang}. Gebruik dit alleen als het laatste bericht te kort is om de taal met zekerheid te bepalen.)`;
+
     // Params as `any` so newer fields (thinking adaptive, output_config.effort)
     // pass through regardless of the pinned SDK's typings.
     const params: any = {
@@ -225,6 +237,7 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
       system: [
         { type: "text", text: KNOWLEDGE, cache_control: { type: "ephemeral" } },
         ...(ctx ? [{ type: "text", text: ctx }] : []),
+        { type: "text", text: langDirective },
       ],
       messages,
     };
