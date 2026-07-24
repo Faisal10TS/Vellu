@@ -10313,6 +10313,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {lang === "nl" ? "Opnieuw abonneren" : "Resubscribe"}
                         </button>
                       )}
+                      {willCancel && bp.plan === "starter" && (
+                        <button
+                          className="btn-ghost"
+                          style={{ borderColor: `${accent}44`, color: accent }}
+                          onClick={async () => {
+                            // Same fresh-checkout path as Resubscribe, but restart
+                            // on Professional — the upgrade route for an account
+                            // that is winding down (change-plan can't be used here:
+                            // the Mollie subscription is already deleted).
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", {
+                                body: { plan: "professional", billing_interval: bp.billing_interval || "monthly" },
+                              });
+                              if (error || !data?.checkout_url) {
+                                toast.show(lang === "nl" ? "Checkout kon niet starten" : "Could not start checkout", "error");
+                                return;
+                              }
+                              window.location.href = data.checkout_url;
+                            } catch { toast.show(t.somethingWrong, "error"); }
+                          }}
+                        >
+                          {lang === "nl" ? "Opnieuw abonneren als Professional" : "Resubscribe as Professional"}
+                        </button>
+                      )}
                       {isCancelled && (
                         <button
                           className="btn-primary"
