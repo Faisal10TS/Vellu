@@ -144,7 +144,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
           background: "#fff", border: `1px solid rgba(255,255,255,0.9)`,
           color: "#111", cursor: "pointer",
           display: "inline-flex", alignItems: "center", gap: 8,
-          fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600,
+          fontFamily: "var(--body-font, 'Jost', sans-serif)", fontSize: 13, fontWeight: 600,
           letterSpacing: "0.06em", textTransform: "uppercase",
           boxShadow: "0 10px 28px rgba(0,0,0,0.32)",
           transition: "transform 0.18s, box-shadow 0.18s",
@@ -164,7 +164,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
             border: "1px solid rgba(0,0,0,0.08)",
             borderRadius: 14, padding: 6,
             boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-            fontFamily: "'Jost', sans-serif", zIndex: 6,
+            fontFamily: "var(--body-font, 'Jost', sans-serif)", zIndex: 6,
           }}
         >
           <button
@@ -215,12 +215,24 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const displayFont = getPageFont(initialSalon.page_font).family;
   useEffect(() => {
     ensurePageFontLoaded(initialSalon.page_font);
-    // Expose the font to the .profile-* CSS classes (salon name on the cover,
-    // service prices, logo initials) that can't take an inline style. Scoped to
-    // this page: removed on unmount so the owner app / landing keep Cormorant
-    // (those rules fall back via var(--display-font, 'Cormorant Garamond',...)).
+    // Expose the font to the page's CSS via two variables, scoped to this
+    // route (removed on unmount so the owner app / landing keep their look):
+    // --display-font: headings/prices/titles — always the chosen font.
+    // --body-font: EVERYTHING else. For a non-classic pick the whole page
+    // adopts the font ("the site looks Modern"); classic keeps today's mix of
+    // Cormorant headings + Jost body, so no existing salon changes until they
+    // actively pick a style. All Jost rules fall back via
+    // var(--body-font, 'Jost', sans-serif) when the variable is unset.
     document.documentElement.style.setProperty("--display-font", displayFont);
-    return () => document.documentElement.style.removeProperty("--display-font");
+    if (displayFont !== getPageFont("classic").family) {
+      document.documentElement.style.setProperty("--body-font", displayFont);
+    } else {
+      document.documentElement.style.removeProperty("--body-font");
+    }
+    return () => {
+      document.documentElement.style.removeProperty("--display-font");
+      document.documentElement.style.removeProperty("--body-font");
+    };
   }, [initialSalon.page_font, displayFont]);
 
   // Swap the global manifest for a salon-scoped one while the customer is on
@@ -1642,7 +1654,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   if (mode === "profile") return (
     <Layout accent={accent}>
 
-      <div className="profile-root" style={{ background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text }}>
+      <div className="profile-root" style={{ background: c.bg, fontFamily: "var(--body-font, 'Jost', sans-serif)", color: c.text }}>
 
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
@@ -1880,7 +1892,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <h2 className="profile-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   {t.profileReviews}
                   <select value={reviewSort} onChange={e => setReviewSort(e.target.value)}
-                    style={{ background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: "6px 10px", color: c.textSub, fontSize: 12, fontFamily: "'Jost',sans-serif", cursor: "pointer", fontWeight: 400 }}>
+                    style={{ background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: "6px 10px", color: c.textSub, fontSize: 12, fontFamily: "var(--body-font, 'Jost', sans-serif)", cursor: "pointer", fontWeight: 400 }}>
                     <option value="recent">{t.sortBy}: {t.mostRecent}</option>
                     <option value="rating">{t.sortBy}: {t.highestRated}</option>
                   </select>
@@ -2347,7 +2359,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         minHeight: "100dvh", 
         background: c.bg,
         backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -10%, ${accent}08 0%, transparent 60%)`,
-        fontFamily: "'Jost',sans-serif", 
+        fontFamily: "var(--body-font, 'Jost', sans-serif)", 
         color: c.text
       }}>
         
@@ -3758,7 +3770,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           <div style={{
             position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
             background: "#991b1b", color: "#fef2f2", padding: "12px 24px", borderRadius: 14,
-            fontSize: 12, fontWeight: 500, fontFamily: "'Jost',sans-serif",
+            fontSize: 12, fontWeight: 500, fontFamily: "var(--body-font, 'Jost', sans-serif)",
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 9999,
             animation: "fadeUp 0.3s ease", maxWidth: "90vw", textAlign: "center"
           }}>
@@ -3810,7 +3822,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   border: `1.5px solid ${on ? accent : c.inputBorder}`,
                                   background: on ? `${accent}18` : "transparent",
                                   color: on ? accent : c.textSub, fontSize: 12, fontWeight: on ? 600 : 500, cursor: "pointer",
-                                  transition: "all 0.15s", fontFamily: "'Jost',sans-serif",
+                                  transition: "all 0.15s", fontFamily: "var(--body-font, 'Jost', sans-serif)",
                                 }}>
                                 {on && <NavIcon name="check" size={11} color={accent} />}
                                 <span style={{ textTransform: "capitalize" }}>{dd.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })}</span>

@@ -134,7 +134,7 @@ function ToastContainer({ toasts }) {
       {toasts.map(t => (
         <div key={t.id} style={{
           padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 500,
-          fontFamily: "'Jost',sans-serif", animation: "fadeUp 0.3s ease",
+          fontFamily: "var(--body-font, 'Jost', sans-serif)", animation: "fadeUp 0.3s ease",
           background: t.type === "success" ? "rgba(134,239,172,0.15)" : t.type === "error" ? "rgba(248,113,113,0.15)" : c.bgCard,
           color: t.type === "success" ? "#86efac" : t.type === "error" ? "#f87171" : c.text,
           border: `1px solid ${t.type === "success" ? "rgba(134,239,172,0.3)" : t.type === "error" ? "rgba(248,113,113,0.3)" : c.border}`,
@@ -165,12 +165,12 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
   return (
     <div role="dialog" aria-modal="true" aria-label={t.confirmation} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo} onKeyDown={e => e.key === "Escape" && onNo()}>
       <div ref={trapRef} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "'Jost',sans-serif" }}>{state.message}</div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>{state.message}</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+          <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
             {t.cancel}
           </button>
-          <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#f87171", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+          <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#f87171", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
             {t.delete}
           </button>
         </div>
@@ -477,14 +477,28 @@ const PAGE_FONTS = {
 };
 // Resolve a stored key to a font config, always falling back to classic so a
 // bad/empty value can never leave the page with no display font.
-const getPageFont = (key) => PAGE_FONTS[key] || PAGE_FONTS.classic;
+const getPageFont = (key) => {
+  // "custom:<Name>" — a Professional salon's own Google Fonts pick. Sanitised
+  // here (quotes/braces stripped) so the name is safe both as a CSS family
+  // and inside the fonts.googleapis.com URL.
+  if (typeof key === "string" && key.startsWith("custom:")) {
+    const name = key.slice(7).trim().replace(/["'<>;{}()\\]/g, "").slice(0, 60);
+    if (name) return {
+      label_nl: name, label_en: name,
+      family: `'${name}', sans-serif`,
+      google: encodeURIComponent(name).replace(/%20/g, "+"),
+      preview: "Aa", custom: true,
+    };
+  }
+  return PAGE_FONTS[key] || PAGE_FONTS.classic;
+};
 // Injects (once) the Google Fonts stylesheet for a chosen font. No-op for
 // classic (already loaded in index.html) and if the link is already present.
 function ensurePageFontLoaded(key) {
   try {
     const f = getPageFont(key);
     if (key === "classic" || !f.google) return;
-    const id = `page-font-${key}`;
+    const id = `page-font-${String(key).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     if (document.getElementById(id)) return;
     const link = document.createElement("link");
     link.id = id;
@@ -1067,7 +1081,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
   body { overscroll-behavior: none; overflow-x: clip; }
   ::-webkit-scrollbar { width: 0; height: 0; }
-  input, textarea, select { outline: none; font-family: 'Jost', sans-serif; }
+  input, textarea, select { outline: none; font-family: var(--body-font, 'Jost', sans-serif); }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
   @keyframes scaleIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
@@ -1077,7 +1091,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
 
   .btn-primary {
     background: ${accent}; color: ${c.btnOnDark}; border: none; border-radius: 100px;
-    padding: 15px 28px; font-family: 'Jost',sans-serif; font-size: 13px; font-weight: 600;
+    padding: 15px 28px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; width: 100%;
     transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
   }
@@ -1088,7 +1102,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .btn-ghost {
     background: transparent; color: ${c.textSub};
     border: 1px solid ${c.borderHover}; border-radius: 100px;
-    padding: 11px 20px; font-family: 'Jost',sans-serif; font-size: 11px; font-weight: 500;
+    padding: 11px 20px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 500;
     letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer; transition: all 0.2s;
   }
   .btn-ghost:hover { background: ${c.bgCardHover}; color: ${c.text}; border-color: ${c.borderHover}; }
@@ -1097,7 +1111,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .input-field {
     background: ${c.inputBg}; border: 1px solid ${c.inputBorder};
     border-radius: 14px; padding: 14px 17px; color: ${c.text};
-    font-family: 'Jost',sans-serif; font-size: 13px; width: 100%; transition: all 0.2s;
+    font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; width: 100%; transition: all 0.2s;
   }
   .input-field:focus { border-color: ${accent}88; background: ${c.bgCardHover}; box-shadow: 0 0 0 3px ${accent}18; }
   .input-field::placeholder { color: ${c.textMuted}; }
@@ -1170,7 +1184,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
 
   .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 100px; padding: 4px; display: flex; gap: 2px; }
-  .lang-btn { padding: 7px 12px; border-radius: 100px; font-family: 'Jost',sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
+  .lang-btn { padding: 7px 12px; border-radius: 100px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
   .lang-btn.active { background: ${accent}; color: ${c.btnOnDark}; }
   .lang-btn.inactive { background: transparent; color: ${c.textLabel}; }
 
@@ -1244,7 +1258,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-tab {
     position: relative; padding: 16px 14px; font-size: 13px; font-weight: 400;
     color: ${c.textLabel}; cursor: pointer; transition: color 0.2s;
-    background: none; border: none; font-family: 'Jost', sans-serif;
+    background: none; border: none; font-family: var(--body-font, 'Jost', sans-serif);
     white-space: nowrap;
   }
   .profile-tab:hover { color: ${c.text}; }
@@ -1324,7 +1338,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-section:last-child { border-bottom: none; }
   .profile-section-title {
     font-size: 18px; font-weight: 600; color: ${c.text};
-    margin-bottom: 18px; font-family: 'Jost', sans-serif;
+    margin-bottom: 18px; font-family: var(--body-font, 'Jost', sans-serif);
   }
 
   /* Service rows — Setmore style */
@@ -1414,7 +1428,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
     background: ${accent}; color: ${c.btnOnDark}; border: none;
     transition: all 0.2s; flex-shrink: 0; white-space: nowrap;
-    font-family: 'Jost', sans-serif;
+    font-family: var(--body-font, 'Jost', sans-serif);
   }
   .profile-service-book-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px ${accent}44; }
   .profile-service-chevron { color: ${c.textMuted}; flex-shrink: 0; }
@@ -1466,7 +1480,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     display: inline-block; padding: 10px 24px; border: 1px solid ${c.border};
     border-radius: 100px; font-size: 13px; font-weight: 500; color: ${c.text};
     cursor: pointer; transition: all 0.2s; background: transparent;
-    font-family: 'Jost', sans-serif; margin-top: 8px;
+    font-family: var(--body-font, 'Jost', sans-serif); margin-top: 8px;
   }
   .profile-write-review-btn:hover { background: ${c.bgCard}; border-color: ${c.borderHover}; }
 
@@ -1491,7 +1505,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   }
   .profile-sidebar-name {
     font-size: 18px; font-weight: 500; color: ${c.text}; text-align: center;
-    font-family: 'Jost', sans-serif;
+    font-family: var(--body-font, 'Jost', sans-serif);
   }
   .profile-sidebar-rating {
     display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -1500,7 +1514,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-book-btn {
     width: 100%; padding: 13px; border-radius: 100px; border: none;
     background: ${accent}; color: ${c.btnOnDark}; font-size: 14px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; font-family: 'Jost', sans-serif;
+    cursor: pointer; transition: all 0.2s; font-family: var(--body-font, 'Jost', sans-serif);
     margin-top: 16px;
   }
   .profile-book-btn:hover {
@@ -1541,7 +1555,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   }
   .profile-mobile-pill {
     background: ${accent}; color: ${c.btnOnDark}; border: none; border-radius: 100px;
-    padding: 14px 40px; font-family: 'Jost',sans-serif; font-size: 13px; font-weight: 600;
+    padding: 14px 40px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
     pointer-events: auto;
     box-shadow: 0 4px 20px ${accent}55, 0 10px 32px rgba(0,0,0,0.55);
@@ -1553,7 +1567,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     padding: 7px 16px; border-radius: 100px; font-size: 12px; font-weight: 500;
     border: 1px solid ${c.inputBorder}; background: transparent;
     color: ${c.textSub}; cursor: pointer; transition: all 0.2s;
-    font-family: 'Jost', sans-serif; white-space: nowrap; flex-shrink: 0;
+    font-family: var(--body-font, 'Jost', sans-serif); white-space: nowrap; flex-shrink: 0;
   }
   .profile-cat-pill:hover { border-color: ${c.textLabel}; color: ${c.text}; }
   .profile-cat-pill.active {

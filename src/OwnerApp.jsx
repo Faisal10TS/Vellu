@@ -17,7 +17,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, ensurePageFontLoaded
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -3025,6 +3025,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setTourOpen(false);
     try { localStorage.setItem(tourKey, "1"); } catch { /* private mode */ }
   };
+  // Custom Google Font (Professional). Verified against the Fonts API before
+  // applying, so a typo can't silently leave the page on the fallback font.
+  const [customFontName, setCustomFontName] = useState("");
+  const [customFontChecking, setCustomFontChecking] = useState(false);
+  const applyCustomFont = async () => {
+    const name = customFontName.trim().replace(/["'<>;{}()\\\/]/g, "").replace(/\s+/g, " ").slice(0, 60);
+    if (!name || customFontChecking) return;
+    setCustomFontChecking(true);
+    try {
+      const fam = encodeURIComponent(name).replace(/%20/g, "+");
+      const res = await fetch(`https://fonts.googleapis.com/css2?family=${fam}&display=swap`);
+      if (!res.ok) {
+        toast.show(lang === "nl" ? `Lettertype "${name}" niet gevonden op Google Fonts` : `Font "${name}" not found on Google Fonts`, "error");
+        return;
+      }
+      const key = `custom:${name}`;
+      ensurePageFontLoaded(key);
+      update(d => { d.page_font = key; return d; });
+      setCustomFontName("");
+      toast.show(lang === "nl" ? `"${name}" toegepast — vergeet niet op te slaan` : `"${name}" applied — don't forget to save`);
+    } catch {
+      toast.show(lang === "nl" ? "Kon Google Fonts niet bereiken" : "Could not reach Google Fonts", "error");
+    } finally { setCustomFontChecking(false); }
+  };
 
   // Load salon data from Supabase
   useEffect(() => {
@@ -4454,8 +4478,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     if (view === "instellingen" && settingsTab === "salon") {
       Object.keys(PAGE_FONTS).forEach(ensurePageFontLoaded);
+      ensurePageFontLoaded(salonData.page_font); // active custom font, if any
     }
-  }, [view, settingsTab]);
+  }, [view, settingsTab, salonData.page_font]);
 
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
@@ -7828,7 +7853,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Stijl" : "Style"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
-                  {lang === "nl" ? "Het lettertype van de titels op je boekingspagina." : "The heading font on your booking page."}
+                  {lang === "nl" ? "Het lettertype van je boekingspagina." : "The font of your booking page."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   {Object.entries(PAGE_FONTS).map(([key, f]) => {
@@ -7841,18 +7866,63 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           cursor: "pointer", borderRadius: 14, padding: "14px 10px", textAlign: "center",
                           background: sel ? `${accent}12` : c.bg,
                           border: `1.5px solid ${sel ? accent : c.inputBorder}`, transition: "all 0.15s",
-                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, minHeight: 72
+                          // Just the label, dead-centre — the accent border marks the
+                          // selection; a caption line pushed the label off-axis.
+                          display: "flex", alignItems: "center", justifyContent: "center", minHeight: 72
                         }}>
                         <div style={{ fontFamily: f.family, fontSize: 20, color: c.text, lineHeight: 1.15, wordBreak: "break-word" }}>
                           {lang === "nl" ? f.label_nl : f.label_en}
-                        </div>
-                        <div style={{ fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, color: sel ? accent : c.textMuted }}>
-                          {sel ? (lang === "nl" ? "Gekozen" : "Selected") : " "}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Custom font — Professional only. Any Google Fonts name,
+                    stored as page_font = "custom:<Name>". */}
+                {(() => {
+                  const isCustom = String(salonData.page_font || "").startsWith("custom:");
+                  const activeName = isCustom ? salonData.page_font.slice(7) : "";
+                  if (isStarter) return (
+                    <div onClick={goUpgrade} role="button" tabIndex={0}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goUpgrade(); } }}
+                      style={{ marginTop: 10, padding: "12px 14px", borderRadius: 14, border: `1px dashed ${c.inputBorder}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                      <NavIcon name="sparkle" size={14} color={accent} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Eigen lettertype" : "Your own font"}</div>
+                        <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Kies elk Google Fonts-lettertype met Professional." : "Pick any Google Fonts typeface with Professional."}</div>
+                      </div>
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: accent, background: `${accent}14`, border: `1px solid ${accent}33`, borderRadius: 100, padding: "4px 10px", flexShrink: 0 }}>Professional</span>
+                    </div>
+                  );
+                  return (
+                    <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${isCustom ? accent : c.inputBorder}`, background: isCustom ? `${accent}0a` : "transparent" }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 2 }}>{lang === "nl" ? "Eigen lettertype" : "Your own font"}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 8 }}>
+                        {lang === "nl"
+                          ? <>Typ de naam van een lettertype van <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>fonts.google.com</a>, bijv. Lobster of Raleway.</>
+                          : <>Type the name of any typeface on <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>fonts.google.com</a>, e.g. Lobster or Raleway.</>}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input className="input-field" placeholder={lang === "nl" ? "Naam van het lettertype" : "Font name"} value={customFontName}
+                          onChange={e => setCustomFontName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyCustomFont(); } }}
+                          style={{ flex: 1, fontSize: 12, padding: "9px 12px" }} />
+                        <button className="btn-ghost" disabled={customFontChecking || !customFontName.trim()}
+                          style={{ fontSize: 11, color: accent, borderColor: `${accent}44`, whiteSpace: "nowrap" }}
+                          onClick={applyCustomFont}>
+                          {customFontChecking ? "..." : (lang === "nl" ? "Gebruik" : "Use")}
+                        </button>
+                      </div>
+                      {isCustom && (
+                        <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontFamily: getPageFont(salonData.page_font).family, fontSize: 20, color: c.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeName}</div>
+                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: accent, flexShrink: 0 }}>{lang === "nl" ? "Actief" : "Active"}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Appearance — logo + cover. Lives here in the Salon tab, right
