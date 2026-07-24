@@ -7811,6 +7811,85 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Appearance — logo + cover. Lives here in the Salon tab, right
+                  under the brand colour, since it's the same "how your page
+                  looks" group. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>{t.appearance}</div>
+
+                {/* Logo upload */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.logoDesc}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    {salonData.logo_url ? (
+                      <div style={{ position: "relative" }}>
+                        <img src={salonData.logo_url} style={{ width: 72, height: 72, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}` }} />
+                        <button onClick={() => update(d => { d.logo_url = ""; return d; })}
+                          style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ width: 72, height: 72, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4, flexShrink: 0 }}>
+                        <NavIcon name="camera" size={20} color={accent} />
+                        <span style={{ fontSize: 9, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.logo}</span>
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
+                          const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                          if (!error) {
+                            const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                            update(d => { d.logo_url = publicUrl; return d; });
+                          }
+                        }} />
+                      </label>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 2 }}>{t.logo}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Verschijnt op je pagina en facturen" : "Shown on your page and invoices"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cover image upload */}
+                <div>
+                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.coverDesc}</div>
+                  {salonData.cover_image_url ? (
+                    <div style={{ position: "relative" }}>
+                      <div style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative" }}>
+                        <img src={salonData.cover_image_url} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block" }} />
+                      </div>
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{lang === "nl" ? "Positie" : "Position"}</span>
+                        <input type="range" min="0" max="100" value={salonData.cover_focal_y ?? 50}
+                          onChange={e => update(d => { d.cover_focal_y = parseInt(e.target.value); return d; })}
+                          style={{ flex: 1, accentColor: accent, height: 4 }} />
+                      </div>
+                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; return d; })}
+                        style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ width: "100%", height: 120, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 6 }}>
+                      <NavIcon name="image" size={22} color={accent} />
+                      <span style={{ fontSize: 10, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.uploadCover}</span>
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
+                        const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                        if (!error) {
+                          const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                          update(d => { d.cover_image_url = publicUrl; return d; });
+                        }
+                      }} />
+                    </label>
+                  )}
+                </div>
+              </div>
+
               {/* Locations */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
@@ -10356,83 +10435,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
-
-              {/* Appearance Section */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>{t.appearance}</div>
-
-                {/* Logo upload */}
-                <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.logoDesc}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    {salonData.logo_url ? (
-                      <div style={{ position: "relative" }}>
-                        <img src={salonData.logo_url} style={{ width: 72, height: 72, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}` }} />
-                        <button onClick={() => update(d => { d.logo_url = ""; return d; })}
-                          style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <label style={{ width: 72, height: 72, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 4, flexShrink: 0 }}>
-                        <NavIcon name="camera" size={20} color={accent} />
-                        <span style={{ fontSize: 9, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.logo}</span>
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
-                          const { error } = await supabase.storage.from("business-images").upload(fileName, file);
-                          if (!error) {
-                            const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                            update(d => { d.logo_url = publicUrl; return d; });
-                          }
-                        }} />
-                      </label>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 2 }}>{t.logo}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Verschijnt op je pagina en facturen" : "Shown on your page and invoices"}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cover image upload */}
-                <div>
-                  <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.coverDesc}</div>
-                  {salonData.cover_image_url ? (
-                    <div style={{ position: "relative" }}>
-                      <div style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative" }}>
-                        <img src={salonData.cover_image_url} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block" }} />
-                      </div>
-                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{lang === "nl" ? "Positie" : "Position"}</span>
-                        <input type="range" min="0" max="100" value={salonData.cover_focal_y ?? 50}
-                          onChange={e => update(d => { d.cover_focal_y = parseInt(e.target.value); return d; })}
-                          style={{ flex: 1, accentColor: accent, height: 4 }} />
-                      </div>
-                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; return d; })}
-                        style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <label style={{ width: "100%", height: 120, borderRadius: 14, border: `1.5px dashed ${accent}55`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 6 }}>
-                      <NavIcon name="image" size={22} color={accent} />
-                      <span style={{ fontSize: 10, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{t.uploadCover}</span>
-                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
-                        const { error } = await supabase.storage.from("business-images").upload(fileName, file);
-                        if (!error) {
-                          const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                          update(d => { d.cover_image_url = publicUrl; return d; });
-                        }
-                      }} />
-                    </label>
-                  )}
-                </div>
-              </div>
 
               {/* Booking Policy Section — separate NL/EN so the public profile
                   shows the right text when the visitor toggles language. EN is
