@@ -2991,7 +2991,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // accounts (plan == null) get the full Professional experience so they
   // feel what they'd lose by picking Starter at conversion time.
   const isStarter = salonData.plan === "starter";
-  const goUpgrade = () => { setView("instellingen"); setSettingsTab("abonnement"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
+  const goUpgrade = () => { setView("instellingen"); setSettingsTab("billing"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
   const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
   // Account section state (Overig tab). Keep everything local so a dirty
   // change-email/change-password form never taints salonData or the main
@@ -7670,9 +7670,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             }}>
               {isMobile && <PTitle sub={t.manageSalon}>{t.settings}</PTitle>}
 
-              {/* ═══ SALON TAB ═══ */}
-              {settingsTab === "salon" && <>
-
               {/* Upgrade confirmation — explains the no-extra-charge timing so
                   the owner doesn't worry they'll be billed twice for this
                   month. */}
@@ -7708,6 +7705,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </div>
               ), document.body)}
+
+              {/* ═══ SALON TAB ═══ */}
+              {settingsTab === "salon" && <>
+
 
               {/* Profile */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
