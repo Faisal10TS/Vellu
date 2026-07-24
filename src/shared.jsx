@@ -459,6 +459,41 @@ const COUNTRIES = [
   { code: "IT", name: "Italia / Italy",          defaultLang: "en", currency: "EUR", vatRate: 0.22, launched: false },
 ];
 
+// ─── PUBLIC-PAGE FONT STYLES ─────────────────────────────────
+// The salon picks one of these for their booking page; it swaps the DISPLAY
+// font (salon name, section titles, prices — everything currently in Cormorant
+// Garamond). Body text stays Jost everywhere. `google` is the Google Fonts
+// css2 `family=` value: the client page injects a stylesheet link for the
+// chosen font on load (classic is already in index.html, so it's skipped).
+// `preview` is the sample glyphs shown in the owner's picker.
+// Keep the keys in sync with profiles.page_font (see the add_page_font migration).
+const PAGE_FONTS = {
+  classic:     { label_nl: "Klassiek",       label_en: "Classic",     family: "'Cormorant Garamond', serif",  google: "Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300", preview: "Aa" },
+  modern:      { label_nl: "Modern",         label_en: "Modern",      family: "'Poppins', sans-serif",        google: "Poppins:wght@400;500;600",                            preview: "Aa" },
+  elegant:     { label_nl: "Elegant",        label_en: "Elegant",     family: "'Playfair Display', serif",    google: "Playfair+Display:wght@400;500;600",                   preview: "Aa" },
+  bold:        { label_nl: "Bold",           label_en: "Bold",        family: "'Archivo Black', sans-serif",  google: "Archivo+Black",                                       preview: "Aa" },
+  playful:     { label_nl: "Speels",         label_en: "Playful",     family: "'Fredoka', sans-serif",        google: "Fredoka:wght@400;500;600",                            preview: "Aa" },
+  handwriting: { label_nl: "Handgeschreven", label_en: "Handwriting", family: "'Dancing Script', cursive",    google: "Dancing+Script:wght@500;600;700",                     preview: "Aa" },
+};
+// Resolve a stored key to a font config, always falling back to classic so a
+// bad/empty value can never leave the page with no display font.
+const getPageFont = (key) => PAGE_FONTS[key] || PAGE_FONTS.classic;
+// Injects (once) the Google Fonts stylesheet for a chosen font. No-op for
+// classic (already loaded in index.html) and if the link is already present.
+function ensurePageFontLoaded(key) {
+  try {
+    const f = getPageFont(key);
+    if (key === "classic" || !f.google) return;
+    const id = `page-font-${key}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${f.google}&display=swap`;
+    document.head.appendChild(link);
+  } catch { /* SSR / no document */ }
+}
+
 // Raw translation tables. Access via the `T` export (Proxy-wrapped below)
 // so missing languages fall back to English instead of returning undefined.
 const _T_RAW = {
@@ -1199,7 +1234,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
     background: ${c.bgCard}; border: 1px solid ${c.border};
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 400; color: ${c.text};
+    font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 16px; font-weight: 400; color: ${c.text};
   }
   .profile-tabs {
     display: flex; gap: 0; flex: 1; overflow-x: auto;
@@ -1242,7 +1277,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     height: 100%; padding: 40px 20px;
   }
   .profile-hero-name {
-    font-family: 'Cormorant Garamond', serif; font-weight: 300; color: #fff;
+    font-family: var(--display-font, 'Cormorant Garamond', serif); font-weight: 300; color: #fff;
     letter-spacing: 0.03em; text-shadow: 0 2px 16px rgba(0,0,0,0.5);
   }
   .profile-hero-meta {
@@ -1371,7 +1406,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-service-details-link { color: ${accent}; cursor: pointer; font-size: 11px; }
   .profile-service-details-link:hover { text-decoration: underline; }
   .profile-service-price {
-    font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 400;
+    font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 24px; font-weight: 400;
     color: ${c.text}; text-align: right; white-space: nowrap; line-height: 1;
   }
   .profile-service-book-btn {
@@ -1452,7 +1487,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     width: 90px; height: 90px; border-radius: 50%; margin: 0 auto 14px;
     background: ${c.bgCard}; border: 1px solid ${c.border};
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 300; color: ${c.text};
+    font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 32px; font-weight: 300; color: ${c.text};
   }
   .profile-sidebar-name {
     font-size: 18px; font-weight: 500; color: ${c.text}; text-align: center;
@@ -1791,6 +1826,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   supabase,

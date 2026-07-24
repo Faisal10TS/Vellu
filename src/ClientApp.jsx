@@ -10,7 +10,8 @@ import {
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
+  getPageFont, ensurePageFontLoaded
 } from "./shared.jsx";
 
 function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
@@ -207,6 +208,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const { colors: c, theme } = useTheme();
   const accent = initialSalon.accent || ACCENT;
   const t = T[lang];
+
+  // The salon's chosen display font (headings / prices / titles). Body stays
+  // Jost. `displayFont` replaces the hardcoded Cormorant Garamond everywhere on
+  // this public page; the stylesheet for a non-classic font is injected on load.
+  const displayFont = getPageFont(initialSalon.page_font).family;
+  useEffect(() => {
+    ensurePageFontLoaded(initialSalon.page_font);
+    // Expose the font to the .profile-* CSS classes (salon name on the cover,
+    // service prices, logo initials) that can't take an inline style. Scoped to
+    // this page: removed on unmount so the owner app / landing keep Cormorant
+    // (those rules fall back via var(--display-font, 'Cormorant Garamond',...)).
+    document.documentElement.style.setProperty("--display-font", displayFont);
+    return () => document.documentElement.style.removeProperty("--display-font");
+  }, [initialSalon.page_font, displayFont]);
 
   // Swap the global manifest for a salon-scoped one while the customer is on
   // this profile page. Without this override, installing the PWA would open
@@ -2235,7 +2250,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
+                <div style={{ fontFamily: displayFont, fontSize: 24, fontWeight: 300 }}>
                   {t.howWasAppt}
                 </div>
               </div>
@@ -2318,7 +2333,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
-            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</span>
           </div>
         </div>
       )}
@@ -2375,7 +2390,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <img src={initialSalon.logo_url} style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
                     )}
                     <div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: initialSalon.logo_url ? 22 : 28, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>
+                      <div style={{ fontFamily: displayFont, fontSize: initialSalon.logo_url ? 22 : 28, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>
                         {initialSalon.name}
                       </div>
                       <div style={{ fontSize: 12, color: c.textLabel, marginTop: 4, letterSpacing: "0.04em" }}>
@@ -2556,7 +2571,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       </div>
                       {/* Price */}
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: c.text, flexShrink: 0, lineHeight: 1 }}>
+                      <div style={{ fontFamily: displayFont, fontSize: 22, color: c.text, flexShrink: 0, lineHeight: 1 }}>
                         {displayPrice}
                       </div>
                       {/* Selection indicator */}
@@ -2600,7 +2615,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>€{v.price}</div>
                                 </div>
                               ))}
                             </div>
@@ -2624,7 +2639,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                       transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
                                     }}>
                                     <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 14, color: accent }}>+€{e.price}</span>
+                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+€{e.price}</span>
                                   </div>
                                 );
                               })}
@@ -2698,7 +2713,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.selectDate}</div>
+                    <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.selectDate}</div>
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.selectDateSub}</div>
                   </div>
                 </div>
@@ -2740,7 +2755,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               }}>
                               {isToday && !isSel && <div style={{ position: "absolute", top: 5, right: 5, width: 4, height: 4, borderRadius: "50%", background: accent }} />}
                               <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
-                              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: isSel ? c.btnOnDark : c.text, lineHeight: 1 }}>{d.getDate()}</span>
+                              <span style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 400, color: isSel ? c.btnOnDark : c.text, lineHeight: 1 }}>{d.getDate()}</span>
                               {!isClosed && !isFull && (
                                 <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}bb` : c.textMuted, fontWeight: 500, marginTop: 1 }}>
                                   {dayHours.open?.slice(0,5)}–{dayHours.close?.slice(0,5)}
@@ -2862,7 +2877,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.yourDetails}</div>
+                    <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.yourDetails}</div>
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.yourDetailsSub}</div>
                   </div>
                 </div>
@@ -2969,7 +2984,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.confirmBooking}</div>
+                    <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>{t.confirmBooking}</div>
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.confirmSub}</div>
                   </div>
                 </div>
@@ -3006,7 +3021,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                     <div>
                       {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>€{getOriginalPrice().toFixed(2)}</span>}
-                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -3015,7 +3030,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           ) : (
             <div className="fade-up" style={{ textAlign: "center", paddingTop: 60 }}>
               <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${accent}18`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", fontSize: 28 }}><NavIcon name="beauty" size={28} color={accent} /></div>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+              <div style={{ fontFamily: displayFont, fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 6 }}>{t.confirmedSub} <strong style={{ color: accent }}>{date}</strong> {t.at} <strong style={{ color: accent }}>{time}</strong></div>
               <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{t.confirmationSent} {form.email}</div>
 
@@ -3185,7 +3200,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <img src={initialSalon.logo_url} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
                 )}
                 <div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, fontWeight: 400, color: c.text }}>{initialSalon.name}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 400, color: c.text }}>{initialSalon.name}</div>
                   <div style={{ fontSize: 11, color: c.textLabel }}>{initialSalon.city}</div>
                 </div>
               </div>
@@ -3306,7 +3321,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 </div>
                               </div>
                             </div>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: c.text }}>
+                            <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
                               {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
                             </div>
                           </div>
@@ -3331,7 +3346,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>€{v.price}</div>
                                 </div>
                               </div>
                             ))}
@@ -3346,7 +3361,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
-                                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+€{e.price}</div>
                                 </div>
                               </div>
                             ))}
@@ -3599,7 +3614,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                         <div>
                           {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>€{getOriginalPrice().toFixed(2)}</span>}
-                          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
@@ -3633,7 +3648,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 /* Done screen mobile */
                 <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
                   <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
                   <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
                     {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
                   </p>
@@ -3679,7 +3694,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
                     {time && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</div>
                 </div>
                 {step === 1 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
@@ -3712,7 +3727,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>
+                <div style={{ fontFamily: displayFont, fontSize: 24, fontWeight: 300 }}>
                   {t.howWasAppt}
                 </div>
                 <div style={{ fontSize: 12, color: c.textSub, marginTop: 4 }}>{initialSalon.name}</div>
@@ -3762,13 +3777,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ width: 56, height: 56, margin: "0 auto 16px", borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <NavIcon name="check" size={26} color={accent} />
                   </div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{T[lang].waitlistJoined}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{T[lang].waitlistJoined}</div>
                   <div style={{ fontSize: 13, color: c.textLabel, marginBottom: 20 }}>{T[lang].waitlistJoinedSub}</div>
                   <button className="btn-primary" style={{ width: "100%" }} onClick={() => setWaitlistOpen(false)}>{T[lang].close}</button>
                 </div>
               ) : (
                 <>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 6 }}>{T[lang].waitlistTitle}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 300, marginBottom: 6 }}>{T[lang].waitlistTitle}</div>
                   <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                     {T[lang].waitlistSub}
                   </div>

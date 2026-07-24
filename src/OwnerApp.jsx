@@ -16,7 +16,8 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
+  PAGE_FONTS, ensurePageFontLoaded
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -3107,6 +3108,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           cover_focal_y: data.cover_focal_y ?? 50,
+          page_font: data.page_font || "classic",
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
           // kind='block' rows are unavailability (agenda banners, slot
@@ -4445,6 +4447,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  // Load every display-font stylesheet when the Style picker is on screen, so
+  // each option previews in its own font. Only fires on Settings → Salon, so
+  // the extra fonts aren't pulled on every dashboard visit.
+  useEffect(() => {
+    if (view === "instellingen" && settingsTab === "salon") {
+      Object.keys(PAGE_FONTS).forEach(ensurePageFontLoaded);
+    }
+  }, [view, settingsTab]);
 
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
@@ -7811,6 +7822,39 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+              {/* Style — the display/heading font of the public booking page.
+                  Each tile previews itself in its own font. Body text stays
+                  the same everywhere; only headings/titles/prices change. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Stijl" : "Style"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
+                  {lang === "nl" ? "Het lettertype van de titels op je boekingspagina." : "The heading font on your booking page."}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {Object.entries(PAGE_FONTS).map(([key, f]) => {
+                    const sel = (salonData.page_font || "classic") === key;
+                    return (
+                      <div key={key} role="button" tabIndex={0}
+                        onClick={() => update(d => { d.page_font = key; return d; })}
+                        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); update(d => { d.page_font = key; return d; }); } }}
+                        style={{
+                          cursor: "pointer", borderRadius: 14, padding: "14px 10px", textAlign: "center",
+                          background: sel ? `${accent}12` : c.bg,
+                          border: `1.5px solid ${sel ? accent : c.inputBorder}`, transition: "all 0.15s",
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, minHeight: 72
+                        }}>
+                        <div style={{ fontFamily: f.family, fontSize: 20, color: c.text, lineHeight: 1.15, wordBreak: "break-word" }}>
+                          {lang === "nl" ? f.label_nl : f.label_en}
+                        </div>
+                        <div style={{ fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, color: sel ? accent : c.textMuted }}>
+                          {sel ? (lang === "nl" ? "Gekozen" : "Selected") : " "}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Appearance — logo + cover. Lives here in the Salon tab, right
                   under the brand colour, since it's the same "how your page
                   looks" group. */}
@@ -10811,6 +10855,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
                   cover_focal_y: salonData.cover_focal_y ?? 50,
+                  page_font: salonData.page_font || "classic",
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",
