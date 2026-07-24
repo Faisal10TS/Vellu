@@ -33,7 +33,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const faqs = lang === "nl" ? [
     ["Wat is Vellu precies?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij. Jij beheert alles vanuit je dashboard."],
     ["Voor wie is Vellu?", "Voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers, en beautysalons. Of je nu solo werkt of een team hebt."],
-    ["Hoeveel kost het?", "Starter is €19/maand, Professional €39/maand. Vast tarief, 0% commissie per boeking. Geen verborgen kosten."],
+    ["Hoeveel kost het?", "Starter is €19/maand, Professional €35/maand. Vast tarief, 0% commissie per boeking. Geen verborgen kosten."],
     ["Waarom geen commissie?", "Wij geloven dat jouw omzet van jou is. Je betaalt een vast bedrag per maand en houdt 100% van elke boeking."],
     ["Kan ik het eerst uitproberen?", "Ja, je kan je pagina gratis opzetten en alles instellen. Je betaalt pas als je live wilt gaan."],
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met het Professional plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
@@ -44,7 +44,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   ] : [
     ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
     ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
-    ["How much does it cost?", "Starter is €19/month, Professional €39/month. Fixed price, 0% commission per booking. No hidden fees."],
+    ["How much does it cost?", "Starter is €19/month, Professional €35/month. Fixed price, 0% commission per booking. No hidden fees."],
     ["Why no commission?", "We believe your revenue is yours. You pay a fixed monthly fee and keep 100% of every booking."],
     ["Can I try it first?", "Yes, you can set up your page for free and configure everything. You only pay when you want to go live."],
     ["Can my staff manage their own agenda?", "Yes! With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
@@ -348,7 +348,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               {[
                 { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"] } },
-                { name: "Professional", price: 39, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"] } },
+                { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"] } },
               ].map((plan, i) => {
                 const yearlyTotal = plan.price * 10; // 2 months free
                 const displayPrice = billingCycle === "yearly" ? yearlyTotal : plan.price;

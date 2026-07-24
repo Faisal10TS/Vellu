@@ -1275,7 +1275,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   // Server-of-truth prices live in create-subscription. Numbers here are
   // display-only — if they ever drift, the server still bills the correct
   // amount and refuses anything else. Yearly = 10× monthly = 2 months free.
-  const PRICES = { starter: 19, professional: 39 };
+  const PRICES = { starter: 19, professional: 35 };
   const priceFor = (planId) => {
     const m = PRICES[planId];
     if (billingInterval === "monthly") return { display: m, suffix: t.perMonth, sub: null };
@@ -7686,8 +7686,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 16 }}>
                       {lang === "nl"
-                        ? "Je krijgt direct toegang tot alle Professional functies. Je betaalt deze maand niets extra — vanaf de volgende afschrijving wordt er €39/maand in plaats van €19/maand afgeschreven."
-                        : "You get instant access to all Professional features. No extra charge this month — from the next renewal you'll be billed €39/month instead of €19/month."}
+                        ? "Je krijgt direct toegang tot alle Professional functies. Je betaalt deze maand niets extra — vanaf de volgende afschrijving wordt er €35/maand in plaats van €19/maand afgeschreven."
+                        : "You get instant access to all Professional features. No extra charge this month — from the next renewal you'll be billed €35/month instead of €19/month."}
                     </div>
                     {salonData.plan_expires_at && (
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10 }}>

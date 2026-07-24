@@ -48,9 +48,10 @@ const ALLOWED_ORIGINS = [
 ];
 
 // Plan pricing in EUR. Server is the source of truth — never trust client.
+// 2026-07-25: Professional lowered 39 -> 35 (yearly stays 10x monthly).
 const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
   starter: { monthly: 19.0, yearly: 190.0 },
-  professional: { monthly: 39.0, yearly: 390.0 },
+  professional: { monthly: 35.0, yearly: 350.0 },
 };
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);

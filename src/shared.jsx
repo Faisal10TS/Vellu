@@ -612,7 +612,7 @@ const _T_RAW = {
     // Subscriptions
     choosePlan:"Kies een abonnement", choosePlanSub:"Selecteer het plan dat bij jou past",
     planStarter:"Starter", planProfessional:"Professional",
-    planStarterPrice:"19", planProfessionalPrice:"39",
+    planStarterPrice:"19", planProfessionalPrice:"35",
     planStarterDesc:"Perfect om te beginnen", planProfessionalDesc:"Voor de groeiende salon",
     planFeatureBookings:"Online boekingen", planFeatureStaff:"Team beheer", planFeatureAnalytics:"Analytics dashboard",
     planFeatureReviews:"Reviews systeem", planFeatureEmail:"Email bevestigingen", planFeatureReminders:"24u herinneringen",
@@ -885,7 +885,7 @@ const _T_RAW = {
     // Subscriptions
     choosePlan:"Choose a plan", choosePlanSub:"Select the plan that fits you",
     planStarter:"Starter", planProfessional:"Professional",
-    planStarterPrice:"19", planProfessionalPrice:"39",
+    planStarterPrice:"19", planProfessionalPrice:"35",
     planStarterDesc:"Perfect to get started", planProfessionalDesc:"For the growing salon",
     planFeatureBookings:"Online bookings", planFeatureStaff:"Team management", planFeatureAnalytics:"Analytics dashboard",
     planFeatureReviews:"Reviews system", planFeatureEmail:"Email confirmations", planFeatureReminders:"24h reminders",
@@ -1775,7 +1775,7 @@ function PlanCompareTable({ lang, accent = ACCENT, defaultOpen = false }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.border}`, position: "sticky", top: 0, background: c.bgCard, zIndex: 1 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{nl ? "Feature" : "Feature"}</div>
             <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: c.text }}>Starter<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€19{nl ? "/mnd" : "/mo"}</div></div>
-            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: accent }}>Professional<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€39{nl ? "/mnd" : "/mo"}</div></div>
+            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: accent }}>Professional<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€35{nl ? "/mnd" : "/mo"}</div></div>
           </div>
           {planMatrix(lang).map((g, gi) => (
             <div key={gi}>
