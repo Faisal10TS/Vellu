@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym, taxForCountry
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -23,6 +23,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Currency symbol from the salon's country_code — all amounts staff see (their
   // revenue, service prices, client spend) show this instead of a hardcoded €.
   const cur = curSym(salonProfile.country_code);
+  const tax = taxForCountry(salonProfile.country_code);
   // When the owner enabled "team sees each other's agenda", the dashboard +
   // agenda show the whole salon with a per-stylist filter; otherwise only
   // this stylist's own appointments (the default).
@@ -352,6 +353,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_accent: salonProfile.accent_color || "",
         salon_btw_rate: salonProfile.btw_rate ?? 21,
         salon_logo: salonProfile.logo_url || "",
+        currency: cur, tax_label: tax.label, tax_id_label: tax.idLabel,
         lang
       });
       await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id).eq("owner_id", salonProfile.id);
@@ -2346,7 +2348,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         client_name: addApptForm.client_name, client_email: email,
                         service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                         payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
-                        salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang,
+                        salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur,
                         cancel_url: cancelUrl || null
                       });
                     }
@@ -2356,7 +2358,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                       price, salon_name: salonProfile.business_name,
-                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang
+                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur
                     });
                     setAddApptDone(true);
                     setAddApptLoading(false);

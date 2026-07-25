@@ -4015,6 +4015,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_slug: salonData.id || "",
           owner_id: salonData.owner_id,
           cancel_url: cancelUrl || null,
+          currency: cur,
           lang,
         };
         await sendEmails("appointment_updated", notifyPayload);
@@ -4074,6 +4075,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_accent: salonData.accent || "",
           salon_btw_rate: salonData.btw_rate ?? 21,
           salon_logo: salonData.logo_url || "",
+          // Currency + tax label from the salon's country → invoice shows $ / ABB
+          // for a Bonaire salon (send-emails defaults to € / BTW if omitted).
+          currency: cur,
+          tax_label: tax.label,
+          tax_id_label: tax.idLabel,
           lang
         });
         await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
@@ -11365,7 +11371,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         payment: "on-arrival", price: totalPrice,
                         salon_name: salonData.name, owner_email: null,
                         salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
-                        owner_id: salonData.owner_id, lang,
+                        owner_id: salonData.owner_id, lang, currency: cur,
                         cancel_url: cancelUrl || null
                       };
                       await sendEmails("booking_confirmation", bookingConfirmPayload);
@@ -11380,7 +11386,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
                         price: totalPrice, salon_name: salonData.name,
-                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang
+                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang, currency: cur
                       });
                     }
                     setAddApptDone(true);
