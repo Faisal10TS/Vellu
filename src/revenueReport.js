@@ -15,14 +15,10 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const BTW_RATE = 0.21; // NL standard rate; services are 21% BTW.
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
 // Safe string — avoids undefined/null blowing up pdf output.
 const s = (v) => (v === null || v === undefined ? "" : String(v));
-
-// Format EUR amount.
-const eur = (n) => `€${(Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace(".", ",")}`;
 
 // Local date formatter — we want Dutch output even when the user's browser
 // locale is English, because the report will be sent to a Dutch accountant.
@@ -43,8 +39,15 @@ const fmtDateNL = (isoDate) => {
 //   lang: "nl" | "en"  (column headers only; numeric formatting stays NL)
 //   staffName: optional — set when the report is filtered to one team member;
 //     shown in the header and appended to the filename.
-export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "" }) {
+export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "", currencySymbol = "€", moneyLocale = "nl-NL", taxLabel = "BTW", taxRate = 0.21, showTax = true }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595.28 x 841.89 pt
+
+  // Currency + tax are driven by the salon's country (passed in by the caller):
+  // NL/BE → € + BTW, Bonaire → $ + ABB, etc. Prices are tax-INCLUSIVE, so
+  // net = gross / (1 + rate). `showTax` is false for salons that don't charge
+  // tax — then net = gross and no tax rows are drawn.
+  const eur = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const taxPct = Math.round((Number(taxRate) || 0) * 100);
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -101,7 +104,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
 
   // ── SUMMARY ──────────────────────────────────────────────
   const totalGross = appointments.reduce((sum, a) => sum + (parseFloat(a.service_price) || 0), 0);
-  const totalNet = totalGross / (1 + BTW_RATE);
+  const totalNet = showTax ? totalGross / (1 + taxRate) : totalGross;
   const totalBtw = totalGross - totalNet;
   const avg = appointments.length ? totalGross / appointments.length : 0;
 
@@ -124,7 +127,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   doc.text(lang === "nl" ? "Aantal afspraken" : "Appointments", col1X, summaryY);
-  doc.text(lang === "nl" ? "Omzet incl. BTW" : "Revenue incl. VAT", col2X, summaryY);
+  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : "Revenue"), col2X, summaryY);
   doc.text(lang === "nl" ? "Gem. per afspraak" : "Avg per appt.", col3X, summaryY);
 
   doc.setFont("helvetica", "bold");
@@ -134,22 +137,24 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.text(eur(totalGross), col2X, summaryY + 18);
   doc.text(eur(avg), col3X, summaryY + 18);
 
-  // BTW breakdown
+  // Tax breakdown — only for salons that actually charge tax (showTax).
   const btwY = summaryY + 44;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(120, 120, 120);
-  doc.text(lang === "nl" ? "BTW (21%)" : "VAT (21%)", col1X, btwY);
-  doc.text(lang === "nl" ? "Netto (excl. BTW)" : "Net (excl. VAT)", col2X, btwY);
+  if (showTax) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`${taxLabel} (${taxPct}%)`, col1X, btwY);
+    doc.text(lang === "nl" ? `Netto (excl. ${taxLabel})` : `Net (excl. ${taxLabel})`, col2X, btwY);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(26, 23, 20);
-  doc.text(eur(totalBtw), col1X, btwY + 16);
-  doc.text(eur(totalNet), col2X, btwY + 16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(26, 23, 20);
+    doc.text(eur(totalBtw), col1X, btwY + 16);
+    doc.text(eur(totalNet), col2X, btwY + 16);
+  }
 
   // ── TABLE ────────────────────────────────────────────────
-  const tableStartY = btwY + 48;
+  const tableStartY = showTax ? btwY + 48 : summaryY + 40;
 
   // Sort appointments by date asc then time asc for a chronological ledger
   const sorted = [...appointments].sort((a, b) => {

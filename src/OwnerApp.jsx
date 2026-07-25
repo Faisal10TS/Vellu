@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -752,7 +752,18 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
       // chunk downloads; subsequent clicks are instant (browser-cached).
       const mod = await import("./revenueReport.js");
-      const result = mod.generateRevenueReportPDF({ salon: salonData, appointments: inRange, range, lang, staffName: fixedStaffName || selectedStaff?.name || "" });
+      // Currency + tax for the report come from the salon's country. Prices are
+      // tax-inclusive; the report only breaks out tax when the salon is tax-
+      // registered (has a tax id) and a rate > 0 — same rule as the invoice.
+      const _money = currencyForCountry(salonData.country_code);
+      const _tax = taxForCountry(salonData.country_code);
+      const _rate = (parseFloat(salonData.btw_rate ?? 21) || 0) / 100;
+      const result = mod.generateRevenueReportPDF({
+        salon: salonData, appointments: inRange, range, lang,
+        staffName: fixedStaffName || selectedStaff?.name || "",
+        currencySymbol: _money.symbol, moneyLocale: _money.locale,
+        taxLabel: _tax.label, taxRate: _rate, showTax: !!salonData.btw_id && _rate > 0,
+      });
       toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
       console.error("PDF error:", e);
