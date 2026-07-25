@@ -1154,7 +1154,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 weekStart.setDate(base.getDate() - dayOfWeek);
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
                     {/* Header + body in one grid */}
                     {weekDays.map((d, i) => {
                       const ds = fmt(d);
@@ -1251,12 +1251,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 const rows = cells.length / 7;
                 return (
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
                       {DAY_HEADERS.map((dh, i) => (
                         <div key={dh} style={{ textAlign: "center", fontSize: isMobile ? 9 : 10, fontWeight: 600, color: c.textLabel, padding: isMobile ? "8px 0" : "10px 0", letterSpacing: "0.12em", textTransform: "uppercase", borderRight: i < 6 ? `1px solid ${c.border}` : "none" }}>{dh}</div>
                       ))}
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
                       {cells.map((cell, i) => {
                         const ds = `${cell.year}-${String(cell.month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
                         const isSel = calDate === ds;
