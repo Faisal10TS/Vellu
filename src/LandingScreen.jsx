@@ -397,6 +397,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 );
               })}
             </div>
+            {/* Prices are in EUR (Vellu bills via Mollie in euros). A salon
+                outside the eurozone is simply charged in EUR and their card
+                converts — so we never show a $-price here that wouldn't match
+                the actual charge. The salon's OWN prices to its clients are a
+                separate thing and DO follow the salon's currency. */}
+            <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, marginTop: 16, lineHeight: 1.5, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
+              {lang === "nl"
+                ? "Alle prijzen in euro's, incl. btw. Betaal je van buiten de eurozone? Je kaart rekent automatisch om."
+                : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
+            </div>
             {/* Full feature comparison — collapsed by default so the pricing
                 section stays scannable; the table answers "what exactly do I
                 miss on Starter?" without a support question. */}
@@ -426,6 +436,28 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 )}
               </div>
             ))}
+          </div></Reveal>
+        </div>
+
+        {/* ─── QUESTIONS / CONTACT ─── */}
+        <div style={{ padding: "10px 24px 20px", position: "relative", zIndex: 10 }}>
+          <Reveal><div style={{ maxWidth: 640, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "36px 32px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4.5vw, 32px)", fontWeight: 300, marginBottom: 10 }}>
+              {lang === "nl" ? "Nog vragen?" : "Still have questions?"}
+            </div>
+            <p style={{ fontSize: 14, color: c.textLabel, lineHeight: 1.6, marginBottom: 24, maxWidth: 460, marginLeft: "auto", marginRight: "auto" }}>
+              {lang === "nl"
+                ? "Stel je vraag in de chat linksonder, of stuur ons een berichtje. We helpen je graag op weg."
+                : "Ask in the chat at the bottom-left, or send us a message. We're happy to help you get started."}
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn-primary" onClick={() => navigate("/contact")} style={{ padding: "12px 26px" }}>
+                {lang === "nl" ? "Neem contact op" : "Contact us"}
+              </button>
+              <a href="mailto:mirahventures@vellu.cc" className="btn-ghost" style={{ padding: "12px 26px", textDecoration: "none", display: "inline-flex", alignItems: "center", borderColor: `${ACCENT}44`, color: ACCENT }}>
+                mirahventures@vellu.cc
+              </a>
+            </div>
           </div></Reveal>
         </div>
 
