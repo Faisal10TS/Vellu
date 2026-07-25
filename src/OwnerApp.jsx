@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -1808,7 +1808,7 @@ function csvRowsToClients(rows) {
   return { records, skipped };
 }
 
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [] }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€" }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -2456,7 +2456,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Bezoeken" : "Visits"}</div>
               </div>
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>€{selected.totalSpent.toFixed(0)}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>{cur}{selected.totalSpent.toFixed(0)}</div>
                 <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Besteed" : "Spent"}</div>
               </div>
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
@@ -3276,6 +3276,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     : allVisibleAppts;
   const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+
+  // Currency symbol for THIS salon's own money (services, revenue, invoices),
+  // from its country_code. Vellu's OWN subscription prices (€19/€35) are NOT
+  // this — those stay € and are excluded from the currency swap below.
+  const cur = curSym(salonData.country_code);
 
   const update = (fn) => setSalonData(d => {
     const updated = fn({...d});
@@ -4318,7 +4323,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
+        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${cur}${a.service_price}\\nStatus: ${a.status}`,
         `LOCATION:${salonData.name}, ${salonData.city}`,
         `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
@@ -4396,7 +4401,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : (lang === "nl" ? "Voltooid" : "Completed")}</span>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{parseFloat(a.service_price || 0).toFixed(2)}</span>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</span>
         </div>
       </div>
       {a.client_allergies && (
@@ -4445,7 +4450,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             window.open(getGoogleCalUrl({
               title: `${a.client_name} — ${a.service_name}`,
               date: a.date, time: a.time, duration: dur,
-              description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n€${a.service_price}`,
+              description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${cur}${a.service_price}`,
               location: salonData.name + (salonData.city ? ", " + salonData.city : "")
             }), "_blank");
           }}>{t.addToGoogleCal}</button>
@@ -4868,8 +4873,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={rowStyle}>
                 <span style={lblStyle}>{lang === "nl" ? "Prijs" : "Price"}</span>
                 <span style={valStyle}>
-                  €{parseFloat(a.service_price || 0).toFixed(2)}
-                  {discount > 0 && <span style={{ color: c.textMuted, fontSize: 11 }}> ({lang === "nl" ? "korting" : "discount"} €{discount.toFixed(2)}{a.discount_reason ? ` · ${a.discount_reason}` : ""})</span>}
+                  {cur}{parseFloat(a.service_price || 0).toFixed(2)}
+                  {discount > 0 && <span style={{ color: c.textMuted, fontSize: 11 }}> ({lang === "nl" ? "korting" : "discount"} {cur}{discount.toFixed(2)}{a.discount_reason ? ` · ${a.discount_reason}` : ""})</span>}
                 </span>
               </div>
               <div style={rowStyle}>
@@ -4946,7 +4951,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {(() => {
                 const svcLabel = (s) => lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name);
                 const varLabel = (v) => lang === "nl" ? v.name_nl : (v.name_en || v.name_nl);
-                const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — €${n.toFixed(0)}` : ""; };
+                const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — ${cur}${n.toFixed(0)}` : ""; };
                 // One option per bookable thing: services with variants expand
                 // to one option per variant (value "serviceId::variantId") so
                 // each entry carries its real price; plain services stay one
@@ -5045,7 +5050,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     border: `1px solid ${on ? accent : c.inputBorder}`,
                                     color: on ? accent : c.textSub,
                                   }}>
-                                  + {lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)} · €{parseFloat(ex.price || 0).toFixed(0)}
+                                  + {lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)} · {cur}{parseFloat(ex.price || 0).toFixed(0)}
                                 </button>
                               );
                             })}
@@ -5067,19 +5072,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Tijd" : "Time"}</label><input className="input-field" type="time" value={editApptForm.time} onChange={(e) => setEditApptForm((f) => ({ ...f, time: e.target.value }))} style={inp} /></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div style={cell}><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={inp} /></div>
+                <div style={cell}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" step="5" min="5" value={editApptForm.duration} onChange={(e) => setEditApptForm((f) => ({ ...f, duration: e.target.value }))} style={inp} /></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
-                <div style={cell}><label style={lbl}>{lang === "nl" ? "Korting (€)" : "Discount (€)"}</label><input className="input-field" type="number" step="0.01" min="0" placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} /></div>
+                <div style={cell}><label style={lbl}>{lang === "nl" ? `Korting (${cur})` : `Discount (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Reden korting (optioneel)" : "Discount reason (optional)"}</label><input className="input-field" value={editApptForm.discount_reason} onChange={(e) => setEditApptForm((f) => ({ ...f, discount_reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. vaste klant" : "e.g. loyal client"} style={inp} /></div>
               </div>
               {discountNum > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}33`, borderRadius: 12 }}>
                   <span style={{ fontSize: 11, color: c.textSub }}>{lang === "nl" ? "Klant betaalt" : "Client pays"}</span>
                   <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
-                    <span style={{ fontSize: 12, color: c.textMuted, textDecoration: "line-through", marginRight: 8, fontFamily: "'Jost',sans-serif" }}>€{basePrice.toFixed(2)}</span>
-                    €{finalPrice.toFixed(2)}
+                    <span style={{ fontSize: 12, color: c.textMuted, textDecoration: "line-through", marginRight: 8, fontFamily: "'Jost',sans-serif" }}>{cur}{basePrice.toFixed(2)}</span>
+                    {cur}{finalPrice.toFixed(2)}
                   </span>
                 </div>
               )}
@@ -5431,7 +5436,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {peakVal > 0 && (() => {
                         const x = padL + peakIdx * (barW + gap) + barW / 2;
                         const y = padT + innerH - (peakVal / max) * innerH - 3;
-                        const label = "€" + fmt(peakVal);
+                        const label = cur + fmt(peakVal);
                         const labelW = Math.max(22, label.length * 5 + 8);
                         const lx = Math.max(0, Math.min(W - labelW, x - labelW / 2));
                         return (
@@ -5479,7 +5484,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {todayAppts.length > 0 && (
                           <div style={{ textAlign: "right" }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : "Expected"}</div>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>€{todayRevenue.toFixed(0)}</div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(0)}</div>
                           </div>
                         )}
                       </div>
@@ -5510,7 +5515,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : "7 days"}</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
                           {weekChange !== 0 && (
                             <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                               {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
@@ -5528,7 +5533,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
                         </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(0)}</div>
                         <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
                           {sparkline(monthDaily, accent, { labels: monthLabels })}
                         </div>
@@ -5649,7 +5654,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(0)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
                         </div>
                         <span style={{ fontSize: 10, color: accent, cursor: "pointer", padding: "6px 12px", borderRadius: 100, border: `1px solid ${accent}33`, letterSpacing: "0.06em" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
@@ -5678,7 +5683,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <g>
                               <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                               <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                €{pts[peakIdx].revenue.toFixed(0)}
+                                {cur}{pts[peakIdx].revenue.toFixed(0)}
                               </text>
                             </g>
                           )}
@@ -5686,7 +5691,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                                <title>{p.label} · {cur}{p.revenue.toFixed(0)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -5708,11 +5713,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{avgWeek.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : "Trend"}</div>
@@ -5762,7 +5767,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                   <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -5785,7 +5790,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} />
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} />
           )}
 
           {/* AGENDA */}
@@ -5945,7 +5950,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>€{periodRevenue.toFixed(0)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(0)}</div>
                 </div>
               </div>
 
@@ -6844,18 +6849,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{visibleCompleted.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{thisMonthTotal.toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>€{unsentTotal.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
@@ -6983,7 +6988,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
 
                         {/* Price */}
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
@@ -7034,7 +7039,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 style={{ height: 30, minWidth: 30, padding: a.paid_at ? "0 10px" : 0, borderRadius: 8, border: `1px solid ${a.paid_at ? `${c.success}44` : c.inputBorder}`, background: a.paid_at ? `${c.success}14` : "transparent", color: a.paid_at ? c.success : c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif" }}
                                 title={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : "Mark as paid")}
                               >
-                                €{a.paid_at ? (lang === "nl" ? " Betaald" : " Paid") : ""}
+                                {cur}{a.paid_at ? (lang === "nl" ? " Betaald" : " Paid") : ""}
                               </button>
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:
@@ -7177,7 +7182,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {peakVal > 0 && (() => {
                         const x = padL + peakIdx * (barW + gap) + barW / 2;
                         const y = padT + innerH - (peakVal / max) * innerH - 3;
-                        const label = "€" + fmtN(peakVal);
+                        const label = cur + fmtN(peakVal);
                         const labelW = Math.max(22, label.length * 5 + 8);
                         const lx = Math.max(0, Math.min(W - labelW, x - labelW / 2));
                         return (
@@ -7258,7 +7263,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7d" : "7d"}</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
                           {weekChange !== 0 && (
                             <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                               {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
@@ -7273,7 +7278,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
                           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30d" : "30d"}</div>
                         </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(0)}</div>
                         <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div>
                       </div>
                       {/* Total appointments */}
@@ -7329,7 +7334,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(0)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
                         </div>
                       </div>
@@ -7353,7 +7358,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <g>
                                 <rect x={px - 30} y={pts[peakIdx].y - 26} width="60" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                                 <text x={px} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                  €{pts[peakIdx].revenue.toFixed(0)}
+                                  {cur}{pts[peakIdx].revenue.toFixed(0)}
                                 </text>
                               </g>
                             );
@@ -7361,7 +7366,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                                <title>{p.label} · {cur}{p.revenue.toFixed(0)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -7381,11 +7386,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{cur}{avgWeek.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : "Trend"}</div>
@@ -7434,7 +7439,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -7499,7 +7504,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{r.name}</span>
                               {r.role && <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}>{r.role}</span>}
                             </div>
-                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, lineHeight: 1 }}>€{r.revenue.toFixed(0)}</span>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, lineHeight: 1 }}>{cur}{r.revenue.toFixed(0)}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                             <div style={{ flex: 1, height: 4, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -8557,7 +8562,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const photoCount = (s.photos || []).length;
                   const heroPhoto = s.photos?.[0]?.url || s.photos?.[0];
                   const minVariantPrice = variantCount > 0 ? Math.min(...s.variants.map(v => parseFloat(v.price))) : null;
-                  const displayPrice = minVariantPrice !== null ? `${t.from} €${minVariantPrice}` : `€${s.price}`;
+                  const displayPrice = minVariantPrice !== null ? `${t.from} ${cur}${minVariantPrice}` : `${cur}${s.price}`;
 
                   return (
                     <SortableService key={s.id} id={s.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
@@ -8585,7 +8590,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                             <div>
-                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
                               <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                             <div>
@@ -8733,7 +8738,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               />
                                             </div>
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" /></div>
+                                              <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} /></div>
                                               <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "min" : "min"} /></div>
                                             </div>
                                             <div style={{ marginBottom: 8 }}>
@@ -8765,7 +8770,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
-                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>€{v.price}</div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{cur}{v.price}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                                 style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${accent}55`, background: `${accent}14`, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600 }}>
@@ -8826,8 +8831,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               />
                                             </div>
                                             <div style={{ marginBottom: 8 }}>
-                                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label>
-                                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder="€" />
+                                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label>
+                                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
                                             </div>
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
@@ -8845,7 +8850,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                             <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
-                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+€{e.price}</div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{cur}{e.price}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
                                                 style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -8998,7 +9003,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
                         <input className="input-field" placeholder="45" type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
                       </div>
                       <div>
@@ -10750,7 +10755,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, color: c.text, fontFamily: "monospace", letterSpacing: "0.04em" }}>{code.code}</div>
                           <div style={{ fontSize: 11, color: c.textSub, marginTop: 2 }}>
-                            <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `€${code.amount}`}</span>
+                            <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `${cur}${code.amount}`}</span>
                             {" "}{t.discount.toLowerCase()}
                           </div>
                         </div>
@@ -10782,7 +10787,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <input className="input-field" placeholder={t.discountAmount} type="number" value={newDiscount.amount} onChange={e => setNewDiscount(d => ({...d, amount: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
                     <select value={newDiscount.type} onChange={e => setNewDiscount(d => ({...d, type: e.target.value}))} style={{ background: c.inputBg, border: "1px solid " + c.inputBorder, borderRadius: 14, padding: "10px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
                       <option value="percent" style={{ background: c.selectBg }}>%</option>
-                      <option value="fixed" style={{ background: c.selectBg }}>€</option>
+                      <option value="fixed" style={{ background: c.selectBg }}>{cur}</option>
                     </select>
                   </div>
                   <button className="btn-ghost" style={{ width: "100%", padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
@@ -11079,14 +11084,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "", extra_ids: [] } : r) }))}
                           style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
+                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{s.price}</option>)}
                         </select>
                         {hasVariants && (
                           <select className="input-field" value={row.variant_id || ""}
                             onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, variant_id: e.target.value } : r) }))}
                             style={{ fontSize: 12 }}>
                             <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : "No variant"}</option>
-                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — €{v.price} · {v.duration} min</option>)}
+                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — {cur}{v.price} · {v.duration} min</option>)}
                           </select>
                         )}
                         {hasExtras && (
@@ -11114,7 +11119,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                       fontWeight: on ? 600 : 500,
                                     }}>
                                     {on && <NavIcon name="check" size={10} color={accent} />}
-                                    {label} · +€{parseFloat(ex.price || 0).toFixed(2)}
+                                    {label} · +{cur}{parseFloat(ex.price || 0).toFixed(2)}
                                   </button>
                                 );
                               })}
