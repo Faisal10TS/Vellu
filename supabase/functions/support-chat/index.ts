@@ -1,17 +1,25 @@
 // supabase/functions/support-chat/index.ts
 //
-// Vellu's in-app help assistant for SALON OWNERS. A logged-in owner chats with
-// it from their dashboard; it answers "how do I…" and "why isn't X working"
-// questions from a curated Vellu knowledge base, personalised with a little
-// non-sensitive context about their own account (plan, whether they have
-// staff, their booking link).
+// Vellu's help assistant. DUAL-MODE, decided per request by whether the caller
+// presents a valid Supabase user token:
+//
+//   • OWNER mode (logged-in salon owner, from the dashboard) — answers "how do
+//     I…" / "why isn't X working" from the Vellu knowledge base, personalised
+//     with a little non-sensitive context about their own account.
+//   • PUBLIC mode (anonymous visitor, from the landing page) — answers sales /
+//     orientation questions from prospects. NO account context is ever fetched,
+//     so no salon data can reach an anonymous caller. Tighter per-message caps,
+//     a per-IP rate limit, AND a hard global daily cap (DB-backed) that protects
+//     the API wallet from abuse of this open endpoint.
 //
 // Design choices:
-//  • verify_jwt=true — only authenticated Supabase users (i.e. logged-in
-//    owners) can call it. Anonymous booking clients have no session here.
-//  • Knowledge-only (no DB tools yet). The model can't read or change the
-//    salon's data — it answers from the KB + the small context block below.
-//    That keeps it safe (no data exposure, no destructive actions) and cheap.
+//  • verify_jwt=false — the endpoint must be reachable by anonymous landing-page
+//    visitors (they have no session). Auth is done IN CODE: a valid user token
+//    unlocks owner mode; everything else falls through to the locked-down public
+//    mode. Owner data paths run only when a real user is verified.
+//  • Knowledge-only (no DB tools). The model can't read or change salon data —
+//    it answers from the KB (+ owner context block in owner mode only). Safe:
+//    no data exposure, no destructive actions, and cheap.
 //  • Model: claude-haiku-4-5 — fastest/cheapest, plenty smart for a FAQ bot.
 //    Switch MODEL to "claude-opus-4-8" for the most capable answers (the
 //    adaptive-thinking + effort params below re-enable automatically for it).
@@ -59,15 +67,48 @@ function json(status: number, body: unknown, origin: string | null) {
   });
 }
 
-// Per-user rate limit — a support bot doesn't need bursts.
+// Per-caller rate limit — a support bot doesn't need bursts. `max` differs by
+// mode: generous for authenticated owners, tighter for anonymous visitors.
 const RATE: Map<string, { count: number; resetAt: number }> = new Map();
-function rateLimit(id: string): boolean {
+const RATE_MAX_ENTRIES = 10_000;
+function rateLimit(id: string, max: number): boolean {
   const now = Date.now();
   const e = RATE.get(id);
-  if (!e || e.resetAt < now) { RATE.set(id, { count: 1, resetAt: now + 60_000 }); return true; }
-  if (e.count >= 20) return false;
+  if (!e || e.resetAt < now) {
+    // Bound the map so a caller rotating keys (e.g. a spoofed X-Forwarded-For)
+    // can't grow it without limit: drop expired entries, then hard-clear if the
+    // cap is still hit. Worst case this just resets some counters — acceptable.
+    if (RATE.size >= RATE_MAX_ENTRIES) {
+      for (const [k, v] of RATE) if (v.resetAt < now) RATE.delete(k);
+      if (RATE.size >= RATE_MAX_ENTRIES) RATE.clear();
+    }
+    RATE.set(id, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (e.count >= max) return false;
   e.count++;
   return true;
+}
+
+// Global caps for the PUBLIC (unauthenticated) landing-page chat — the wallet
+// backstop against abuse of an open AI endpoint. Both are DB-backed (see
+// bumpPublicUsage) so they hold across function instances/cold starts AND can't
+// be bypassed by X-Forwarded-For spoofing the way the in-memory per-IP limit can.
+// Owner (authenticated) chats are NOT subject to these caps. Both configurable.
+const DAILY_PUBLIC_CAP = Number(Deno.env.get("PUBLIC_CHAT_DAILY_CAP") || "300");   // per UTC day
+const MINUTE_PUBLIC_CAP = Number(Deno.env.get("PUBLIC_CHAT_MINUTE_CAP") || "20");  // global burst/min
+
+// Atomically bump the global day + minute counters and return both. Returns null
+// on ANY error; callers treat null as "budget unknown" and FAIL CLOSED (refuse
+// the paid public call) — a wallet backstop must never spend when it can't verify.
+async function bumpPublicUsage(): Promise<{ day: number; minute: number } | null> {
+  try {
+    const { data, error } = await supabase.rpc("bump_public_chat_usage");
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.day_count !== "number" || typeof row.minute_count !== "number") return null;
+    return { day: row.day_count, minute: row.minute_count };
+  } catch { return null; }
 }
 
 // ─── KNOWLEDGE BASE ──────────────────────────────────────────
@@ -156,6 +197,16 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 Vellu is een product van Mirah Ventures. Kom je er samen niet uit, verwijs dan naar mirahventures@vellu.cc.`;
 
+// Extra steer for PUBLIC visitors (landing page, not logged in). Overrides the
+// KB's "you help the owner, not the client" framing for prospects who are still
+// deciding. Appended as its own system block only in public mode.
+const PUBLIC_FRAMING = `CONTEXT: De persoon die nu chat is een GEÏNTERESSEERDE BEZOEKER op de Vellu-landingspagina — nog geen klant, waarschijnlijk een saloneigenaar of beauty-professional die overweegt Vellu te gaan gebruiken.
+- Beantwoord oriëntatie- en verkoopvragen: wat is Vellu, wat kost het, welke functies zijn er, hoe begin ik, past het bij mijn type salon, hoe verschilt het van andere platformen.
+- Wees warm, kort en enthousiast, maar blijf eerlijk en verzin niks. Weet je iets niet zeker, verwijs naar mirahventures@vellu.cc.
+- Vellu heeft een gratis proefperiode van 14 dagen: je kunt je pagina gratis opzetten en betaalt pas als je live wilt. Moedig ze aan de proef te starten via de knop bovenaan de pagina ("Start 14-dagen gratis proef" / "Start 14-day free trial").
+- Wil iemand juist zélf een afspraak boeken bij een salon? Verwijs ze dan vriendelijk naar de zoekbalk "Vind je salon" op de pagina, waar ze de naam van hun salon typen.
+- Vraag NIET om in te loggen en beloof geen account-specifieke hulp — je hebt in deze modus geen toegang tot account-, boekings- of klantgegevens. Vraag ook nooit om wachtwoorden of betaalgegevens.`;
+
 interface InMsg { role: string; content: unknown }
 
 serve(async (req) => {
@@ -168,57 +219,91 @@ serve(async (req) => {
     return json(200, { error: "not_configured" }, origin);
   }
 
-  // Auth: identify the owner from their Supabase session token.
+  // ── Mode: OWNER if a valid Supabase user token is presented, else PUBLIC.
+  // A missing/invalid/anon token (e.g. the landing page's anon key) is NOT an
+  // error here — it simply means the locked-down public mode.
   const authHeader = req.headers.get("Authorization") || "";
   const jwt = authHeader.replace(/^Bearer\s+/i, "");
-  if (!jwt) return json(401, { error: "no_auth" }, origin);
-  const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
-  if (userErr || !userData?.user) return json(401, { error: "invalid_auth" }, origin);
-  const userId = userData.user.id;
+  let userId: string | null = null;
+  if (jwt) {
+    try {
+      const { data: userData } = await supabase.auth.getUser(jwt);
+      if (userData?.user) userId = userData.user.id;
+    } catch { /* not a user token → public mode */ }
+  }
+  const isOwner = !!userId;
 
-  if (!rateLimit(userId)) return json(429, { error: "rate_limited" }, origin);
+  // Rate limiting. Owners: generous per-user. Public: a best-effort per-IP
+  // throttle only — X-Forwarded-For is spoofable on a verify_jwt=false endpoint,
+  // so the REAL burst/spend protection is the DB-backed global caps below, not
+  // this. Cap the key length so a rotating/oversized header can't bloat the map.
+  // Return 200 (not 429) so supabase-js delivers the body and the client shows
+  // the friendly "slow down" message instead of throwing on a non-2xx status.
+  if (isOwner) {
+    if (!rateLimit("u:" + userId, 20)) return json(200, { error: "rate_limited" }, origin);
+  } else {
+    const ip = ((req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown").slice(0, 64);
+    if (!rateLimit("ip:" + ip, 6)) return json(200, { error: "rate_limited" }, origin);
+  }
 
   let body: { messages?: InMsg[]; lang?: string };
   try { body = await req.json(); } catch { return json(400, { error: "invalid_json" }, origin); }
 
-  // Validate + trim the conversation: only user/assistant text, last 20 turns,
-  // each capped so a single message can't blow up the request.
+  // Validate + trim the conversation. Public callers get tighter caps so a
+  // single request stays cheap.
+  const maxTurns = isOwner ? 20 : 10;
+  const maxChars = isOwner ? 4000 : 1500;
   const raw = Array.isArray(body.messages) ? body.messages : [];
   const messages = raw
     .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .map((m) => ({ role: m.role as "user" | "assistant", content: String(m.content).slice(0, 4000) }))
-    .slice(-20);
+    .map((m) => ({ role: m.role as "user" | "assistant", content: String(m.content).slice(0, maxChars) }))
+    .slice(-maxTurns);
   if (!messages.length || messages[messages.length - 1].role !== "user") {
     return json(400, { error: "no_user_message" }, origin);
   }
 
-  // Light, non-sensitive personalisation. Never expose other salons' data.
+  // Wallet backstop for the PUBLIC endpoint: hard global day + minute caps.
+  // Counted only for well-formed requests (above) and before the paid Claude
+  // call, so malformed spam can't inflate it and capped calls cost no tokens.
+  // FAIL CLOSED: if the counter can't be confirmed (null) or either cap is
+  // exceeded, refuse — never spend when the budget is unknown.
+  if (!isOwner) {
+    const usage = await bumpPublicUsage();
+    if (!usage || usage.day > DAILY_PUBLIC_CAP || usage.minute > MINUTE_PUBLIC_CAP) {
+      return json(200, { error: "busy" }, origin);
+    }
+  }
+
+  // Owner-only, non-sensitive personalisation. Never fetched in public mode, so
+  // no salon data can ever reach an anonymous visitor.
   let ctx = "";
-  try {
-    const { data: p } = await supabase
-      .from("profiles")
-      .select("business_name, slug, plan, country_code")
-      .eq("id", userId)
-      .maybeSingle();
-    if (p) {
-      const { count: staffCount } = await supabase
-        .from("staff_members")
-        .select("*", { count: "exact", head: true })
-        .eq("owner_id", userId);
-      const planLabel = p.plan === "professional" ? "Professional" : (p.plan === "starter" ? "Starter" : "geen actief betaald plan (proef/gratis)");
-      ctx = `Context over deze eigenaar (gebruik het om je antwoord persoonlijk te maken; noem het niet ongevraagd op):
+  if (isOwner) {
+    try {
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("business_name, slug, plan, country_code")
+        .eq("id", userId)
+        .maybeSingle();
+      if (p) {
+        const { count: staffCount } = await supabase
+          .from("staff_members")
+          .select("*", { count: "exact", head: true })
+          .eq("owner_id", userId);
+        const planLabel = p.plan === "professional" ? "Professional" : (p.plan === "starter" ? "Starter" : "geen actief betaald plan (proef/gratis)");
+        ctx = `Context over deze eigenaar (gebruik het om je antwoord persoonlijk te maken; noem het niet ongevraagd op):
 - Salon: ${p.business_name || "onbekend"}
 - Boekingslink: vellu.cc/${p.slug || ""}
 - Abonnement: ${planLabel}
 - Aantal medewerkers: ${staffCount ?? 0}
 Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan kort uit dat het bij Professional hoort en dat upgraden kan via Instellingen → Abonnement.`;
-    }
-  } catch { /* context is best-effort */ }
+      }
+    } catch { /* context is best-effort */ }
+  }
 
   try {
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-    // Reply in the SAME language the owner wrote in — that's what users expect,
+    // Reply in the SAME language the user wrote in — that's what users expect,
     // and it overrides the KB's "default Dutch". The UI-language hint (body.lang,
     // from the language toggle) is only a tiebreaker for messages too short to
     // detect. Kept as its own high-salience system block placed LAST.
@@ -229,14 +314,18 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
       `Schrijft de gebruiker in het Engels, antwoord dan volledig in het Engels; schrijft die in het Nederlands, antwoord in het Nederlands. Meng nooit talen binnen één antwoord.\n` +
       `(Ter info: de interface van deze gebruiker staat op ${uiLang}. Gebruik dit alleen als het laatste bericht te kort is om de taal met zekerheid te bepalen.)`;
 
+    // Second system block: owner context (owner mode) or the sales framing
+    // (public mode). Both sit after the cached KB so the cache prefix is stable.
+    const modeBlock = isOwner ? ctx : PUBLIC_FRAMING;
+
     // Params as `any` so newer fields (thinking adaptive, output_config.effort)
     // pass through regardless of the pinned SDK's typings.
     const params: any = {
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: isOwner ? 1024 : 600,
       system: [
         { type: "text", text: KNOWLEDGE, cache_control: { type: "ephemeral" } },
-        ...(ctx ? [{ type: "text", text: ctx }] : []),
+        ...(modeBlock ? [{ type: "text", text: modeBlock }] : []),
         { type: "text", text: langDirective },
       ],
       messages,
@@ -250,15 +339,20 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
     }
     const msg: any = await anthropic.messages.create(params);
 
+    const isEn = body.lang === "en";
     if (msg.stop_reason === "refusal") {
-      return json(200, { reply: "Sorry, daar kan ik niet mee helpen. Voor iets anders over Vellu sta ik klaar — of mail mirahventures@vellu.cc." }, origin);
+      return json(200, { reply: isEn
+        ? "Sorry, I can't help with that. I'm here for anything else about Vellu — or email mirahventures@vellu.cc."
+        : "Sorry, daar kan ik niet mee helpen. Voor iets anders over Vellu sta ik klaar — of mail mirahventures@vellu.cc." }, origin);
     }
     const reply = (msg.content || [])
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("\n")
       .trim();
-    return json(200, { reply: reply || "Sorry, ik heb even geen antwoord. Probeer het opnieuw of mail mirahventures@vellu.cc." }, origin);
+    return json(200, { reply: reply || (isEn
+      ? "Sorry, I don't have an answer right now. Please try again, or email mirahventures@vellu.cc."
+      : "Sorry, ik heb even geen antwoord. Probeer het opnieuw of mail mirahventures@vellu.cc.") }, origin);
   } catch (e) {
     console.error("support-chat error:", e);
     return json(500, { error: "assistant_failed" }, origin);

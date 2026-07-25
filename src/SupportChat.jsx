@@ -8,11 +8,11 @@ import { supabase } from "./supabase.js";
 // and renders the reply. Knowledge-only: it can explain how Vellu works but
 // can't read or change the salon's data.
 
-export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
+export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting: greetingOverride, subtitle: subtitleOverride, side = "right", launcherBottom }) {
   const [open, setOpen] = useState(false);
-  const greeting = lang === "nl"
+  const greeting = greetingOverride || (lang === "nl"
     ? "Hoi! Ik ben de Vellu-assistent. Vraag me hoe iets werkt — bijvoorbeeld je openingstijden instellen, een medewerker toevoegen, of waarom een klant geen mail kreeg."
-    : "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email.";
+    : "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email.");
   const [messages, setMessages] = useState([{ role: "assistant", content: greeting }]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -51,6 +51,12 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
           : "Slow down a moment — try again in a minute." }]);
         return;
       }
+      if (data?.error === "busy") {
+        setMessages(m => [...m, { role: "assistant", content: lang === "nl"
+          ? "Het is nu erg druk met vragen. Probeer het later opnieuw, of mail mirahventures@vellu.cc."
+          : "It's very busy right now. Please try again later, or email mirahventures@vellu.cc." }]);
+        return;
+      }
       const reply = data?.reply || (lang === "nl"
         ? "Sorry, dat lukte niet. Probeer het opnieuw of mail mirahventures@vellu.cc."
         : "Sorry, that didn't work. Try again or email mirahventures@vellu.cc.");
@@ -65,8 +71,15 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
     }
   };
 
-  // Sits above the mobile bottom nav bar when present.
-  const bottomOffset = isMobile ? "calc(84px + env(safe-area-inset-bottom, 0px))" : 24;
+  // Launcher offset. On the dashboard (mobile) it sits above the bottom nav bar;
+  // callers without a bottom nav (e.g. the landing page) pass launcherBottom to
+  // override. `side` anchors the launcher/panel left or right so it can avoid
+  // other fixed elements (the landing's bottom-right "start trial" pill).
+  const bottomOffset = launcherBottom != null ? launcherBottom : (isMobile ? "calc(84px + env(safe-area-inset-bottom, 0px))" : 24);
+  const anchorX = side === "left" ? { left: 20 } : { right: 20 };
+  const panelAnchorX = isMobile
+    ? { left: 12, right: 12 }
+    : (side === "left" ? { left: 20, right: "auto" } : { right: 20, left: "auto" });
 
   return createPortal((
     <>
@@ -76,7 +89,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
           onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100); }}
           aria-label={lang === "nl" ? "Hulp" : "Help"}
           style={{
-            position: "fixed", right: 20, bottom: bottomOffset, zIndex: 480,
+            position: "fixed", bottom: bottomOffset, zIndex: 480, ...anchorX,
             width: 52, height: 52, borderRadius: "50%", border: "none", cursor: "pointer",
             background: accent, color: c.btnOnDark || "#fff",
             boxShadow: "0 8px 24px rgba(0,0,0,0.28)", display: "flex", alignItems: "center", justifyContent: "center",
@@ -91,7 +104,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
       {/* Chat panel */}
       {open && (
         <div style={{
-          position: "fixed", right: isMobile ? 12 : 20, left: isMobile ? 12 : "auto",
+          position: "fixed", ...panelAnchorX,
           bottom: isMobile ? "calc(12px + env(safe-area-inset-bottom, 0px))" : 24, zIndex: 490,
           width: isMobile ? "auto" : 380, maxWidth: "calc(100vw - 24px)",
           height: isMobile ? "70vh" : 520, maxHeight: "calc(100vh - 48px)",
@@ -106,7 +119,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, lineHeight: 1 }}>{lang === "nl" ? "Vellu-assistent" : "Vellu assistant"}</div>
-              <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.04em" }}>{lang === "nl" ? "Hulp bij het gebruik van Vellu" : "Help using Vellu"}</div>
+              <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.04em" }}>{subtitleOverride || (lang === "nl" ? "Hulp bij het gebruik van Vellu" : "Help using Vellu")}</div>
             </div>
             <button onClick={() => setOpen(false)} aria-label={lang === "nl" ? "Sluiten" : "Close"}
               style={{ background: "transparent", border: `1px solid ${c.border}`, borderRadius: 9, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: c.textSub, padding: 0, flexShrink: 0 }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
+import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
 } from "./shared.jsx";
@@ -18,6 +19,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const [error, setError] = useState("");
   const [faqOpen, setFaqOpen] = useState(null);
   const [billingCycle, setBillingCycle] = useState("monthly"); // "monthly" | "yearly"
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const goToSlug = (slug) => {
     let clean = slug.toLowerCase().trim()
@@ -460,6 +467,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             the conversion ask is one tap away regardless of how far down the
             page they've scrolled. */}
         <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} />
+
+        {/* Help chat for prospects — anchored bottom-LEFT so it never collides
+            with the bottom-right start-trial pill. Runs in public mode (no
+            login), which the support-chat function detects automatically. */}
+        <SupportChat
+          lang={lang}
+          c={c}
+          accent={ACCENT}
+          isMobile={isMobile}
+          side="left"
+          launcherBottom={20}
+          greeting={lang === "nl"
+            ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak."
+            : "Hi! Questions about Vellu? Happy to help — pricing, how it works, or whether it fits your salon. Ask away."}
+          subtitle={lang === "nl" ? "Vragen over Vellu?" : "Questions about Vellu?"}
+        />
       </div>
     </Layout>
   );
