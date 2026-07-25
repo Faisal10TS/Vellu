@@ -29,7 +29,7 @@ if(!authed)return new Response(JSON.stringify({error:"unauthorized"}),{status:40
 const fmtD=(ds,l="nl")=>{try{const d=new Date(ds+"T12:00:00");if(l==="en"){const dy=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];const mo=["January","February","March","April","May","June","July","August","September","October","November","December"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}const dy=["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];const mo=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}catch{return esc(ds);}};
 const acOf=(b)=>/^#[0-9a-fA-F]{6}$/.test(String(b.salon_accent||""))?b.salon_accent:"#c9a96e";
 const lH=(b)=>{const ac=acOf(b);const logo=safeImgSrc(b.salon_logo);const n=esc(b.salon_name);if(logo)return`<div style="text-align:center;margin-bottom:32px;"><img src="${esc(logo)}" alt="${n}" style="max-height:60px;max-width:200px;margin-bottom:12px;" /><div style="width:40px;height:1px;background:${ac};margin:0 auto;"></div></div>`;return`<div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:${ac};margin:12px auto;"></div></div>`;};
-const fP=(p)=>`€${parseFloat(p||0).toFixed(2)}`;
+let CURSYM="€";const fP=(p)=>`${CURSYM}${parseFloat(p||0).toFixed(2)}`;
 const W=`<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">`;
 const bS=`style="background:#f9f7f4;border-radius:12px;padding:24px;margin-bottom:28px;"`;
 const tS=`style="width:100%;border-collapse:collapse;"`;
@@ -39,7 +39,7 @@ const gL=`style="border-top:1px solid #e8e0d5;"`;
 const gA=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;"`;
 const gR=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;text-align:right;"`;
 try{
-const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.date,lang);
+const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.trim():"€";
 // Friendly sender: show the salon's name (falls back to Vellu for our own
 // subscription invoices) and route replies to the salon. A recognisable
 // From name + Reply-To improves trust and inbox placement vs bare noreply@.
@@ -73,10 +73,6 @@ const subj=txt(lang,`Afspraak geannuleerd: ${b.client_name}`,`Appointment cancel
 for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;color:#dc2626;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eC}</strong> heeft de afspraak bij <strong>${eS}</strong> geannuleerd. Deze tijd is nu weer vrij in je agenda.`,`<strong>${eC}</strong> cancelled their appointment at <strong>${eS}</strong>. This slot is now free again in your agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(lang,"Klant","Client"),eC)}${b.client_phone?row(txt(lang,"Telefoon","Phone"),ePh):""}${row(txt(lang,"Behandeling","Treatment"),eSv)}${row(txt(lang,"Datum","Date"),esc(fmtD(b.date,lang)))}${row(txt(lang,"Tijd","Time"),eT)}${reasonRow}</table></div></div>`);}}
 if(type==="booking_cancelled"){
 await send(plainText(b.client_email),plainText(txt(lang,"Afspraak geannuleerd","Appointment cancelled")),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,"Je afspraak is succesvol geannuleerd.","Your appointment has been successfully cancelled.")}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment"),eSv)}${row(txt(lang,"Was gepland op","Was scheduled for"),`${esc(b.date)} ${txt(lang,"om","at")} ${eT}`)}</table></div><p style="color:#888;font-size:13px;text-align:center;">${txt(lang,"Wil je opnieuw boeken? Ga naar vellu.cc","Want to rebook? Visit vellu.cc")}</p></div>`);}
-// Sent when the salon owner edits an appointment (date/time/price). Shows
-// the new values; if old_* values are provided, fields that actually changed
-// are highlighted with a strike-through old value next to the new one so
-// the client sees at a glance what the salon changed for them.
 if(type==="appointment_updated"){
 const oldDate=b.old_date?esc(fmtD(b.old_date,lang)):"";
 const oldTime=esc(b.old_time||"");
@@ -89,33 +85,21 @@ return `<tr><td ${cL}>${label}</td><td ${cR}><span style="color:#999;text-decora
 const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${txt(lang,"Past de nieuwe tijd je niet? Annuleren kan via:","Doesn't work for you? Cancel via:")}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment")}</a></div>`:"";
 await send(plainText(b.client_email),plainText(txt(lang,`Wijziging afspraak bij ${b.salon_name}`,`Appointment updated at ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is gewijzigd","Your appointment has been updated")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eS}</strong> heeft de details van je afspraak aangepast. Hieronder zie je de nieuwe gegevens:`,`<strong>${eS}</strong> updated the details of your appointment. The new details are below:`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment"),eSv)}${changedRow(txt(lang,"Datum","Date"),oldDate,eD)}${changedRow(txt(lang,"Tijd","Time"),oldTime,eT)}${changedRow(txt(lang,"Totaal","Total"),oldPrice,newPrice)}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Zien we je dan, ${eC}!`,`See you then, ${eC}!`)}</p></div>`);}
 if(type==="invoice"){
-const bd=[];if(b.salon_address)bd.push(eAd);if(b.salon_kvk)bd.push(`KVK: ${eKv}`);if(b.salon_btw)bd.push(`BTW: ${eBt}`);if(b.salon_iban)bd.push(`IBAN: ${eIb}`);
+const bd=[];if(b.salon_address)bd.push(eAd);if(b.salon_kvk)bd.push(`KVK: ${eKv}`);if(b.salon_btw)bd.push(`${b.tax_id_label?esc(String(b.tax_id_label)):"BTW"}: ${eBt}`);if(b.salon_iban)bd.push(`IBAN: ${eIb}`);
 const bSec=bd.length>0?`<div style="background:#f0ede8;border-radius:10px;padding:16px;margin-bottom:24px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:8px;">${txt(lang,"Bedrijfsgegevens","Business details")}</div><div style="font-size:13px;font-weight:500;margin-bottom:4px;">${eS}</div>${bd.map((d)=>`<div style="font-size:12px;color:#666;">${d}</div>`).join("")}</div>`:"";
-// BTW breakdown. Consumer prices in NL are inclusive of BTW, so b.price is the
-// gross total. Only show a split when the salon is BTW-registered (has a
-// BTW-id). Rate is per-salon (21% nail/beauty, 9% typical hairdresser).
 const gross=parseFloat(b.price||0);
 const rate=Math.max(0,parseFloat(b.salon_btw_rate!=null?b.salon_btw_rate:21))/100;
 let vatRows="";
-if(b.salon_btw&&rate>0){const net=gross/(1+rate);const vat=gross-net;const rl=parseFloat((rate*100).toFixed(2)).toString().replace(".",lang==="nl"?",":".");vatRows=`${row(txt(lang,"Subtotaal (excl. btw)","Subtotal (excl. VAT)"),fP(net))}${row(`${txt(lang,"Btw","VAT")} ${rl}%`,fP(vat))}`;}
-const totLabel=b.salon_btw?txt(lang,"Totaal (incl. btw)","Total (incl. VAT)"):txt(lang,"Totaal","Total");
-const noVatNote=b.salon_btw?"":`<p style="color:#aaa;font-size:11px;text-align:center;margin:0 0 8px;">${txt(lang,"Geen btw in rekening gebracht.","No VAT charged.")}</p>`;
-// Factuurdatum = the day the invoice is issued (now, in NL time). The
-// appointment date is kept separately below as the service date.
+const TAXL=b.tax_label?esc(String(b.tax_label)):txt(lang,"Btw","VAT");
+if(b.salon_btw&&rate>0){const net=gross/(1+rate);const vat=gross-net;const rl=parseFloat((rate*100).toFixed(2)).toString().replace(".",lang==="nl"?",":".");vatRows=`${row(`${txt(lang,"Subtotaal","Subtotal")} (${txt(lang,"excl.","excl.")} ${TAXL})`,fP(net))}${row(`${TAXL} ${rl}%`,fP(vat))}`;}
+const totLabel=b.salon_btw?`${txt(lang,"Totaal","Total")} (${txt(lang,"incl.","incl.")} ${TAXL})`:txt(lang,"Totaal","Total");
+const noVatNote=b.salon_btw?"":`<p style="color:#aaa;font-size:11px;text-align:center;margin:0 0 8px;">${txt(lang,"Geen belasting in rekening gebracht.","No tax charged.")}</p>`;
 const invDate=fmtD(new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Amsterdam"}),lang);
-// Payment-request block: renders when the salon configured a pay link and/or
-// an IBAN. The QR is a SEPA (EPC) code served by our payment-qr function —
-// banking apps scan it and pre-fill the transfer with IBAN + amount + ref.
 const payBlock=(()=>{
-// Only for clients who chose "payment request afterwards" at booking —
-// clients paying in the salon get a plain invoice without a pay block.
 if(!b.payment_request)return"";
 const link=safeImgSrc(b.payment_link);
 const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
 if(!link&&!ibanP)return"";
-// bunq.me / PayPal.Me accept the amount as a path segment, so the salon's
-// static profile link can still request the EXACT amount of this invoice.
-// Only appended when the link is a bare profile (no amount segment yet).
 let linkAmt=link;
 if(link&&gross>0){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
 const holder=esc(b.iban_holder||b.salon_name||"");
@@ -153,9 +137,6 @@ const eNo=b.notes?esc(String(b.notes).slice(0,300)):"";
 const eEm=esc(b.client_email);
 const subj=txt(lang,`Nieuwe wachtlijst-aanmelding: ${b.client_name}`,`New waitlist request: ${b.client_name}`);
 for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Nieuwe wachtlijst-aanmelding","New waitlist request")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(lang,"Klant","Client"),eC)}${row(txt(lang,"E-mail","Email"),eEm)}${b.client_phone?row(txt(lang,"Telefoon","Phone"),ePh):""}${b.service_name?row(txt(lang,"Behandeling","Treatment"),eSv):""}${b.staff_name?row(txt(lang,"Medewerker","Staff"),esc(b.staff_name)):""}${row(txt(lang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days"),daysStr)}${eNo?`<tr><td ${cL}>${txt(lang,"Notitie","Note")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div></div>`);}}
-// Vellu's own subscription invoice — issued from Mirah Ventures (KVK 42045867) to the salon owner.
-// Distinct from the salon→client `invoice` handler above. 21% BTW hardcoded for now;
-// becomes dynamic once KOR is confirmed or a BTW-id arrives.
 if(type==="subscription_invoice"){
 const billerName="Mirah Ventures";const billerKvk="42045867";const billerCity="Amersfoort";const billerEmail="info@vellu.cc";
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
