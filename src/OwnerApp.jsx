@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -7753,6 +7753,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <input className="input-field" placeholder={t.city} value={salonData.city} onChange={e => update(d => { d.city = e.target.value; return d; })} />
                 </div>
 
+                {/* Region — drives the salon's currency + tax label everywhere
+                    (read live from country_code). Changing it re-labels every
+                    amount instantly and resets the tax rate to the new region's
+                    default; historical amounts are re-shown in the new symbol,
+                    not converted. Only launched markets are offered. */}
+                <div style={{ marginTop: 18 }}>
+                  <SL>{lang === "nl" ? "Regio & valuta" : "Region & currency"}</SL>
+                  <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
+                    {lang === "nl"
+                      ? "Bepaalt je valuta en belasting. Verhuisd of bij het aanmelden het verkeerde land gekozen? Pas het hier aan."
+                      : "Sets your currency and tax. Moved, or picked the wrong country at signup? Change it here."}
+                  </div>
+                  <select className="input-field" value={salonData.country_code || "NL"} style={{ width: "100%" }}
+                    onChange={async (e) => {
+                      const newCode = e.target.value;
+                      const oldCode = salonData.country_code || "NL";
+                      if (newCode === oldCode) return;
+                      const nc = COUNTRIES.find(x => x.code === newCode);
+                      const m = currencyForCountry(newCode);
+                      const tx = taxForCountry(newCode);
+                      const sym = m.symbol.trim();
+                      const msg = lang === "nl"
+                        ? `Regio wijzigen naar ${nc?.name}? Je valuta wordt "${sym}" en je belasting ${tx.label} (standaard ${tx.defaultRate}%). Bestaande bedragen worden voortaan in ${sym} getoond — ze worden niet omgerekend. Klik daarna op Opslaan om het te bewaren.`
+                        : `Change region to ${nc?.name}? Your currency becomes "${sym}" and tax ${tx.label} (default ${tx.defaultRate}%). Existing amounts will be shown in ${sym} from now on — they are not converted. Click Save afterwards to keep it.`;
+                      if (await showConfirm(msg)) {
+                        update(d => { d.country_code = newCode; d.btw_rate = tx.defaultRate; return d; });
+                      } else {
+                        update(d => ({ ...d })); // revert the controlled select to the old value
+                      }
+                    }}>
+                    {COUNTRIES.filter(x => x.launched).map(x => (
+                      <option key={x.code} value={x.code} style={{ background: c.selectBg }}>{x.name}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>
+                    {(() => { const m = currencyForCountry(salonData.country_code); const tx = taxForCountry(salonData.country_code); return `${lang === "nl" ? "Valuta" : "Currency"}: ${m.symbol.trim()} · ${lang === "nl" ? "Belasting" : "Tax"}: ${tx.label}`; })()}
+                  </div>
+                </div>
+
                 {/* Salon URL / slug editor — separate save path from the big
                     Opslaan at the bottom because changing the slug invalidates
                     the query (data loads by slug) and forces a reload. */}
@@ -10978,6 +11017,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const updateData = {
                   business_name: salonData.name,
                   city: salonData.city,
+                  // Region → drives currency + tax label everywhere (read live from country_code).
+                  country_code: salonData.country_code || "NL",
                   accent_color: salonData.accent,
                   address: salonData.address || null,
                   kvk_number: salonData.kvk_number || null,
