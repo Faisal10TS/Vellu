@@ -3292,6 +3292,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // from its country_code. Vellu's OWN subscription prices (€19/€35) are NOT
   // this — those stay € and are excluded from the currency swap below.
   const cur = curSym(salonData.country_code);
+  // Tax presentation for this salon's country (label + fiscal-number label +
+  // default rate). NL/BE → BTW/BTW-id, Bonaire → ABB/CRIB, etc.
+  const tax = taxForCountry(salonData.country_code);
 
   const update = (fn) => setSalonData(d => {
     const updated = fn({...d});
@@ -8181,8 +8184,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <input className="input-field" placeholder="12345678" value={salonData.kvk_number || ""} onChange={e => update(d => { d.kvk_number = e.target.value; return d; })} style={{ width: "100%" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
-                      <input className="input-field" placeholder="NL123456789B01" value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} style={{ width: "100%" }} />
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{tax.idLabel === "BTW-id" ? t.btwId : tax.idLabel}</div>
+                      <input className="input-field" placeholder={tax.idLabel === "BTW-id" ? "NL123456789B01" : ""} value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} style={{ width: "100%" }} />
                     </div>
                   </div>
                   <div>
@@ -8190,9 +8193,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "BTW-percentage" : "VAT percentage"}</div>
-                    <input className="input-field" type="number" min="0" max="100" step="1" placeholder="21" value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "21% voor nagels/schoonheid, 9% voor reguliere kappersdiensten. Wordt op de factuur als BTW-regel getoond zodra je een BTW-id hebt ingevuld." : "21% for nails/beauty, 9% for typical hairdresser services. Shown as a VAT line on the invoice once you've entered a BTW-id."}</div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : `${tax.label} percentage`}</div>
+                    <input className="input-field" type="number" min="0" max="100" step="1" placeholder={String(tax.defaultRate)} value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.label === "BTW"
+                      ? (lang === "nl" ? "21% voor nagels/schoonheid, 9% voor reguliere kappersdiensten. Wordt op de factuur als BTW-regel getoond zodra je een BTW-id hebt ingevuld." : "21% for nails/beauty, 9% for typical hairdresser services. Shown as a VAT line on the invoice once you've entered a BTW-id.")
+                      : (lang === "nl" ? `Wordt op de factuur als ${tax.label}-regel getoond zodra je een ${tax.idLabel} hebt ingevuld.` : `Shown as a ${tax.label} line on the invoice once you've entered a ${tax.idLabel}.`)}</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
