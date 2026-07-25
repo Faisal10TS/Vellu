@@ -24,6 +24,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
 const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
 
+// Currency symbol per country (mirrors shared.jsx CURRENCIES). Unset = €.
+const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "NAf. ", GB: "£" };
+const curFor = (code?: string | null) => CUR_SYM[code || ""] || "€";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -149,6 +153,8 @@ serve(async (req) => {
         salon_logo: p.logo_url || "",
         // Reply-To: client replies land at the salon, not our noreply.
         salon_email: p.salon_email || p.email || "",
+        // Currency symbol so a Bonaire client's reminder shows $ not € (send-emails defaults to €).
+        currency: curFor(p.country_code),
         owner_id: apt.owner_id,
         lang,
       };
