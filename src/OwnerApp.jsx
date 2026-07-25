@@ -8231,15 +8231,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.kvkNumber}</div>
                       <input className="input-field" placeholder="12345678" value={salonData.kvk_number || ""} onChange={e => update(d => { d.kvk_number = e.target.value; return d; })} style={{ width: "100%" }} />
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Nummer van je Kamer van Koophandel (optioneel)." : "Your Chamber of Commerce number (optional)."}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{tax.idLabel === "BTW-id" ? t.btwId : tax.idLabel}</div>
                       <input className="input-field" placeholder={tax.idLabel === "BTW-id" ? "NL123456789B01" : ""} value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} style={{ width: "100%" }} />
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.idLabel === "BTW-id"
+                        ? (lang === "nl" ? "Je BTW-identificatienummer (optioneel)." : "Your VAT ID (optional).")
+                        : tax.idLabel === "CRIB"
+                          ? (lang === "nl" ? "Je CRIB-nummer van de Belastingdienst Caribisch Nederland (optioneel). Laat leeg als je geen ABB in rekening brengt." : "Your CRIB number from the Caribbean Netherlands tax office (optional). Leave blank if you don't charge ABB.")
+                          : (lang === "nl" ? `Je ${tax.idLabel} (optioneel). Laat leeg als je geen belasting in rekening brengt.` : `Your ${tax.idLabel} (optional). Leave blank if you don't charge tax.`)}</div>
                     </div>
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{isSepa ? t.ibanNumber : (lang === "nl" ? "Rekeningnummer" : "Account number")}</div>
                     <input className="input-field" placeholder={isSepa ? "NL00 RABO 0000 0000 00" : (lang === "nl" ? "Je rekeningnummer" : "Your account number")} value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{isSepa
+                      ? (lang === "nl" ? "Je IBAN (optioneel) — komt op de factuur en wordt gebruikt voor de betaal-QR." : "Your IBAN (optional) — shown on the invoice and used for the payment QR.")
+                      : (lang === "nl" ? "Je lokale bankrekeningnummer (optioneel) — komt op de factuur zodat klanten kunnen overmaken." : "Your local bank account number (optional) — shown on the invoice so clients can transfer.")}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : `${tax.label} percentage`}</div>
