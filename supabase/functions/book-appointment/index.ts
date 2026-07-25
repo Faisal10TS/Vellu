@@ -142,7 +142,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -617,6 +617,10 @@ serve(async (req) => {
     // Reply-To for the client-facing emails: a customer replying to their
     // confirmation reaches the salon's inbox, not the dead noreply@ box.
     salon_email: ownerEmail || "",
+    // Currency symbol from the salon's country (mirrors shared.jsx CURRENCIES) —
+    // so a Bonaire client's confirmation shows $ instead of €. send-emails
+    // defaults to € when this is absent.
+    currency: ({ BQ: "$", AW: "Afl. ", CW: "NAf. ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
   let emailsSent = false;
