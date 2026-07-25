@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded
+  getPageFont, ensurePageFontLoaded, curSym
 } from "./shared.jsx";
 
 function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
@@ -208,6 +208,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const { colors: c, theme } = useTheme();
   const accent = initialSalon.accent || ACCENT;
   const t = T[lang];
+  // Currency symbol for this salon (from its country_code). Every price on this
+  // page prefixes with `cur` instead of a hardcoded "€", so a Bonaire salon
+  // shows "$", NL/BE stay "€". Number formatting (.toFixed(2)) is unchanged.
+  const cur = curSym(initialSalon.country_code);
 
   // The salon's chosen display font (headings / prices / titles). Body stays
   // Jost. `displayFont` replaces the hardcoded Cormorant Garamond everywhere on
@@ -1786,7 +1790,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     </div>
                     <div className="profile-service-price">
-                      {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
+                      {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
                     </div>
                     <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                       {t.book}
@@ -2312,12 +2316,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : "from ") : ""}€{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : "from ") : ""}{cur}{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                   <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                  <span>+€{e.price}</span>
+                  <span>+{cur}{e.price}</span>
                 </div>
               ))}
             </div>
@@ -2338,14 +2342,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           {appliedDiscount && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: "#4ade80" }}>
-                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})
+                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})
               </span>
-              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>€{getOriginalPrice().toFixed(2)}</span>
+              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{cur}{getOriginalPrice().toFixed(2)}</span>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
-            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}{cur}{getPrice().toFixed(2)}</span>
           </div>
         </div>
       )}
@@ -2533,7 +2537,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
                       <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                     </span>
-                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}€{getOriginalPrice().toFixed(2)}</span>
+                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{cur}{getOriginalPrice().toFixed(2)}</span>
                   </div>
                 )}
 
@@ -2548,7 +2552,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`;
                   return (
                   <div key={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -2627,7 +2631,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>€{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{v.price}</div>
                                 </div>
                               ))}
                             </div>
@@ -2651,7 +2655,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                       transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
                                     }}>
                                     <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+€{e.price}</span>
+                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{cur}{e.price}</span>
                                   </div>
                                 );
                               })}
@@ -2967,7 +2971,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
                       <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`}</div>
                     </div>
                     <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                   </div>
@@ -3011,7 +3015,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
                         </div>
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{cur}{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -3026,14 +3030,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {appliedDiscount && (
                     <div className="confirm-row">
                       <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})</span>
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                     <div>
-                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>€{getOriginalPrice().toFixed(2)}</span>}
-                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{cur}{getOriginalPrice().toFixed(2)}</span>}
+                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{cur}{getPrice().toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -3057,7 +3061,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     const end = new Date(start.getTime() + dur * 60000);
                     const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
                     const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
-                    const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: €${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
+                    const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: ${cur}${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
                     const loc = encodeURIComponent(initialSalon.name + ", " + initialSalon.city);
                     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}&details=${details}&location=${loc}`, "_blank");
                   }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
@@ -3074,7 +3078,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       `DTSTART:${fmt2(start)}`,
                       `DTEND:${fmt2(end)}`,
                       `SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,
-                      `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: €${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
+                      `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: ${cur}${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
                       `LOCATION:${initialSalon.name}, ${initialSalon.city}`,
                       "STATUS:CONFIRMED",
                       "END:VEVENT",
@@ -3130,7 +3134,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {selectedServices.length > 0 ? (
-                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}€{getOriginalPrice().toFixed(2)}</>
+                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}{cur}{getOriginalPrice().toFixed(2)}</>
                   ) : (
                     <>{t.noServicesSelected}</>
                   )}
@@ -3334,7 +3338,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
-                              {s.variants?.length > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
+                              {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (
@@ -3358,7 +3362,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>€{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{v.price}</div>
                                 </div>
                               </div>
                             ))}
@@ -3373,7 +3377,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+€{e.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{cur}{e.price}</div>
                                 </div>
                               </div>
                             ))}
@@ -3566,7 +3570,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
                           <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`}</div>
+                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`}</div>
                         </div>
                         <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                       </div>
@@ -3604,7 +3608,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ")}</div>}
                             </div>
-                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>€{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{cur}{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0), 0)).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -3619,14 +3623,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {appliedDiscount && (
                         <div className="confirm-row">
                           <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-€${appliedDiscount.amount}`})</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                         <div>
-                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>€{getOriginalPrice().toFixed(2)}</span>}
-                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>€{getPrice().toFixed(2)}</span>
+                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{cur}{getOriginalPrice().toFixed(2)}</span>}
+                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{cur}{getPrice().toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
@@ -3706,7 +3710,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
                     {time && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}€{getPrice().toFixed(2)}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}{cur}{getPrice().toFixed(2)}</div>
                 </div>
                 {step === 1 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 

@@ -352,9 +352,9 @@ function getPaymentLinkWithAmount(link, price) {
 // Payment request after the visit — sent manually by the owner/staff from a
 // completed appointment. Includes the pay link when the salon has one,
 // otherwise the IBAN transfer details.
-function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder }) {
+function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder, countryCode }) {
   const firstName = (clientName || "").split(" ")[0] || clientName || "";
-  const amount = `€${parseFloat(price || 0).toFixed(2)}`;
+  const amount = fmtMoney(price, countryCode);
   const linkWithAmount = getPaymentLinkWithAmount(paymentLink, price);
   const payVia = linkWithAmount
     ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
@@ -446,9 +446,10 @@ const LANGUAGES = [
 const COUNTRIES = [
   { code: "NL", name: "Nederland / Netherlands", defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
   { code: "BE", name: "België / Belgium",        defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
-  // Dutch Caribbean. NOTE: `vatRate`/`currency` are informational only — they
-  // are not read anywhere; each salon sets its own rate in Settings (btw_rate).
-  // Verify the local rate before ever wiring these up.
+  // Dutch Caribbean. `currency` IS now read (see currencyForCountry / fmtMoney
+  // below) so prices show in the local currency. `vatRate` here is just a hint;
+  // the salon sets its own rate in Settings (btw_rate), and the tax LABEL comes
+  // from TAX_BY_COUNTRY (Bonaire = ABB, not BTW).
   { code: "AW", name: "Aruba",                   defaultLang: "nl", currency: "AWG", vatRate: null, launched: true },
   { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "ANG", vatRate: null, launched: true },
   { code: "BQ", name: "Bonaire",                 defaultLang: "nl", currency: "USD", vatRate: null, launched: true },
@@ -458,6 +459,55 @@ const COUNTRIES = [
   { code: "ES", name: "España / Spain",          defaultLang: "en", currency: "EUR", vatRate: 0.21, launched: false },
   { code: "IT", name: "Italia / Italy",          defaultLang: "en", currency: "EUR", vatRate: 0.22, launched: false },
 ];
+
+// ─── CURRENCY & TAX (per country) ────────────────────────────
+// One place that maps a salon's profiles.country_code to how money and tax are
+// shown. Existing NL/BE salons are unaffected (EUR + BTW); Bonaire salons get
+// USD + ABB, etc. All amounts on the booking page, dashboard, invoices and PDF
+// reports flow through these helpers instead of a hardcoded "€".
+const CURRENCIES = {
+  EUR: { code: "EUR", symbol: "€",     locale: "nl-NL" },
+  USD: { code: "USD", symbol: "$",     locale: "en-US" },
+  GBP: { code: "GBP", symbol: "£",     locale: "en-GB" },
+  AWG: { code: "AWG", symbol: "Afl. ", locale: "en-US" }, // Aruban florin
+  ANG: { code: "ANG", symbol: "NAf. ", locale: "en-US" }, // Netherlands Antillean guilder
+};
+
+// Resolve a salon's currency from its country_code (fallback EUR for anything
+// unknown/missing, so existing behaviour is preserved).
+function currencyForCountry(countryCode) {
+  const country = COUNTRIES.find((c) => c.code === countryCode);
+  return (country && CURRENCIES[country.currency]) || CURRENCIES.EUR;
+}
+// Just the currency symbol — the minimal swap for display spots that keep their
+// own number formatting (e.g. `${curSym(cc)}${price}` replacing `€${price}`).
+function curSym(countryCode) {
+  return currencyForCountry(countryCode).symbol;
+}
+// Full money format: symbol + locale-grouped number ($1,234.50 vs €1.234,50).
+// `decimals` defaults to 2; pass null to keep the number as-is (with grouping).
+function fmtMoney(amount, countryCode, decimals = 2) {
+  const cur = currencyForCountry(countryCode);
+  const n = Number(amount) || 0;
+  const opts = decimals == null ? {} : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+  return cur.symbol + n.toLocaleString(cur.locale, opts);
+}
+
+// Per-country tax presentation. `label` shows on invoices/reports (BTW vs ABB),
+// `idLabel` is the fiscal-number field label, `defaultRate` is a suggestion the
+// salon can override via btw_rate. NL/BE/BQ are confirmed; VERIFY AW/CW rates
+// and labels before formally launching there.
+const TAX_BY_COUNTRY = {
+  NL: { label: "BTW", idLabel: "BTW-id",      defaultRate: 21 },
+  BE: { label: "BTW", idLabel: "BTW-nr.",     defaultRate: 21 },
+  BQ: { label: "ABB", idLabel: "CRIB",        defaultRate: 6  }, // Bonaire
+  AW: { label: "BBO", idLabel: "Fiscaal nr.", defaultRate: 0  }, // Aruba — verify
+  CW: { label: "OB",  idLabel: "Fiscaal nr.", defaultRate: 0  }, // Curaçao — verify
+};
+const DEFAULT_TAX = { label: "BTW", idLabel: "BTW-id", defaultRate: 21 };
+function taxForCountry(countryCode) {
+  return TAX_BY_COUNTRY[countryCode] || DEFAULT_TAX;
+}
 
 // ─── PUBLIC-PAGE FONT STYLES ─────────────────────────────────
 // The salon picks one of these for their booking page; it swaps the DISPLAY
@@ -1840,6 +1890,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, taxForCountry,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
