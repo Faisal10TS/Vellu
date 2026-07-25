@@ -100,18 +100,25 @@ if(!b.payment_request)return"";
 const link=safeImgSrc(b.payment_link);
 const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
 if(!link&&!ibanP)return"";
+// The SEPA EPC QR + bunq.me amount-append are euro-only. For non-euro salons
+// (Bonaire/Aruba/Curacao) we skip the QR and show plain bank details instead,
+// with the amount in the salon's own currency (CURSYM) — never a euro QR.
+const isEur=CURSYM==="€";
 let linkAmt=link;
-if(link&&gross>0){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
+if(link&&gross>0&&isEur){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
 const holder=esc(b.iban_holder||b.salon_name||"");
 const payRef=String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100);
 let h=`<div style="background:${AC}10;border:1px solid ${AC}44;border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">`;
 h+=`<div style="font-size:14px;font-weight:600;margin-bottom:12px;">${txt(lang,"Betalen","Payment")} · ${fP(gross)}</div>`;
 if(link)h+=`<a href="${esc(linkAmt)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">${txt(lang,"Betaal online","Pay online")}</a>`;
-if(ibanP&&gross>0){
-const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}`;
+if(ibanP&&gross>0&&isEur){
+const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}&currency=EUR`;
 h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of scan met je bank-app:":"Scan met je bank-app:",link?"Or scan with your banking app:":"Scan with your banking app:")}</div>`;
 h+=`<img src="${esc(qrUrl)}" width="150" height="150" alt="SEPA QR" style="display:block;margin:0 auto 10px;border-radius:8px;" />`;
 h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${esc(ibanP)}${holder?` ${txt(lang,"t.n.v.","in the name of")} ${holder}`:""}<br/>${txt(lang,"o.v.v.","reference:")} ${esc(payRef)}</div>`;
+}else if(ibanP&&gross>0){
+h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of maak het bedrag over naar:":"Maak het bedrag over naar:",link?"Or transfer the amount to:":"Transfer the amount to:")}</div>`;
+h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${holder?`${holder}<br/>`:""}${esc(ibanP)}<br/>${txt(lang,"Bedrag","Amount")}: ${fP(gross)}<br/>${txt(lang,"o.v.v.","reference:")} ${esc(payRef)}</div>`;
 }
 h+=`</div>`;
 return h;})();

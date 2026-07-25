@@ -39,6 +39,12 @@ serve(async (req) => {
   if (!name) return new Response("missing_name", { status: 400 });
   if (!Number.isFinite(amountRaw) || amountRaw <= 0 || amountRaw > 99999) return new Response("invalid_amount", { status: 400 });
 
+  // EPC (SEPA Credit Transfer) is euro-only. Refuse any non-EUR currency so a
+  // non-euro salon's amount is never encoded as EUR. send-emails only calls
+  // this for euro salons; this is defence-in-depth.
+  const currency = (url.searchParams.get("currency") || "EUR").toUpperCase();
+  if (currency !== "EUR") return new Response("non_sepa_currency", { status: 400 });
+
   // EPC069-12 "quick response code" payload, version 002 (BIC optional
   // within SEPA). Line 11 is the unstructured remittance (the invoice ref).
   const payload = [

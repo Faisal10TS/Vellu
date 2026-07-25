@@ -39,7 +39,7 @@ const fmtDateNL = (isoDate) => {
 //   lang: "nl" | "en"  (column headers only; numeric formatting stays NL)
 //   staffName: optional — set when the report is filtered to one team member;
 //     shown in the header and appended to the filename.
-export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "", currencySymbol = "€", moneyLocale = "nl-NL", taxLabel = "BTW", taxRate = 0.21, showTax = true }) {
+export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "", currencySymbol = "€", moneyLocale = "nl-NL", taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595.28 x 841.89 pt
 
   // Currency + tax are driven by the salon's country (passed in by the caller):
@@ -93,7 +93,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     s(salon.address),
     [s(salon.postcode), s(salon.city)].filter(Boolean).join(" "),
     salon.kvk_number ? `KVK: ${s(salon.kvk_number)}` : "",
-    salon.btw_id ? `BTW: ${s(salon.btw_id)}` : "",
+    salon.btw_id ? `${taxIdLabel}: ${s(salon.btw_id)}` : "",
     salon.iban ? `IBAN: ${s(salon.iban)}` : "",
     s(salon.salon_email),
   ].filter(Boolean);
@@ -213,6 +213,16 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(160, 160, 160);
+      // Currency/tax basis note: amounts reflect the salon's CURRENT region.
+      // Values are never converted, so a report spanning a region change shows
+      // pre-switch earnings in the new symbol/rate — flag that here.
+      doc.text(
+        lang === "nl"
+          ? `Bedragen in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}%` : ""}. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`
+          : `Amounts in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}%` : ""}. After a region change, earlier amounts are not converted.`,
+        margin,
+        pageH - 32
+      );
       doc.text(
         `${lang === "nl" ? "Gegenereerd op" : "Generated on"} ${new Date().toLocaleDateString("nl-NL")} · vellu.cc`,
         margin,

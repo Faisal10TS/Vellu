@@ -11,6 +11,7 @@
 //   • Backup / migration (full client list)
 
 import { supabase } from "./supabase.js";
+import { curSym } from "./shared.jsx";
 
 // RFC 4180: wrap in double quotes, escape embedded quotes by doubling.
 function csvCell(v) {
@@ -27,7 +28,7 @@ function rowsToCsv(rows, columns) {
   return "\uFEFF" + header + "\r\n" + body;
 }
 
-export async function exportClientsCSV({ ownerId, salonName, lang = "nl" }) {
+export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countryCode = "NL" }) {
   if (!ownerId) throw new Error("ownerId required");
 
   // Pull every appointment for this owner, plus the client record joined in.
@@ -92,19 +93,20 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl" }) {
   // Sort alphabetically by last name for predictable output.
   rows.sort((a, b) => (a.last_name || "").localeCompare(b.last_name || "") || (a.first_name || "").localeCompare(b.first_name || ""));
 
+  const sym = curSym(countryCode).trim();
   const labels = lang === "nl" ? {
     first_name: "Voornaam", last_name: "Achternaam", email: "E-mail", phone: "Telefoon",
     allergies: "Allergieën", first_visit: "Eerste bezoek", last_visit: "Laatste bezoek",
     total_appointments: "Aantal afspraken", completed_count: "Afgerond",
     cancelled_count: "Geannuleerd", no_show_count: "No-shows",
-    total_spent: "Totaal besteed (€)", favorite_service: "Favoriete behandeling",
+    total_spent: `Totaal besteed (${sym})`, favorite_service: "Favoriete behandeling",
     favorite_staff: "Favoriete medewerker",
   } : {
     first_name: "First name", last_name: "Last name", email: "Email", phone: "Phone",
     allergies: "Allergies", first_visit: "First visit", last_visit: "Last visit",
     total_appointments: "Appointments", completed_count: "Completed",
     cancelled_count: "Cancelled", no_show_count: "No-shows",
-    total_spent: "Total spent (€)", favorite_service: "Favorite service",
+    total_spent: `Total spent (${sym})`, favorite_service: "Favorite service",
     favorite_staff: "Favorite staff",
   };
 

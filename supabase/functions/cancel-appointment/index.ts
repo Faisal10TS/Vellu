@@ -228,22 +228,31 @@ serve(async (req) => {
   const appt = tokenRow.appointments;
   if (!appt) return json(404, { error: "appointment_not_found" }, origin);
 
+  // For the check path (anonymous cancel page) resolve the salon's currency
+  // from the owner's country_code so the amount renders in the right symbol
+  // ($ for Bonaire, etc.) instead of a hardcoded euro.
+  let cc = "NL";
+  if (action === "check" && appt.owner_id) {
+    const { data: o } = await supabase.from("profiles").select("country_code").eq("id", appt.owner_id).maybeSingle();
+    cc = o?.country_code || "NL";
+  }
+
   if (tokenRow.used === true || appt.status === "cancelled") {
     if (action === "check") {
-      return json(200, { status: "already_cancelled", appointment: sanitize(appt) }, origin);
+      return json(200, { status: "already_cancelled", appointment: sanitize(appt), country_code: cc }, origin);
     }
     return json(410, { error: "already_used" }, origin);
   }
 
   if (new Date(tokenRow.expires_at) < new Date()) {
     if (action === "check") {
-      return json(200, { status: "expired", appointment: sanitize(appt) }, origin);
+      return json(200, { status: "expired", appointment: sanitize(appt), country_code: cc }, origin);
     }
     return json(410, { error: "expired" }, origin);
   }
 
   if (action === "check") {
-    return json(200, { status: "valid", appointment: sanitize(appt) }, origin);
+    return json(200, { status: "valid", appointment: sanitize(appt), country_code: cc }, origin);
   }
 
   const cleanReason = reason ? String(reason).trim().slice(0, 500) : null;

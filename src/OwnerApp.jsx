@@ -635,14 +635,14 @@ function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
 // this salon, aggregated with visit/spend stats. Useful for marketing
 // imports, GDPR data-portability responses, accountant client ledgers,
 // and migration backups.
-function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast }) {
+function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, countryCode = "NL" }) {
   const [exporting, setExporting] = useState(false);
 
   const download = async () => {
     setExporting(true);
     try {
       const mod = await import("./clientExport.js");
-      const result = await mod.exportClientsCSV({ ownerId, salonName, lang });
+      const result = await mod.exportClientsCSV({ ownerId, salonName, lang, countryCode });
       if (result.count === 0) {
         toast.show(lang === "nl" ? "Nog geen klanten om te exporteren" : "No clients to export yet", "error");
       } else {
@@ -762,7 +762,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         salon: salonData, appointments: inRange, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
-        taxLabel: _tax.label, taxRate: _rate, showTax: !!salonData.btw_id && _rate > 0,
+        taxLabel: _tax.label, taxIdLabel: _tax.idLabel, taxRate: _rate, showTax: !!salonData.btw_id && _rate > 0,
       });
       toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
@@ -997,7 +997,7 @@ async function autoFillTranslations(form, pairs, currentLang) {
   return updated;
 }
 
-function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
+function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur = "€" }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -1050,7 +1050,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
           placeholder={lang === "nl" ? "Omschrijving" : "Description"}
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          <input className="input-field" placeholder="€ Prijs *" type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+          <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
           <input className="input-field" placeholder="Duur (min)" type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
         </div>
       </div>
@@ -1063,7 +1063,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
   );
 }
 
-function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
+function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur = "€" }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -1106,7 +1106,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0 }) {
           lang={lang} accent={accent}
           placeholder={lang === "nl" ? "Naam *" : "Name *"}
         />
-        <input className="input-field" placeholder={lang === "nl" ? "€ Prijs *" : "€ Price *"} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
@@ -3295,6 +3295,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Tax presentation for this salon's country (label + fiscal-number label +
   // default rate). NL/BE → BTW/BTW-id, Bonaire → ABB/CRIB, etc.
   const tax = taxForCountry(salonData.country_code);
+  // SEPA/euro region? The automatic payment-QR (EPC069-12) only works for
+  // euro/SEPA banks, so for non-SEPA regions (Bonaire/Aruba/Curaçao, whose
+  // banks don't even issue IBANs) we relabel the account field and drop the QR.
+  const isSepa = ["NL", "BE"].includes(salonData.country_code || "NL");
 
   const update = (fn) => setSalonData(d => {
     const updated = fn({...d});
@@ -4482,7 +4486,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const msg = getWhatsAppBookingMsg(lang, {
                 clientName: a.client_name, salonName: salonData.name,
                 date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
-                time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2)
+                time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2), countryCode: salonData.country_code
               });
               window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
             }}>
@@ -8234,8 +8238,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
-                    <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{isSepa ? t.ibanNumber : (lang === "nl" ? "Rekeningnummer" : "Account number")}</div>
+                    <input className="input-field" placeholder={isSepa ? "NL00 RABO 0000 0000 00" : (lang === "nl" ? "Je rekeningnummer" : "Your account number")} value={salonData.iban || ""} onChange={e => update(d => { d.iban = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : `${tax.label} percentage`}</div>
@@ -8269,15 +8273,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
-                  {lang === "nl"
-                    ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met het exacte factuurbedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Je klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle banken, gewoon vanuit hun eigen bank-app. Klanten die in de salon betalen krijgen dit blok niet."
-                    : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with the exact invoice amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Your clients don't need to bank where you bank: it works with every bank, straight from their own banking app. Clients who pay in the salon never get this block."}
+                  {isSepa
+                    ? (lang === "nl"
+                      ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met het exacte factuurbedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Je klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle SEPA-banken, gewoon vanuit hun eigen bank-app. Klanten die in de salon betalen krijgen dit blok niet."
+                      : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with the exact invoice amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Your clients don't need to bank where you bank: it works with every SEPA bank, straight from their own banking app. Clients who pay in the salon never get this block.")
+                    : (lang === "nl"
+                      ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met je bankgegevens (rekeninghouder + rekeningnummer) en het exacte factuurbedrag in jouw valuta, plus een betaalkenmerk. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet. Klanten die in de salon betalen krijgen dit blok niet."
+                      : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with your bank details (account holder + account number) and the exact invoice amount in your currency, plus a payment reference. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone. Clients who pay in the salon never get this block.")}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
                     <input className="input-field" placeholder={lang === "nl" ? "Naam op je bankrekening, bijv. TTNB Den Haag" : "Name on your bank account"} value={salonData.iban_holder || ""} onChange={e => update(d => { d.iban_holder = e.target.value; return d; })} style={{ width: "100%" }} />
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Wordt bij de QR en het IBAN getoond zodat de klant weet aan wie die betaalt." : "Shown with the QR and IBAN so the client knows who they're paying."}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Wordt bij je betaalgegevens getoond zodat de klant weet aan wie die betaalt." : "Shown with your payment details so the client knows who they're paying."}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
@@ -8856,7 +8864,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   </DndContext>
                                 )}
                                 <div style={{ marginTop: 8 }}>
-                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} cur={cur} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
                                     update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: [...(svc.variants||[]), variant]} : svc); return d; });
                                   }} />
                                 </div>
@@ -8936,7 +8944,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   </DndContext>
                                 )}
                                 <div style={{ marginTop: 8 }}>
-                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} cur={cur} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
                                     update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: [...(svc.extras||[]), extra]} : svc); return d; });
                                   }} />
                                 </div>
@@ -10960,6 +10968,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 ownerId={salonData.owner_id}
                 salonName={salonData.name}
                 lang={lang}
+                countryCode={salonData.country_code || "NL"}
                 c={c}
                 accent={accent}
                 toast={toast}

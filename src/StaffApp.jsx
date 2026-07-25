@@ -2143,7 +2143,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       </div>
                                     </div>
                                   ))}
-                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
+                                  <VariantAdder serviceId={s.id} lang={lang} t={t} accent={accent} cur={cur} nextPosition={(s.variants || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(variant) => {
                                     setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: [...(sv.variants||[]), variant]} : sv));
                                   }} />
                                 </div>
@@ -2192,7 +2192,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       </div>
                                     </div>
                                   ))}
-                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
+                                  <ExtraAdder serviceId={s.id} lang={lang} t={t} accent={accent} cur={cur} nextPosition={(s.extras || []).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1} onAdd={(extra) => {
                                     setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: [...(sv.extras||[]), extra]} : sv));
                                   }} />
                                 </div>

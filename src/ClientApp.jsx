@@ -3101,7 +3101,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       clientName: form.firstName,
                       salonName: initialSalon.name,
                       date: parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
-                      time, serviceName: getServiceLabel(), price: getPrice().toFixed(2)
+                      time, serviceName: getServiceLabel(), price: getPrice().toFixed(2), countryCode: initialSalon.country_code
                     });
                     window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
                   }}><NavIcon name="chat" size={13} color="currentColor" /> {t.whatsappBookingConfirm}</button>

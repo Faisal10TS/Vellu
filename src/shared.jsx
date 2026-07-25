@@ -318,11 +318,11 @@ function getWhatsAppUrl(phone, message) {
   return `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
 }
 
-function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price }) {
+function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
   if (lang === "nl") {
-    return `Hoi ${clientName}! ✨\n\nJe afspraak bij ${salonName} is bevestigd:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nTot dan! 🙏`;
+    return `Hoi ${clientName}! ✨\n\nJe afspraak bij ${salonName} is bevestigd:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nTot dan! 🙏`;
   }
-  return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 €${price}\n\nSee you then! 🙏`;
+  return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nSee you then! 🙏`;
 }
 
 // bunq.me and PayPal.Me accept the amount as a path segment
