@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -20,6 +20,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const DAY = lang === "nl" ? DAY_NL : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = salonProfile.accent_color || ACCENT;
+  // Currency symbol from the salon's country_code — all amounts staff see (their
+  // revenue, service prices, client spend) show this instead of a hardcoded €.
+  const cur = curSym(salonProfile.country_code);
   // When the owner enabled "team sees each other's agenda", the dashboard +
   // agenda show the whole salon with a per-stylist filter; otherwise only
   // this stylist's own appointments (the default).
@@ -271,7 +274,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n€${a.service_price}\\nStatus: ${a.status}`,
+        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${cur}${a.service_price}\\nStatus: ${a.status}`,
         `LOCATION:${salonProfile.business_name}`,
         `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
@@ -533,7 +536,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status}</span>
-          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
         </div>
       </div>
       {a.status === "confirmed" && mine && (
@@ -551,7 +554,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             window.open(getGoogleCalUrl({
               title: `${a.client_name} — ${a.service_name}`,
               date: a.date, time: a.time, duration: dur,
-              description: `${a.service_name}\n${a.client_name}\n€${a.service_price}`,
+              description: `${a.service_name}\n${a.client_name}\n${cur}${a.service_price}`,
               location: salonProfile.business_name || ""
             }), "_blank");
           }}>{t.addToGoogleCal}</button>
@@ -774,7 +777,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     {todayAppts.length > 0 && (
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : "Expected"}</div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>€{todayRevenue.toFixed(0)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(0)}</div>
                       </div>
                     )}
                   </div>
@@ -805,7 +808,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : "7 days"}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>€{weekRevenue.toFixed(0)}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
                       {weekChange !== 0 && (
                         <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                           {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
@@ -823,7 +826,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
                       <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
                     </div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>€{monthRevenue.toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(0)}</div>
                     <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
                       {sparkline(monthDaily, accent)}
                     </div>
@@ -832,7 +835,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {/* TOTAL EARNINGS */}
                   <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>€{totalEarnings.toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{cur}{totalEarnings.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : "treatments"}</div>
                   </div>
                 </div>
@@ -892,7 +895,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : "Revenue over time")}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{total8w.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(0)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
                         </div>
                       </div>
@@ -914,14 +917,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             <g>
                               <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                               <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                €{pts[peakIdx].revenue.toFixed(0)}
+                                {cur}{pts[peakIdx].revenue.toFixed(0)}
                               </text>
                             </g>
                           )}
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · €{p.revenue.toFixed(0)}</title>
+                                <title>{p.label} · {cur}{p.revenue.toFixed(0)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -941,11 +944,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{pts[peakIdx].revenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>€{avgWeek.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{avgWeek.toFixed(0)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>Trend</div>
@@ -996,7 +999,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                   <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>€{stats.revenue.toFixed(0)}</span>
+                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                   <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -1136,7 +1139,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>€{periodRevenue.toFixed(0)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(0)}</div>
                 </div>
               </div>
 
@@ -1551,7 +1554,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           </div>
                           {!isMobile && (
                             <div style={{ fontSize: 11, color: c.textLabel }}>
-                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : "visit") : (lang === "nl" ? "bezoeken" : "visits")} · €${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : "No visits yet")}
+                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : "visit") : (lang === "nl" ? "bezoeken" : "visits")} · ${cur}${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : "No visits yet")}
                               {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
                             </div>
                           )}
@@ -1593,7 +1596,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : "Spent"}</div>
-                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>€{clientView.totalSpent.toFixed(0)}</div>
+                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>{cur}{clientView.totalSpent.toFixed(0)}</div>
                         </div>
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : "Last"}</div>
@@ -1619,7 +1622,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
                                 <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
-                                <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                                <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
                               </div>
                             </div>
                           ))}
@@ -1661,18 +1664,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>€{totalEarnings.toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{totalEarnings.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>€{thisMonthTotal.toFixed(0)}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>€{unsentTotal.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
@@ -1796,7 +1799,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
 
                         {/* Price */}
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>€{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
@@ -2026,7 +2029,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
                                 <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
@@ -2066,7 +2069,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
-                                {varCount > 0 ? `${t.from} €${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `€${s.price}`}
+                                {varCount > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
@@ -2093,7 +2096,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editVarForm.name_nl} onChange={ev => setEditVarForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editVarForm.name_en} onChange={ev => setEditVarForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVarForm.duration} onChange={ev => setEditVarForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
@@ -2125,7 +2128,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                         )}
                                         <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                       </div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>€{v.price}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{v.price}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2155,7 +2158,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? "Prijs (€)" : "Price (€)"}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
                                       <div style={{ display: "flex", gap: 6 }}>
@@ -2174,7 +2177,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
                                       <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                       <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+€{e.price}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+{cur}{e.price}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2255,7 +2258,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <SL>{t.selectServiceFor}</SL>
                     <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
                       <option value="" style={{ background: c.selectBg }}>—</option>
-                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — €{s.price}</option>)}
+                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{s.price}</option>)}
                     </select>
                   </div>
                   {(() => {
@@ -2266,7 +2269,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <SL>{lang === "nl" ? "Variant" : "Variant"}</SL>
                         <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — €{v.price}</option>)}
+                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {cur}{v.price}</option>)}
                         </select>
                       </div>
                     );
