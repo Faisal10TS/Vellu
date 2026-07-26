@@ -997,6 +997,99 @@ async function autoFillTranslations(form, pairs, currentLang) {
   return updated;
 }
 
+// Owner-facing proofreader. One click sends the salon's service names to the
+// check-translations edge function (Claude) and lists genuine typos / NL-EN
+// mismatches with a suggested fix. Nothing changes until the owner clicks
+// Apply; beauty jargon (wispy, PMU, foreign fill…) is never flagged.
+function TranslationChecker({ lang, accent, onApply }) {
+  const { colors: c } = useTheme();
+  const toast = useToast();
+  const [state, setState] = useState("idle"); // idle | loading | done
+  const [issues, setIssues] = useState([]);
+  const [busy, setBusy] = useState("");
+
+  const run = async () => {
+    setState("loading");
+    try {
+      const { data, error } = await supabase.functions.invoke("check-translations", { body: {} });
+      if (error || !data || data.error) {
+        toast.show(lang === "nl" ? "Controle mislukt, probeer het opnieuw." : "Check failed, please try again.", "error");
+        setState("idle");
+        return;
+      }
+      setIssues(Array.isArray(data.issues) ? data.issues : []);
+      setState("done");
+    } catch {
+      toast.show(lang === "nl" ? "Controle mislukt, probeer het opnieuw." : "Check failed, please try again.", "error");
+      setState("idle");
+    }
+  };
+
+  const applyOne = async (issue) => {
+    const key = issue.id + issue.field;
+    setBusy(key);
+    const ok = await onApply(issue);
+    setBusy("");
+    if (ok) {
+      setIssues(prev => prev.filter(i => !(i.id === issue.id && i.field === issue.field)));
+      toast.show(lang === "nl" ? "Aangepast" : "Updated");
+    } else {
+      toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error");
+    }
+  };
+
+  const ignoreOne = (issue) => setIssues(prev => prev.filter(i => !(i.id === issue.id && i.field === issue.field)));
+  const langLabel = (f) => f === "name_nl" ? (lang === "nl" ? "Nederlands" : "Dutch") : (lang === "nl" ? "Engels" : "English");
+
+  return (
+    <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: 16, marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{lang === "nl" ? "Vertalingen controleren" : "Check translations"}</div>
+          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.5, maxWidth: 420 }}>
+            {lang === "nl" ? "Laat AI je dienstnamen (NL + EN) nakijken op typefouten en verkeerde vertalingen. Vakjargon (wispy, PMU…) blijft ongemoeid." : "Let AI proofread your service names (NL + EN) for typos and wrong translations. Industry terms (wispy, PMU…) are left alone."}
+          </div>
+        </div>
+        <button className="btn-ghost" style={{ padding: "9px 16px", color: accent, borderColor: `${accent}55`, whiteSpace: "nowrap" }} disabled={state === "loading"} onClick={run}>
+          {state === "loading" ? (lang === "nl" ? "Bezig…" : "Checking…") : (lang === "nl" ? "Controleer nu" : "Check now")}
+        </button>
+      </div>
+
+      {state === "done" && issues.length === 0 && (
+        <div style={{ marginTop: 14, fontSize: 12, color: c.success, background: `${c.success}14`, border: `1px solid ${c.success}33`, borderRadius: 10, padding: "10px 12px" }}>
+          {lang === "nl" ? "Geen problemen gevonden — je namen zien er goed uit." : "No issues found — your names look good."}
+        </div>
+      )}
+
+      {issues.length > 0 && (
+        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          {issues.map(issue => (
+            <div key={issue.id + issue.field} style={{ border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 14px", background: c.bg }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{langLabel(issue.field)}{issue.other ? ` · ${lang === "nl" ? "andere taal" : "other"}: “${issue.other}”` : ""}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>{issue.reason}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14, color: c.danger, textDecoration: "line-through" }}>{issue.current || "—"}</span>
+                <span style={{ color: c.textMuted }}>→</span>
+                <span style={{ fontSize: 14, color: c.success, fontWeight: 600 }}>{issue.suggestion}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px", color: accent, borderColor: `${accent}55` }} disabled={busy === issue.id + issue.field} onClick={() => applyOne(issue)}>
+                  {busy === issue.id + issue.field ? "…" : (lang === "nl" ? "Toepassen" : "Apply")}
+                </button>
+                <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => ignoreOne(issue)}>
+                  {lang === "nl" ? "Negeren" : "Ignore"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur = "€" }) {
   const { colors: c } = useTheme();
   const toast = useToast();
@@ -8399,6 +8492,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* ═══ DIENSTEN TAB ═══ */}
               {settingsTab === "diensten" && <>
+
+              {/* AI proofreader for the salon's own service names (NL + EN). */}
+              <TranslationChecker lang={lang} accent={accent} onApply={async (issue) => {
+                const patch = { [issue.field]: issue.suggestion };
+                // The primary `name` column mirrors name_nl — keep it in sync.
+                if (issue.field === "name_nl") patch.name = issue.suggestion;
+                const { error } = await supabase.from("services").update(patch).eq("id", issue.id).eq("owner_id", salonData.owner_id);
+                if (error) return false;
+                update(d => { d.services = d.services.map(s => s.id === issue.id ? { ...s, ...patch } : s); return d; });
+                return true;
+              }} />
 
               {/* ── CATEGORIES ── compact CRUD; used to group services on the public page */}
               <div style={{ marginBottom: 20 }}>
