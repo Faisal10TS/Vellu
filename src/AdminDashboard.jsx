@@ -26,6 +26,20 @@ const relTime = (iso) => {
   return fmtDate(iso);
 };
 
+// Coloured pill for a salon's subscription state. `churning` (cancel at period
+// end) overrides — a still-paying-but-leaving customer is the one to chase.
+function statusBadge(classification, churning, c, accent) {
+  if (churning) return { label: "churning", color: c.danger };
+  switch (classification) {
+    case "paying": return { label: "paying", color: c.success };
+    case "trialing": return { label: "trial", color: accent };
+    case "comped": return { label: "comped", color: c.textSub };
+    case "cancelled": return { label: "cancelled", color: c.danger };
+    case "expired": return { label: "expired", color: c.danger };
+    default: return { label: classification || "none", color: c.textMuted };
+  }
+}
+
 function StatCard({ label, value, sub, accent, c }) {
   return (
     <div style={{
@@ -50,7 +64,9 @@ export default function AdminDashboard({ onLogout }) {
   const [recent, setRecent] = useState([]);
   const [cron, setCron] = useState([]);
   const [timeline, setTimeline] = useState([]);
-  const [tab, setTab] = useState("overview"); // overview | salons | signups | cron
+  const [billing, setBilling] = useState(null);
+  const [subs, setSubs] = useState([]);
+  const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | cron
   const [search, setSearch] = useState("");
 
   // Gate on is_admin() + load everything in parallel on mount.
@@ -64,12 +80,14 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
         supabase.rpc("admin_cron_summary"),
         supabase.rpc("admin_revenue_timeline", { p_days: 30 }),
+        supabase.rpc("admin_billing_overview"),
+        supabase.rpc("admin_subscriptions_list"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -77,6 +95,8 @@ export default function AdminDashboard({ onLogout }) {
       setRecent(rs.data || []);
       setCron(cr.data || []);
       setTimeline(tl.data || []);
+      setBilling(bo.data?.[0] || null);
+      setSubs(sb.data || []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -145,6 +165,7 @@ export default function AdminDashboard({ onLogout }) {
         <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${c.border}`, overflowX: "auto" }}>
           {[
             ["overview", "Overview"],
+            ["billing", "Revenue"],
             ["salons", "Salons"],
             ["signups", "Signups (30d)"],
             ["cron", "Cron health"],
@@ -222,6 +243,78 @@ export default function AdminDashboard({ onLogout }) {
                 ))}
               </div>
             )}
+          </>
+        )}
+
+        {/* ── REVENUE / BILLING TAB — Vellu's OWN subscription income ── */}
+        {tab === "billing" && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <StatCard label="MRR" value={fmtEur(billing?.mrr_eur)} sub={`${billing?.paying_count ?? 0} paying · monthly recurring`} accent={accent} c={c} />
+              <StatCard label="ARR" value={fmtEur(billing?.arr_eur)} sub="annual run-rate" accent={accent} c={c} />
+              <StatCard label="Collected to date" value={fmtEur(billing?.collected_total_eur)} sub={`${billing?.invoices_count ?? 0} invoices · ${fmtEur(billing?.collected_30d_eur)} last 30d`} accent={accent} c={c} />
+              <StatCard label="Trials" value={billing?.trialing_count ?? 0} sub={`${billing?.trials_ending_14d ?? 0} ending in 14 days`} accent={accent} c={c} />
+              {(billing?.churning_count ?? 0) > 0 && <StatCard label="Churning" value={billing.churning_count} sub="cancel at period end" accent={c.danger} c={c} />}
+              {(billing?.comped_count ?? 0) > 0 && <StatCard label="Comped / free" value={billing.comped_count} sub="active, no Mollie sub" accent={c.textSub} c={c} />}
+            </div>
+
+            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+              MRR counts only salons with an active subscription backed by a real Mollie payment. Trials and comped/demo accounts contribute €0 until they convert. All amounts in euro — Vellu always bills in euro, whatever currency the salon itself uses.
+            </div>
+
+            {/* Trials ending soon — the conversion window worth chasing */}
+            {subs.filter(s => s.classification === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() <= Date.now() + 14 * 864e5).length > 0 && (
+              <div style={{ background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: accent, marginBottom: 8 }}>Trials ending soon — conversion window</div>
+                {subs.filter(s => s.classification === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() <= Date.now() + 14 * 864e5).map(s => (
+                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", fontSize: 13 }}>
+                    <span style={{ fontWeight: 500 }}>{s.business_name} <span style={{ color: c.textMuted, fontSize: 11, textTransform: "capitalize" }}>· {s.plan}</span></span>
+                    <span style={{ color: c.textSub, fontSize: 12 }}>trial ends {fmtDate(s.trial_ends_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Per-salon subscriptions */}
+            <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
+                      {["Salon", "Plan", "Status", "Interval", "MRR", "Renews / trial ends"].map(h => (
+                        <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subs.map(s => {
+                      const badge = statusBadge(s.classification, s.churning, c, accent);
+                      return (
+                        <tr key={s.id} style={{ borderBottom: `1px solid ${c.border}` }}>
+                          <td style={{ padding: "12px 14px" }}>
+                            <a href={`/${s.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                          </td>
+                          <td style={{ padding: "12px 14px", color: c.textSub, textTransform: "capitalize" }}>{s.plan || "—"}</td>
+                          <td style={{ padding: "12px 14px" }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: badge.color, background: `${badge.color}1a`, borderRadius: 20, padding: "3px 10px" }}>{badge.label}</span>
+                          </td>
+                          <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{s.billing_interval || "—"}</td>
+                          <td style={{ padding: "12px 14px", color: Number(s.mrr_eur) > 0 ? accent : c.textMuted, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.mrr_eur)}</td>
+                          <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>
+                            {s.classification === "paying"
+                              ? (s.plan_expires_at ? `renews ${fmtDate(s.plan_expires_at)}` : "active")
+                              : s.classification === "trialing"
+                                ? (s.trial_ends_at ? `trial ends ${fmtDate(s.trial_ends_at)}` : "trial")
+                                : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {subs.length === 0 && <tr><td colSpan={6} style={{ padding: "24px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No subscriptions yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </>
         )}
 
