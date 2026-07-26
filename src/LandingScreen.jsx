@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
-  useTheme, useSEO, ACCENT, T, COUNTRIES, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
+  useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -1005,20 +1005,35 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               {mode === "signup" && <>
                 <input className="input-field" placeholder={t.businessNameField} value={form.businessName} onChange={e => setForm(f => ({...f, businessName: e.target.value}))} />
                 <input className="input-field" placeholder={t.city} value={form.city} onChange={e => setForm(f => ({...f, city: e.target.value}))} />
-                <select
-                  className="input-field"
-                  value={form.countryCode}
-                  onChange={e => setForm(f => ({...f, countryCode: e.target.value}))}
-                  aria-label={lang === "nl" ? "Land" : "Country"}
-                  style={{ appearance: "none", cursor: "pointer", paddingRight: 40 }}
-                >
-                  {/* Native dropdown menus ignore the select's dark styling, so
-                      each option needs explicit theme colours — otherwise it's
-                      unreadable grey-on-white. */}
-                  {COUNTRIES.filter(c2 => c2.launched).map(c2 => (
-                    <option key={c2.code} value={c2.code} style={{ background: c.selectBg, color: c.text }}>{c2.name}</option>
-                  ))}
-                </select>
+                {/* Land / regio — explicitly labelled and with live feedback,
+                    because this quietly sets the salon's currency AND tax. A
+                    non-NL owner who leaves it on the default would otherwise get
+                    euros + BTW by accident. */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Land / regio" : "Country / region"}</div>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      className="input-field"
+                      value={form.countryCode}
+                      onChange={e => setForm(f => ({...f, countryCode: e.target.value}))}
+                      aria-label={lang === "nl" ? "Land / regio" : "Country / region"}
+                      style={{ appearance: "none", cursor: "pointer", paddingRight: 40, width: "100%" }}
+                    >
+                      {/* Native dropdown menus ignore the select's dark styling, so
+                          each option needs explicit theme colours — otherwise it's
+                          unreadable grey-on-white. */}
+                      {COUNTRIES.filter(c2 => c2.launched).map(c2 => (
+                        <option key={c2.code} value={c2.code} style={{ background: c.selectBg, color: c.text }}>{c2.name}</option>
+                      ))}
+                    </select>
+                    <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: c.textLabel, fontSize: 12 }}>▾</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? <>Bepaalt je <strong style={{ color: c.text }}>valuta en belasting</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Later te wijzigen in Instellingen.</>
+                      : <>Sets your <strong style={{ color: c.text }}>currency and tax</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Changeable later in Settings.</>}
+                  </div>
+                </div>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 17, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textLabel, fontFamily: "'Jost',sans-serif", pointerEvents: "none" }}>vellu.cc/</div>
                   <input className="input-field" placeholder={lang === "nl" ? "jouw-salon-naam" : "your-salon-name"} value={form.slug} onChange={e => setForm(f => ({...f, slug: e.target.value.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}))} style={{ paddingLeft: 85 }} />
