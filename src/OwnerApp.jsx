@@ -16,7 +16,7 @@ import {
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
-  TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES
 } from "./shared.jsx";
@@ -1640,7 +1640,7 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
   const { colors: c } = useTheme();
   const t = T[lang];
   const toast = useToast();
-  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
   const [step, setStep] = useState(0);
   // Salon name + city are already collected at signup, so onboarding doesn't
   // re-ask them. Step 1 only collects the public-facing contact email (the one
@@ -2381,8 +2381,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     : clients;
 
   const initials = (name) => (name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-  const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
-  const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { weekday: "long" }); const ds = d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${a.time}` : ""}`; } catch { return a.date; } };
+  const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
+  const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long" }); const ds = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${a.time}` : ""}`; } catch { return a.date; } };
 
   const statusBadge = (a) => {
     if (a.status === "cancelled") return { label: lang === "nl" ? "Geannuleerd" : "Cancelled", bg: `${c.danger}1a`, color: c.danger };
@@ -2825,7 +2825,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 {waitlistGroups.map(g => {
                   const multi = g.entries.length > 1;
                   const open = !!waitlistOpen[g.key];
-                  const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short" }); } catch { return d; } };
+                  const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); } catch { return d; } };
                   return (
                     <div key={g.key} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
@@ -3002,7 +3002,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: c } = useTheme();
   const t = T[lang];
-  const DAY = lang === "nl" ? DAY_NL : DAY_EN;
+  const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
 
   const [view, setView] = useState("dashboard");
   const [calDate, setCalDate] = useState(fmt(getToday()));
@@ -4590,7 +4590,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 10px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
               const msg = getWhatsAppBookingMsg(lang, {
                 clientName: a.client_name, salonName: salonData.name,
-                date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
                 time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2), countryCode: salonData.country_code
               });
               window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
@@ -4948,7 +4948,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const fmtT = (min) => `${pad2(Math.floor(min / 60) % 24)}:${pad2(min % 60)}`;
         const startM = toM(a.time);
         const durM = parseInt(a.service_duration || 60);
-        const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
         const statusColor = a.status === "completed" ? c.success : (a.status === "cancelled" || a.status === "no_show") ? c.danger : accent;
         const statusLabel = a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Completed")
           : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled")
@@ -5539,7 +5539,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   let peakIdx = 0;
                   data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
                   const peakVal = data[peakIdx];
-                  const fmt = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
+                  const fmt = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
                   return (
                     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
                       {/* Faint baseline so the chart reads as a floor + bars,
@@ -5595,7 +5595,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   return { rating: r, count, pct };
                 });
                 const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+                const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
                 return (
                   <>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 22 }}>
@@ -5928,7 +5928,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
             const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
             const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
-            const MON_SHORT = lang === "nl" ? MON_NL : MON_EN;
+            const MON_SHORT = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
 
             // Compute the current period's appointments for the summary bar
             let periodAppts = [];
@@ -6206,7 +6206,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                     <div style={{ padding: "10px 14px", borderBottom: `1px solid ${c.border}`, background: c.inputBg, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, fontWeight: 500, color: c.text, textTransform: "capitalize" }}>
-                        {new Date(calDate + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+                        {new Date(calDate + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
                       </div>
                       <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                         {dayAppts.length} {dayAppts.length === 1 ? (lang === "nl" ? "afspraak" : "appt") : (lang === "nl" ? "afspraken" : "appts")}
@@ -6937,7 +6937,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const formatDate = (ds) => {
               if (!ds) return "";
               const d = new Date(ds);
-              const MON = lang === "nl" ? MON_NL : MON_EN;
+              const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
               return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
             };
             const initials = (name) => {
@@ -7297,7 +7297,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   let peakIdx = 0;
                   data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
                   const peakVal = data[peakIdx];
-                  const fmtN = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
+                  const fmtN = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
                   return (
                     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
                       <line x1={padL} y1={padT + innerH + 0.5} x2={padL + innerW} y2={padT + innerH + 0.5} stroke={c.border} strokeWidth="0.5" />
@@ -7833,7 +7833,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {salonData.plan_expires_at && (
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10 }}>
                         {lang === "nl" ? "Nieuwe prijs gaat in op:" : "New price starts on:"}{" "}
-                        <strong style={{ color: c.text }}>{new Date(salonData.plan_expires_at).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { day: "numeric", month: "long", year: "numeric" })}</strong>
+                        <strong style={{ color: c.text }}>{new Date(salonData.plan_expires_at).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "long", year: "numeric" })}</strong>
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
@@ -9464,7 +9464,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border }}>
                         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>{t.staffDays}</div>
                         {[0,1,2,3,4,5,6].map(day => {
-                          const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                          const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
                           const staffDay = editStaffForm.working_hours?.[day];
                           const isOn = staffDay ? !staffDay.closed : true;
                           const openTime = staffDay?.open || "09:00";
@@ -9584,7 +9584,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <SL>{t.businessHours}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.businessHoursDesc}</div>
                 {[0,1,2,3,4,5,6].map(day => {
-                  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                  const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
                   const hours = salonData.business_hours?.[day] || DEFAULT_HOURS[day];
                   const isClosed = hours.closed;
                   return (
@@ -9822,7 +9822,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div key={x.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, marginBottom: 6 }}>
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span>{parseDate(x.date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
+                          <span>{parseDate(x.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
                           {x.staff_id ? (
                             <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                               {(salonData.staff || []).find(sm => sm.id === x.staff_id)?.name || (lang === "nl" ? "Medewerker" : "Staff")}
@@ -10351,7 +10351,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const trialEnds = bp.trial_ends_at ? new Date(bp.trial_ends_at) : null;
                 const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
                 const fmtEUR = (n) => `€${parseFloat(n || 0).toFixed(2)}`;
-                const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 
                 const statusColor = isActive ? c.success : isTrial ? ACCENT : isPastDue ? c.warning : c.textLabel;
                 const statusLabel = isTrial ? (lang === "nl" ? "Proefperiode" : "Trial")

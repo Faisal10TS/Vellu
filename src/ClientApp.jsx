@@ -9,7 +9,7 @@ import {
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getToday, fmt, parseDate, getDays,
-  genTimes, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
   getPageFont, ensurePageFontLoaded, curSym
 } from "./shared.jsx";
@@ -281,8 +281,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     };
   }, [initialSalon?.slug, initialSalon?.name, initialSalon?.accent]);
 
-  const DAY = lang === "nl" ? DAY_NL : DAY_EN;
-  const MON = lang === "nl" ? MON_NL : MON_EN;
+  const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
+  const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
   // Display duration for a service row. Services with variants often have a
   // meaningless parent duration (0 min) because the real durations live on the
@@ -726,9 +726,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Booking policy: NL is the default, EN is optional. Falls back to NL when
   // the salon hasn't provided an English translation, so we don't show empty
   // space to English visitors of NL-only salons.
-  const effectivePolicy = lang === "en"
-    ? (initialSalon.booking_policy_en || initialSalon.booking_policy || "")
-    : (initialSalon.booking_policy || "");
+  const effectivePolicy = lang === "nl"
+    ? (initialSalon.booking_policy || "")
+    : (initialSalon.booking_policy_en || initialSalon.booking_policy || "");
 
   // Check if form is complete
   const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
@@ -1327,7 +1327,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // A tappable "first available: <date>" hint. Jumps the picker to that day.
   const FirstAvailableHint = () => {
     if (!firstOpenDate || firstOpenDate === date) return null;
-    const label = parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+    const label = parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
     return (
       <button type="button" onClick={() => { setDate(firstOpenDate); setTime(null); }}
         style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accent, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
@@ -2177,7 +2177,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   // Found an open day
                   const isToday = offset === 0;
                   const isTomorrow = offset === 1;
-                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "short" });
+                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
                   return (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 12 }}>
                       <NavIcon name="calendar" size={13} color={accent} />
@@ -2359,7 +2359,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       {date && time && (
         <div style={{ marginBottom: 16, paddingTop: selectedServices.length > 0 ? 16 : 0, borderTop: selectedServices.length > 0 ? "1px solid " + c.border : "none" }}>
           <div style={{ fontSize: 12, color: c.textSub }}>
-            {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
+            {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
           </div>
           <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
           {selectedServices.length > 0 && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
@@ -3069,7 +3069,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     ))}
                   </div>
-                  {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                  {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
@@ -3150,7 +3150,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     const msg = getWhatsAppBookingMsg(lang, {
                       clientName: form.firstName,
                       salonName: initialSalon.name,
-                      date: parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                      date: parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
                       time, serviceName: getServiceLabel(), price: getPrice().toFixed(2), countryCode: initialSalon.country_code
                     });
                     window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
@@ -3193,7 +3193,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 2 && (
                 <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {time ? (
-                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
+                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
                   ) : (
                     <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
                   )}
@@ -3688,7 +3688,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                         ))}
                       </div>
-                      {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                      {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
@@ -3742,7 +3742,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
                   <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
                   <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
-                    {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                    {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
                   </p>
                   <p style={{ fontSize: 12, color: c.textLabel, marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
                   <div style={{ marginBottom: 32 }}>
@@ -3905,7 +3905,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   transition: "all 0.15s", fontFamily: "var(--body-font, 'Jost', sans-serif)",
                                 }}>
                                 {on && <NavIcon name="check" size={11} color={accent} />}
-                                <span style={{ textTransform: "capitalize" }}>{dd.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "short", day: "numeric", month: "short" })}</span>
+                                <span style={{ textTransform: "capitalize" }}>{dd.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })}</span>
                               </button>
                             );
                           })}

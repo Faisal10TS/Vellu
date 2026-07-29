@@ -8,7 +8,7 @@ import {
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
-  TIMES, DAY_NL, DAY_EN, DAY_FULL_NL, DAY_FULL_EN, MON_NL, MON_EN,
+  TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym, taxForCountry
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
@@ -17,7 +17,7 @@ import InstallAppPrompt from "./InstallAppPrompt.jsx";
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { colors: c } = useTheme();
   const t = T[lang];
-  const DAY = lang === "nl" ? DAY_NL : DAY_EN;
+  const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = salonProfile.accent_color || ACCENT;
   // Currency symbol from the salon's country_code — all amounts staff see (their
@@ -701,7 +701,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const monthRevenue = completedAppts.filter(a => parseDate(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
             const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
             const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-            const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+            const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
 
             // Daily revenue for sparklines
             const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -1024,7 +1024,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
           {/* AGENDA */}
           {view === "agenda" && (() => {
-            const MON_SHORT = lang === "nl" ? MON_NL : MON_EN;
+            const MON_SHORT = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
             const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
             const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
             const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
@@ -1456,7 +1456,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               appointments. Owner tab has manual add + CSV import + edit; those
               stay owner-only because clients are a salon-wide resource. */}
           {view === "klanten" && (() => {
-            const MON = lang === "nl" ? MON_NL : MON_EN;
+            const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
             const fmtDate = (ds) => { if (!ds) return ""; const d = new Date(ds); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
             // Aggregate by lowercase email so a repeat client with different
             // display names still collapses to one row.
@@ -1648,7 +1648,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const formatDate = (ds) => {
               if (!ds) return "";
               const d = new Date(ds);
-              const MON = lang === "nl" ? MON_NL : MON_EN;
+              const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
               return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
             };
             const initials = (name) => {
@@ -1879,7 +1879,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
                   {[0,1,2,3,4,5,6].map(day => {
-                    const DAY_FULL = lang === "nl" ? DAY_FULL_NL : DAY_FULL_EN;
+                    const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
                     const staffDay = whForm[day];
                     const isOn = staffDay ? !staffDay.closed : true;
                     const openTime = staffDay?.open || "09:00";

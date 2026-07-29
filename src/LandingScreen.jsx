@@ -731,7 +731,7 @@ function SavingsCalculator({ lang, t, c }) {
   const treatwellMonthly = revenue * 0.08;
   const velluMonthly = 19;
   const savingsYear = Math.max(0, (treatwellMonthly - velluMonthly) * 12);
-  const fmt = (n) => "€" + Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : "en-US");
+  const fmt = (n) => "€" + Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
   const slider = {
     width: "100%", appearance: "none", WebkitAppearance: "none",
     height: 4, borderRadius: 100, background: c.border, outline: "none", cursor: "pointer",

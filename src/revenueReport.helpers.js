@@ -4,7 +4,7 @@
 
 export function periodPreset(kind, lang = "nl") {
   const now = new Date();
-  const monthName = (d) => d.toLocaleDateString(lang === "nl" ? "nl-NL" : "en-US", { month: "long", year: "numeric" });
+  const monthName = (d) => d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { month: "long", year: "numeric" });
   // LOCAL date components — toISOString() converts to UTC first, which for a
   // local-midnight Date in a UTC-positive timezone (NL) lands on the PREVIOUS
   // day: "this month" would run Jun 30 → Jul 30 and silently drop the last
