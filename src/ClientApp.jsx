@@ -1790,7 +1790,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     </div>
                     <div className="profile-service-price">
-                      {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
+                      {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
                     </div>
                     <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                       {t.book}
@@ -2321,7 +2321,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                   <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                  <span>+{cur}{e.price}</span>
+                  <span>+{cur}{parseFloat(e.price).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -2552,7 +2552,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`;
                   return (
                   <div key={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -2631,7 +2631,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
                                 </div>
                               ))}
                             </div>
@@ -2655,7 +2655,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                       transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
                                     }}>
                                     <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
-                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{cur}{e.price}</span>
+                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{cur}{parseFloat(e.price).toFixed(2)}</span>
                                   </div>
                                 );
                               })}
@@ -3338,7 +3338,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
-                              {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
+                              {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (
@@ -3362,7 +3362,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{v.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
                                 </div>
                               </div>
                             ))}
@@ -3377,7 +3377,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div key={e.id} className={`service-card ${item?.extras?.find(x => x.id === e.id) ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                   <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{cur}{e.price}</div>
+                                  <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
                                 </div>
                               </div>
                             ))}

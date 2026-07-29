@@ -2071,7 +2071,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
-                                {varCount > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price)))}` : `${cur}${s.price}`}
+                                {varCount > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
@@ -2130,7 +2130,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                         )}
                                         <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                       </div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{v.price}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2179,7 +2179,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
                                       <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                       <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+{cur}{e.price}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2260,7 +2260,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <SL>{t.selectServiceFor}</SL>
                     <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
                       <option value="" style={{ background: c.selectBg }}>—</option>
-                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{s.price}</option>)}
+                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{parseFloat(s.price).toFixed(2)}</option>)}
                     </select>
                   </div>
                   {(() => {
@@ -2271,7 +2271,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <SL>{lang === "nl" ? "Variant" : "Variant"}</SL>
                         <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {cur}{v.price}</option>)}
+                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {cur}{parseFloat(v.price).toFixed(2)}</option>)}
                         </select>
                       </div>
                     );
