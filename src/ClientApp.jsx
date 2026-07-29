@@ -284,6 +284,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
   const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name || "") : (s.name_en || s.name_nl || s.name || "");
+  // Optional service description — language-aware, falls back like svcName.
+  const svcDesc = (s) => (lang === "nl" ? (s.description_nl || "") : lang === "es" ? (s.description_es || s.description_en || s.description_nl || "") : (s.description_en || s.description_nl || "")).trim();
   // Display duration for a service row. Services with variants often have a
   // meaningless parent duration (0 min) because the real durations live on the
   // variants — show the variant range instead ("40–80 min"), collapsing to a
@@ -1810,6 +1812,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
+                      {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
                       <div className="profile-service-meta">
                         <span className="profile-service-duration-pill">
                           <NavIcon name="clock" size={10} color={c.textSub} />
