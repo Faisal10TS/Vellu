@@ -283,7 +283,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
-  const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : (s.name_en || s.name_nl || s.name || "");
+  const svcName = (s) => lang === "nl" ? (s.name_nl || s.name_en || s.name || "") : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name || "") : (s.name_en || s.name_nl || s.name || "");
   // Display duration for a service row. Services with variants often have a
   // meaningless parent duration (0 min) because the real durations live on the
   // variants — show the variant range instead ("40–80 min"), collapsing to a
@@ -893,7 +893,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const getServiceLabel = () => {
     return selectedServices.map(item => {
       let label = svcName(item.service);
-      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)) + (item.variant.per_unit && (item.variantQty || 1) > 1 ? ` ×${item.variantQty}` : "");
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : lang === "es" ? (item.variant.name_es || item.variant.name_en || item.variant.name_nl) : (item.variant.name_en || item.variant.name_nl)) + (item.variant.per_unit && (item.variantQty || 1) > 1 ? ` ×${item.variantQty}` : "");
       if (item.staff) label += ` (${item.staff.name})`;
       return label;
     }).join(" + ");
@@ -1790,7 +1790,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {usedCats.map(cat => (
                         <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
                           onClick={() => setProfileCategory(cat.id)}>
-                          {lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
+                          {lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
                         </button>
                       ))}
                     </div>
@@ -1876,7 +1876,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                                 {memberServices.map(s => (
                                   <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
-                                    {lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}
+                                    {lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}
                                   </span>
                                 ))}
                               </div>
@@ -2340,7 +2340,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div key={item.service.id} style={{ marginBottom: idx < selectedServices.length - 1 ? 10 : 0, paddingBottom: idx < selectedServices.length - 1 ? 10 : 0, borderBottom: idx < selectedServices.length - 1 ? "1px solid " + c.border : "none" }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>
                 {svcName(item.service)}
-                {item.variant && <span style={{ fontWeight: 400, color: c.textSub }}> — {lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}</span>}
+                {item.variant && <span style={{ fontWeight: 400, color: c.textSub }}> — {lang === "nl" ? item.variant.name_nl : lang === "es" ? (item.variant.name_es || item.variant.name_en || item.variant.name_nl) : (item.variant.name_en || item.variant.name_nl)}</span>}
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
@@ -2348,7 +2348,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
-                  <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}{e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}</span>
+                  <span>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}{e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}</span>
                   <span>+{cur}{(parseFloat(e.price) * (e.per_unit ? (e.qty || 1) : 1)).toFixed(2)}</span>
                 </div>
               ))}
@@ -2549,7 +2549,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                               fontSize: 12, fontWeight: 500, transition: "all 0.2s"
                             }}
-                          >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                          >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                         ))}
                       </div>
                       <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -2658,8 +2658,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     transition: "all 0.15s"
                                   }}>
                                   <div>
-                                    <div style={{ fontWeight: 500, fontSize: 13, color: c.text }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                    <div style={{ fontWeight: 500, fontSize: 13, color: c.text }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2697,7 +2697,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                       fontSize: 12, fontWeight: 500, color: extraSel ? accent : c.textSub,
                                       transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
                                     }}>
-                                    <span>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</span>
+                                    <span>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</span>
                                     {showStep && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                                         <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty - 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
@@ -3061,9 +3061,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {selectedServices.map((item, idx) => (
                       <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : lang === "es" ? (item.variant.name_es || item.variant.name_en || item.variant.name_nl) : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
                           {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
-                          {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
+                          {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                         </div>
                         <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
                       </div>
@@ -3339,7 +3339,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                                   fontSize: 11, fontWeight: 500, transition: "all 0.2s"
                                 }}
-                              >{lang === "nl" ? (cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                              >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                             ))}
                           </div>
                           <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -3411,8 +3411,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div key={v.id} className={`service-card ${vSel ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div>
-                                    <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                    <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3442,7 +3442,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               return (
                               <div key={e.id} className={`service-card ${extraSel ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                                  <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                                  <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     {extraSel && e.per_unit && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -3680,9 +3680,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         {selectedServices.map((item) => (
                           <div key={item.service.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
+                              <span style={{ fontSize: 13, fontWeight: 500 }}>{svcName(item.service)}{item.variant ? ` — ${lang === "nl" ? item.variant.name_nl : lang === "es" ? (item.variant.name_es || item.variant.name_en || item.variant.name_nl) : (item.variant.name_en || item.variant.name_nl)}` : ""}</span>
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
-                              {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
+                              {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                             </div>
                             <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
                           </div>

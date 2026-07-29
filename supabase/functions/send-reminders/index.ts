@@ -139,7 +139,9 @@ serve(async (req) => {
     const remindedOwners = new Set<string>();
     for (const apt of appointments || []) {
       const p = apt.profiles || {};
-      const lang = langFor(p.country_code);
+      // Prefer the client's chosen booking language (stored on the appointment);
+      // fall back to the salon's country language for older/legacy rows.
+      const lang = ["nl", "en", "es"].includes(apt.lang) ? apt.lang : langFor(p.country_code);
       const booking = {
         client_name: apt.client_name,
         client_email: apt.client_email,

@@ -988,7 +988,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     return (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                         {sorted.map(([name, stats]) => {
-                          const svc = services.find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                          const svc = services.find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
                           const thumb = svc?.photos?.[0]?.url;
                           return (
                             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2062,7 +2062,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-                                <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}</div>
                                 <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
                                   <span>{s.duration} {t.min}</span>
                                   {varCount > 0 && <><span>·</span><span>{varCount} {lang === "nl" ? "varianten" : "variants"}</span></>}
@@ -2125,8 +2125,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
                                       <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{v.name_nl}</div>
-                                        {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && (
-                                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>
+                                        {(lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)) && (
+                                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>
                                         )}
                                         <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                       </div>

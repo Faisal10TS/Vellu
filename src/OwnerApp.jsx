@@ -966,13 +966,33 @@ function AutoTranslateField({ nlValue, enValue, setNl, setEn, lang, accent, plac
 // the untranslated pair.
 async function autoFillTranslations(form, pairs, currentLang) {
   const updated = { ...form };
-  const isNl = currentLang === "nl";
+  // The owner types in ONE language (the current UI lang). Fill every OTHER
+  // language whose field is still empty. Spanish (name_es/description_es) is
+  // filled alongside the NL/EN pair so es clients see a translated menu.
+  const SRC = { nl: "NL", en: "EN", es: "ES" };        // DeepL source codes
+  const TGT = { nl: "NL", en: "EN-US", es: "ES" };     // DeepL target codes
+  const cur = ["nl", "en", "es"].includes(currentLang) ? currentLang : "nl";
+  // Where to look for the owner's typed text, per UI language. AutoTranslateField
+  // stores es-UI input in the EN field (it only edits nl/en), so for es we fall
+  // back to en, then nl — first non-empty field wins as the translation source.
+  const PREF = { nl: ["nl", "en", "es"], en: ["en", "nl", "es"], es: ["es", "en", "nl"] };
   const jobs = [];
   for (const p of pairs) {
-    const nlVal = String(updated[p.nl] || "").trim();
-    const enVal = String(updated[p.en] || "").trim();
-    if (isNl && nlVal && !enVal) jobs.push({ text: nlVal, sourceLang: "NL", targetLang: "EN-US", targetField: p.en });
-    else if (!isNl && enVal && !nlVal) jobs.push({ text: enVal, sourceLang: "EN", targetLang: "NL", targetField: p.nl });
+    // es field derived from the nl field name (name_nl→name_es, …). Only the
+    // name_es / description_es columns actually exist on services/variants/
+    // extras/categories — never generate es for other fields (e.g. policy).
+    const esField = p.es || p.nl.replace(/_nl$/, "_es");
+    const esOk = esField === "name_es" || esField === "description_es";
+    const fields = { nl: p.nl, en: p.en, ...(esOk ? { es: esField } : {}) };
+    let srcLg = null;
+    for (const lg of PREF[cur]) { if (fields[lg] && String(updated[fields[lg]] || "").trim()) { srcLg = lg; break; } }
+    if (!srcLg) continue;
+    const srcVal = String(updated[fields[srcLg]]).trim();
+    for (const lg of ["nl", "en", "es"]) {
+      if (lg === srcLg || !fields[lg]) continue;
+      if (String(updated[fields[lg]] || "").trim()) continue; // already filled
+      jobs.push({ text: srcVal, sourceLang: SRC[srcLg], targetLang: TGT[lg], targetField: fields[lg] });
+    }
   }
   if (jobs.length === 0) return updated;
   const byRoute = new Map();
@@ -1097,14 +1117,14 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
   const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", per_unit: false });
 
   const add = async () => {
-    const primaryName = lang === "nl" ? form.name_nl : (form.name_en || form.name_nl);
+    const primaryName = lang === "nl" ? form.name_nl : lang === "es" ? (form.name_es || form.name_en || form.name_nl) : (form.name_en || form.name_nl);
     if (!primaryName || !form.price) return;
     const price = parseFloat(form.price);
     if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
     const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
     const { data, error } = await supabase.from("service_variants").insert({
-      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null,
-      description_nl: filled.description_nl || null, description_en: filled.description_en || null,
+      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
+      description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
       price, duration: parseInt(filled.duration) || 60,
       per_unit: !!form.per_unit,
       max_quantity: 10,
@@ -1169,13 +1189,13 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
   const [form, setForm] = useState({ name_nl: "", name_en: "", price: "", per_unit: false });
 
   const add = async () => {
-    const primaryName = lang === "nl" ? form.name_nl : (form.name_en || form.name_nl);
+    const primaryName = lang === "nl" ? form.name_nl : lang === "es" ? (form.name_es || form.name_en || form.name_nl) : (form.name_en || form.name_nl);
     if (!primaryName || !form.price) return;
     const price = parseFloat(form.price);
     if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : "Invalid price", "error"); return; }
     const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }], lang);
     const { data, error } = await supabase.from("service_extras").insert({
-      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null,
+      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
       price,
       per_unit: !!form.per_unit,
       max_quantity: 10,
@@ -4053,10 +4073,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           base = r.origLabel || svcLabelOf(svc);
         } else {
           const v = r.variant_id ? (svc?.variants || []).find(x => x.id === r.variant_id) : null;
-          base = svcLabelOf(svc) + (v ? " — " + (lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)) : "");
+          base = svcLabelOf(svc) + (v ? " — " + (lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)) : "");
         }
         const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
-        if (exs.length > 0) base += " + " + exs.map(e => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
+        if (exs.length > 0) base += " + " + exs.map(e => lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)).join(", ");
         const entry = { service_id: r.service_id, staff_id: r.staff_id || null, duration: parseInt(r.duration) || 60, offset_min: runningOffset, label: base };
         runningOffset += entry.duration;
         const sn = r.staff_id ? staffNameOf(r.staff_id) : "";
@@ -4254,7 +4274,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const addService = async () => {
     // Owner-visible input in current lang → require that. If lang=en they type
     // name_en and NL gets auto-translated below (and vice versa).
-    const primaryName = lang === "nl" ? newSvc.name_nl : (newSvc.name_en || newSvc.name_nl);
+    const primaryName = lang === "nl" ? newSvc.name_nl : lang === "es" ? (newSvc.name_es || newSvc.name_en || newSvc.name_nl) : (newSvc.name_en || newSvc.name_nl);
     if (!primaryName || !newSvc.price) { setSvcError(t.fillRequired); return; }
     const price = parseFloat(newSvc.price);
     if (!Number.isFinite(price) || price < 0) { setSvcError(lang === "nl" ? "Ongeldige prijs" : "Invalid price"); return; }
@@ -4267,6 +4287,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       name: filled.name_nl || filled.name_en,
       name_nl: filled.name_nl || filled.name_en,
       name_en: filled.name_en || null,
+      name_es: filled.name_es || null,
       price,
       duration: parseInt(filled.duration) || 60,
       position: nextPosition,
@@ -5078,8 +5099,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               {(() => {
-                const svcLabel = (s) => lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name);
-                const varLabel = (v) => lang === "nl" ? v.name_nl : (v.name_en || v.name_nl);
+                const svcLabel = (s) => lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name);
+                const varLabel = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
                 const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — ${cur}${n.toFixed(0)}` : ""; };
                 // One option per bookable thing: services with variants expand
                 // to one option per variant (value "serviceId::variantId") so
@@ -5179,7 +5200,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     border: `1px solid ${on ? accent : c.inputBorder}`,
                                     color: on ? accent : c.textSub,
                                   }}>
-                                  + {lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)} · {cur}{parseFloat(ex.price || 0).toFixed(0)}
+                                  + {lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl)} · {cur}{parseFloat(ex.price || 0).toFixed(0)}
                                 </button>
                               );
                             })}
@@ -5885,7 +5906,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     return (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                         {sorted.map(([name, stats], idx) => {
-                          const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                          const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
                           const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
                           return (
                             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -7557,7 +7578,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   );
                   const max = sorted[0][1].count;
                   return sorted.map(([name, stats], idx) => {
-                    const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)) === name);
+                    const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
                     const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
                     return (
                       <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
@@ -8552,9 +8573,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               const filled = await autoFillTranslations(editCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
                               const nlName = (filled.name_nl || filled.name_en || "").trim();
                               const enName = (filled.name_en || "").trim();
-                              const { error } = await supabase.from("service_categories").update({ name_nl: nlName, name_en: enName || null }).eq("id", cat.id);
+                              const esName = (filled.name_es || "").trim();
+                              const { error } = await supabase.from("service_categories").update({ name_nl: nlName, name_en: enName || null, name_es: esName || null }).eq("id", cat.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: nlName, name_en: enName || null} : x); return d; });
+                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: nlName, name_en: enName || null, name_es: esName || null} : x); return d; });
                               setEditingCategoryId(null);
                             }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                             <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingCategoryId(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -8619,8 +8641,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const filled = await autoFillTranslations(newCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
                         const nlName = (filled.name_nl || filled.name_en || "").trim();
                         const enName = (filled.name_en || "").trim();
+                        const esName = (filled.name_es || "").trim();
                         const nextPos = ((salonData.categories || []).reduce((m, x) => Math.max(m, x.position || 0), 0)) + 1;
-                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: nlName, name_en: enName || null, position: nextPos }).select().single();
+                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: nlName, name_en: enName || null, name_es: esName || null, position: nextPos }).select().single();
                         if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                         update(d => { d.categories = [...(d.categories || []), data]; return d; });
                         setNewCategoryForm({ name_nl: "", name_en: "" });
@@ -8797,7 +8820,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <select className="input-field" value={editSvcForm.category_id || ""} onChange={e => setEditSvcForm(f => ({...f, category_id: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }}>
                               <option value="" style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? "Geen categorie" : "No category"}</option>
                               {(salonData.categories || []).map(cat => (
-                                <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                                <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl)}</option>
                               ))}
                             </select>
                             {(salonData.categories || []).length === 0 && (
@@ -8811,9 +8834,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               const newCatId = editSvcForm.category_id || null;
                               // Fill the empty language via DeepL before saving.
                               const filled = await autoFillTranslations(editSvcForm, [{ nl: "name_nl", en: "name_en" }], lang);
-                              const { error } = await supabase.from("services").update({ name_nl: filled.name_nl, name_en: filled.name_en, name: filled.name_nl, price: parseFloat(filled.price), duration: parseInt(filled.duration), category_id: newCatId }).eq("id", s.id);
+                              const { error } = await supabase.from("services").update({ name_nl: filled.name_nl, name_en: filled.name_en, name_es: filled.name_es || null, name: filled.name_nl, price: parseFloat(filled.price), duration: parseInt(filled.duration), category_id: newCatId }).eq("id", s.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: filled.name_nl, name_en: filled.name_en, price: parseFloat(filled.price), duration: parseInt(filled.duration), category_id: newCatId} : sv); return d; });
+                              update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, name_nl: filled.name_nl, name_en: filled.name_en, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), category_id: newCatId} : sv); return d; });
                               setEditingService(null);
                             }}>
                               <NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}
@@ -8844,7 +8867,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                             {/* Name + meta */}
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : (s.name_en || s.name_nl)}</div>
+                              <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}</div>
                               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span>{s.duration} {t.min}</span>
                                 {variantCount > 0 && <><span>·</span><span>{variantCount} {variantCount === 1 ? (lang === "nl" ? "variant" : "variant") : (lang === "nl" ? "varianten" : "variants")}</span></>}
@@ -8872,7 +8895,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     >
                                       <option value="">{lang === "nl" ? "+ Categorie" : "+ Category"}</option>
                                       {(salonData.categories || []).map(cat => (
-                                        <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                                        <option key={cat.id} value={cat.id}>{lang === "nl" ? cat.name_nl : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl)}</option>
                                       ))}
                                     </select>
                                   </span>
@@ -8893,7 +8916,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 title={lang === "nl" ? "Verwijderen" : "Delete"}>
                                 <NavIcon name="xmark" size={13} color="currentColor" />
                               </button>
-                              <div style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                              <div role="button" tabIndex={0}
+                                onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedServiceId(isExpanded ? null : s.id); } }}
+                                title={isExpanded ? (lang === "nl" ? "Inklappen" : lang === "es" ? "Contraer" : "Collapse") : (lang === "nl" ? "Uitklappen" : lang === "es" ? "Expandir" : "Expand")}
+                                style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, cursor: "pointer", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                               </div>
                             </div>
@@ -8953,7 +8980,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editVariantForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                                                await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null, per_unit: !!editVariantForm.per_unit }).eq("id", v.id);
+                                                await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, per_unit: !!editVariantForm.per_unit }).eq("id", v.id);
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...filled, price: parseFloat(filled.price), duration: parseInt(filled.duration), per_unit: !!editVariantForm.per_unit} : vr)} : svc); return d; });
                                                 setEditingVariant(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
@@ -8964,8 +8991,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
-                                              {(lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
+                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
+                                              {(lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
@@ -9039,9 +9066,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editExtraForm, [{ nl: "name_nl", en: "name_en" }], lang);
-                                                const { error } = await supabase.from("service_extras").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit }).eq("id", e.id);
+                                                const { error } = await supabase.from("service_extras").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit }).eq("id", e.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
-                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit} : ex)} : svc); return d; });
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit} : ex)} : svc); return d; });
                                                 setEditingExtra(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                                               <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -9051,7 +9078,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
-                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}</div>
+                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, per_unit: !!e.per_unit }); }}
@@ -9219,7 +9246,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <select className="input-field" value={newSvc.category_id || ""} onChange={e => setNewSvc(s => ({...s, category_id: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }}>
                           <option value="" style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? "Geen categorie" : "No category"}</option>
                           {(salonData.categories || []).map(cat => (
-                            <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : (cat.name_en || cat.name_nl)}</option>
+                            <option key={cat.id} value={cat.id} style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? cat.name_nl : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl)}</option>
                           ))}
                         </select>
                       </div>
@@ -9499,7 +9526,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 const isOn = editStaffForm.service_ids.includes(s.id);
                                 return (<div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
                                   style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
-                                  {lang === "nl" ? (s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}</div>);
+                                  {lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}</div>);
                               })}
                             </div>
                             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : "Empty = all services"}</div>
@@ -11296,7 +11323,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, variant_id: e.target.value } : r) }))}
                             style={{ fontSize: 12 }}>
                             <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : "No variant"}</option>
-                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)} — {cur}{parseFloat(v.price).toFixed(2)} · {v.duration} min</option>)}
+                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)} — {cur}{parseFloat(v.price).toFixed(2)} · {v.duration} min</option>)}
                           </select>
                         )}
                         {hasExtras && (
@@ -11307,7 +11334,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                               {selSvc.extras.map(ex => {
                                 const on = (row.extra_ids || []).includes(ex.id);
-                                const label = lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl);
+                                const label = lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl);
                                 return (
                                   <button key={ex.id} type="button"
                                     onClick={() => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => {
@@ -11474,9 +11501,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const price = parseFloat(variant ? variant.price : svc.price) + extrasPrice;
                       const duration = parseInt(variant ? variant.duration : svc.duration);
                       const extrasSuffix = extras.length
-                        ? " + " + extras.map(ex => lang === "nl" ? ex.name_nl : (ex.name_en || ex.name_nl)).join(", ")
+                        ? " + " + extras.map(ex => lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl)).join(", ")
                         : "";
-                      const labelBase = (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) : "") + extrasSuffix;
+                      const labelBase = (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + (lang === "nl" ? variant.name_nl : lang === "es" ? (variant.name_es || variant.name_en || variant.name_nl) : (variant.name_en || variant.name_nl)) : "") + extrasSuffix;
                       const labelFull = labelBase + (staff ? ` (${staff.name})` : "");
                       rows.push({ svc, variant, extras, staff, price, duration, labelBase, labelFull });
                     }

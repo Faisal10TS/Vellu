@@ -157,7 +157,7 @@ serve(async (req) => {
   // ---------- 2. Validate services belong to this salon ----------
   const { data: services, error: svcErr } = await supabase
     .from("services")
-    .select("id, name_nl, name_en, price, duration, owner_id")
+    .select("id, name_nl, name_en, name_es, price, duration, owner_id")
     .in("id", service_ids)
     .eq("owner_id", salon.id);
   if (svcErr) return err(500, "db_error_services", origin);
@@ -172,7 +172,7 @@ serve(async (req) => {
   if (variantIdsFlat.length > 0) {
     const { data: variants, error: vErr } = await supabase
       .from("service_variants")
-      .select("id, service_id, name_nl, name_en, price, duration, per_unit, max_quantity")
+      .select("id, service_id, name_nl, name_en, name_es, price, duration, per_unit, max_quantity")
       .in("id", variantIdsFlat);
     if (vErr) return err(500, "db_error_variants", origin);
     if (!variants || variants.length !== variantIdsFlat.length) return err(400, "invalid_variant", origin);
@@ -189,7 +189,7 @@ serve(async (req) => {
   if (extraIdsFlat.length > 0) {
     const { data: extras, error: eErr } = await supabase
       .from("service_extras")
-      .select("id, service_id, name_nl, name_en, price, per_unit, max_quantity")
+      .select("id, service_id, name_nl, name_en, name_es, price, per_unit, max_quantity")
       .in("id", extraIdsFlat);
     if (eErr) return err(500, "db_error_extras", origin);
     if (!extras || extras.length !== extraIdsFlat.length) return err(400, "invalid_extra", origin);
@@ -267,6 +267,9 @@ serve(async (req) => {
   // [1, max_quantity]. Non-per-unit extras are always quantity 1.
   const extraQty = (e: any) => e.per_unit ? Math.max(1, Math.min(parseInt(extra_qtys?.[e.id]) || 1, e.max_quantity || 10)) : 1;
   const variantQty = (v: any) => v && v.per_unit ? Math.max(1, Math.min(parseInt(variant_qtys?.[v.id]) || 1, v.max_quantity || 10)) : 1;
+  // Language-aware name pick for agenda/email labels: Spanish → name_es
+  // (fall back to EN then NL); English → name_en (fall back NL); else NL.
+  const nmOf = (o: any) => lang === "es" ? (o.name_es || o.name_en || o.name_nl) : (lang === "nl" ? o.name_nl : (o.name_en || o.name_nl));
 
   for (const svc of servicesOrdered) {
     const variantId = variant_ids?.[svc.id];
@@ -279,13 +282,13 @@ serve(async (req) => {
     totalDuration += duration;
 
     // Build display name
-    let label = lang === "nl" ? svc.name_nl : (svc.name_en || svc.name_nl);
-    if (variant) label += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
+    let label = nmOf(svc);
+    if (variant) label += " — " + nmOf(variant) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
     const staffId = staff_ids_per_service?.[svc.id];
     if (staffId && staffById[staffId]) label += ` (${staffById[staffId].name})`;
     if (svcExtras.length > 0) {
       label += " + " + svcExtras.map((e: any) => {
-        const nm = lang === "nl" ? e.name_nl : (e.name_en || e.name_nl);
+        const nm = nmOf(e);
         const q = extraQty(e);
         return q > 1 ? `${nm} ×${q}` : nm;
       }).join(", ");
@@ -295,8 +298,8 @@ serve(async (req) => {
     // Compact label for the agenda card (service name + variant only,
     // without the parenthetical staff name — the agenda already renders
     // that separately via the filter pill).
-    let shortLabel = lang === "nl" ? svc.name_nl : (svc.name_en || svc.name_nl);
-    if (variant) shortLabel += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
+    let shortLabel = nmOf(svc);
+    if (variant) shortLabel += " — " + nmOf(variant) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
     serviceBreakdown.push({
       service_id: svc.id,
       staff_id: staffId || null,
@@ -591,6 +594,9 @@ serve(async (req) => {
     service_breakdown: serviceBreakdown,
     client_allergies: allergies,
     location_id: location_id || null,
+    // Client's chosen UI language — lets send-reminders localize the reminder
+    // (nl/en/es); null falls back to the salon's country language.
+    lang: ["nl", "en", "es"].includes(lang) ? lang : null,
   }).select("id").single();
 
   if (aErr || !appt) return err(500, "appointment_create_failed", origin);
@@ -612,7 +618,7 @@ serve(async (req) => {
   // Best-effort: a messaging hiccup must never fail an otherwise-valid booking.
   const ownerEmail = salon.salon_email || salon.email || null;
   const staffEmails = Object.values(staffById).map((s: any) => s.email).filter(Boolean);
-  const emailLang = lang === "en" ? "en" : "nl";
+  const emailLang = lang === "es" ? "es" : (lang === "en" ? "en" : "nl");
   const isOnline = payment_method === "online";
   const emailBase = {
     client_name: `${firstName} ${lastName}`,
