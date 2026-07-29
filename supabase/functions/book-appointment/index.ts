@@ -113,6 +113,7 @@ serve(async (req) => {
     service_ids,
     variant_ids,            // { [service_id]: variant_id }
     extra_ids,              // { [service_id]: [extra_id] }
+    extra_qtys,             // { [extra_id]: quantity } — per_unit extras only
     staff_ids_per_service,  // { [service_id]: staff_id | null }
     discount_code,
     date,
@@ -187,7 +188,7 @@ serve(async (req) => {
   if (extraIdsFlat.length > 0) {
     const { data: extras, error: eErr } = await supabase
       .from("service_extras")
-      .select("id, service_id, name_nl, name_en, price")
+      .select("id, service_id, name_nl, name_en, price, per_unit, max_quantity")
       .in("id", extraIdsFlat);
     if (eErr) return err(500, "db_error_extras", origin);
     if (!extras || extras.length !== extraIdsFlat.length) return err(400, "invalid_extra", origin);
@@ -261,13 +262,17 @@ serve(async (req) => {
   const serviceBreakdown: any[] = [];
   let runningOffset = 0;
 
+  // Per-unit extras (e.g. "broken nail x3"): clamp the client-sent quantity to
+  // [1, max_quantity]. Non-per-unit extras are always quantity 1.
+  const extraQty = (e: any) => e.per_unit ? Math.max(1, Math.min(parseInt(extra_qtys?.[e.id]) || 1, e.max_quantity || 10)) : 1;
+
   for (const svc of servicesOrdered) {
     const variantId = variant_ids?.[svc.id];
     const svcExtras = (extra_ids?.[svc.id] || []).map((eid: string) => extrasById[eid]).filter(Boolean);
     const variant = variantId ? variantsById[variantId] : null;
     const price = variant ? parseFloat(variant.price) : parseFloat(svc.price);
     const duration = variant ? parseInt(variant.duration) : parseInt(svc.duration);
-    const extrasPrice = svcExtras.reduce((s: number, e: any) => s + parseFloat(e.price || 0), 0);
+    const extrasPrice = svcExtras.reduce((s: number, e: any) => s + parseFloat(e.price || 0) * extraQty(e), 0);
     totalPrice += price + extrasPrice;
     totalDuration += duration;
 
@@ -277,7 +282,11 @@ serve(async (req) => {
     const staffId = staff_ids_per_service?.[svc.id];
     if (staffId && staffById[staffId]) label += ` (${staffById[staffId].name})`;
     if (svcExtras.length > 0) {
-      label += " + " + svcExtras.map((e: any) => lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)).join(", ");
+      label += " + " + svcExtras.map((e: any) => {
+        const nm = lang === "nl" ? e.name_nl : (e.name_en || e.name_nl);
+        const q = extraQty(e);
+        return q > 1 ? `${nm} ×${q}` : nm;
+      }).join(", ");
     }
     serviceNameParts.push(label);
 
