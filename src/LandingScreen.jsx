@@ -580,7 +580,15 @@ function Reveal({ children, delay = 0 }) {
 // Real product screenshots shown inside the hero phone frame, cross-faded on a
 // timer so the device feels alive. Files live in /public. If they 404,
 // HeroPhoneMockup falls back to the CSS mockup below.
-const HERO_SHOTS = ["/hero-phone-1.jpg", "/hero-phone-2.jpg"];
+const HERO_SHOTS = [
+  "/hero-phone-1.jpg", // owner dashboard (revenue + today's appointments)
+  "/hero-phone-2.jpg", // calendar — a full week
+  "/hero-phone-3.jpg", // clients list
+  "/hero-phone-4.jpg", // analytics — charts + rating
+  "/hero-phone-5.jpg", // invoices — earnings + PDF report
+  "/hero-phone-6.jpg", // public booking page — services
+  "/hero-phone-7.jpg", // public booking page — contact/map
+];
 
 // Phone frame for the hero. Renders the real screenshots (HERO_SHOTS) when
 // present; otherwise falls back to a CSS-only mockup of a fictional salon's
@@ -596,16 +604,17 @@ function HeroPhoneMockup({ lang, c }) {
   const cats = lang === "nl" ? ["Nagels", "Brows", "Lashes"] : ["Nails", "Brows", "Lashes"];
   const slots = ["10:00", "11:30", "13:00", "15:30"];
   const darkOnGold = "#1a1713";
-  // Prefer the real product screenshots (HERO_SHOTS); if they're missing,
-  // onError flips this false and we render the CSS mockup instead. The two
-  // shots cross-fade on a timer so the hero feels alive.
-  const [useShot, setUseShot] = useState(true);
+  // Prefer the real product screenshots (HERO_SHOTS); they cross-fade on a
+  // timer so the hero feels alive. Any shot that 404s drops itself out of the
+  // rotation via onError; only when they're ALL gone do we fall back to the
+  // CSS mockup below.
+  const [shots, setShots] = useState(HERO_SHOTS);
   const [shotIdx, setShotIdx] = useState(0);
   useEffect(() => {
-    if (!useShot) return;
-    const id = setInterval(() => setShotIdx(i => (i + 1) % HERO_SHOTS.length), 3800);
+    if (shots.length <= 1) return;
+    const id = setInterval(() => setShotIdx(i => (i + 1) % shots.length), 4000);
     return () => clearInterval(id);
-  }, [useShot]);
+  }, [shots.length]);
   const check = (sz, col) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
   return (
     <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "14px 0 18px" }}>
@@ -630,19 +639,19 @@ function HeroPhoneMockup({ lang, c }) {
             {/* Glass sheen — a faint diagonal reflection across the top of the display */}
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(153deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.02) 20%, transparent 40%)", pointerEvents: "none", zIndex: 6 }} />
 
-            {useShot ? (
+            {shots.length > 0 ? (
               /* Real product screenshots, full-bleed inside the frame, cross-
                  fading on a timer. Each screenshot carries its own phone status
-                 bar, so we don't overlay anything. Both layers are stacked; the
-                 active one fades in over the other. */
+                 bar, so we don't overlay anything. All layers are stacked; the
+                 active one fades in over the others. */
               <div style={{ position: "relative", width: "100%", aspectRatio: "254 / 552", background: c.bgCard }}>
-                {HERO_SHOTS.map((src, i) => (
+                {shots.map((src, i) => (
                   <img
                     key={src}
                     src={src}
-                    alt={lang === "nl" ? "Vellu boekingspagina" : "Vellu booking page"}
-                    onError={() => setUseShot(false)}
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", display: "block", opacity: i === shotIdx ? 1 : 0, transition: "opacity 0.9s ease" }}
+                    alt={lang === "nl" ? "Vellu salon-app" : "Vellu salon app"}
+                    onError={() => setShots(s => s.filter(x => x !== src))}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", display: "block", opacity: i === (shotIdx % shots.length) ? 1 : 0, transition: "opacity 0.9s ease" }}
                   />
                 ))}
               </div>
