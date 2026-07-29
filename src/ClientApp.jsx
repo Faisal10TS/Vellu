@@ -788,6 +788,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }));
   };
 
+  // Per-unit variants: quantity lives on the item (item.variantQty) so the
+  // selected variant object itself stays pristine for id comparisons.
+  const setVariantQty = (serviceId, qty) => {
+    setSelectedServices(prev => prev.map(item => {
+      if (item.service.id !== serviceId || !item.variant) return item;
+      const max = item.variant.max_quantity || 10;
+      return { ...item, variantQty: Math.max(1, Math.min(qty, max)) };
+    }));
+  };
+
   // Team accounts with 2+ staff must have a specific stylist picked per
   // service — otherwise the booking floats without attribution and doesn't
   // show up in any per-staff agenda filter (see also the server-side check
@@ -843,7 +853,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // "Vanaf €30.00" rather than a misleading €0.00. Once every variant-service
   // has a variant picked (enforced before step 2) these equal the exact values.
   const itemBasePrice = (item) => {
-    if (item.variant) return parseFloat(item.variant.price);
+    if (item.variant) return parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1);
     const vs = item.service.variants || [];
     if (vs.length > 0) return Math.min(...vs.map(v => parseFloat(v.price)));
     return parseFloat(item.service.price || 0);
@@ -883,7 +893,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const getServiceLabel = () => {
     return selectedServices.map(item => {
       let label = svcName(item.service);
-      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl));
+      if (item.variant) label += " — " + (lang === "nl" ? item.variant.name_nl : (item.variant.name_en || item.variant.name_nl)) + (item.variant.per_unit && (item.variantQty || 1) > 1 ? ` ×${item.variantQty}` : "");
       if (item.staff) label += ` (${item.staff.name})`;
       return label;
     }).join(" + ");
@@ -1343,12 +1353,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       const clientEmail = form.email.toLowerCase();
 
       const variant_ids = {};
+      const variant_qtys = {};
       const extra_ids = {};
       const extra_qtys = {};
       const staff_ids_per_service = {};
       const service_ids = selectedServices.map(item => {
         const sid = item.service.id;
-        if (item.variant) variant_ids[sid] = item.variant.id;
+        if (item.variant) {
+          variant_ids[sid] = item.variant.id;
+          if (item.variant.per_unit) variant_qtys[item.variant.id] = Math.max(1, Math.min(parseInt(item.variantQty) || 1, item.variant.max_quantity || 10));
+        }
         if (item.extras && item.extras.length > 0) {
           extra_ids[sid] = item.extras.map(e => e.id);
           for (const e of item.extras) if (e.per_unit) extra_qtys[e.id] = Math.max(1, Math.min(parseInt(e.qty) || 1, e.max_quantity || 10));
@@ -1362,6 +1376,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           salon_slug: initialSalon.id, // salon slug (routed as /:slug)
           service_ids,
           variant_ids,
+          variant_qtys,
           extra_ids,
           extra_qtys,
           staff_ids_per_service,
@@ -2630,13 +2645,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div style={{ marginBottom: s.extras?.length > 0 || staffForService.length > 0 ? 14 : 0 }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectVariant}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              {s.variants.map(v => (
-                                <div key={v.id} onClick={() => updateServiceItem(s.id, { variant: v })}
+                              {s.variants.map(v => {
+                                const vSel = item?.variant?.id === v.id;
+                                const vQty = item?.variantQty || 1;
+                                return (
+                                <div key={v.id} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}
                                   style={{
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
                                     padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                                    background: item?.variant?.id === v.id ? `${accent}14` : "transparent",
-                                    border: `1px solid ${item?.variant?.id === v.id ? accent : c.border}`,
+                                    background: vSel ? `${accent}14` : "transparent",
+                                    border: `1px solid ${vSel ? accent : c.border}`,
                                     transition: "all 0.15s"
                                   }}>
                                   <div>
@@ -2644,9 +2662,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    {vSel && v.per_unit && (
+                                      <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{vQty}</span>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                      </span>
+                                    )}
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{(parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)).toFixed(2)}</div>
+                                  </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -3037,7 +3065,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                         </div>
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{cur}{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -3376,18 +3404,31 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         {isSel && s.variants?.length > 0 && (
                           <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectVariant}</SL>
-                            {s.variants.map(v => (
-                              <div key={v.id} className={`service-card ${item?.variant?.id === v.id ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => updateServiceItem(s.id, { variant: v })}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            {s.variants.map(v => {
+                              const vSel = item?.variant?.id === v.id;
+                              const vQty = item?.variantQty || 1;
+                              return (
+                              <div key={v.id} className={`service-card ${vSel ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : (v.name_en || v.name_nl)}</div>
                                     {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : (v.description_en || v.description_nl)}</div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
-                                  <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    {vSel && v.per_unit && (
+                                      <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{vQty}</span>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                      </span>
+                                    )}
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{(parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)).toFixed(2)}</div>
+                                  </div>
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
 
@@ -3643,7 +3684,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                             </div>
-                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{cur}{((item.variant ? parseFloat(item.variant.price) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>

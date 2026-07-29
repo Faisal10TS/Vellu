@@ -112,6 +112,7 @@ serve(async (req) => {
     salon_slug,
     service_ids,
     variant_ids,            // { [service_id]: variant_id }
+    variant_qtys,           // { [variant_id]: quantity } — per_unit variants only
     extra_ids,              // { [service_id]: [extra_id] }
     extra_qtys,             // { [extra_id]: quantity } — per_unit extras only
     staff_ids_per_service,  // { [service_id]: staff_id | null }
@@ -171,7 +172,7 @@ serve(async (req) => {
   if (variantIdsFlat.length > 0) {
     const { data: variants, error: vErr } = await supabase
       .from("service_variants")
-      .select("id, service_id, name_nl, name_en, price, duration")
+      .select("id, service_id, name_nl, name_en, price, duration, per_unit, max_quantity")
       .in("id", variantIdsFlat);
     if (vErr) return err(500, "db_error_variants", origin);
     if (!variants || variants.length !== variantIdsFlat.length) return err(400, "invalid_variant", origin);
@@ -265,12 +266,13 @@ serve(async (req) => {
   // Per-unit extras (e.g. "broken nail x3"): clamp the client-sent quantity to
   // [1, max_quantity]. Non-per-unit extras are always quantity 1.
   const extraQty = (e: any) => e.per_unit ? Math.max(1, Math.min(parseInt(extra_qtys?.[e.id]) || 1, e.max_quantity || 10)) : 1;
+  const variantQty = (v: any) => v && v.per_unit ? Math.max(1, Math.min(parseInt(variant_qtys?.[v.id]) || 1, v.max_quantity || 10)) : 1;
 
   for (const svc of servicesOrdered) {
     const variantId = variant_ids?.[svc.id];
     const svcExtras = (extra_ids?.[svc.id] || []).map((eid: string) => extrasById[eid]).filter(Boolean);
     const variant = variantId ? variantsById[variantId] : null;
-    const price = variant ? parseFloat(variant.price) : parseFloat(svc.price);
+    const price = variant ? parseFloat(variant.price) * variantQty(variant) : parseFloat(svc.price);
     const duration = variant ? parseInt(variant.duration) : parseInt(svc.duration);
     const extrasPrice = svcExtras.reduce((s: number, e: any) => s + parseFloat(e.price || 0) * extraQty(e), 0);
     totalPrice += price + extrasPrice;
@@ -278,7 +280,7 @@ serve(async (req) => {
 
     // Build display name
     let label = lang === "nl" ? svc.name_nl : (svc.name_en || svc.name_nl);
-    if (variant) label += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl));
+    if (variant) label += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
     const staffId = staff_ids_per_service?.[svc.id];
     if (staffId && staffById[staffId]) label += ` (${staffById[staffId].name})`;
     if (svcExtras.length > 0) {
@@ -294,7 +296,7 @@ serve(async (req) => {
     // without the parenthetical staff name — the agenda already renders
     // that separately via the filter pill).
     let shortLabel = lang === "nl" ? svc.name_nl : (svc.name_en || svc.name_nl);
-    if (variant) shortLabel += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl));
+    if (variant) shortLabel += " — " + (lang === "nl" ? variant.name_nl : (variant.name_en || variant.name_nl)) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
     serviceBreakdown.push({
       service_id: svc.id,
       staff_id: staffId || null,

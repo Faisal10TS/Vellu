@@ -1094,7 +1094,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
+  const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", per_unit: false });
 
   const add = async () => {
     const primaryName = lang === "nl" ? form.name_nl : (form.name_en || form.name_nl);
@@ -1106,6 +1106,8 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
       service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null,
       description_nl: filled.description_nl || null, description_en: filled.description_en || null,
       price, duration: parseInt(filled.duration) || 60,
+      per_unit: !!form.per_unit,
+      max_quantity: 10,
       // Append at the end of the list so drag-reorder positions stay stable.
       position: nextPosition
     }).select().single();
@@ -1114,7 +1116,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
       return;
     }
     onAdd(data);
-    setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60" });
+    setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", per_unit: false });
     setOpen(false);
   };
 
@@ -1146,6 +1148,10 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
           <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
           <input className="input-field" placeholder="Duur (min)" type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
         </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", padding: "2px" }}>
+          <input type="checkbox" checked={!!form.per_unit} onChange={e => setForm(f => ({...f, per_unit: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+          {lang === "nl" ? "Klant kan aantal kiezen (bijv. 3 stuks)" : "Client can choose a quantity (e.g. 3 units)"}
+        </label>
       </div>
       {((lang === "nl" ? !form.name_nl : !form.name_en) || !form.price) && <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : "Fill in name and price"}</div>}
       <div style={{ display: "flex", gap: 6 }}>
@@ -3094,7 +3100,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingException, setEditingException] = useState(null);
   const [editingBlocked, setEditingBlocked] = useState(null);
   const [editingVariant, setEditingVariant] = useState(null);
-  const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "" });
+  const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "", per_unit: false });
   const [editingExtra, setEditingExtra] = useState(null);
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "", per_unit: false });
   const [settingsTab, setSettingsTab] = useState("salon");
@@ -8940,11 +8946,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 placeholder={lang === "nl" ? "Omschrijving" : "Description"}
                                               />
                                             </div>
+                                            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", marginBottom: 8 }}>
+                                              <input type="checkbox" checked={!!editVariantForm.per_unit} onChange={ev => setEditVariantForm(f => ({...f, per_unit: ev.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+                                              {lang === "nl" ? "Klant kan aantal kiezen (bijv. 3 stuks)" : "Client can choose a quantity (e.g. 3 units)"}
+                                            </label>
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editVariantForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                                                await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null }).eq("id", v.id);
-                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...filled, price: parseFloat(filled.price), duration: parseInt(filled.duration)} : vr)} : svc); return d; });
+                                                await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null, per_unit: !!editVariantForm.per_unit }).eq("id", v.id);
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...filled, price: parseFloat(filled.price), duration: parseInt(filled.duration), per_unit: !!editVariantForm.per_unit} : vr)} : svc); return d; });
                                                 setEditingVariant(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                                               <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingVariant(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -8960,7 +8970,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
-                                              <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
+                                              <button aria-label={lang === "nl" ? "Bewerk variant" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "", per_unit: !!v.per_unit }); }}
                                                 style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${accent}55`, background: `${accent}14`, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600 }}>
                                                 <NavIcon name="edit" size={11} color="currentColor" /> {lang === "nl" ? "Bewerk" : "Edit"}
                                               </button>
