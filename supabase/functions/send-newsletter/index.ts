@@ -3,10 +3,11 @@
 // Lets a salon owner send a newsletter to their own clients.
 //
 // "Clients of this salon" = every distinct client_email that has an
-// appointment with this owner (same definition the CSV export uses). The
-// recipient list is derived SERVER-SIDE from the owner's appointments — the
-// client never sends a recipient list, so an owner can only ever email their
-// own clients.
+// appointment with this owner, PLUS every imported / manually-added client
+// (manual_clients) — so a salon that just imported its list can reach them
+// even before they've booked. The recipient list is derived SERVER-SIDE from
+// the owner's own data — the client never sends a recipient list, so an owner
+// can only ever email their own clients.
 //
 // Each recipient gets an INDIVIDUAL email (no BCC) so client addresses are
 // never exposed to each other. Sent in batches via Resend's batch endpoint.
@@ -132,6 +133,32 @@ serve(async (req) => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Also include imported / manually-added clients (manual_clients). A salon
+  // that just imported its client list — whose clients haven't booked through
+  // Vellu yet — must still be able to reach them (e.g. to announce the new
+  // booking page). These have no appointment history, so we treat their import
+  // date as both first-seen and last-seen, with 0 completed visits. Result:
+  // they're always in "all", never in "loyal", and count as "new" when
+  // recently imported. Hidden (soft-deleted) rows are skipped.
+  const { data: manual } = await supabase
+    .from("manual_clients")
+    .select("email, created_at, hidden")
+    .eq("owner_id", ownerId);
+  for (const m of manual || []) {
+    if (m.hidden) continue;
+    const em = String(m.email || "").trim().toLowerCase();
+    if (!em || !validEmail.test(em)) continue;
+    const d = String(m.created_at || "").slice(0, 10) || today;
+    if (byEmail[em]) {
+      // Client also booked — keep the richer appointment history, but let an
+      // earlier import date widen the "first seen" window.
+      if (d && d < byEmail[em].first) byEmail[em].first = d;
+    } else {
+      byEmail[em] = { first: d, last: d, completed: 0 };
+    }
+  }
+
   const daysAgo = (n: number) => {
     const d = new Date();
     d.setUTCDate(d.getUTCDate() - n);
