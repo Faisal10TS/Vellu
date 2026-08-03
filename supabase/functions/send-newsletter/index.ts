@@ -216,6 +216,7 @@ serve(async (req) => {
   // Send in batches of 100 via Resend's batch endpoint. Each entry is an
   // individual email (single recipient) so addresses stay private.
   let sent = 0;
+  const errors: { status: number; body: string }[] = [];
   const CHUNK = 100;
   for (let i = 0; i < emails.length; i += CHUNK) {
     const chunk = emails.slice(i, i + CHUNK);
@@ -225,6 +226,13 @@ serve(async (req) => {
       subject,
       html,
       ...(replyTo ? { reply_to: replyTo } : {}),
+      // List-Unsubscribe — Gmail/Yahoo weigh this heavily for bulk mail (their
+      // 2024 sender rules). Without it a salon newsletter is very likely to be
+      // spam-filed even though Resend accepted it. Points at the salon's own
+      // reply address (or noreply@) so "unsubscribe" reaches a real inbox.
+      headers: {
+        "List-Unsubscribe": `<mailto:${replyTo || FROM_ADDRESS}?subject=Unsubscribe>`,
+      },
     }));
     try {
       const res = await fetch("https://api.resend.com/emails/batch", {
@@ -236,12 +244,16 @@ serve(async (req) => {
         sent += chunk.length;
       } else {
         const errText = await res.text();
+        errors.push({ status: res.status, body: errText.slice(0, 400) });
         console.error("Resend batch error:", res.status, errText);
       }
     } catch (e) {
+      errors.push({ status: 0, body: String(e).slice(0, 400) });
       console.error("Resend batch exception:", e);
     }
   }
 
-  return json(200, { sent, total: emails.length, segment }, origin);
+  // Report the real outcome so the dashboard can show a failure instead of a
+  // false "sent!" — a 200 with sent:0 + errors means Resend rejected the batch.
+  return json(200, { sent, total: emails.length, failed: emails.length - sent, segment, errors: errors.slice(0, 3) }, origin);
 });
