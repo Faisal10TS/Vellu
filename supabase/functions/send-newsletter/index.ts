@@ -122,7 +122,10 @@ serve(async (req) => {
   const byEmail: Record<string, Agg> = {};
   for (const a of appts || []) {
     const em = String(a.client_email || "").trim().toLowerCase();
-    if (!em || !validEmail.test(em)) continue;
+    // Also require ASCII: Resend's batch endpoint rejects the ENTIRE batch with
+    // a 422 if any single "to" has a non-ASCII char (e.g. an accented import
+    // like "guísela@…"), so one bad address would silently sink all recipients.
+    if (!em || !validEmail.test(em) || /[^\x00-\x7F]/.test(em)) continue;
     const d = String(a.date || "");
     if (!d) continue;
     const agg = byEmail[em] || { first: d, last: d, completed: 0 };
@@ -148,7 +151,10 @@ serve(async (req) => {
   for (const m of manual || []) {
     if (m.hidden) continue;
     const em = String(m.email || "").trim().toLowerCase();
-    if (!em || !validEmail.test(em)) continue;
+    // Also require ASCII: Resend's batch endpoint rejects the ENTIRE batch with
+    // a 422 if any single "to" has a non-ASCII char (e.g. an accented import
+    // like "guísela@…"), so one bad address would silently sink all recipients.
+    if (!em || !validEmail.test(em) || /[^\x00-\x7F]/.test(em)) continue;
     const d = String(m.created_at || "").slice(0, 10) || today;
     if (byEmail[em]) {
       // Client also booked — keep the richer appointment history, but let an
@@ -246,6 +252,27 @@ serve(async (req) => {
         const errText = await res.text();
         errors.push({ status: res.status, body: errText.slice(0, 400) });
         console.error("Resend batch error:", res.status, errText);
+        // Batch is all-or-nothing — a single invalid address rejects the whole
+        // batch. Fall back to individual sends so the good addresses still get
+        // the email and only the bad one is dropped.
+        for (const to of chunk) {
+          try {
+            const single = {
+              from: `${salonName} <${FROM_ADDRESS}>`,
+              to: [to],
+              subject,
+              html,
+              ...(replyTo ? { reply_to: replyTo } : {}),
+              headers: { "List-Unsubscribe": `<mailto:${replyTo || FROM_ADDRESS}?subject=Unsubscribe>` },
+            };
+            const r = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify(single),
+            });
+            if (r.ok) sent++;
+          } catch { /* skip this recipient */ }
+        }
       }
     } catch (e) {
       errors.push({ status: 0, body: String(e).slice(0, 400) });
