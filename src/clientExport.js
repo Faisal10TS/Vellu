@@ -35,15 +35,23 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   // Why go through appointments: `clients` is a shared table across all salons
   // (email is globally unique). So the *authoritative* list of "clients of
   // this salon" is "people who have booked here at least once."
-  const { data: appts, error } = await supabase
-    .from("appointments")
-    .select("id, date, time, service_name, service_price, staff_name, client_id, client_email, client_name, client_phone, status, clients(first_name, last_name, email, phone, allergies, created_at)")
-    .eq("owner_id", ownerId);
-
-  if (error) throw error;
-  if (!appts || appts.length === 0) {
-    return { count: 0, csv: null };
-  }
+  const [apptRes, manualRes] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("id, date, time, service_name, service_price, staff_name, client_id, client_email, client_name, client_phone, status, clients(first_name, last_name, email, phone, allergies, created_at)")
+      .eq("owner_id", ownerId),
+    // Imported / manually-added clients — they may not have booked an
+    // appointment yet (e.g. a salon that just imported its list), but must
+    // still be part of the export.
+    supabase
+      .from("manual_clients")
+      .select("name, email, phone, created_at, hidden")
+      .eq("owner_id", ownerId),
+  ]);
+  if (apptRes.error) throw apptRes.error;
+  if (manualRes.error) throw manualRes.error;
+  const appts = apptRes.data || [];
+  const manual = manualRes.data || [];
 
   // Aggregate per email (clients.email is globally unique so email ==
   // canonical key). Falls back to appointment fields if the joined clients
@@ -82,6 +90,26 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
     if (a.service_name) agg.services[a.service_name] = (agg.services[a.service_name] || 0) + 1;
     if (a.staff_name) agg.staff[a.staff_name] = (agg.staff[a.staff_name] || 0) + 1;
   }
+
+  // Merge in imported / manually-added clients that have no appointment yet.
+  // Ones who also booked are already covered above (richer stats), so skip
+  // any email that's already aggregated.
+  for (const m of manual) {
+    if (m.hidden) continue;
+    const email = String(m.email || "").toLowerCase();
+    if (!email || byEmail.has(email)) continue;
+    const nm = String(m.name || "").trim();
+    byEmail.set(email, {
+      first_name: nm.split(" ")[0] || "",
+      last_name: nm.split(" ").slice(1).join(" ") || "",
+      email, phone: m.phone || "", allergies: "",
+      first_visit: "", last_visit: "",
+      total_appointments: 0, completed_count: 0, cancelled_count: 0, no_show_count: 0,
+      total_spent: 0, services: {}, staff: {},
+    });
+  }
+
+  if (byEmail.size === 0) return { count: 0, csv: null };
 
   const rows = Array.from(byEmail.values()).map(r => ({
     ...r,

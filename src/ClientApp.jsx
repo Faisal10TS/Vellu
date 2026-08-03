@@ -137,8 +137,8 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
     <div style={{ position: "relative", display: "inline-block" }}>
       <button
         onClick={openNativeOrPopover}
-        aria-label={lang === "nl" ? "Deel deze pagina" : "Share this page"}
-        title={lang === "nl" ? "Deel" : "Share"}
+        aria-label={lang === "nl" ? "Deel deze pagina" : lang === "es" ? "Compartir esta página" : "Share this page"}
+        title={lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share"}
         style={{
           height: 44, padding: "0 22px 0 18px", borderRadius: 100,
           background: "#fff", border: `1px solid rgba(255,255,255,0.9)`,
@@ -153,7 +153,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
         onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.32)"; }}
       >
         <NavIcon name="share" size={15} color={accent || "#c9a96e"} />
-        {lang === "nl" ? "Deel deze salon" : "Share this salon"}
+        {lang === "nl" ? "Deel deze salon" : lang === "es" ? "Compartir este salón" : "Share this salon"}
       </button>
       {open && (
         <div
@@ -179,7 +179,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
             <NavIcon name="copy" size={14} color="currentColor" />
-            <span style={{ flex: 1 }}>{copied ? (lang === "nl" ? "✓ Gekopieerd" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : "Copy link")}</span>
+            <span style={{ flex: 1 }}>{copied ? (lang === "nl" ? "✓ Gekopieerd" : lang === "es" ? "✓ Copiado" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}</span>
           </button>
           <button
             onClick={openWhatsApp}
@@ -740,11 +740,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const canConfirm = form.firstName.trim() && form.lastName.trim() && emailValid && phoneValid && policyValid;
   // Show the user WHY the next button is disabled.
-  const invalidReason = !form.firstName.trim() ? (lang === "nl" ? "Vul je voornaam in" : "Enter your first name")
-    : !form.lastName.trim() ? (lang === "nl" ? "Vul je achternaam in" : "Enter your last name")
-    : !emailValid ? (lang === "nl" ? "Vul een geldig e-mailadres in" : "Enter a valid email address")
-    : !phoneValid ? (lang === "nl" ? "Vul een geldig telefoonnummer in" : "Enter a valid phone number")
-    : !policyValid ? (lang === "nl" ? "Accepteer de voorwaarden" : "Please accept the terms")
+  const invalidReason = !form.firstName.trim() ? (lang === "nl" ? "Vul je voornaam in" : lang === "es" ? "Introduce tu nombre" : "Enter your first name")
+    : !form.lastName.trim() ? (lang === "nl" ? "Vul je achternaam in" : lang === "es" ? "Introduce tus apellidos" : "Enter your last name")
+    : !emailValid ? (lang === "nl" ? "Vul een geldig e-mailadres in" : lang === "es" ? "Introduce un correo electrónico válido" : "Enter a valid email address")
+    : !phoneValid ? (lang === "nl" ? "Vul een geldig telefoonnummer in" : lang === "es" ? "Introduce un número de teléfono válido" : "Enter a valid phone number")
+    : !policyValid ? (lang === "nl" ? "Accepteer de voorwaarden" : lang === "es" ? "Acepta los términos" : "Please accept the terms")
     : "";
 
   // Multi-service helpers
@@ -868,7 +868,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   };
   const hasUnchosenVariant = selectedServices.some(it => (it.service.variants || []).length > 0 && !it.variant);
   // "Vanaf €30.00" prefix for totals while any variant is still unchosen.
-  const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : "from ") : "";
+  const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : "";
   const getPrice = () => {
     let total = selectedServices.reduce((sum, item) => {
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
@@ -1334,7 +1334,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       <button type="button" onClick={() => { setDate(firstOpenDate); setTime(null); }}
         style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accent, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
         <NavIcon name="calendar" size={14} color={accent} />
-        <span>{lang === "nl" ? "Eerste beschikbare dag: " : "First available: "}<b style={{ textTransform: "capitalize" }}>{label}</b> →</span>
+        <span>{lang === "nl" ? "Eerste beschikbare dag: " : lang === "es" ? "Primera disponibilidad: " : "First available: "}<b style={{ textTransform: "capitalize" }}>{label}</b> →</span>
       </button>
     );
   };
@@ -1644,7 +1644,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const getRelativeTime = (dateStr) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const dys = Math.floor(diff / 86400000);
-    if (dys < 1) return lang === "nl" ? "vandaag" : "today";
+    if (dys < 1) return lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today";
     if (dys < 7) return `${dys} ${t.nDaysAgo}`;
     if (dys < 30) return `${Math.floor(dys / 7)} ${t.nWeeksAgo}`;
     return `${Math.floor(dys / 30)} ${t.nMonthsAgo}`;
@@ -1783,7 +1783,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
                 return (
                   <div className="profile-cat-scroll" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                     </button>
                     <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -1796,7 +1796,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </button>
                       ))}
                     </div>
-                    <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                     </button>
                   </div>
@@ -1861,7 +1861,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 members as equals. */}
                             {initialSalon.show_owner_on_booking && member.user_id && member.user_id === initialSalon.owner_id && (
                               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                                {lang === "nl" ? "Eigenaar" : "Owner"}
+                                {lang === "nl" ? "Eigenaar" : lang === "es" ? "Propietario" : "Owner"}
                               </span>
                             )}
                           </div>
@@ -2112,7 +2112,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             border: `1px solid ${c.border}`,
                             boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
                           }}>
-                          {lang === "nl" ? "Open in Maps ↗" : "Open in Maps ↗"}
+                          {lang === "nl" ? "Open in Maps ↗" : lang === "es" ? "Abrir en Maps ↗" : "Open in Maps ↗"}
                         </a>
                       </div>
                     );
@@ -2125,7 +2125,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div className="profile-footer">
               {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span> · {t.noCommission}
               <div style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}>
-                <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : "Privacy"}</a>
+                <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : lang === "es" ? "Privacidad" : "Privacy"}</a>
                 {" · "}
                 <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{t.terms}</a>
               </div>
@@ -2180,13 +2180,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   // Found an open day
                   const isToday = offset === 0;
                   const isTomorrow = offset === 1;
-                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
+                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : lang === "es" ? "Mañana" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
                   return (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 12 }}>
                       <NavIcon name="calendar" size={13} color={accent} />
                       <div style={{ fontSize: 12, color: c.text }}>
                         <span style={{ fontWeight: 600, color: accent }}>{dayLabel}</span>
-                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : "available"} · {hrs.open} – {hrs.close}</span>
+                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {hrs.open} – {hrs.close}</span>
                       </div>
                     </div>
                   );
@@ -2347,7 +2347,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : "from ") : ""}{cur}{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{cur}{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
@@ -2527,7 +2527,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
                   return (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                       </button>
                       <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -2555,7 +2555,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                         ))}
                       </div>
-                      <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                       </button>
                     </div>
@@ -2575,7 +2575,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {filteredServices.length === 0 && (
                   <div style={{ textAlign: "center", padding: "40px 20px", color: c.textMuted }}>
                     <div style={{ marginBottom: 12 }}><NavIcon name="beauty" size={36} color={ACCENT} /></div>
-                    <div style={{ fontSize: 13 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                    <div style={{ fontSize: 13 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : lang === "es" ? "No hay tratamientos en esta categoría" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : lang === "es" ? "Aún no hay tratamientos disponibles" : "No treatments available yet")}</div>
                   </div>
                 )}
                 {filteredServices.map(s => {
@@ -2810,7 +2810,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           const isToday = ds === fmt(getToday());
                           return (
                             <div key={i} role="button" tabIndex={isClosed ? -1 : 0}
-                              aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : "closed"})` : isFull ? ` (${lang === "nl" ? "volgeboekt" : "fully booked"})` : ""}`}
+                              aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed"})` : isFull ? ` (${lang === "nl" ? "volgeboekt" : lang === "es" ? "todo reservado" : "fully booked"})` : ""}`}
                               aria-disabled={isClosed}
                               onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }}
                               onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
@@ -2830,7 +2830,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   {dayHours.open?.slice(0,5)}–{dayHours.close?.slice(0,5)}
                                 </span>
                               )}
-                              {isFull && <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}cc` : c.danger, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "vol" : "full"}</span>}
+                              {isFull && <span style={{ fontSize: 8, color: isSel ? `${c.btnOnDark}cc` : c.danger, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "vol" : lang === "es" ? "completo" : "full"}</span>}
                               {isClosed && <span style={{ fontSize: 8, color: c.textMuted }}>—</span>}
                             </div>
                           );
@@ -2850,7 +2850,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   if (slotsLoading) return (
                     <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
                       <div style={{ width: 28, height: 28, margin: "0 auto 12px", border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                      <div style={{ fontSize: 12 }}>{lang === "nl" ? "Beschikbaarheid laden..." : "Loading availability..."}</div>
+                      <div style={{ fontSize: 12 }}>{lang === "nl" ? "Beschikbaarheid laden..." : lang === "es" ? "Cargando disponibilidad..." : "Loading availability..."}</div>
                     </div>
                   );
                   const availableTimes = getAvailableTimes(date);
@@ -2873,7 +2873,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   if (freeCount === 0) return (
                     <div style={{ textAlign: "center", padding: "40px 20px" }}>
                       <div style={{ marginBottom: 10, opacity: 0.4 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : lang === "es" ? "Todo reservado" : "Fully booked"}</div>
                       <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5, marginBottom: 16 }}>
                         {lang === "nl"
                           ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt.`
@@ -2892,9 +2892,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const afternoon = availableTimes.filter(tt => { const h = parseInt(tt); return h >= 12 && h < 17; });
                   const evening = availableTimes.filter(tt => { const h = parseInt(tt); return h >= 17; });
                   const groups = [
-                    { label: lang === "nl" ? "Ochtend" : "Morning", icon: "sun", times: morning },
-                    { label: lang === "nl" ? "Middag" : "Afternoon", icon: "clock", times: afternoon },
-                    { label: lang === "nl" ? "Avond" : "Evening", icon: "moon", times: evening },
+                    { label: lang === "nl" ? "Ochtend" : lang === "es" ? "Mañana" : "Morning", icon: "sun", times: morning },
+                    { label: lang === "nl" ? "Middag" : lang === "es" ? "Tarde" : "Afternoon", icon: "clock", times: afternoon },
+                    { label: lang === "nl" ? "Avond" : lang === "es" ? "Noche" : "Evening", icon: "moon", times: evening },
                   ].filter(g => g.times.some(tt => !isTimeSlotBooked(tt)));
 
                   return (
@@ -3177,12 +3177,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 1 && <>
                 {selectedServices.length > 0 && missingVariants.length > 0 && (
                   <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
-                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een variant voor: " : lang === "es" ? "Elige una variante para: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
                   </div>
                 )}
                 {selectedServices.length > 0 && missingStaff.length > 0 && (
                   <div style={{ fontSize: 11, color: c.warning, marginBottom: 10, padding: "8px 12px", background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 10 }}>
-                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een medewerker voor: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
+                    <NavIcon name="alerttri" size={13} color={c.warning} /> {lang === "nl" ? "Kies een medewerker voor: " : lang === "es" ? "Elige un estilista para: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
                   </div>
                 )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
@@ -3196,9 +3196,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {step === 2 && (
                 <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {time ? (
-                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : "at"} {time}</>
+                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {time}</>
                   ) : (
-                    <>{lang === "nl" ? "Kies een tijdstip" : "Pick a time"}</>
+                    <>{lang === "nl" ? "Kies een tijdstip" : lang === "es" ? "Elige una hora" : "Pick a time"}</>
                   )}
                 </button>
               )}
@@ -3212,9 +3212,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <>
                   <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, lineHeight: 1.5, textAlign: "center" }}>
                     {t.bookingLegalNotice}{" "}
-                    <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : "privacy policy"}</a>
+                    <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : lang === "es" ? "política de privacidad" : "privacy policy"}</a>
                     {" "}{t.bookingLegalNoticeAnd}{" "}
-                    <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : "terms"}</a>.
+                    <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
                     {" "}{t.bookingLegalNoticeRefund}
                   </div>
                   <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
@@ -3244,7 +3244,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {/* Back button on cover. top respects the iOS safe area so it
                     isn't tucked under the status bar/notch in the installed PWA
                     (where it became untappable). */}
-                <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : "Back"} style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", left: 12, zIndex: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : lang === "es" ? "Atrás" : "Back"} style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", left: 12, zIndex: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
                     ←
                   </button>
                 <div style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", right: 12, zIndex: 10, display: "flex", alignItems: "center", gap: 6 }}>
@@ -3317,7 +3317,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 180, behavior: "smooth" }); };
                       return (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                          <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : "Previous"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                           </button>
                           <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -3345,7 +3345,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
                             ))}
                           </div>
-                          <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : "Next"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                           </button>
                         </div>
@@ -3365,7 +3365,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {filteredServices.length === 0 && (
                       <div style={{ textAlign: "center", padding: "30px 16px", color: c.textMuted }}>
                         <div style={{ marginBottom: 10 }}><NavIcon name="beauty" size={32} color={accent} /></div>
-                        <div style={{ fontSize: 12 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : "No treatments available yet")}</div>
+                        <div style={{ fontSize: 12 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : lang === "es" ? "No hay tratamientos en esta categoría" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : lang === "es" ? "Aún no hay tratamientos disponibles" : "No treatments available yet")}</div>
                       </div>
                     )}
                     {filteredServices.map(s => {
@@ -3488,12 +3488,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div style={{ marginTop: 14 }}>
                       {selectedServices.length > 0 && missingVariants.length > 0 && (
                         <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
-                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
+                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een variant voor: " : lang === "es" ? "Elige una variante para: " : "Choose a variant for: "}{missingVariants.map(item => svcName(item.service)).join(", ")}
                         </div>
                       )}
                       {selectedServices.length > 0 && missingStaff.length > 0 && (
                         <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>
-                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een medewerker voor: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
+                          <NavIcon name="alerttri" size={13} color="#fb923c" /> {lang === "nl" ? "Kies een medewerker voor: " : lang === "es" ? "Elige un estilista para: " : "Choose a stylist for: "}{missingStaff.map(item => svcName(item.service)).join(", ")}
                         </div>
                       )}
                       {selectedServices.length === 0 && (
@@ -3519,10 +3519,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         // the customer can select it and join that day's waitlist.
                         const isFull = !isClosed && dayAvailability[ds] === "full";
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
-                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : "closed") : isFull ? (lang === "nl" ? "vol" : "full") : MON[d.getMonth()]}</span>
+                            <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed") : isFull ? (lang === "nl" ? "vol" : lang === "es" ? "completo" : "full") : MON[d.getMonth()]}</span>
                           </div>
                         );
                       })}
@@ -3534,7 +3534,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       if (slotsLoading) {
                         return (
                           <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, fontSize: 13, marginBottom: 20 }}>
-                            {lang === "nl" ? "Beschikbaarheid laden..." : "Loading availability..."}
+                            {lang === "nl" ? "Beschikbaarheid laden..." : lang === "es" ? "Cargando disponibilidad..." : "Loading availability..."}
                           </div>
                         );
                       }
@@ -3555,7 +3555,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       ) : (
                         <div style={{ textAlign: "center", padding: "30px 20px", color: c.textLabel, marginBottom: 20 }}>
                           {availableTimes.length > 0
-                            ? <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : "Fully booked"}</div>
+                            ? <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 6 }}>{lang === "nl" ? "Volgeboekt" : lang === "es" ? "Todo reservado" : "Fully booked"}</div>
                             : null}
                           <div style={{ fontSize: 13, marginBottom: 16 }}>
                             {availableTimes.length > 0
@@ -3715,9 +3715,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, lineHeight: 1.5, textAlign: "center" }}>
                       {t.bookingLegalNotice}{" "}
-                      <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : "privacy policy"}</a>
+                      <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : lang === "es" ? "política de privacidad" : "privacy policy"}</a>
                       {" "}{t.bookingLegalNoticeAnd}{" "}
-                      <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : "terms"}</a>.
+                      <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
                       {" "}{t.bookingLegalNoticeRefund}
                     </div>
                     <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
@@ -3892,7 +3892,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     return (
                       <div style={{ marginBottom: 16 }}>
                         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
-                          {lang === "nl" ? "Voor welke dag(en)?" : "Which day(s)?"}
+                          {lang === "nl" ? "Voor welke dag(en)?" : lang === "es" ? "¿Qué día(s)?" : "Which day(s)?"}
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {wlCandidates.map(ds => {

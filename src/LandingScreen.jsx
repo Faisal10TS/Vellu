@@ -11,8 +11,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({
-    title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : "Vellu - Beauty Booking Platform | 0% Commission",
-    description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
+    title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : lang === "es" ? "Vellu - Plataforma de reservas de belleza | 0% de comisión" : "Vellu - Beauty Booking Platform | 0% Commission",
+    description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
     url: "https://vellu.cc/"
   });
   const [slugInput, setSlugInput] = useState("");
@@ -244,8 +244,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               {/* Anchor 1 — your own branded page, with a mini URL + row mock */}
               <div className="bento-card bento-wide" style={{ padding: "24px 22px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20 }}>
                 <NavIcon name="calendar" size={24} color={ACCENT} />
-                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? "Eigen boekingspagina" : "Your own booking page"}</div>
-                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6, marginBottom: 16 }}>{lang === "nl" ? "Jouw merk, jouw kleuren, jouw link. Klanten boeken direct bij jou — zonder tussenpartij." : "Your brand, your colors, your link. Clients book directly with you — no middleman."}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? "Eigen boekingspagina" : lang === "es" ? "Tu propia página de reservas" : "Your own booking page"}</div>
+                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6, marginBottom: 16 }}>{lang === "nl" ? "Jouw merk, jouw kleuren, jouw link. Klanten boeken direct bij jou — zonder tussenpartij." : lang === "es" ? "Tu marca, tus colores, tu enlace. Los clientes reservan directamente contigo — sin intermediarios." : "Your brand, your colors, your link. Clients book directly with you — no middleman."}</div>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", background: c.bg, border: `1px solid ${ACCENT}33`, borderRadius: 100, fontSize: 12 }}>
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
                   <span style={{ color: c.textSub }}>vellu.cc/</span><span style={{ color: ACCENT, fontWeight: 600 }}>{lang === "nl" ? "jouw-naam" : "your-name"}</span>
@@ -254,8 +254,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               {/* Anchor 2 — 0% commission, oversized numeral */}
               <div className="bento-card" style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${ACCENT}14, transparent 70%)`, border: `1px solid ${ACCENT}33`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 64, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>0%</div>
-                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>{lang === "nl" ? "Commissie" : "Commission"}</div>
-                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke euro van elke boeking blijft van jou." : "Flat monthly fee. Every euro of every booking stays yours."}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>{lang === "nl" ? "Commissie" : lang === "es" ? "Comisión" : "Commission"}</div>
+                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke euro van elke boeking blijft van jou." : lang === "es" ? "Tarifa mensual fija. Cada euro de cada reserva es tuyo." : "Flat monthly fee. Every euro of every booking stays yours."}</div>
               </div>
               {/* Supporting tiles */}
               {[
@@ -443,7 +443,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "10px 24px 20px", position: "relative", zIndex: 10 }}>
           <Reveal><div style={{ maxWidth: 640, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "36px 32px", textAlign: "center" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4.5vw, 32px)", fontWeight: 300, marginBottom: 10 }}>
-              {lang === "nl" ? "Nog vragen?" : "Still have questions?"}
+              {lang === "nl" ? "Nog vragen?" : lang === "es" ? "¿Aún tienes preguntas?" : "Still have questions?"}
             </div>
             <p style={{ fontSize: 14, color: c.textLabel, lineHeight: 1.6, marginBottom: 24, maxWidth: 460, marginLeft: "auto", marginRight: "auto" }}>
               {lang === "nl"
@@ -452,7 +452,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn-primary" onClick={() => navigate("/contact")} style={{ padding: "12px 26px" }}>
-                {lang === "nl" ? "Neem contact op" : "Contact us"}
+                {lang === "nl" ? "Neem contact op" : lang === "es" ? "Contáctanos" : "Contact us"}
               </button>
               <a href="mailto:mirahventures@vellu.cc" className="btn-ghost" style={{ padding: "12px 26px", textDecoration: "none", display: "inline-flex", alignItems: "center", borderColor: `${ACCENT}44`, color: ACCENT }}>
                 mirahventures@vellu.cc
@@ -491,7 +491,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.dpa}</a>
             <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
-            <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Ontwikkeld door Mirah Ventures" : "Developed by Mirah Ventures"}</a>
+            <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Ontwikkeld door Mirah Ventures" : lang === "es" ? "Desarrollado por Mirah Ventures" : "Developed by Mirah Ventures"}</a>
           </div>
         </footer>
 
@@ -513,7 +513,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           greeting={lang === "nl"
             ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak."
             : "Hi! Questions about Vellu? Happy to help — pricing, how it works, or whether it fits your salon. Ask away."}
-          subtitle={lang === "nl" ? "Vragen over Vellu?" : "Questions about Vellu?"}
+          subtitle={lang === "nl" ? "Vragen over Vellu?" : lang === "es" ? "¿Preguntas sobre Vellu?" : "Questions about Vellu?"}
         />
       </div>
     </Layout>
@@ -597,9 +597,9 @@ const HERO_SHOTS = [
 // one composition.
 function HeroPhoneMockup({ lang, c }) {
   const services = [
-    [lang === "nl" ? "Gel manicure" : "Gel manicure", "45 min", "€38"],
-    [lang === "nl" ? "BIAB nieuwe set" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : "From €52"],
-    [lang === "nl" ? "Brow lift & verf" : "Brow lift & tint", "30 min", "€29"],
+    [lang === "nl" ? "Gel manicure" : lang === "es" ? "Manicura en gel" : "Gel manicure", "45 min", "€38"],
+    [lang === "nl" ? "BIAB nieuwe set" : lang === "es" ? "BIAB set nuevo" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : lang === "es" ? "Desde €52" : "From €52"],
+    [lang === "nl" ? "Brow lift & verf" : lang === "es" ? "Lifting y tinte de cejas" : "Brow lift & tint", "30 min", "€29"],
   ];
   const cats = lang === "nl" ? ["Nagels", "Brows", "Lashes"] : ["Nails", "Brows", "Lashes"];
   const slots = ["10:00", "11:30", "13:00", "15:30"];
@@ -649,7 +649,7 @@ function HeroPhoneMockup({ lang, c }) {
                   <img
                     key={src}
                     src={src}
-                    alt={lang === "nl" ? "Vellu salon-app" : "Vellu salon app"}
+                    alt={lang === "nl" ? "Vellu salon-app" : lang === "es" ? "App de salón Vellu" : "Vellu salon app"}
                     onError={() => setShots(s => s.filter(x => x !== src))}
                     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", display: "block", opacity: i === (shotIdx % shots.length) ? 1 : 0, transition: "opacity 0.9s ease" }}
                   />
@@ -706,7 +706,7 @@ function HeroPhoneMockup({ lang, c }) {
 
             {/* Choose a time */}
             <div style={{ padding: "9px 14px 0" }}>
-              <div style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{lang === "nl" ? "Kies een tijd" : "Choose a time"}</div>
+              <div style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{lang === "nl" ? "Kies een tijd" : lang === "es" ? "Elige una hora" : "Choose a time"}</div>
               <div style={{ display: "flex", gap: 5 }}>
                 {slots.map((tt, i) => (
                   <div key={tt} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 600, padding: "7px 0", borderRadius: 9, background: i === 1 ? ACCENT : c.bgCard, color: i === 1 ? darkOnGold : c.textSub, border: `1px solid ${i === 1 ? ACCENT : c.border}` }}>{tt}</div>
@@ -717,7 +717,7 @@ function HeroPhoneMockup({ lang, c }) {
             {/* Confirm CTA — with the running total */}
             <div style={{ padding: "11px 14px 16px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", borderRadius: 100, background: ACCENT, boxShadow: `0 12px 26px -12px ${ACCENT}` }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: darkOnGold }}>{lang === "nl" ? "Bevestig · 11:30" : "Confirm · 11:30"}</span>
+                <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: darkOnGold }}>{lang === "nl" ? "Bevestig · 11:30" : lang === "es" ? "Confirmar · 11:30" : "Confirm · 11:30"}</span>
                 <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: darkOnGold }}>€38</span>
               </div>
             </div>
@@ -767,8 +767,8 @@ function SavingsCalculator({ lang, t, c }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 18px", background: c.bg, borderRadius: 14, marginBottom: 16 }}>
         <Row label={t.calcRevenue} value={fmt(revenue)} c={c} />
-        <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${lang === "nl" ? "/mnd" : "/mo"}`} c={c} negative />
-        <Row label={t.calcVelluCost} value={`− €${velluMonthly}${lang === "nl" ? "/mnd" : "/mo"}`} c={c} negative />
+        <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
+        <Row label={t.calcVelluCost} value={`− €${velluMonthly}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
       </div>
       <div style={{ textAlign: "center", padding: "18px 18px", background: `${ACCENT}10`, border: `1px solid ${ACCENT}33`, borderRadius: 14 }}>
         <div style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{t.calcSavingsYear}</div>
@@ -893,7 +893,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         // Profile insert failed — sign the half-registered auth user out so they aren't
         // stranded in a state where OwnerEntryPage can never find their profile.
         await supabase.auth.signOut();
-        setError(lang === "nl" ? "Profiel aanmaken mislukt. Probeer het opnieuw." : "Could not create profile. Please try again.");
+        setError(lang === "nl" ? "Profiel aanmaken mislukt. Probeer het opnieuw." : lang === "es" ? "No se pudo crear el perfil. Inténtalo de nuevo." : "Could not create profile. Please try again.");
         setLoading(false);
         return;
       }
@@ -1019,13 +1019,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                     non-NL owner who leaves it on the default would otherwise get
                     euros + BTW by accident. */}
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Land / regio" : "Country / region"}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Land / regio" : lang === "es" ? "País / región" : "Country / region"}</div>
                   <div style={{ position: "relative" }}>
                     <select
                       className="input-field"
                       value={form.countryCode}
                       onChange={e => setForm(f => ({...f, countryCode: e.target.value}))}
-                      aria-label={lang === "nl" ? "Land / regio" : "Country / region"}
+                      aria-label={lang === "nl" ? "Land / regio" : lang === "es" ? "País / región" : "Country / region"}
                       style={{ appearance: "none", cursor: "pointer", paddingRight: 40, width: "100%" }}
                     >
                       {/* Native dropdown menus ignore the select's dark styling, so
@@ -1081,7 +1081,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(s => !s)}
-                  aria-label={showPassword ? (lang === "nl" ? "Wachtwoord verbergen" : "Hide password") : (lang === "nl" ? "Wachtwoord tonen" : "Show password")}
+                  aria-label={showPassword ? (lang === "nl" ? "Wachtwoord verbergen" : lang === "es" ? "Ocultar contraseña" : "Hide password") : (lang === "nl" ? "Wachtwoord tonen" : lang === "es" ? "Mostrar contraseña" : "Show password")}
                   style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted }}
                 >
                   {showPassword ? (
@@ -1097,7 +1097,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
                   style={{ width: 16, height: 16, accentColor: ACCENT, cursor: "pointer" }} />
                 <span style={{ fontSize: 12, color: c.textSub }}>
-                  {lang === "nl" ? "Onthoud mijn gegevens" : "Remember me"}
+                  {lang === "nl" ? "Onthoud mijn gegevens" : lang === "es" ? "Recordarme" : "Remember me"}
                 </span>
               </label>
             )}

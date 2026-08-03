@@ -66,7 +66,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   if (staffName) {
     doc.setFontSize(10);
     doc.setTextColor(...ACCENT);
-    doc.text(`${lang === "nl" ? "Medewerker" : "Team member"}: ${s(staffName)}`, margin, 94);
+    doc.text(`${lang === "nl" ? "Medewerker" : lang === "es" ? "Miembro del equipo" : "Team member"}: ${s(staffName)}`, margin, 94);
   }
 
   // Vellu wordmark top-right (just text, no image — keeps PDF tiny)
@@ -116,7 +116,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(26, 23, 20);
-  doc.text(lang === "nl" ? "Samenvatting" : "Summary", margin, y);
+  doc.text(lang === "nl" ? "Samenvatting" : lang === "es" ? "Resumen" : "Summary", margin, y);
 
   const summaryY = y + 20;
   const col1X = margin;
@@ -126,9 +126,9 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
-  doc.text(lang === "nl" ? "Aantal afspraken" : "Appointments", col1X, summaryY);
-  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : "Revenue"), col2X, summaryY);
-  doc.text(lang === "nl" ? "Gem. per afspraak" : "Avg per appt.", col3X, summaryY);
+  doc.text(lang === "nl" ? "Aantal afspraken" : lang === "es" ? "Citas" : "Appointments", col1X, summaryY);
+  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"), col2X, summaryY);
+  doc.text(lang === "nl" ? "Gem. per afspraak" : lang === "es" ? "Prom. por cita." : "Avg per appt.", col3X, summaryY);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -165,12 +165,12 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   autoTable(doc, {
     startY: tableStartY,
     head: [[
-      lang === "nl" ? "Datum" : "Date",
-      lang === "nl" ? "Tijd" : "Time",
-      lang === "nl" ? "Klant" : "Client",
-      lang === "nl" ? "Behandeling" : "Service",
-      lang === "nl" ? "Medewerker" : "Staff",
-      lang === "nl" ? "Bedrag" : "Amount",
+      lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date",
+      lang === "nl" ? "Tijd" : lang === "es" ? "Hora" : "Time",
+      lang === "nl" ? "Klant" : lang === "es" ? "Cliente" : "Client",
+      lang === "nl" ? "Behandeling" : lang === "es" ? "Servicio" : "Service",
+      lang === "nl" ? "Medewerker" : lang === "es" ? "Personal" : "Staff",
+      lang === "nl" ? "Bedrag" : lang === "es" ? "Importe" : "Amount",
     ]],
     body: sorted.map(a => [
       a.date,
@@ -224,7 +224,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
         pageH - 32
       );
       doc.text(
-        `${lang === "nl" ? "Gegenereerd op" : "Generated on"} ${new Date().toLocaleDateString("nl-NL")} · vellu.cc`,
+        `${lang === "nl" ? "Gegenereerd op" : lang === "es" ? "Generado el" : "Generated on"} ${new Date().toLocaleDateString("nl-NL")} · vellu.cc`,
         margin,
         pageH - 20
       );

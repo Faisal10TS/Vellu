@@ -341,7 +341,7 @@ function SalonRoute({ lang, setLang }) {
   // Dynamic SEO for salon pages
   useSEO({
     title: salon ? `${salon.name} | Vellu` : undefined,
-    description: salon ? `${lang === "nl" ? "Boek een afspraak bij" : "Book an appointment at"} ${salon.name}${salon.city ? ` in ${salon.city}` : ""}. ${lang === "nl" ? "Online boeken, geen commissie." : "Book online, no commission."}` : undefined,
+    description: salon ? `${lang === "nl" ? "Boek een afspraak bij" : lang === "es" ? "Reserva una cita en" : "Book an appointment at"} ${salon.name}${salon.city ? ` in ${salon.city}` : ""}. ${lang === "nl" ? "Online boeken, geen commissie." : lang === "es" ? "Reserva online, sin comisión." : "Book online, no commission."}` : undefined,
     ogImage: salon?.cover_image_url || salon?.logo_url || undefined,
     url: `https://vellu.cc/${slug}`
   });
@@ -355,9 +355,9 @@ function SalonRoute({ lang, setLang }) {
   if (notFound) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
 
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : "Salon not found"}</div>
-      <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} {lang === "nl" ? "bestaat niet" : "does not exist"}</div>
-      <button className="btn-ghost" onClick={() => navigate("/")}>← {lang === "nl" ? "Terug naar home" : "Back to home"}</button>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : lang === "es" ? "Salón no encontrado" : "Salon not found"}</div>
+      <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} {lang === "nl" ? "bestaat niet" : lang === "es" ? "no existe" : "does not exist"}</div>
+      <button className="btn-ghost" onClick={() => navigate("/")}>← {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}</button>
     </div>
   );
 
@@ -437,7 +437,7 @@ function CancelRoute({ lang }) {
 
       <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
         {status === "loading" && (
-          <div style={{ color: c.textLabel }}>{lang === "nl" ? "laden..." : "loading..."}</div>
+          <div style={{ color: c.textLabel }}>{lang === "nl" ? "laden..." : lang === "es" ? "cargando..." : "loading..."}</div>
         )}
         
         {status === "confirm" && appointment && (
@@ -455,7 +455,7 @@ function CancelRoute({ lang }) {
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.date}</div>
-                <div style={{ fontWeight: 500 }}>{appointment.date} {lang === "nl" ? "om" : "at"} {appointment.time}</div>
+                <div style={{ fontWeight: 500 }}>{appointment.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.total}</div>
@@ -488,10 +488,10 @@ function CancelRoute({ lang }) {
               {t.bookingCancelled}
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>
-              {lang === "nl" ? "Je ontvangt een bevestiging per e-mail." : "You will receive a confirmation email."}
+              {lang === "nl" ? "Je ontvangt een bevestiging per e-mail." : lang === "es" ? "Recibirás un correo de confirmación." : "You will receive a confirmation email."}
             </p>
             <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
+              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
             </button>
           </div>
         )}
@@ -504,7 +504,7 @@ function CancelRoute({ lang }) {
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>{t.cancelBeforeTime}</p>
             <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
+              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
             </button>
           </div>
         )}
@@ -513,13 +513,13 @@ function CancelRoute({ lang }) {
           <div className="fade-up">
             <div style={{ marginBottom: 20 }}><NavIcon name="xmark" size={48} color="#f87171" /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
-              {lang === "nl" ? "Link ongeldig" : "Invalid link"}
+              {lang === "nl" ? "Link ongeldig" : lang === "es" ? "Enlace no válido" : "Invalid link"}
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>
-              {lang === "nl" ? "Deze annuleringslink is niet geldig." : "This cancellation link is not valid."}
+              {lang === "nl" ? "Deze annuleringslink is niet geldig." : lang === "es" ? "Este enlace de cancelación no es válido." : "This cancellation link is not valid."}
             </p>
             <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : "Back to home"}
+              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
             </button>
           </div>
         )}
@@ -610,13 +610,13 @@ function CookieConsent({ lang }) {
           {lang === "nl" 
             ? "Wij gebruiken alleen functionele cookies. " 
             : "We only use functional cookies. "}
-          <a href="/privacy" style={{ color: ACCENT, textDecoration: "none" }}>{lang === "nl" ? "Meer info" : "Learn more"}</a>
+          <a href="/privacy" style={{ color: ACCENT, textDecoration: "none" }}>{lang === "nl" ? "Meer info" : lang === "es" ? "Más información" : "Learn more"}</a>
         </div>
       </div>
       <button onClick={() => { localStorage.setItem("vellu_cookies_accepted", "true"); setVisible(false); }}
-        aria-label={lang === "nl" ? "Begrepen" : "Got it"}
+        aria-label={lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
         style={{ background: ACCENT, color: c.btnOnDark, border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif", flexShrink: 0 }}>
-        {lang === "nl" ? "Begrepen" : "Got it"}
+        {lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
       </button>
     </div>
   );
@@ -660,7 +660,7 @@ export default function VelluApp() {
   const [lang, setLang] = useState(() => {
     try {
       const saved = localStorage.getItem("vellu_lang");
-      if (saved === "nl" || saved === "en") return saved;
+      if (saved === "nl" || saved === "en" || saved === "es") return saved;
     } catch { /* private mode */ }
     if (typeof navigator !== "undefined") {
       const nav = (navigator.language || navigator.languages?.[0] || "").toLowerCase();

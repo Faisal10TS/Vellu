@@ -105,7 +105,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Non-secure contexts or old Safari — leave the toast to fill in.
-      toast.show(lang === "nl" ? "Kopiëren mislukt" : "Copy failed", "error");
+      toast.show(lang === "nl" ? "Kopiëren mislukt" : lang === "es" ? "No se pudo copiar" : "Copy failed", "error");
     }
   };
   useEffect(() => {
@@ -217,7 +217,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         background: !staffFilter ? accent : "transparent",
         color: !staffFilter ? c.btnOnDark : c.textSub,
         border: `1px solid ${!staffFilter ? accent : c.inputBorder}`,
-      }}>{lang === "nl" ? "Iedereen" : "Everyone"}</div>
+      }}>{lang === "nl" ? "Iedereen" : lang === "es" ? "Todos" : "Everyone"}</div>
       {salonStaff.map(m => (
         <div key={m.id} onClick={() => setStaffFilter(staffFilter === m.id ? null : m.id)} style={{
           padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -225,7 +225,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           background: staffFilter === m.id ? accent : "transparent",
           color: staffFilter === m.id ? c.btnOnDark : c.textSub,
           border: `1px solid ${staffFilter === m.id ? accent : c.inputBorder}`,
-        }}>{m.id === staffMember.id ? (lang === "nl" ? "Ik" : "Me") : m.name}</div>
+        }}>{m.id === staffMember.id ? (lang === "nl" ? "Ik" : lang === "es" ? "Yo" : "Me") : m.name}</div>
       ))}
     </div>
   ) : null;
@@ -241,9 +241,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id).eq("owner_id", salonProfile.id);
-      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : "Error completing", "error"); return; }
+      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
-      toast.show(lang === "nl" ? "Afspraak voltooid" : "Appointment completed");
+      toast.show(lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed");
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -251,13 +251,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id);
-      if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : "Error marking no-show", "error"); return; }
+      if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : lang === "es" ? "Error al marcar como no presentado" : "Error marking no-show", "error"); return; }
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
     } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
     const { error } = await supabase.from("staff_members").update({ working_hours: whForm }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
-    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
     setMyStaff(s => ({...s, working_hours: whForm}));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
@@ -322,7 +322,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   const staffDeletePhoto = async (serviceId, photoId, photoUrl) => {
     const { error } = await supabase.from("service_photos").delete().eq("id", photoId).eq("owner_id", salonProfile.id);
-    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
     const urlParts = photoUrl.split("/service-photos/");
     if (urlParts[1]) await supabase.storage.from("service-photos").remove([urlParts[1]]);
     setServices(svcs => svcs.map(s => s.id === serviceId ? {...s, photos: (s.photos||[]).filter(p => p.id !== photoId)} : s));
@@ -362,20 +362,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
       setInvoiceForm(f => ({ ...f, next_invoice_number: nextNum }));
       setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
-      toast.show(lang === "nl" ? "Factuur verstuurd" : "Invoice sent");
+      toast.show(lang === "nl" ? "Factuur verstuurd" : lang === "es" ? "Factura enviada" : "Invoice sent");
     }
     } finally { setProcessingApptId(null); }
   };
 
   const cancelAppt = async (id) => {
     if (processingApptId) return;
-    if (!await showConfirm(lang === "nl" ? "Afspraak annuleren?" : "Cancel appointment?")) return;
+    if (!await showConfirm(lang === "nl" ? "Afspraak annuleren?" : lang === "es" ? "¿Cancelar la cita?" : "Cancel appointment?")) return;
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id).eq("owner_id", salonProfile.id);
-      if (error) { toast.show(lang === "nl" ? "Annuleren mislukt" : "Cancel failed", "error"); return; }
+      if (error) { toast.show(lang === "nl" ? "Annuleren mislukt" : lang === "es" ? "No se pudo cancelar" : "Cancel failed", "error"); return; }
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "cancelled"} : x));
-      toast.show(lang === "nl" ? "Afspraak geannuleerd" : "Appointment cancelled");
+      toast.show(lang === "nl" ? "Afspraak geannuleerd" : lang === "es" ? "Cita cancelada" : "Appointment cancelled");
     } finally { setProcessingApptId(null); }
   };
 
@@ -392,7 +392,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const saveStaffBlock = async () => {
     if (!blockForm.from) return;
     if (blockForm.mode === "time" && !(blockForm.time_end > blockForm.time_start)) {
-      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : "End time must be after start time", "error");
+      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error");
       return;
     }
     setBlockSaving(true);
@@ -403,11 +403,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         const { data: updated, error } = await supabase.from("staff_day_overrides")
           .update({ date: blockForm.from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason })
           .eq("id", blockEditId).eq("staff_id", staffMember.id).select("*").single();
-        if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+        if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
         setStaffBlocks(prev => prev.map(x => x.id === blockEditId ? updated : x));
         setBlockModalOpen(false);
         setBlockEditId(null);
-        toast.show(lang === "nl" ? "Blokkade bijgewerkt" : "Block updated");
+        toast.show(lang === "nl" ? "Blokkade bijgewerkt" : lang === "es" ? "Bloqueo actualizado" : "Block updated");
         return;
       }
       const rows = [];
@@ -429,23 +429,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         }
       }
       const { data, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
-      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
       setStaffBlocks(prev => [...prev, ...(data || [])]);
       setBlockModalOpen(false);
       toast.show(blockForm.mode === "time"
-        ? (lang === "nl" ? "Tijdvak geblokkeerd" : "Time window blocked")
-        : (lang === "nl" ? "Dag(en) geblokkeerd" : "Day(s) blocked"));
+        ? (lang === "nl" ? "Tijdvak geblokkeerd" : lang === "es" ? "Franja horaria bloqueada" : "Time window blocked")
+        : (lang === "nl" ? "Dag(en) geblokkeerd" : lang === "es" ? "Día(s) bloqueado(s)" : "Day(s) blocked"));
     } finally {
       setBlockSaving(false);
     }
   };
 
   const removeStaffBlock = async (id) => {
-    if (!await showConfirm(lang === "nl" ? "Blokkade verwijderen?" : "Remove block?")) return;
+    if (!await showConfirm(lang === "nl" ? "Blokkade verwijderen?" : lang === "es" ? "¿Quitar el bloqueo?" : "Remove block?")) return;
     const { error } = await supabase.from("staff_day_overrides").delete().eq("id", id);
-    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
     setStaffBlocks(prev => prev.filter(b => b.id !== id));
-    toast.show(lang === "nl" ? "Blokkade verwijderd" : "Block removed");
+    toast.show(lang === "nl" ? "Blokkade verwijderd" : lang === "es" ? "Bloqueo eliminado" : "Block removed");
   };
 
   // Save an exception day (extra werkdag) for THIS staff member. Immediately
@@ -454,7 +454,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const saveStaffException = async () => {
     if (!excForm.date) return;
     if (!(excForm.close > excForm.open)) {
-      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : "End time must be after start time", "error");
+      toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error");
       return;
     }
     setExcSaving(true);
@@ -464,21 +464,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         kind: "exception", block_time_start: excForm.open, block_time_end: excForm.close,
         reason: staffMember.name || null,
       }).select("*").single();
-      if (error || !data) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+      if (error || !data) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
       setStaffExceptions(prev => [...prev, data]);
       setExcModalOpen(false);
-      toast.show(lang === "nl" ? "Extra werkdag toegevoegd" : "Extra workday added");
+      toast.show(lang === "nl" ? "Extra werkdag toegevoegd" : lang === "es" ? "Día de trabajo extra añadido" : "Extra workday added");
     } finally {
       setExcSaving(false);
     }
   };
 
   const removeStaffException = async (id) => {
-    if (!await showConfirm(lang === "nl" ? "Extra werkdag verwijderen?" : "Remove extra workday?")) return;
+    if (!await showConfirm(lang === "nl" ? "Extra werkdag verwijderen?" : lang === "es" ? "¿Quitar el día de trabajo extra?" : "Remove extra workday?")) return;
     const { error } = await supabase.from("staff_day_overrides").delete().eq("id", id);
-    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; }
+    if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
     setStaffExceptions(prev => prev.filter(b => b.id !== id));
-    toast.show(lang === "nl" ? "Extra werkdag verwijderd" : "Extra workday removed");
+    toast.show(lang === "nl" ? "Extra werkdag verwijderd" : lang === "es" ? "Día de trabajo extra eliminado" : "Extra workday removed");
   };
 
   // Compute this staff member's own time-window inside a combined booking.
@@ -531,19 +531,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               in the DB; staff read them via a scoped SELECT policy. */}
           {note && (
             <div style={{ marginTop: 8, padding: "6px 10px", background: `${accent}0c`, borderLeft: `2px solid ${accent}55`, borderRadius: 4 }}>
-              <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>{lang === "nl" ? "Notitie" : "Note"}</div>
+              <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>{lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}</div>
               <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{note}</div>
             </div>
           )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status}</span>
+          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status}</span>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
         </div>
       </div>
       {a.status === "confirmed" && mine && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : "Complete"}</>}</button>
+          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
           {phoneDigits && (
             <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg({ salonName: salonProfile.business_name, clientName: a.client_name, service: a.service_name, date: a.date, time: a.time, lang }))} target="_blank" rel="noopener noreferrer"
               className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -561,7 +561,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             }), "_blank");
           }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : "Cancel"}</button>
+          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
         </div>
       )}
     </div>
@@ -571,7 +571,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
-    ["klanten", "user", t.customers || (lang === "nl" ? "Klanten" : "Clients")],
+    ["klanten", "user", t.customers || (lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients")],
     ["facturen", "facturen", t.invoices],
     ["instellingen", "instellingen", t.settings]
   ];
@@ -586,8 +586,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           nudge. Deliberately NOT shown to salon clients (see ClientApp). */}
       <InstallAppPrompt
         dismissKey="vellu_install_dismissed_staff"
-        title={lang === "nl" ? "Installeer Vellu" : "Install Vellu"}
-        subtitle={lang === "nl" ? "Snelle toegang tot je agenda" : "Quick access to your agenda"}
+        title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
+        subtitle={lang === "nl" ? "Snelle toegang tot je agenda" : lang === "es" ? "Acceso rápido a tu agenda" : "Quick access to your agenda"}
         lang={lang} accent={accent} c={c}
       />
       {/* Wrapper: on desktop, use fixed 100dvh + overflow:hidden so the sidebar
@@ -623,13 +623,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                   <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
                     onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}
-                    title={lang === "nl" ? "Open boekingspagina in nieuw tabblad" : "Open booking page in new tab"}>
-                    <NavIcon name="eye" size={11} color={accent} /> {lang === "nl" ? "Bekijk" : "Preview"}
+                    title={lang === "nl" ? "Open boekingspagina in nieuw tabblad" : lang === "es" ? "Abrir la página de reservas en una pestaña nueva" : "Open booking page in new tab"}>
+                    <NavIcon name="eye" size={11} color={accent} /> {lang === "nl" ? "Bekijk" : lang === "es" ? "Vista previa" : "Preview"}
                   </button>
                   <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
                     onClick={copyLink}
-                    title={lang === "nl" ? "Kopieer boekingspagina-link" : "Copy booking page link"}>
-                    <NavIcon name="link" size={11} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : "Copied") : (lang === "nl" ? "Kopieer" : "Copy")}
+                    title={lang === "nl" ? "Kopieer boekingspagina-link" : lang === "es" ? "Copiar el enlace de la página de reservas" : "Copy booking page link"}>
+                    <NavIcon name="link" size={11} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy")}
                   </button>
                 </div>
               )}
@@ -670,7 +670,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "klanten" ? (t.customers || (lang === "nl" ? "Klanten" : "Clients")) : view === "facturen" ? t.invoices : t.settings}</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "klanten" ? (t.customers || (lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients")) : view === "facturen" ? t.invoices : t.settings}</div>
                 <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name}</div>
               </div>
             </div>
@@ -681,11 +681,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
               <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}>
-                <NavIcon name="eye" size={12} color={accent} /> {lang === "nl" ? "Bekijk salon" : "Preview salon"}
+                <NavIcon name="eye" size={12} color={accent} /> {lang === "nl" ? "Bekijk salon" : lang === "es" ? "Vista previa del salón" : "Preview salon"}
               </button>
               <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 onClick={copyLink}>
-                <NavIcon name="link" size={12} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : "Copied") : (lang === "nl" ? "Kopieer link" : "Copy link")}
+                <NavIcon name="link" size={12} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}
               </button>
             </div>
           )}
@@ -772,13 +772,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.today}</div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1.15 }}>
-                        {todayAppts.length} {todayAppts.length === 1 ? (lang === "nl" ? "afspraak" : "appointment") : (lang === "nl" ? "afspraken" : "appointments")}
+                        {todayAppts.length} {todayAppts.length === 1 ? (lang === "nl" ? "afspraak" : lang === "es" ? "cita" : "appointment") : (lang === "nl" ? "afspraken" : lang === "es" ? "citas" : "appointments")}
                       </div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, textTransform: "capitalize" }}>{todayDate}</div>
                     </div>
                     {todayAppts.length > 0 && (
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : "Expected"}</div>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : lang === "es" ? "Previsto" : "Expected"}</div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(0)}</div>
                       </div>
                     )}
@@ -787,14 +787,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative" }}>
                       <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
-                      <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : "View agenda →"}</div>
+                      <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : lang === "es" ? "Ver agenda →" : "View agenda →"}</div>
                     </div>
                   ) : (
                     <div style={{ position: "relative" }}>
                       {todayAppts.slice(0, 3).map(a => <ApptCard key={a.id} a={a} />)}
                       {todayAppts.length > 3 && (
                         <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
-                          + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles →" : "more · View all →"}
+                          + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles →" : lang === "es" ? "más · Ver todo →" : "more · View all →"}
                         </div>
                       )}
                     </div>
@@ -806,8 +806,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {/* WEEK REVENUE */}
                   <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze week" : "This week"}</div>
-                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : "7 days"}</div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week"}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days"}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
@@ -825,8 +825,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {/* MONTH REVENUE */}
                   <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
-                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : "30 days"}</div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days"}</div>
                     </div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(0)}</div>
                     <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
@@ -838,7 +838,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalEarnings}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{cur}{totalEarnings.toFixed(0)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : "treatments"}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments"}</div>
                   </div>
                 </div>
               </div>
@@ -896,9 +896,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
-                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : "Revenue over time")}</div>
+                          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : lang === "es" ? "Ingresos a lo largo del tiempo" : "Revenue over time")}</div>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(0)}</div>
-                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : "last 8 weeks"}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : lang === "es" ? "últimas 8 semanas" : "last 8 weeks"}</div>
                         </div>
                       </div>
                       <div style={{ flex: 1, display: "flex", alignItems: "stretch", marginTop: 14, minHeight: 180 }}>
@@ -945,11 +945,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : "Best week"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : lang === "es" ? "Mejor semana" : "Best week"}</div>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(0)}</div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : "Average"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : lang === "es" ? "Promedio" : "Average"}</div>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{avgWeek.toFixed(0)}</div>
                         </div>
                         <div>
@@ -966,7 +966,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 {/* Popular services — thumbnails + revenue */}
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : "Popular services")}</div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : lang === "es" ? "Servicios populares" : "Popular services")}</div>
                     <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
                   </div>
                   {(() => {
@@ -1080,7 +1080,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: calViewMode === mode ? accent : "transparent",
                         color: calViewMode === mode ? c.btnOnDark : c.textSub,
-                      }}>{mode === "week" ? (lang === "nl" ? "Week" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : "Month") : (lang === "nl" ? "Jaar" : "Year")}</div>
+                      }}>{mode === "week" ? (lang === "nl" ? "Week" : lang === "es" ? "Semana" : "Week") : mode === "month" ? (lang === "nl" ? "Maand" : lang === "es" ? "Mes" : "Month") : (lang === "nl" ? "Jaar" : lang === "es" ? "Año" : "Year")}</div>
                     ))}
                   </div>
                 </div>
@@ -1092,10 +1092,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setBlockModalOpen(true);
                     }}
                     style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
-                    title={lang === "nl" ? "Blokkeer een dag of tijdvak" : "Block a day or time window"}
+                    title={lang === "nl" ? "Blokkeer een dag of tijdvak" : lang === "es" ? "Bloquear un día o una franja horaria" : "Block a day or time window"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                    {lang === "nl" ? "Blokkeer tijd" : "Block time"}
+                    {lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time"}
                   </button>
                   <button
                     onClick={() => {
@@ -1103,17 +1103,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setExcModalOpen(true);
                     }}
                     style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
-                    title={lang === "nl" ? "Werk eenmalig op een dag die normaal vrij is" : "Work once on a day you're normally off"}
+                    title={lang === "nl" ? "Werk eenmalig op een dag die normaal vrij is" : lang === "es" ? "Trabaja una vez en un día que normalmente libras" : "Work once on a day you're normally off"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                    {lang === "nl" ? "Extra werkdag" : "Extra workday"}
+                    {lang === "nl" ? "Extra werkdag" : lang === "es" ? "Día de trabajo extra" : "Extra workday"}
                   </button>
                   {staffWeekOffset !== 0 && (
                     <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
                       padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase",
                       background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
-                    }}>{lang === "nl" ? "Vandaag" : "Today"}</div>
+                    }}>{lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today"}</div>
                   )}
                   <div onClick={() => setStaffWeekOffset(o => o - 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
@@ -1132,15 +1132,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Bevestigd" : "Confirmed"}</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.filter(a => a.status === "confirmed").length}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : "Completed"}</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : lang === "es" ? "Completada" : "Completed"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodDone}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : "Revenue"}</div>
+                  <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(0)}</div>
                 </div>
               </div>
@@ -1187,7 +1187,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                                   <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
                                   <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                                    {lang === "nl" ? "Vrij" : "Off"}
+                                    {lang === "nl" ? "Vrij" : lang === "es" ? "Libre" : "Off"}
                                   </div>
                                 </div>
                               </div>
@@ -1361,14 +1361,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, color: c.text }}>{monthName}</div>
-                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : "Now"}</div>}
+                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : lang === "es" ? "Ahora" : "Now"}</div>}
                           </div>
                           <div>
                             <div style={{ height: 4, borderRadius: 3, background: c.inputBg, overflow: "hidden" }}>
                               <div style={{ height: "100%", width: `${pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
                             </div>
                             <div style={{ fontSize: 10, color: count > 0 ? c.textSub : c.textMuted, marginTop: 6 }}>
-                              {count > 0 ? `${count} ${lang === "nl" ? "afspraken" : "appointments"}` : (lang === "nl" ? "Geen afspraken" : "No appointments")}
+                              {count > 0 ? `${count} ${lang === "nl" ? "afspraken" : lang === "es" ? "citas" : "appointments"}` : (lang === "nl" ? "Geen afspraken" : lang === "es" ? "Sin citas" : "No appointments")}
                             </div>
                           </div>
                         </div>
@@ -1393,22 +1393,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                           {isTimeBlock
                             ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
-                            : (lang === "nl" ? "Dag geblokkeerd" : "Day blocked")}
+                            : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                         </div>
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
-                          {b.reason || (lang === "nl" ? "Geen reden opgegeven" : "No reason given")}
+                          {b.reason || (lang === "nl" ? "Geen reden opgegeven" : lang === "es" ? "Sin motivo indicado" : "No reason given")}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         {isTimeBlock && (
                           <button className="btn-ghost" onClick={() => openBlockEdit(b)}
                             style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
-                            {lang === "nl" ? "Bewerk" : "Edit"}
+                            {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
                           </button>
                         )}
                         <button className="btn-ghost" onClick={() => removeStaffBlock(b.id)}
                           style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
-                          {lang === "nl" ? "Deblokkeer" : "Unblock"}
+                          {lang === "nl" ? "Deblokkeer" : lang === "es" ? "Desbloquear" : "Unblock"}
                         </button>
                       </div>
                     </div>
@@ -1428,12 +1428,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         {lang === "nl" ? `Extra werkdag ${b.block_time_start}–${b.block_time_end}` : `Extra workday ${b.block_time_start}–${b.block_time_end}`}
                       </div>
                       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
-                        {lang === "nl" ? "Klanten kunnen je op deze tijden boeken." : "Clients can book you during these hours."}
+                        {lang === "nl" ? "Klanten kunnen je op deze tijden boeken." : lang === "es" ? "Los clientes pueden reservar contigo en este horario." : "Clients can book you during these hours."}
                       </div>
                     </div>
                     <button className="btn-ghost" onClick={() => removeStaffException(b.id)}
                       style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
-                      {lang === "nl" ? "Verwijder" : "Remove"}
+                      {lang === "nl" ? "Verwijder" : lang === "es" ? "Quitar" : "Remove"}
                     </button>
                   </div>
                 ))}
@@ -1442,7 +1442,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 {calAppts.length === 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : "No appointments on this day")}</div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : lang === "es" ? "No hay citas este día" : "No appointments on this day")}</div>
                   </div>
                 ) : (
                   calAppts.map(a => <ApptCard key={a.id} a={a} />)
@@ -1494,26 +1494,26 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
             return (
               <div className="fade-up">
-                {isMobile && <PTitle sub={lang === "nl" ? "Klanten die jij hebt behandeld" : "Clients you've served"}>{lang === "nl" ? "Klanten" : "Clients"}</PTitle>}
+                {isMobile && <PTitle sub={lang === "nl" ? "Klanten die jij hebt behandeld" : lang === "es" ? "Clientes que has atendido" : "Clients you've served"}>{lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"}</PTitle>}
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal klanten" : "Total clients"}</div>
+                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal klanten" : lang === "es" ? "Total de clientes" : "Total clients"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{byEmail.size}</div>
                   </div>
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Terugkerend" : "Returning"}</div>
+                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Terugkerend" : lang === "es" ? "Recurrentes" : "Returning"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{Array.from(byEmail.values()).filter(cl => cl.visitCount > 1).length}</div>
                   </div>
                   {!isMobile && (
                     <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Komende afspraken" : "Upcoming"}</div>
+                      <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Komende afspraken" : lang === "es" ? "Próxima" : "Upcoming"}</div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{Array.from(byEmail.values()).filter(cl => cl.next).length}</div>
                     </div>
                   )}
                 </div>
 
                 <div style={{ position: "relative", marginBottom: 12 }}>
-                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam, e-mail of telefoon" : "Search by name, email or phone"}
+                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam, e-mail of telefoon" : lang === "es" ? "Buscar por nombre, correo o teléfono" : "Search by name, email or phone"}
                     value={clientSearch} onChange={e => setClientSearch(e.target.value)}
                     style={{ width: "100%", padding: "12px 40px 12px 16px", fontSize: 12 }} />
                   {clientSearch && (
@@ -1528,7 +1528,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ opacity: 0.4 }}><NavIcon name="user" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>
                       {q ? (lang === "nl" ? `Geen klant gevonden voor "${clientSearch}"` : `No client found for "${clientSearch}"`)
-                         : (lang === "nl" ? "Je hebt nog geen klanten behandeld." : "You haven't served any clients yet.")}
+                         : (lang === "nl" ? "Je hebt nog geen klanten behandeld." : lang === "es" ? "Todavía no has atendido a ningún cliente." : "You haven't served any clients yet.")}
                     </div>
                   </div>
                 ) : (
@@ -1543,12 +1543,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               {cl.name}
                               {cl.visitCount >= 3 && (
                                 <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                                  {lang === "nl" ? "Vaste klant" : "Regular"}
+                                  {lang === "nl" ? "Vaste klant" : lang === "es" ? "Habitual" : "Regular"}
                                 </span>
                               )}
                               {note && (
                                 <span title={note} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${c.warning}18`, color: c.warning, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                                  {lang === "nl" ? "Notitie" : "Note"}
+                                  {lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}
                                 </span>
                               )}
                             </div>
@@ -1556,8 +1556,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           </div>
                           {!isMobile && (
                             <div style={{ fontSize: 11, color: c.textLabel }}>
-                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : "visit") : (lang === "nl" ? "bezoeken" : "visits")} · ${cur}${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : "No visits yet")}
-                              {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
+                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : lang === "es" ? "visita" : "visit") : (lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits")} · ${cur}${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : lang === "es" ? "Sin visitas todavía" : "No visits yet")}
+                              {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : lang === "es" ? "Última: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
                             </div>
                           )}
                           <div style={{ textAlign: "right" }}>
@@ -1593,25 +1593,25 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Bezoeken" : "Visits"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Bezoeken" : lang === "es" ? "Visitas" : "Visits"}</div>
                           <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: c.text }}>{clientView.visitCount}</div>
                         </div>
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : "Spent"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : lang === "es" ? "Gastado" : "Spent"}</div>
                           <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>{cur}{clientView.totalSpent.toFixed(0)}</div>
                         </div>
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : "Last"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : lang === "es" ? "Última" : "Last"}</div>
                           <div style={{ fontSize: 12, color: c.text, marginTop: 3 }}>{clientView.lastVisit ? fmtDate(clientView.lastVisit) : "—"}</div>
                         </div>
                       </div>
                       {clientNotes[clientView.email] && (
                         <div style={{ padding: "10px 14px", background: `${accent}0c`, borderLeft: `3px solid ${accent}`, borderRadius: 4, marginBottom: 14 }}>
-                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Notitie (alleen jullie zien dit)" : "Note (staff-only)"}</div>
+                          <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Notitie (alleen jullie zien dit)" : lang === "es" ? "Nota (solo para el personal)" : "Note (staff-only)"}</div>
                           <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{clientNotes[clientView.email]}</div>
                         </div>
                       )}
-                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Afspraken" : "Appointments"}</div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Afspraken" : lang === "es" ? "Citas" : "Appointments"}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                         {clientView.appts
                           .slice()
@@ -1623,7 +1623,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <div style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</div>
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
+                                <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
                                 <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
                               </div>
                             </div>
@@ -1670,17 +1670,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : "This month"}</div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : "Unsent"}</div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : "Sent"}</div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
                   </div>
@@ -1707,7 +1707,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: c.textMuted, pointerEvents: "none", display: "flex" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
                     </div>
-                    <input className="input-field" placeholder={t.searchPlaceholder || (lang === "nl" ? "Zoek op naam of dienst..." : "Search by name or service...")} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
+                    <input className="input-field" placeholder={t.searchPlaceholder || (lang === "nl" ? "Zoek op naam of dienst..." : lang === "es" ? "Buscar por nombre o servicio..." : "Search by name or service...")} value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
                       style={{ width: "100%", fontSize: 12, padding: "11px 14px 11px 38px" }} />
                     {invoiceSearch && (
                       <button onClick={() => setInvoiceSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: "50%", background: c.inputBorder, border: "none", color: c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
@@ -1717,9 +1717,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   </div>
                   <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
                     {[
-                      ["all", lang === "nl" ? "Alles" : "All", completedAppts.length],
-                      ["unsent", lang === "nl" ? "Open" : "Unsent", unsent.length],
-                      ["sent", lang === "nl" ? "Verstuurd" : "Sent", sent.length]
+                      ["all", lang === "nl" ? "Alles" : lang === "es" ? "Todos" : "All", completedAppts.length],
+                      ["unsent", lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length],
+                      ["sent", lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", sent.length]
                     ].map(([key, label, count]) => (
                       <div key={key} onClick={() => setInvoiceFilter(key)} style={{
                         padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -1748,17 +1748,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 if (completedAppts.length === 0) return (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen voltooide afspraken" : "No completed appointments yet"}</div>
-                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : "Invoices appear here once you mark an appointment as completed."}</div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen voltooide afspraken" : lang === "es" ? "Aún no hay citas completadas" : "No completed appointments yet"}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : lang === "es" ? "Las facturas aparecen aquí una vez que marcas una cita como completada." : "Invoices appear here once you mark an appointment as completed."}</div>
                   </div>
                 );
                 if (filtered.length === 0) return (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : "No results for this filter"}</div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : lang === "es" ? "No hay resultados para este filtro" : "No results for this filter"}</div>
                     {(invoiceSearch || invoiceFilter !== "all") && (
                       <button className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => { setInvoiceSearch(""); setInvoiceFilter("all"); }}>
-                        {lang === "nl" ? "Filter wissen" : "Clear filter"}
+                        {lang === "nl" ? "Filter wissen" : lang === "es" ? "Borrar filtro" : "Clear filter"}
                       </button>
                     )}
                   </div>
@@ -1789,7 +1789,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
                             {!a.invoice_sent && (
                               <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                                {lang === "nl" ? "Open" : "Unsent"}
+                                {lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent"}
                               </span>
                             )}
                           </div>
@@ -1831,12 +1831,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         {invoicesExpanded ? (
                           <>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
-                            {t.showLess || (lang === "nl" ? "Minder tonen" : "Show less")}
+                            {t.showLess || (lang === "nl" ? "Minder tonen" : lang === "es" ? "Mostrar menos" : "Show less")}
                           </>
                         ) : (
                           <>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                            {t.showMore || (lang === "nl" ? "Meer laden" : "Show more")} ({filtered.length - 10})
+                            {t.showMore || (lang === "nl" ? "Meer laden" : lang === "es" ? "Mostrar más" : "Show more")} ({filtered.length - 10})
                           </>
                         )}
                       </button>
@@ -1857,9 +1857,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
                 <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}`, maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {[
-                    ["werktijden", "planning", lang === "nl" ? "Werktijden" : "Hours"],
-                    ["facturatie", "facturen", lang === "nl" ? "Facturatie" : "Invoicing"],
-                    ["diensten", "diensten", lang === "nl" ? "Diensten" : "Services"],
+                    ["werktijden", "planning", lang === "nl" ? "Werktijden" : lang === "es" ? "Horario" : "Hours"],
+                    ["facturatie", "facturen", lang === "nl" ? "Facturatie" : lang === "es" ? "Facturación" : "Invoicing"],
+                    ["diensten", "diensten", lang === "nl" ? "Diensten" : lang === "es" ? "Servicios" : "Services"],
                   ].map(([key, icon, label]) => (
                     <div key={key} onClick={() => setStaffSettingsTab(key)} style={{
                       padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: isMobile ? 10 : 11, fontWeight: 600,
@@ -1919,7 +1919,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     );
                   })}
                   <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={saveWorkingHours}>
-                    {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}
+                    {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : lang === "es" ? "Guardado" : "Saved"}</> : t.saveChanges}
                   </button>
                 </div>
               )}
@@ -1954,7 +1954,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <input className="input-field" value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : "Next number"}</div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : lang === "es" ? "Siguiente número" : "Next number"}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: c.inputBg, borderRadius: 14, border: `1px solid ${c.inputBorder}` }}>
                           <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
                         </div>
@@ -1965,7 +1965,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         request afterwards" at booking, and it routes to THIS
                         worker's own account. */}
                     <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 14, marginTop: 4 }}>
-                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : "Payment requests"}</div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : lang === "es" ? "Solicitudes de pago" : "Payment requests"}</div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
                         {lang === "nl"
                           ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met het exacte factuurbedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet. Klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle banken, gewoon vanuit hun eigen bank-app."
@@ -1973,11 +1973,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>
-                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : "Account holder name"}</div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : lang === "es" ? "Nombre del titular de la cuenta" : "Account holder name"}</div>
                           <input className="input-field" placeholder={myStaff.name || ""} value={invoiceForm.iban_holder} onChange={e => setInvoiceForm(f => ({...f, iban_holder: e.target.value}))} style={{ width: "100%" }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : "Payment link (optional)"}</div>
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : lang === "es" ? "Enlace de pago (opcional)" : "Payment link (optional)"}</div>
                           <input className="input-field" placeholder="https://bunq.me/jouwnaam" value={invoiceForm.payment_link} onChange={e => setInvoiceForm(f => ({...f, payment_link: e.target.value}))} style={{ width: "100%" }} />
                         </div>
                       </div>
@@ -1990,9 +1990,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       iban_holder: invoiceForm.iban_holder || null, payment_link: invoiceForm.payment_link || null,
                       invoice_prefix: invoiceForm.invoice_prefix || "INV", next_invoice_number: invoiceForm.next_invoice_number || 1
                     }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
-                    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
                     setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
-                  }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : "Saved"}</> : t.saveChanges}</button>
+                  }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : lang === "es" ? "Guardado" : "Saved"}</> : t.saveChanges}</button>
                 </div>
               )}
 
@@ -2001,7 +2001,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.myServices}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted }}>{services.length} {lang === "nl" ? "diensten" : "services"}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted }}>{services.length} {lang === "nl" ? "diensten" : lang === "es" ? "servicios" : "services"}</div>
                   </div>
                   {services.length === 0 && (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
@@ -2020,14 +2020,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div key={s.id} style={{ background: c.bgCard, border: `1px solid ${isExp ? `${accent}44` : c.border}`, borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s" }}>
                         {isEdit ? (
                           <div style={{ padding: 18 }}>
-                            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : "Edit service"}</div>
+                            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : lang === "es" ? "Editar servicio" : "Edit service"}</div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                               <div>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : "Name (NL)"}</div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (NL)" : lang === "es" ? "Nombre (NL)" : "Name (NL)"}</div>
                                 <input className="input-field" value={editSvcForm.name_nl} onChange={e => setEditSvcForm(f => ({...f, name_nl: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : "Name (EN)"}</div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam (EN)" : lang === "es" ? "Nombre (EN)" : "Name (EN)"}</div>
                                 <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
@@ -2035,14 +2035,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</div>
                                 <input className="input-field" type="number" value={editSvcForm.duration} onChange={e => setEditSvcForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
                               <button className="btn-primary" style={{ flex: 1, padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => {
                                 const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id).eq("owner_id", salonProfile.id);
-                                if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                                if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
                                 setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
                                 setEditingSvc(null);
                               }}><NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}</button>
@@ -2065,9 +2065,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}</div>
                                 <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
                                   <span>{s.duration} {t.min}</span>
-                                  {varCount > 0 && <><span>·</span><span>{varCount} {lang === "nl" ? "varianten" : "variants"}</span></>}
+                                  {varCount > 0 && <><span>·</span><span>{varCount} {lang === "nl" ? "varianten" : lang === "es" ? "variantes" : "variants"}</span></>}
                                   {extCount > 0 && <><span>·</span><span>{extCount} extras</span></>}
-                                  {photoCount > 0 && <><span>·</span><span>{photoCount} {lang === "nl" ? "foto's" : "photos"}</span></>}
+                                  {photoCount > 0 && <><span>·</span><span>{photoCount} {lang === "nl" ? "foto's" : lang === "es" ? "fotos" : "photos"}</span></>}
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
@@ -2096,28 +2096,28 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={v.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginBottom: 6 }}>
                                       {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editVarForm.name_nl} onChange={ev => setEditVarForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editVarForm.name_en} onChange={ev => setEditVarForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : lang === "es" ? "Nombre (neerlandés)" : "Name (Dutch)"}</label><input className="input-field" value={editVarForm.name_nl} onChange={ev => setEditVarForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : lang === "es" ? "Nombre (inglés)" : "Name (English)"}</label><input className="input-field" value={editVarForm.name_en} onChange={ev => setEditVarForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVarForm.duration} onChange={ev => setEditVarForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVarForm.duration} onChange={ev => setEditVarForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
                                       {(() => { const lbl2 = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (NL)" : "Description (NL)"}</label><input className="input-field" value={editVarForm.description_nl} onChange={ev => setEditVarForm(f => ({...f, description_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (EN)" : "Description (EN)"}</label><input className="input-field" value={editVarForm.description_en} onChange={ev => setEditVarForm(f => ({...f, description_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (NL)" : lang === "es" ? "Descripción (NL)" : "Description (NL)"}</label><input className="input-field" value={editVarForm.description_nl} onChange={ev => setEditVarForm(f => ({...f, description_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl2}>{lang === "nl" ? "Omschrijving (EN)" : lang === "es" ? "Descripción (EN)" : "Description (EN)"}</label><input className="input-field" value={editVarForm.description_en} onChange={ev => setEditVarForm(f => ({...f, description_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
                                       <div style={{ display: "flex", gap: 6 }}>
                                         <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                           const price = parseFloat(editVarForm.price);
                                           const duration = parseInt(editVarForm.duration);
-                                          if (!editVarForm.name_nl || !Number.isFinite(price) || !Number.isFinite(duration)) { toast.show(lang === "nl" ? "Vul alle velden in" : "Fill in all fields", "error"); return; }
+                                          if (!editVarForm.name_nl || !Number.isFinite(price) || !Number.isFinite(duration)) { toast.show(lang === "nl" ? "Vul alle velden in" : lang === "es" ? "Completa todos los campos" : "Fill in all fields", "error"); return; }
                                           const { error } = await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null }).eq("id", v.id);
-                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
                                           setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null} : vr)} : sv));
                                           setEditingVar(null);
-                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : "Save"}</button>
+                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
                                         <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingVar(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
                                       </div>
                                     </div>
@@ -2136,7 +2136,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
-                                        <button onClick={async () => { const { error } = await supabase.from("service_variants").delete().eq("id", v.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
+                                        <button onClick={async () => { const { error } = await supabase.from("service_variants").delete().eq("id", v.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="xmark" size={11} color="currentColor" />
                                         </button>
@@ -2158,20 +2158,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={e.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginBottom: 6 }}>
                                       {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : lang === "es" ? "Nombre (neerlandés)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : lang === "es" ? "Nombre (inglés)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
                                       <div style={{ display: "flex", gap: 6 }}>
                                         <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                           const price = parseFloat(editExtraForm.price);
-                                          if (!editExtraForm.name_nl || !Number.isFinite(price)) { toast.show(lang === "nl" ? "Vul alle velden in" : "Fill in all fields", "error"); return; }
+                                          if (!editExtraForm.name_nl || !Number.isFinite(price)) { toast.show(lang === "nl" ? "Vul alle velden in" : lang === "es" ? "Completa todos los campos" : "Fill in all fields", "error"); return; }
                                           const { error } = await supabase.from("service_extras").update({ name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price }).eq("id", e.id);
-                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : "Save failed", "error"); return; }
+                                          if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
                                           setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.map(ex => ex.id === e.id ? {...ex, name_nl: editExtraForm.name_nl, name_en: editExtraForm.name_en || null, price} : ex)} : sv));
                                           setEditingExtra(null);
-                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : "Save"}</button>
+                                        }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
                                         <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
                                       </div>
                                     </div>
@@ -2185,7 +2185,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
-                                        <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
+                                        <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="xmark" size={11} color="currentColor" />
                                         </button>
@@ -2200,7 +2200,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 {/* Photos */}
                                 <div style={{ marginTop: 18 }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{lang === "nl" ? "Foto's" : "Photos"}</div>
+                                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{lang === "nl" ? "Foto's" : lang === "es" ? "Fotos" : "Photos"}</div>
                                     <div style={{ fontSize: 10, color: c.textMuted }}>{photoCount}</div>
                                   </div>
                                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2221,7 +2221,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       ) : (
                                         <>
                                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
-                                          <span style={{ fontSize: 9, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "nl" ? "Foto" : "Photo"}</span>
+                                          <span style={{ fontSize: 9, color: accent, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "nl" ? "Foto" : lang === "es" ? "Foto" : "Photo"}</span>
                                         </>
                                       )}
                                       <input accept="image/*" multiple type="file" style={{ display: "none" }}
@@ -2268,7 +2268,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     if (!selSvc?.variants?.length) return null;
                     return (
                       <div>
-                        <SL>{lang === "nl" ? "Variant" : "Variant"}</SL>
+                        <SL>{lang === "nl" ? "Variant" : lang === "es" ? "Variante" : "Variant"}</SL>
                         <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
                           {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {cur}{parseFloat(v.price).toFixed(2)}</option>)}
@@ -2297,7 +2297,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         back-filling a booking the client already knows about. */}
                     <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer", fontSize: 12, color: c.textSub, userSelect: "none" }}>
                       <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
-                      {lang === "nl" ? "Stuur bevestiging naar de klant" : "Send confirmation to the client"}
+                      {lang === "nl" ? "Stuur bevestiging naar de klant" : lang === "es" ? "Enviar confirmación al cliente" : "Send confirmation to the client"}
                     </label>
                   </div>
                 </div>
@@ -2332,7 +2332,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     };
                     const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
                     if (apptError || !appt) {
-                      toast.show(lang === "nl" ? "Fout bij het toevoegen van afspraak" : "Error adding appointment", "error");
+                      toast.show(lang === "nl" ? "Fout bij het toevoegen van afspraak" : lang === "es" ? "Error al añadir la cita" : "Error adding appointment", "error");
                       setAddApptLoading(false);
                       return;
                     }
@@ -2384,7 +2384,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div onClick={e => e.stopPropagation()}
                  style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-                {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : "Block time or day")}
+                {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : lang === "es" ? "Bloquear horario o día" : "Block time or day")}
               </div>
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
                 {lang === "nl"
@@ -2418,16 +2418,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
                 {blockForm.mode === "time" ? (
                   <>
-                    <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label>
+                    <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label>
                       <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                      <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                         <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                           {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                         </select>
                       </div>
-                      <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
+                      <div><label style={lbl}>{lang === "nl" ? "Tot" : lang === "es" ? "Hasta" : "To"}</label>
                         <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                           {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                         </select>
@@ -2436,25 +2436,25 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   </>
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                    <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                       <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
                     </div>
-                    <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : "To (optional)"}</label>
+                    <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
                       <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
                     </div>
                   </div>
                 )}
-                <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : "Reason (optional)"}</label>
-                  <input className="input-field" value={blockForm.reason} onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. Privé-afspraak, vakantie" : "e.g. Private appointment, vacation"} style={{ width: "100%" }} />
+                <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : lang === "es" ? "Motivo (opcional)" : "Reason (optional)"}</label>
+                  <input className="input-field" value={blockForm.reason} onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. Privé-afspraak, vakantie" : lang === "es" ? "p. ej. Cita privada, vacaciones" : "e.g. Private appointment, vacation"} style={{ width: "100%" }} />
                 </div>
               </div>
               ); })()}
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn-primary" disabled={blockSaving} onClick={saveStaffBlock} style={{ flex: 1, background: c.danger, color: "#fff" }}>
-                  {blockSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (blockEditId ? (lang === "nl" ? "Opslaan" : "Save") : (lang === "nl" ? "Blokkeer" : "Block"))}
+                  {blockSaving ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Guardando…" : "Saving…") : (blockEditId ? (lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save") : (lang === "nl" ? "Blokkeer" : lang === "es" ? "Bloquear" : "Block"))}
                 </button>
                 <button className="btn-ghost" disabled={blockSaving} onClick={() => { setBlockModalOpen(false); setBlockEditId(null); }} style={{ padding: "0 18px" }}>
-                  {lang === "nl" ? "Annuleer" : "Cancel"}
+                  {lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}
                 </button>
               </div>
             </div>
@@ -2470,7 +2470,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div onClick={(e) => e.stopPropagation()}
                  style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 400, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-                {lang === "nl" ? "Extra werkdag" : "Extra workday"}
+                {lang === "nl" ? "Extra werkdag" : lang === "es" ? "Día de trabajo extra" : "Extra workday"}
               </div>
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
                 {lang === "nl"
@@ -2479,16 +2479,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               </div>
               {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
-                <div><label style={lbl}>{lang === "nl" ? "Datum" : "Date"}</label>
+                <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label>
                   <input className="input-field" type="date" value={excForm.date} onChange={e => setExcForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%" }} autoFocus />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <div><label style={lbl}>{lang === "nl" ? "Van" : "From"}</label>
+                  <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                     <select className="input-field" value={excForm.open} onChange={e => setExcForm(f => ({ ...f, open: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                       {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                     </select>
                   </div>
-                  <div><label style={lbl}>{lang === "nl" ? "Tot" : "To"}</label>
+                  <div><label style={lbl}>{lang === "nl" ? "Tot" : lang === "es" ? "Hasta" : "To"}</label>
                     <select className="input-field" value={excForm.close} onChange={e => setExcForm(f => ({ ...f, close: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                       {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                     </select>
@@ -2498,10 +2498,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               ); })()}
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn-primary" disabled={excSaving} onClick={saveStaffException} style={{ flex: 1 }}>
-                  {excSaving ? (lang === "nl" ? "Bezig…" : "Saving…") : (lang === "nl" ? "Toevoegen" : "Add")}
+                  {excSaving ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Guardando…" : "Saving…") : (lang === "nl" ? "Toevoegen" : lang === "es" ? "Añadir" : "Add")}
                 </button>
                 <button className="btn-ghost" disabled={excSaving} onClick={() => setExcModalOpen(false)} style={{ padding: "0 18px" }}>
-                  {lang === "nl" ? "Annuleer" : "Cancel"}
+                  {lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}
                 </button>
               </div>
             </div>
