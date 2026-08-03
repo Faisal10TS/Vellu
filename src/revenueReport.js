@@ -127,7 +127,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   doc.text(lang === "nl" ? "Aantal afspraken" : lang === "es" ? "Citas" : "Appointments", col1X, summaryY);
-  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"), col2X, summaryY);
+  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : lang === "es" ? `Ingresos incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"), col2X, summaryY);
   doc.text(lang === "nl" ? "Gem. per afspraak" : lang === "es" ? "Prom. por cita." : "Avg per appt.", col3X, summaryY);
 
   doc.setFont("helvetica", "bold");
@@ -144,7 +144,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     doc.setFontSize(9);
     doc.setTextColor(120, 120, 120);
     doc.text(`${taxLabel} (${taxPct}%)`, col1X, btwY);
-    doc.text(lang === "nl" ? `Netto (excl. ${taxLabel})` : `Net (excl. ${taxLabel})`, col2X, btwY);
+    doc.text(lang === "nl" ? `Netto (excl. ${taxLabel})` : lang === "es" ? `Neto (excl. ${taxLabel})` : `Net (excl. ${taxLabel})`, col2X, btwY);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);

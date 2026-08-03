@@ -3559,7 +3559,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             : null}
                           <div style={{ fontSize: 13, marginBottom: 16 }}>
                             {availableTimes.length > 0
-                              ? (lang === "nl" ? `Alle ${availableTimes.length} tijden op deze dag zijn geboekt.` : `All ${availableTimes.length} times on this day are booked.`)
+                              ? (lang === "nl" ? `Alle ${availableTimes.length} tijden op deze dag zijn geboekt.` : lang === "es" ? `Todas las ${availableTimes.length} horas de este día están reservadas.` : `All ${availableTimes.length} times on this day are booked.`)
                               : t.noTimesAvailable}
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>

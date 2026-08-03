@@ -1392,7 +1392,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ flex: 1, minWidth: 180 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                           {isTimeBlock
-                            ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
+                            ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Bloqueado ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
                             : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                         </div>
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
@@ -1425,7 +1425,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
-                        {lang === "nl" ? `Extra werkdag ${b.block_time_start}–${b.block_time_end}` : `Extra workday ${b.block_time_start}–${b.block_time_end}`}
+                        {lang === "nl" ? `Extra werkdag ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Día extra ${b.block_time_start}–${b.block_time_end}` : `Extra workday ${b.block_time_start}–${b.block_time_end}`}
                       </div>
                       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
                         {lang === "nl" ? "Klanten kunnen je op deze tijden boeken." : lang === "es" ? "Los clientes pueden reservar contigo en este horario." : "Clients can book you during these hours."}
@@ -1527,7 +1527,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="user" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>
-                      {q ? (lang === "nl" ? `Geen klant gevonden voor "${clientSearch}"` : `No client found for "${clientSearch}"`)
+                      {q ? (lang === "nl" ? `Geen klant gevonden voor "${clientSearch}"` : lang === "es" ? `No se encontró ningún cliente para "${clientSearch}"` : `No client found for "${clientSearch}"`)
                          : (lang === "nl" ? "Je hebt nog geen klanten behandeld." : lang === "es" ? "Todavía no has atendido a ningún cliente." : "You haven't served any clients yet.")}
                     </div>
                   </div>
@@ -2031,7 +2031,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <input className="input-field" value={editSvcForm.name_en} onChange={e => setEditSvcForm(f => ({...f, name_en: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
+                                <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</div>
                                 <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                               </div>
                               <div>
@@ -2098,7 +2098,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : lang === "es" ? "Nombre (neerlandés)" : "Name (Dutch)"}</label><input className="input-field" value={editVarForm.name_nl} onChange={ev => setEditVarForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : lang === "es" ? "Nombre (inglés)" : "Name (English)"}</label><input className="input-field" value={editVarForm.name_en} onChange={ev => setEditVarForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVarForm.price} onChange={ev => setEditVarForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVarForm.duration} onChange={ev => setEditVarForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
@@ -2160,7 +2160,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Nederlands)" : lang === "es" ? "Nombre (neerlandés)" : "Name (Dutch)"}</label><input className="input-field" value={editExtraForm.name_nl} onChange={ev => setEditExtraForm(f => ({...f, name_nl: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                         <div><label style={lbl}>{lang === "nl" ? "Naam (Engels)" : lang === "es" ? "Nombre (inglés)" : "Name (English)"}</label><input className="input-field" value={editExtraForm.name_en} onChange={ev => setEditExtraForm(f => ({...f, name_en: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
-                                        <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
+                                        <div style={{ gridColumn: "span 2" }}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} /></div>
                                       </div>
                                       ); })()}
                                       <div style={{ display: "flex", gap: 6 }}>

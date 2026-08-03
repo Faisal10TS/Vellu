@@ -516,7 +516,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
         body: { subject: subject.trim(), message: message.trim(), segment },
       });
       if (error || !data) throw new Error(error?.message || "send_failed");
-      toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${data.sent} klant${data.sent === 1 ? "" : "en"}` : `Newsletter sent to ${data.sent} client${data.sent === 1 ? "" : "s"}`);
+      toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${data.sent} klant${data.sent === 1 ? "" : "en"}` : lang === "es" ? `Boletín enviado a ${data.sent} cliente${data.sent === 1 ? "" : "s"}` : `Newsletter sent to ${data.sent} client${data.sent === 1 ? "" : "s"}`);
       setSubject(""); setMessage(""); setConfirming(false);
     } catch (e) {
       console.error("Newsletter send failed:", e);
@@ -582,7 +582,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>
         {count === null
           ? (lang === "nl" ? "Ontvangers laden…" : lang === "es" ? "Cargando destinatarios…" : "Loading recipients…")
-          : (lang === "nl" ? `${count} ontvanger${count === 1 ? "" : "s"}` : `${count} recipient${count === 1 ? "" : "s"}`)}
+          : (lang === "nl" ? `${count} ontvanger${count === 1 ? "" : "s"}` : lang === "es" ? `${count} destinatario${count === 1 ? "" : "s"}` : `${count} recipient${count === 1 ? "" : "s"}`)}
       </div>
 
       {!confirming ? (
@@ -646,7 +646,7 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, country
       if (result.count === 0) {
         toast.show(lang === "nl" ? "Nog geen klanten om te exporteren" : lang === "es" ? "Aún no hay clientes para exportar" : "No clients to export yet", "error");
       } else {
-        toast.show(lang === "nl" ? `${result.count} klanten geëxporteerd` : `Exported ${result.count} clients`);
+        toast.show(lang === "nl" ? `${result.count} klanten geëxporteerd` : lang === "es" ? `${result.count} clientes exportados` : `Exported ${result.count} clients`);
       }
     } catch (e) {
       console.error("CSV export failed:", e);
@@ -764,7 +764,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
         taxLabel: _tax.label, taxIdLabel: _tax.idLabel, taxRate: _rate, showTax: !!salonData.btw_id && _rate > 0,
       });
-      toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : `PDF downloaded (${result.count} appointments)`);
+      toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : lang === "es" ? `PDF descargado (${result.count} citas)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
       console.error("PDF error:", e);
       toast.show(lang === "nl" ? "PDF genereren mislukt" : lang === "es" ? "No se pudo generar el PDF" : "Failed to generate PDF", "error");
@@ -2227,7 +2227,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // Remove source's manual row so it stops showing up in the list.
         await supabase.from("manual_clients").delete().eq("id", source.manualId).eq("owner_id", ownerId);
       }
-      toast.show(lang === "nl" ? `Samengevoegd met ${target.name}` : `Merged into ${target.name}`);
+      toast.show(lang === "nl" ? `Samengevoegd met ${target.name}` : lang === "es" ? `Combinado con ${target.name}` : `Merged into ${target.name}`);
       setMergeSource(null);
       setMergeSearch("");
       setSelected(null);
@@ -2397,7 +2397,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const { error } = await supabase.from("manual_clients").insert(slice);
       if (error) {
         setImporting(false);
-        toast.show(lang === "nl" ? `Import mislukt na ${inserted} klanten` : `Import failed after ${inserted} clients`, "error");
+        toast.show(lang === "nl" ? `Import mislukt na ${inserted} klanten` : lang === "es" ? `La importación falló tras ${inserted} clientes` : `Import failed after ${inserted} clients`, "error");
         setRefreshKey(k => k + 1);
         setImportPreview(null);
         return;
@@ -2407,10 +2407,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     setImporting(false);
     setImportPreview(null);
     const parts = [
-      lang === "nl" ? `${inserted} klanten geïmporteerd` : `${inserted} clients imported`,
+      lang === "nl" ? `${inserted} klanten geïmporteerd` : lang === "es" ? `${inserted} clientes importados` : `${inserted} clients imported`,
     ];
-    if (duplicates > 0) parts.push(lang === "nl" ? `${duplicates} al aanwezig` : `${duplicates} already there`);
-    if (importPreview.skipped > 0) parts.push(lang === "nl" ? `${importPreview.skipped} overgeslagen` : `${importPreview.skipped} skipped`);
+    if (duplicates > 0) parts.push(lang === "nl" ? `${duplicates} al aanwezig` : lang === "es" ? `${duplicates} ya estaban` : `${duplicates} already there`);
+    if (importPreview.skipped > 0) parts.push(lang === "nl" ? `${importPreview.skipped} overgeslagen` : lang === "es" ? `${importPreview.skipped} omitidos` : `${importPreview.skipped} skipped`);
     toast.show(parts.join(" · "));
     setRefreshKey(k => k + 1);
   };
@@ -2485,7 +2485,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 // Count CLIENTS, not rows — one person asking for four dates is
                 // still one client waiting.
                 const n = waitlistGroups.filter(g => g.waitingIds.length > 0).length;
-                return lang === "nl" ? `${n} klant${n === 1 ? "" : "en"} op de wachtlijst` : `${n} client${n === 1 ? "" : "s"} on the waitlist`;
+                return lang === "nl" ? `${n} klant${n === 1 ? "" : "en"} op de wachtlijst` : lang === "es" ? `${n} cliente${n === 1 ? "" : "s"} en la lista de espera` : `${n} client${n === 1 ? "" : "s"} on the waitlist`;
               })()}
             </div>
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
@@ -2504,7 +2504,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           <NavIcon name="alerttri" size={14} color={c.warning} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: c.warning }}>
-              {lang === "nl" ? `${dupePairs.length} mogelijke duplicate${dupePairs.length === 1 ? "" : "s"} gevonden` : `${dupePairs.length} possible duplicate${dupePairs.length === 1 ? "" : "s"} found`}
+              {lang === "nl" ? `${dupePairs.length} mogelijke duplicate${dupePairs.length === 1 ? "" : "s"} gevonden` : lang === "es" ? `${dupePairs.length} posible${dupePairs.length === 1 ? "" : "s"} duplicado${dupePairs.length === 1 ? "" : "s"} encontrado${dupePairs.length === 1 ? "" : "s"}` : `${dupePairs.length} possible duplicate${dupePairs.length === 1 ? "" : "s"} found`}
             </div>
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
               {lang === "nl" ? "Klanten met hetzelfde telefoonnummer — klik om samen te voegen." : lang === "es" ? "Clientes que comparten un número de teléfono — haz clic para combinar." : "Clients sharing a phone number — click to merge."}
@@ -2532,7 +2532,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 </div>
               </div>
               {cl.phone && (
-                <a href={getWhatsAppUrl(cl.phone, lang === "nl" ? `Hoi ${(cl.name || "").split(" ")[0]}! ` : `Hi ${(cl.name || "").split(" ")[0]}! `)}
+                <a href={getWhatsAppUrl(cl.phone, lang === "nl" ? `Hoi ${(cl.name || "").split(" ")[0]}! ` : lang === "es" ? `¡Hola ${(cl.name || "").split(" ")[0]}! ` : `Hi ${(cl.name || "").split(" ")[0]}! `)}
                   target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                   aria-label="WhatsApp" style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
@@ -2591,7 +2591,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 </a>
               )}
               {selected.phone && (
-                <a href={getWhatsAppUrl(selected.phone, lang === "nl" ? `Hoi ${(selected.name || "").split(" ")[0]}! ` : `Hi ${(selected.name || "").split(" ")[0]}! `)}
+                <a href={getWhatsAppUrl(selected.phone, lang === "nl" ? `Hoi ${(selected.name || "").split(" ")[0]}! ` : lang === "es" ? `¡Hola ${(selected.name || "").split(" ")[0]}! ` : `Hi ${(selected.name || "").split(" ")[0]}! `)}
                   target="_blank" rel="noopener noreferrer"
                   style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: accent, textDecoration: "none" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg> WhatsApp
@@ -2676,7 +2676,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               {lang === "nl"
                 ? `${importPreview.rows.length} klanten gevonden in ${importPreview.fileName}`
                 : `${importPreview.rows.length} clients found in ${importPreview.fileName}`}
-              {importPreview.skipped > 0 && (lang === "nl" ? ` · ${importPreview.skipped} regels overgeslagen (geen naam/email)` : ` · ${importPreview.skipped} rows skipped (no name/email)`)}
+              {importPreview.skipped > 0 && (lang === "nl" ? ` · ${importPreview.skipped} regels overgeslagen (geen naam/email)` : lang === "es" ? ` · ${importPreview.skipped} filas omitidas (sin nombre/correo)` : ` · ${importPreview.skipped} rows skipped (no name/email)`)}
             </div>
             <div style={{ flex: 1, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 14 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
@@ -2699,7 +2699,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               </table>
               {importPreview.rows.length > 50 && (
                 <div style={{ padding: "8px 10px", fontSize: 11, color: c.textMuted, textAlign: "center", borderTop: `1px solid ${c.border}` }}>
-                  {lang === "nl" ? `…en nog ${importPreview.rows.length - 50} meer` : `…and ${importPreview.rows.length - 50} more`}
+                  {lang === "nl" ? `…en nog ${importPreview.rows.length - 50} meer` : lang === "es" ? `…y ${importPreview.rows.length - 50} más` : `…and ${importPreview.rows.length - 50} more`}
                 </div>
               )}
             </div>
@@ -2710,7 +2710,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" disabled={importing} onClick={confirmImport} style={{ flex: 1 }}>
-                {importing ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Importando…" : "Importing…") : (lang === "nl" ? `Importeer ${importPreview.rows.length} klanten` : `Import ${importPreview.rows.length} clients`)}
+                {importing ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Importando…" : "Importing…") : (lang === "nl" ? `Importeer ${importPreview.rows.length} klanten` : lang === "es" ? `Importar ${importPreview.rows.length} clientes` : `Import ${importPreview.rows.length} clients`)}
               </button>
               <button className="btn-ghost" disabled={importing} onClick={() => setImportPreview(null)} style={{ padding: "0 18px" }}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
             </div>
@@ -2813,7 +2813,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           mergeClientInto(p.source, p.survivor);
                           setShowDupes(false);
                         }}>
-                        {lang === "nl" ? `Behoud ${p.survivor.name}` : `Keep ${p.survivor.name}`}
+                        {lang === "nl" ? `Behoud ${p.survivor.name}` : lang === "es" ? `Conservar ${p.survivor.name}` : `Keep ${p.survivor.name}`}
                       </button>
                       <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} disabled={merging}
                         onClick={() => {
@@ -2823,7 +2823,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           mergeClientInto(p.survivor, p.source);
                           setShowDupes(false);
                         }}>
-                        {lang === "nl" ? `Behoud ${p.source.name}` : `Keep ${p.source.name}`}
+                        {lang === "nl" ? `Behoud ${p.source.name}` : lang === "es" ? `Conservar ${p.source.name}` : `Keep ${p.source.name}`}
                       </button>
                     </div>
                   </div>
@@ -2976,7 +2976,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                         <button className="btn-ghost" style={{ flex: "1 1 auto", fontSize: 10, padding: "8px", color: c.danger, borderColor: `${c.danger}55` }}
                           onClick={() => {
                             const msg = multi
-                              ? (lang === "nl" ? `Verwijder alle ${g.entries.length} aanmeldingen van ${g.name}?` : `Delete all ${g.entries.length} entries from ${g.name}?`)
+                              ? (lang === "nl" ? `Verwijder alle ${g.entries.length} aanmeldingen van ${g.name}?` : lang === "es" ? `¿Eliminar las ${g.entries.length} entradas de ${g.name}?` : `Delete all ${g.entries.length} entries from ${g.name}?`)
                               : (lang === "nl" ? "Verwijder deze aanmelding?" : lang === "es" ? "¿Eliminar esta entrada?" : "Delete this entry?");
                             if (!window.confirm(msg)) return;
                             multi ? deleteWaitlistGroup(g.ids) : deleteWaitlistEntry(g.ids[0]);
@@ -3194,14 +3194,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const fam = encodeURIComponent(name).replace(/%20/g, "+");
       const res = await fetch(`https://fonts.googleapis.com/css2?family=${fam}&display=swap`);
       if (!res.ok) {
-        toast.show(lang === "nl" ? `Lettertype "${name}" niet gevonden op Google Fonts` : `Font "${name}" not found on Google Fonts`, "error");
+        toast.show(lang === "nl" ? `Lettertype "${name}" niet gevonden op Google Fonts` : lang === "es" ? `Fuente "${name}" no encontrada en Google Fonts` : `Font "${name}" not found on Google Fonts`, "error");
         return;
       }
       const key = `custom:${name}`;
       ensurePageFontLoaded(key);
       update(d => { d.page_font = key; return d; });
       setCustomFontName("");
-      toast.show(lang === "nl" ? `"${name}" toegepast — vergeet niet op te slaan` : `"${name}" applied — don't forget to save`);
+      toast.show(lang === "nl" ? `"${name}" toegepast — vergeet niet op te slaan` : lang === "es" ? `"${name}" aplicada — no olvides guardar` : `"${name}" applied — don't forget to save`);
     } catch {
       toast.show(lang === "nl" ? "Kon Google Fonts niet bereiken" : lang === "es" ? "No se pudo conectar con Google Fonts" : "Could not reach Google Fonts", "error");
     } finally { setCustomFontChecking(false); }
@@ -4540,7 +4540,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {a.client_name}
             {showWarn && (
               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.warning}22`, color: c.warning, border: `1px solid ${c.warning}44`, fontWeight: 600, letterSpacing: "0.04em" }}
-                title={lang === "nl" ? `${noShowInfo.no_show_count} no-shows bij jouw salon` : `${noShowInfo.no_show_count} no-shows at your salon`}>
+                title={lang === "nl" ? `${noShowInfo.no_show_count} no-shows bij jouw salon` : lang === "es" ? `${noShowInfo.no_show_count} ausencias en tu salón` : `${noShowInfo.no_show_count} no-shows at your salon`}>
                 ⚠ {noShowInfo.no_show_count}× NO-SHOW
               </span>
             )}
@@ -4684,7 +4684,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       key: "welcome",
       target: null,
       before: () => setView("dashboard"),
-      title: lang === "nl" ? `Welkom bij Vellu, ${salonData.name || ""}` : `Welcome to Vellu, ${salonData.name || ""}`,
+      title: lang === "nl" ? `Welkom bij Vellu, ${salonData.name || ""}` : lang === "es" ? `Bienvenido a Vellu, ${salonData.name || ""}` : `Welcome to Vellu, ${salonData.name || ""}`,
       body: lang === "nl"
         ? "In één minuut laten we zien waar alles staat. Je kunt op elk moment overslaan — de rondleiding staat later gewoon weer bij Instellingen → Overig."
         : "In one minute we'll show you where everything lives. Skip whenever you like — you can restart the tour any time under Settings → Other."
@@ -4964,7 +4964,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <button key={p.id || idx} className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, idx)}
                   style={{ padding: "12px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: c.bgCard, border: `1px solid ${c.border}`, color: c.text }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{p.label || (lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{p.label || (lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
                       {p.btw_id ? `BTW ${p.btw_id}` : (p.kvk_number ? `KVK ${p.kvk_number}` : (lang === "nl" ? "Extra profiel" : lang === "es" ? "Perfil adicional" : "Extra profile"))}
                     </div>
@@ -5245,11 +5245,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Tijd" : lang === "es" ? "Hora" : "Time"}</label><input className="input-field" type="time" value={editApptForm.time} onChange={(e) => setEditApptForm((f) => ({ ...f, time: e.target.value }))} style={inp} /></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div style={cell}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={inp} /></div>
+                <div style={cell}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</label><input className="input-field" type="number" step="5" min="5" value={editApptForm.duration} onChange={(e) => setEditApptForm((f) => ({ ...f, duration: e.target.value }))} style={inp} /></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
-                <div style={cell}><label style={lbl}>{lang === "nl" ? `Korting (${cur})` : `Discount (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} /></div>
+                <div style={cell}><label style={lbl}>{lang === "nl" ? `Korting (${cur})` : lang === "es" ? `Descuento (${cur})` : `Discount (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Reden korting (optioneel)" : lang === "es" ? "Motivo del descuento (opcional)" : "Discount reason (optional)"}</label><input className="input-field" value={editApptForm.discount_reason} onChange={(e) => setEditApptForm((f) => ({ ...f, discount_reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. vaste klant" : lang === "es" ? "p. ej. cliente fiel" : "e.g. loyal client"} style={inp} /></div>
               </div>
               {discountNum > 0 && (
@@ -5672,7 +5672,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {todayAppts.slice(0, 3).map(a => renderApptCard(a))}
                           {todayAppts.length > 3 && (
                             <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
-                              {lang === "nl" ? `+ ${todayAppts.length - 3} meer · Bekijk alles →` : `+ ${todayAppts.length - 3} more · View all →`}
+                              {lang === "nl" ? `+ ${todayAppts.length - 3} meer · Bekijk alles →` : lang === "es" ? `+ ${todayAppts.length - 3} más · Ver todo →` : `+ ${todayAppts.length - 3} more · View all →`}
                             </div>
                           )}
                         </div>
@@ -6795,9 +6795,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const isTimeBlock = !!ov.block_time_start;
                 const unblock = async () => {
                   const label = isTimeBlock
-                    ? (lang === "nl" ? `tijdvak ${ov.block_time_start}–${ov.block_time_end}` : `${ov.block_time_start}–${ov.block_time_end} time block`)
+                    ? (lang === "nl" ? `tijdvak ${ov.block_time_start}–${ov.block_time_end}` : lang === "es" ? `Bloqueo ${ov.block_time_start}–${ov.block_time_end}` : `${ov.block_time_start}–${ov.block_time_end} time block`)
                     : (lang === "nl" ? "geblokkeerde dag" : lang === "es" ? "día bloqueado" : "blocked day");
-                  if (!window.confirm(lang === "nl" ? `Deblokkeer deze ${label}?` : `Unblock this ${label}?`)) return;
+                  if (!window.confirm(lang === "nl" ? `Deblokkeer deze ${label}?` : lang === "es" ? `¿Desbloquear este ${label}?` : `Unblock this ${label}?`)) return;
                   const next = { ...(salonData.day_overrides || {}) };
                   if (isTimeBlock || !ov.from || ov.from === ov.to) {
                     delete next[calDate];
@@ -6828,7 +6828,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                         {isTimeBlock
-                          ? (lang === "nl" ? `Geblokkeerd ${ov.block_time_start}–${ov.block_time_end}` : `Blocked ${ov.block_time_start}–${ov.block_time_end}`)
+                          ? (lang === "nl" ? `Geblokkeerd ${ov.block_time_start}–${ov.block_time_end}` : lang === "es" ? `Bloqueado ${ov.block_time_start}–${ov.block_time_end}` : `Blocked ${ov.block_time_start}–${ov.block_time_end}`)
                           : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                       </div>
                       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
@@ -6854,7 +6854,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const isTimeBlock = !!b.block_time_start;
                   const staffName = (salonData.staff || []).find(sm => sm.id === b.staff_id)?.name || "";
                   const removeBlock = async () => {
-                    if (!window.confirm(lang === "nl" ? `Deblokkade van ${staffName} verwijderen?` : `Remove ${staffName}'s block?`)) return;
+                    if (!window.confirm(lang === "nl" ? `Deblokkade van ${staffName} verwijderen?` : lang === "es" ? `¿Quitar el bloqueo de ${staffName}?` : `Remove ${staffName}'s block?`)) return;
                     const { error } = await supabase.from("staff_day_overrides").delete().eq("id", b.id);
                     if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
                     update(d => { d.staff_blocks = (d.staff_blocks || []).filter(x => x.id !== b.id); return d; });
@@ -6868,8 +6868,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ flex: 1, minWidth: 180 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                           {isTimeBlock
-                            ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
-                            : (lang === "nl" ? `${staffName} is vrij` : `${staffName} is off`)}
+                            ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `${staffName} bloqueó ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
+                            : (lang === "nl" ? `${staffName} is vrij` : lang === "es" ? `${staffName} está libre` : `${staffName} is off`)}
                         </div>
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
                           {b.reason || (lang === "nl" ? "Eigen blokkade — geen reden opgegeven" : lang === "es" ? "Bloqueo propio — sin motivo indicado" : "Own block — no reason given")}
@@ -6949,7 +6949,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 )}
                 {calAppts.length > 0 && (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
-                    <NavIcon name="download" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en)` : `Export ${calAppts.length} appointment(s)`}
+                    <NavIcon name="download" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en)` : lang === "es" ? `Exportar ${calAppts.length} cita(s)` : `Export ${calAppts.length} appointment(s)`}
                   </button>
                 )}
               </>)}
@@ -8389,7 +8389,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         ? (lang === "nl" ? "Je BTW-identificatienummer (optioneel)." : lang === "es" ? "Tu número de IVA (opcional)." : "Your VAT ID (optional).")
                         : tax.idLabel === "CRIB"
                           ? (lang === "nl" ? "Je CRIB-nummer van de Belastingdienst Caribisch Nederland (optioneel). Laat leeg als je geen ABB in rekening brengt." : lang === "es" ? "Tu número CRIB de la oficina tributaria del Caribe Neerlandés (opcional). Déjalo en blanco si no cobras ABB." : "Your CRIB number from the Caribbean Netherlands tax office (optional). Leave blank if you don't charge ABB.")
-                          : (lang === "nl" ? `Je ${tax.idLabel} (optioneel). Laat leeg als je geen belasting in rekening brengt.` : `Your ${tax.idLabel} (optional). Leave blank if you don't charge tax.`)}</div>
+                          : (lang === "nl" ? `Je ${tax.idLabel} (optioneel). Laat leeg als je geen belasting in rekening brengt.` : lang === "es" ? `Tu ${tax.idLabel} (opcional). Déjalo en blanco si no cobras impuestos.` : `Your ${tax.idLabel} (optional). Leave blank if you don't charge tax.`)}</div>
                     </div>
                   </div>
                   <div>
@@ -8400,11 +8400,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       : (lang === "nl" ? "Je lokale bankrekeningnummer (optioneel) — komt op de factuur zodat klanten kunnen overmaken." : lang === "es" ? "Tu número de cuenta bancaria local (opcional) — se muestra en la factura para que los clientes puedan transferir." : "Your local bank account number (optional) — shown on the invoice so clients can transfer.")}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : `${tax.label} percentage`}</div>
+                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : lang === "es" ? `Porcentaje de ${tax.label}` : `${tax.label} percentage`}</div>
                     <input className="input-field" type="number" min="0" max="100" step="1" placeholder={String(tax.defaultRate)} value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.label === "BTW"
                       ? (lang === "nl" ? "21% voor nagels/schoonheid, 9% voor reguliere kappersdiensten. Wordt op de factuur als BTW-regel getoond zodra je een BTW-id hebt ingevuld." : lang === "es" ? "21% para uñas/belleza, 9% para servicios típicos de peluquería. Se muestra como una línea de IVA en la factura una vez que hayas introducido un número de IVA." : "21% for nails/beauty, 9% for typical hairdresser services. Shown as a VAT line on the invoice once you've entered a BTW-id.")
-                      : (lang === "nl" ? `Wordt op de factuur als ${tax.label}-regel getoond zodra je een ${tax.idLabel} hebt ingevuld.` : `Shown as a ${tax.label} line on the invoice once you've entered a ${tax.idLabel}.`)}</div>
+                      : (lang === "nl" ? `Wordt op de factuur als ${tax.label}-regel getoond zodra je een ${tax.idLabel} hebt ingevuld.` : lang === "es" ? `Se muestra como una línea de ${tax.label} en la factura cuando hayas introducido un ${tax.idLabel}.` : `Shown as a ${tax.label} line on the invoice once you've entered a ${tax.idLabel}.`)}</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
@@ -8456,7 +8456,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {(salonData.invoice_profiles || []).map((p, idx) => (
                       <div key={p.id || idx} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14 }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
-                          {p.label || (lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`)}
+                          {p.label || (lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`)}
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
@@ -8489,7 +8489,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div key={p.id || idx} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted }}>
-                        {lang === "nl" ? `Profiel ${idx + 2}` : `Profile ${idx + 2}`}
+                        {lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`}
                       </div>
                       <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}33`, display: "inline-flex", alignItems: "center", gap: 5 }}
                         onClick={() => update(d => { d.invoice_profiles = (d.invoice_profiles || []).filter((_, i) => i !== idx); return d; })}>
@@ -8622,7 +8622,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <button onClick={async () => {
                               const used = (salonData.services || []).some(sv => sv.category_id === cat.id);
                               const msg = used
-                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : `Category "${cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
+                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : lang === "es" ? `La categoría "${cat.name_nl}" está en uso. Los servicios quedarán sin agrupar. ¿Continuar?` : `Category "${cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
                                 : (lang === "nl" ? "Categorie verwijderen?" : lang === "es" ? "¿Eliminar categoría?" : "Delete category?");
                               if (!(await showConfirm(msg))) return;
                               const { error } = await supabase.from("service_categories").delete().eq("id", cat.id);
@@ -8841,7 +8841,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                             <div>
-                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
+                              <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</div>
                               <input className="input-field" type="number" value={editSvcForm.price} onChange={e => setEditSvcForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 13, padding: "10px 12px", width: "100%" }} />
                             </div>
                             <div>
@@ -8993,7 +8993,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               />
                                             </div>
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                                              <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} /></div>
+                                              <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" value={editVariantForm.price} onChange={e => setEditVariantForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} /></div>
                                               <div><label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</label><input className="input-field" type="number" value={editVariantForm.duration} onChange={e => setEditVariantForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "min" : "min"} /></div>
                                             </div>
                                             <div style={{ marginBottom: 8 }}>
@@ -9090,7 +9090,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               />
                                             </div>
                                             <div style={{ marginBottom: 8 }}>
-                                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</label>
+                                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label>
                                               <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
                                             </div>
                                             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", marginBottom: 8 }}>
@@ -9277,7 +9277,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : `Price (${cur})`}</div>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</div>
                         <input className="input-field" placeholder="45" type="number" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} style={{ fontSize: 13, padding: "11px 13px", width: "100%" }} />
                       </div>
                       <div>
@@ -9518,13 +9518,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 agenda ownership and the "eigenaar" badge. */}
                             {m.user_id !== salonData.owner_id && (
                               <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
-                                if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : `Delete ${m.name}?`)) return;
+                                if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : lang === "es" ? `¿Eliminar ${m.name}?` : `Delete ${m.name}?`)) return;
                                 await supabase.from("staff_services").delete().eq("staff_id", m.id);
                                 await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
                                 const { error } = await supabase.from("staff_members").delete().eq("id", m.id);
                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                 update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
-                                toast.show(lang === "nl" ? `${m.name} verwijderd` : `${m.name} deleted`);
+                                toast.show(lang === "nl" ? `${m.name} verwijderd` : lang === "es" ? `${m.name} eliminado` : `${m.name} deleted`);
                               }}>×</button>
                             )}
                           </>
@@ -9815,7 +9815,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         color: (salonData.min_advance_hours || 0) === hrs ? accent : c.textSub,
                         fontSize: 12, fontWeight: 500
                       }}
-                    >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : lang === "es" ? "Sin mínimo" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u van tevoren` : `Min. ${hrs}h ahead`)}</div>
+                    >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : lang === "es" ? "Sin mínimo" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u van tevoren` : lang === "es" ? `Mín. ${hrs}h de antelación` : `Min. ${hrs}h ahead`)}</div>
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
@@ -10495,7 +10495,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                             <div style={{ fontSize: 14, color: c.text }}>{fmtDate(trialEnds)}</div>
                             <div style={{ fontSize: 11, color: ACCENT, marginTop: 2 }}>
-                              {trialDaysLeft === 0 ? (lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today") : (lang === "nl" ? `nog ${trialDaysLeft} dagen` : `${trialDaysLeft} days left`)}
+                              {trialDaysLeft === 0 ? (lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today") : (lang === "nl" ? `nog ${trialDaysLeft} dagen` : lang === "es" ? `${trialDaysLeft} días restantes` : `${trialDaysLeft} days left`)}
                             </div>
                           </div>
                         )}
@@ -10507,7 +10507,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 14, color: c.text }}>{fmtDate(expires)}</div>
                             {daysLeft !== null && (
                               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-                                {lang === "nl" ? `over ${daysLeft} dagen` : `in ${daysLeft} days`}
+                                {lang === "nl" ? `over ${daysLeft} dagen` : lang === "es" ? `en ${daysLeft} días` : `in ${daysLeft} days`}
                               </div>
                             )}
                           </div>
@@ -11347,7 +11347,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div key={row.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                           <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, fontWeight: 600 }}>
-                            {lang === "nl" ? `Dienst ${idx + 1}` : `Service ${idx + 1}`}
+                            {lang === "nl" ? `Dienst ${idx + 1}` : lang === "es" ? `Servicio ${idx + 1}` : `Service ${idx + 1}`}
                           </div>
                           {(addApptForm.services || []).length > 1 && (
                             <button type="button"
