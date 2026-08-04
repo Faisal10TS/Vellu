@@ -15,8 +15,6 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
     url: "https://vellu.cc/"
   });
-  const [slugInput, setSlugInput] = useState("");
-  const [error, setError] = useState("");
   const [faqOpen, setFaqOpen] = useState(null);
   const [billingCycle, setBillingCycle] = useState("monthly"); // "monthly" | "yearly"
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
@@ -154,25 +152,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ─── FIND-A-SALON — sits just above the calculator so the
-            owner-acquisition flow above stays uninterrupted while still
-            keeping the client search easy to spot. */}
-        <div id="find-salon" style={{ padding: "0 24px 24px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{t.findSalonTitle}</div>
-              <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>{t.findSalonSub}</div>
-            </div>
-            <div style={{ display: "flex", gap: 6, flex: "1 1 240px" }}>
-              <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
-                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
-                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugInput} onChange={e => setSlugInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && goToSlug(slugInput)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px" }} />
-              </div>
-              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugInput)}>→</button>
-            </div>
-          </div>
-        </div>
+        {/* ─── FIND-A-SALON — Fresha/Treatwell have a marketplace search;
+            Vellu deliberately doesn't. This is a *finder*: it helps a client
+            reach their own salon's page. The Vellu twist: every card renders
+            in the salon's OWN accent colour + cover — the "jouw merk, jouw
+            kleuren" promise made visible on the landing page itself. No
+            ratings, no ranking, no competitors side-by-side. */}
+        <SalonFinder lang={lang} t={t} c={c} goToSlug={goToSlug} navigate={navigate} />
 
         {/* ─── SAVINGS CALCULATOR ───
             Concrete €€ saved vs a typical commission platform — sliders feel
@@ -517,6 +503,140 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         />
       </div>
     </Layout>
+  );
+}
+
+// ─── SALON FINDER ───────────────────────────────────────────
+// Country code → flag emoji ("NL" → 🇳🇱). Empty string when the code is
+// missing/malformed so the row just renders without a flag.
+const flagOf = (cc) => {
+  if (!cc || cc.length !== 2) return "";
+  try { return cc.toUpperCase().replace(/./g, ch => String.fromCodePoint(127397 + ch.charCodeAt(0))); } catch { return ""; }
+};
+// Diacritics-insensitive lowercase for search ("Curaçao" matches "curacao").
+const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// The client-facing salon search. Loads every directory-visible salon once
+// (the list is small; client-side filtering gives instant results — switch
+// to a server ilike query only when the directory outgrows this) and
+// filters as the visitor types. Each card is painted with the salon's own
+// accent colour, cover and logo. A dashed "your salon here?" card at the
+// end turns the section into an acquisition surface too.
+function SalonFinder({ lang, t, c, goToSlug, navigate }) {
+  const [q, setQ] = useState("");
+  const [salons, setSalons] = useState(null); // null = loading
+  const [slugFallback, setSlugFallback] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
+        .eq("directory_visible", true)
+        .in("subscription_status", ["active", "trialing"])
+        .order("created_at", { ascending: true })
+        .limit(24);
+      if (!cancelled) setSalons(data || []);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const list = (salons || []).filter(s => {
+    if (!q.trim()) return true;
+    const hay = normStr(`${s.business_name} ${s.city || ""} ${s.slug}`);
+    return q.trim().split(/\s+/).every(w => hay.includes(normStr(w)));
+  });
+  // Some salons typed a full address into the city field; show just the
+  // city part (text after the last comma) without touching their data.
+  const cityOf = (s) => (s.city || "").split(",").pop().trim();
+
+  return (
+    <div id="find-salon" style={{ padding: "8px 24px 44px", position: "relative", zIndex: 10 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4.5vw, 34px)", fontWeight: 300, marginBottom: 6 }}>{t.findSalonTitle}</h2>
+          <div style={{ fontSize: 12, color: c.textLabel, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>{t.findSalonSub}</div>
+        </div>
+
+        {/* Search pill */}
+        <div style={{ maxWidth: 460, margin: "0 auto 20px", position: "relative" }}>
+          <div style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+          </div>
+          <input
+            className="input-field"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder={t.findSalonPh}
+            aria-label={t.findSalonTitle}
+            style={{ width: "100%", borderRadius: 100, padding: "13px 20px 13px 44px", fontSize: 13 }}
+          />
+        </div>
+
+        {/* Cards — horizontal snap strip on mobile, centered wrap on desktop,
+            so the section stays compact and never pushes the B2B flow down. */}
+        <style>{`
+          .salon-strip { display: flex; gap: 14px; overflow-x: auto; padding: 4px 4px 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+          .salon-card { scroll-snap-align: start; flex: 0 0 206px; text-align: left; cursor: pointer; border-radius: 20px; overflow: hidden; transition: transform .22s ease; padding: 0; font-family: inherit; }
+          .salon-card:hover { transform: translateY(-3px); }
+          @media (min-width: 720px) { .salon-strip { justify-content: center; flex-wrap: wrap; overflow-x: visible; } }
+          @media (prefers-reduced-motion: reduce) { .salon-card, .salon-card:hover { transition: none; transform: none; } }
+        `}</style>
+        {salons === null ? (
+          <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, padding: "16px 0" }}>…</div>
+        ) : (
+          <div className="salon-strip">
+            {list.map(s => {
+              const acc = s.accent_color || ACCENT;
+              return (
+                <button key={s.slug} className="salon-card" onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
+                  style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
+                  {/* Cover / brand band — the salon's own colours, not ours */}
+                  <div style={{ height: 66, background: s.cover_image_url ? `url(${s.cover_image_url}) center/cover` : `linear-gradient(120deg, ${acc}55, ${acc}18 60%, transparent), linear-gradient(160deg, ${acc}22, transparent)` }} />
+                  <div style={{ padding: "0 14px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-end", marginTop: -17 }}>
+                      {s.logo_url
+                        ? <img src={s.logo_url} alt="" style={{ width: 40, height: 40, borderRadius: 13, objectFit: "cover", border: `2.5px solid ${c.bgCard}`, background: c.bgCard, flexShrink: 0 }} />
+                        : <div style={{ width: 40, height: 40, borderRadius: 13, background: `linear-gradient(135deg, ${acc}, ${acc}88)`, border: `2.5px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: "#1a1713", flexShrink: 0 }}>{(s.business_name || "?").trim().slice(0, 1).toUpperCase()}</div>}
+                    </div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, marginTop: 8, color: c.text, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.business_name}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>{flagOf(s.country_code)} {cityOf(s)}</div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: 100, border: `1px solid ${acc}55`, fontSize: 10, color: acc, fontWeight: 600 }}>
+                      {t.findSalonBook} →
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {/* "Your salon here?" — acquisition card, always last */}
+            <button className="salon-card" onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
+              style={{ border: `1.5px dashed ${ACCENT}66`, background: `${ACCENT}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${ACCENT}88`, display: "flex", alignItems: "center", justifyContent: "center", color: ACCENT, fontSize: 18, marginBottom: 10 }}>+</div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
+              <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
+              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
+            </button>
+          </div>
+        )}
+
+        {/* No-result fallback: a client holding an exact vellu.cc link can
+            still navigate straight to it. */}
+        {salons !== null && q.trim() && list.length === 0 && (
+          <div style={{ maxWidth: 460, margin: "6px auto 0", textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 10 }}>{t.findSalonNoRes} {t.findSalonNoResHint}</div>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+              <div style={{ flex: 1, position: "relative", maxWidth: 260 }}>
+                <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugFallback} onChange={e => setSlugFallback(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && goToSlug(slugFallback)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px", width: "100%" }} />
+              </div>
+              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugFallback)}>→</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

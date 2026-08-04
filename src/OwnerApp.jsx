@@ -3299,6 +3299,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           staff_exceptions: (staffBlocksData || []).filter(r => r.kind === "exception"),
           account_type: data.account_type || "joint",
           show_owner_on_booking: data.show_owner_on_booking || false,
+          // Opt-out: visible in the landing-page salon finder unless
+          // explicitly switched off (DB default is true).
+          directory_visible: data.directory_visible !== false,
           staff_see_all: data.staff_see_all || false,
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
@@ -8365,6 +8368,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   ))}
                 </div>
+                {/* Salon-finder visibility — the landing page's "find your
+                    salon" section only lists salons with this ON (opt-out,
+                    default on). The salon's own vellu.cc/slug link always
+                    keeps working regardless. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, padding: "12px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: c.text, marginBottom: 3 }}>
+                      {lang === "nl" ? "Vindbaar in de Vellu salon-zoeker" : lang === "es" ? "Visible en el buscador de salones de Vellu" : "Discoverable in the Vellu salon finder"}
+                    </div>
+                    <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
+                      {lang === "nl"
+                        ? "Klanten kunnen je salon vinden via de zoeker op vellu.cc. Je eigen link blijft altijd werken, ook als dit uit staat."
+                        : lang === "es"
+                          ? "Los clientes pueden encontrar tu salón con el buscador en vellu.cc. Tu propio enlace siempre funciona, incluso si esto está desactivado."
+                          : "Clients can find your salon via the finder on vellu.cc. Your own link always keeps working, even with this off."}
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => update(d => { d.directory_visible = !d.directory_visible; return d; })}
+                    style={{ width: 36, height: 20, borderRadius: 10, background: salonData.directory_visible ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.directory_visible ? 18 : 2, transition: "left 0.2s" }} />
+                  </div>
+                </div>
               </div>
 
               {/* Invoice details */}
@@ -11273,6 +11299,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",
                   show_owner_on_booking: !!salonData.show_owner_on_booking,
+                  directory_visible: salonData.directory_visible !== false,
                   staff_see_all: !!salonData.staff_see_all,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
