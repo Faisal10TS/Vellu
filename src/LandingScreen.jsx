@@ -532,19 +532,33 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
     (async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
+        .select("id,slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
         .eq("directory_visible", true)
         .in("subscription_status", ["active", "trialing"])
         .order("created_at", { ascending: true })
         .limit(24);
-      if (!cancelled) setSalons(data || []);
+      const rows = data || [];
+      // Treatment search: pull every listed business's service names (all
+      // languages) so "biab", "knippen" or "pmu" finds the right place too.
+      const svcByOwner = {};
+      if (rows.length) {
+        const { data: svcs } = await supabase
+          .from("services")
+          .select("owner_id,name,name_nl,name_en,name_es")
+          .in("owner_id", rows.map(r => r.id));
+        for (const s of (svcs || [])) {
+          svcByOwner[s.owner_id] = (svcByOwner[s.owner_id] || "") + " " +
+            [s.name, s.name_nl, s.name_en, s.name_es].filter(Boolean).join(" ");
+        }
+      }
+      if (!cancelled) setSalons(rows.map(r => ({ ...r, svc: svcByOwner[r.id] || "" })));
     })();
     return () => { cancelled = true; };
   }, []);
 
   const list = (salons || []).filter(s => {
     if (!q.trim()) return true;
-    const hay = normStr(`${s.business_name} ${s.city || ""} ${s.slug}`);
+    const hay = normStr(`${s.business_name} ${s.city || ""} ${s.slug} ${s.svc || ""}`);
     return q.trim().split(/\s+/).every(w => hay.includes(normStr(w)));
   });
   // Some salons typed a full address into the city field; show just the
