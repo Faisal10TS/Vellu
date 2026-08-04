@@ -786,7 +786,7 @@ const _T_RAW = {
     gallery:"Galerij", noGallery:"Nog geen foto's in de galerij",
     // Landing page
     heroTag:"Voor nail techs, lash artists, kappers & meer",
-    heroTitle:"Jouw salon.", heroBrand:"Jouw merk. Jouw klanten.",
+    heroTitle:"Jouw salon. Jouw regels.", heroBrand:"Jouw omzet.",
     heroSub:"Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie. Klaar in 2 minuten.",
     startFree:"Start 14-daagse trial →", howItWork:"Hoe werkt het?",
     findSalonNav:"Klant? Vind een salon →",
@@ -1065,7 +1065,7 @@ const _T_RAW = {
     gallery:"Gallery", noGallery:"No photos in gallery yet",
     // Landing page
     heroTag:"For nail techs, lash artists, hairdressers & more",
-    heroTitle:"Your salon.", heroBrand:"Your brand. Your clients.",
+    heroTitle:"Your salon. Your rules.", heroBrand:"Your revenue.",
     heroSub:"Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes.",
     startFree:"Start 14-day free trial →", howItWork:"How does it work?",
     findSalonNav:"Customer? Find a salon →",
@@ -1344,7 +1344,7 @@ const _T_RAW = {
     gallery:"Galería", noGallery:"Aún no hay fotos en la galería",
     // Landing page
     heroTag:"Para manicuristas, lashistas, peluqueros y más",
-    heroTitle:"Tu salón.", heroBrand:"Tu marca. Tus clientes.",
+    heroTitle:"Tu salón. Tus reglas.", heroBrand:"Tus ingresos.",
     heroSub:"Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión. Lista en 2 minutos.",
     startFree:"Comienza tu prueba gratis de 14 días →", howItWork:"¿Cómo funciona?",
     findSalonNav:"¿Eres cliente? Encuentra un salón →",
