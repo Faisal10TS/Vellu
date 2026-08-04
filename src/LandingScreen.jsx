@@ -146,9 +146,27 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
               ))}
             </div>
+            {/* Quiet, truthful trust line — real salons in both markets use
+                Vellu today. No inflated numbers, no fabricated quotes. */}
+            <div className="hero-stats" style={{ display: "flex", marginTop: 22, fontSize: 11, color: c.textMuted, letterSpacing: "0.05em" }}>
+              {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
+                : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
+                : "Used by salons in the Netherlands and the Caribbean"}
+            </div>
           </div>
           <div className="fade-up">
             <HeroPhoneMockup lang={lang} c={c} />
+            {/* "See it live" — screenshots convince, clicking sells. Links to
+                the seeded demo salon so a prospect can poke a REAL booking
+                page (clearly labelled as an example). */}
+            <div style={{ textAlign: "center", marginTop: 2 }}>
+              <button
+                onClick={() => navigate("/bloomstudio")}
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 12, color: ACCENT, letterSpacing: "0.04em", padding: "8px 12px", borderBottom: `1px solid ${ACCENT}44` }}
+              >
+                {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+              </button>
+            </div>
           </div>
         </div>
 
