@@ -477,6 +477,15 @@ const CURRENCIES = {
   ANG: { code: "ANG", symbol: "NAf. ", locale: "en-US" }, // Netherlands Antillean guilder
 };
 
+// The language the SALON OWNER receives system emails in, derived from the
+// salon's country (mirrors DUTCH_COUNTRIES/langFor in the edge functions):
+// NL/BE/AW/CW/BQ → nl, everything else → en. Distinct from the CLIENT's
+// browsing language — a Dutch owner shouldn't get an English "new booking"
+// email just because their client booked in English.
+function ownerLangFor(countryCode) {
+  const country = COUNTRIES.find((c) => c.code === (countryCode || "NL"));
+  return (country && country.defaultLang) || "nl";
+}
 // Resolve a salon's currency from its country_code (fallback EUR for anything
 // unknown/missing, so existing behaviour is preserved).
 function currencyForCountry(countryCode) {
@@ -2185,7 +2194,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
-  CURRENCIES, currencyForCountry, curSym, fmtMoney, taxForCountry,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, taxForCountry, ownerLangFor,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,

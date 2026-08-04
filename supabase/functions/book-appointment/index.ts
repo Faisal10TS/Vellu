@@ -656,11 +656,14 @@ serve(async (req) => {
         cancel_url: `https://vellu.cc/cancel/${cancelToken}`,
       }),
     ];
-    // Notification to the owner (+ any assigned staff).
+    // Notification to the owner (+ any assigned staff). The owner reads this
+    // in the SALON's language (mirrors DUTCH_COUNTRIES in send-reminders),
+    // not the client's booking language.
     if (ownerEmail) {
       jobs.push(sendMail("booking_notification", {
         owner_email: ownerEmail,
         staff_emails: staffEmails,
+        owner_lang: ["NL", "BE", "AW", "CW", "BQ"].includes(salon.country_code || "NL") ? "nl" : "en",
       }));
     }
     // NOTE: no invoice at booking time anymore. "online" now means "payment

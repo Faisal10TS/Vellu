@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym, taxForCountry
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym, taxForCountry, ownerLangFor
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -2358,7 +2358,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                       price, salon_name: salonProfile.business_name,
-                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur
+                      salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur,
+                      owner_lang: ownerLangFor(salonProfile.country_code)
                     });
                     setAddApptDone(true);
                     setAddApptLoading(false);

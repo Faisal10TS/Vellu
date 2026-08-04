@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym
+  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor
 } from "./shared.jsx";
 
 function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
@@ -248,7 +248,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const dynamicManifest = {
       name: `${initialSalon.name} via Vellu`,
       short_name: initialSalon.name?.slice(0, 12) || "Vellu",
-      description: `Boek je afspraak bij ${initialSalon.name}`,
+      description: lang === "nl" ? `Boek je afspraak bij ${initialSalon.name}` : lang === "es" ? `Reserva tu cita en ${initialSalon.name}` : `Book your appointment at ${initialSalon.name}`,
       start_url: `/${initialSalon.slug}`,
       scope: "/",
       display: "standalone",
@@ -279,7 +279,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (prevHref) link.href = prevHref;
       else link.remove();
     };
-  }, [initialSalon?.slug, initialSalon?.name, initialSalon?.accent]);
+  }, [initialSalon?.slug, initialSalon?.name, initialSalon?.accent, lang]);
 
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
@@ -1475,6 +1475,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           price: serverPrice,
           salon_name: result.salon_name || initialSalon.name,
           salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
+          // The owner reads this email in the SALON's language, not the
+          // client's browsing language.
+          owner_lang: ownerLangFor(initialSalon.country_code),
         }).catch(e => console.error("notification email failed:", e));
       }
 

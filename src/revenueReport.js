@@ -20,12 +20,18 @@ const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 // Safe string — avoids undefined/null blowing up pdf output.
 const s = (v) => (v === null || v === undefined ? "" : String(v));
 
-// Local date formatter — we want Dutch output even when the user's browser
-// locale is English, because the report will be sent to a Dutch accountant.
-const fmtDateNL = (isoDate) => {
+// Local date formatter in the report's language. Originally NL-only ("report
+// goes to a Dutch accountant") — no longer true now salons exist outside NL,
+// so the accountant reads whatever language the owner exports in.
+const REPORT_MONTHS = {
+  nl: ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"],
+  en: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+  es: ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"],
+};
+const fmtDateNL = (isoDate, lang = "nl") => {
   try {
     const [y, m, d] = isoDate.split("-").map(Number);
-    const months = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+    const months = REPORT_MONTHS[lang] || REPORT_MONTHS.nl;
     return `${d} ${months[m - 1]} ${y}`;
   } catch {
     return isoDate;
@@ -57,12 +63,12 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(26, 23, 20);
-  doc.text("Omzetrapport", margin, 60);
+  doc.text(lang === "nl" ? "Omzetrapport" : lang === "es" ? "Informe de ingresos" : "Revenue report", margin, 60);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(120, 120, 120);
-  doc.text(range.label || `${fmtDateNL(range.from)} — ${fmtDateNL(range.to)}`, margin, 78);
+  doc.text(range.label || `${fmtDateNL(range.from, lang)} — ${fmtDateNL(range.to, lang)}`, margin, 78);
   if (staffName) {
     doc.setFontSize(10);
     doc.setTextColor(...ACCENT);
@@ -224,7 +230,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
         pageH - 32
       );
       doc.text(
-        `${lang === "nl" ? "Gegenereerd op" : lang === "es" ? "Generado el" : "Generated on"} ${new Date().toLocaleDateString("nl-NL")} · vellu.cc`,
+        `${lang === "nl" ? "Gegenereerd op" : lang === "es" ? "Generado el" : "Generated on"} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
         margin,
         pageH - 20
       );
@@ -236,7 +242,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
   const fnStaff = staffName ? "-" + s(staffName).replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 30) : "";
   const fnRange = (range.from || "").slice(0, 7); // YYYY-MM for month files
-  const filename = `${fnSalon}${fnStaff}-omzet-${fnRange || range.from || "rapport"}.pdf`;
+  const filename = `${fnSalon}${fnStaff}-${lang === "nl" ? "omzet" : lang === "es" ? "ingresos" : "revenue"}-${fnRange || range.from || "report"}.pdf`;
 
   doc.save(filename);
 

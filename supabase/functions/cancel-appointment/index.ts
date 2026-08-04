@@ -61,7 +61,7 @@ function rateLimit(ip: string): boolean {
 // Notify the first waiting waitlist entry for this owner+date. Best-effort:
 // runs after the cancel succeeded, and swallows its own errors so a failure
 // here never makes the cancel appear to fail to the client.
-async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string }) {
+async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string; lang?: string }) {
   try {
     const { data: entries } = await supabase
       .from("waitlist")
@@ -95,7 +95,10 @@ async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?:
           salon_logo: salonMeta.logo || "",
           salon_slug: salonMeta.slug || "",
           date,
-          lang: "nl",
+          // Waitlist rows don't store the client's language (yet), so the
+          // salon's market language is the best signal we have — better than
+          // the old hardcoded Dutch for e.g. a Sint Maarten salon.
+          lang: salonMeta.lang || "nl",
         },
       }),
     }).catch((e) => console.error("waitlist notify email failed:", e));
@@ -137,6 +140,9 @@ async function notifyOwnerCancellation(b: {
           salon_accent: b.salon_accent || "",
           salon_logo: b.salon_logo || "",
           lang: b.lang || "nl",
+          // send-emails renders owner-facing mails from owner_lang; keep lang
+          // too so older send-emails versions stay compatible.
+          owner_lang: b.lang || "nl",
         },
       }),
     }).catch((e) => console.error("owner cancellation email failed:", e));
@@ -326,7 +332,9 @@ serve(async (req) => {
       time: appt.time,
       reason: cleanReason,
     }),
-    // Client-facing cancellation confirmation (email + SMS).
+    // Client-facing cancellation confirmation (email + SMS) — in the language
+    // the CLIENT booked in (stored on the appointment row), falling back to
+    // the salon's market language for old rows without one.
     notifyClientCancellation({
       client_email: appt.client_email,
       client_phone: appt.client_phone || null,
@@ -335,7 +343,7 @@ serve(async (req) => {
       salon_accent: notify.salon_accent,
       salon_logo: notify.salon_logo,
       salon_email: notify.owner_email,
-      lang: notify.lang,
+      lang: ["nl", "en", "es"].includes(appt.lang) ? appt.lang : notify.lang,
       service_name: appt.service_name,
       date: appt.date,
       time: appt.time,
@@ -347,6 +355,7 @@ serve(async (req) => {
           accent: notify.salon_accent,
           logo: notify.salon_logo,
           slug: salonSlug,
+          lang: notify.lang,
         })
       : Promise.resolve(),
   ]);

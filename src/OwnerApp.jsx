@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES, ownerLangFor
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -11703,7 +11703,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
                         price: totalPrice, salon_name: salonData.name,
-                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang, currency: cur
+                        salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang, currency: cur,
+                        owner_lang: ownerLangFor(salonData.country_code)
                       });
                     }
                     setAddApptDone(true);

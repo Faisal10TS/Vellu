@@ -129,6 +129,13 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
     cancelled_count: "Geannuleerd", no_show_count: "No-shows",
     total_spent: `Totaal besteed (${sym})`, favorite_service: "Favoriete behandeling",
     favorite_staff: "Favoriete medewerker",
+  } : lang === "es" ? {
+    first_name: "Nombre", last_name: "Apellido", email: "Correo", phone: "Teléfono",
+    allergies: "Alergias", first_visit: "Primera visita", last_visit: "Última visita",
+    total_appointments: "Citas", completed_count: "Completadas",
+    cancelled_count: "Canceladas", no_show_count: "Ausencias",
+    total_spent: `Total gastado (${sym})`, favorite_service: "Servicio favorito",
+    favorite_staff: "Personal favorito",
   } : {
     first_name: "First name", last_name: "Last name", email: "Email", phone: "Phone",
     allergies: "Allergies", first_visit: "First visit", last_visit: "Last visit",
@@ -145,7 +152,7 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   const fnSalon = (salonName || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
   const d = new Date();
   const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const filename = `${fnSalon}-klanten-${today}.csv`;
+  const filename = `${fnSalon}-${lang === "nl" ? "klanten" : lang === "es" ? "clientes" : "clients"}-${today}.csv`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

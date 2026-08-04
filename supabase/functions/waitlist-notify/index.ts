@@ -94,7 +94,10 @@ serve(async (req) => {
   const clientName = String(payload?.client_name || "").trim().slice(0, 120);
   const clientPhone = payload?.client_phone ? String(payload.client_phone).trim().slice(0, 40) : null;
   const notes = payload?.notes ? String(payload.notes).slice(0, 300) : null;
-  const clientLang = payload?.lang === "en" ? "en" : "nl";
+  // Client's own language for their confirmation — es was added after this
+  // function was written, so accept all three (Spanish clients were silently
+  // getting Dutch emails).
+  const clientLang = ["en", "es"].includes(payload?.lang) ? payload.lang : "nl";
   const staffId = payload?.staff_id ? String(payload.staff_id) : null;
   const serviceIds: string[] = Array.isArray(payload?.service_ids) ? payload.service_ids.map((x: unknown) => String(x)) : [];
   // Dates: keep only YYYY-MM-DD strings, dedup, cap.
@@ -175,6 +178,9 @@ serve(async (req) => {
     dates,
     notes,
     lang: salonLang,
+    // send-emails renders owner-facing mails from owner_lang; keep lang too
+    // so older send-emails versions stay compatible.
+    owner_lang: salonLang,
   });
 
   return json(200, { success: true }, origin);
