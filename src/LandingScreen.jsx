@@ -513,6 +513,12 @@ const flagOf = (cc) => {
   if (!cc || cc.length !== 2) return "";
   try { return cc.toUpperCase().replace(/./g, ch => String.fromCodePoint(127397 + ch.charCodeAt(0))); } catch { return ""; }
 };
+// Category label in the visitor's language, falling back across languages.
+const catLabel = (cat, lang) => (lang === "nl"
+  ? (cat.name_nl || cat.name_en || cat.name_es)
+  : lang === "es"
+    ? (cat.name_es || cat.name_en || cat.name_nl)
+    : (cat.name_en || cat.name_nl || cat.name_es)) || "";
 // Diacritics-insensitive lowercase for search ("Curaçao" matches "curacao").
 const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -538,20 +544,29 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
         .order("created_at", { ascending: true })
         .limit(24);
       const rows = data || [];
-      // Treatment search: pull every listed business's service names (all
-      // languages) so "biab", "knippen" or "pmu" finds the right place too.
+      // Treatment search + category chips: pull services and categories of
+      // every listed business in one go (both publicly readable), so
+      // "biab", "knippen" or "pmu" finds the right place and each card can
+      // show what the business actually does.
       const svcByOwner = {};
+      const catsByOwner = {};
       if (rows.length) {
-        const { data: svcs } = await supabase
-          .from("services")
-          .select("owner_id,name,name_nl,name_en,name_es")
-          .in("owner_id", rows.map(r => r.id));
+        const ids = rows.map(r => r.id);
+        const [{ data: svcs }, { data: cats }] = await Promise.all([
+          supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids),
+          supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", ids).order("position", { ascending: true }),
+        ]);
         for (const s of (svcs || [])) {
           svcByOwner[s.owner_id] = (svcByOwner[s.owner_id] || "") + " " +
             [s.name, s.name_nl, s.name_en, s.name_es].filter(Boolean).join(" ");
         }
+        for (const cat of (cats || [])) {
+          (catsByOwner[cat.owner_id] = catsByOwner[cat.owner_id] || []).push(cat);
+          svcByOwner[cat.owner_id] = (svcByOwner[cat.owner_id] || "") + " " +
+            [cat.name_nl, cat.name_en, cat.name_es].filter(Boolean).join(" ");
+        }
       }
-      if (!cancelled) setSalons(rows.map(r => ({ ...r, svc: svcByOwner[r.id] || "" })));
+      if (!cancelled) setSalons(rows.map(r => ({ ...r, svc: svcByOwner[r.id] || "", cats: (catsByOwner[r.id] || []).slice(0, 3) })));
     })();
     return () => { cancelled = true; };
   }, []);
@@ -616,6 +631,13 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
                     </div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, marginTop: 8, color: c.text, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.business_name}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>{flagOf(s.country_code)} {cityOf(s)}</div>
+                    {/* What this business does — its own first categories,
+                        in the visitor's language, truncated to one line. */}
+                    {(s.cats || []).length > 0 && (
+                      <div style={{ fontSize: 9.5, color: c.textLabel, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {s.cats.map(cat => catLabel(cat, lang)).filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: 100, border: `1px solid ${acc}55`, fontSize: 10, color: acc, fontWeight: 600 }}>
                       {t.findSalonBook} →
                     </div>
