@@ -117,10 +117,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 26 }}>
               <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
             </div>
+            {/* Three beats, three lines — each beat wrapped in nowrap so a
+                line can never break mid-phrase ("Jouw salon. Jouw / regels.")
+                at in-between viewport widths. Mirrors the og-image. */}
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(42px, 7.5vw, 64px)", fontWeight: 300, letterSpacing: "0.05em", lineHeight: 1.06, marginBottom: 22 }}>
-              {t.heroTitle}
+              <span style={{ whiteSpace: "nowrap" }}>{t.heroTitle}</span>
               <br />
-              <span style={{ color: ACCENT }}>{t.heroBrand}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{t.heroTitle2}</span>
+              <br />
+              <span style={{ color: ACCENT, whiteSpace: "nowrap" }}>{t.heroBrand}</span>
             </h1>
             <p className="hero-sub" style={{ fontSize: "clamp(14px, 2vw, 16px)", color: c.textSub, lineHeight: 1.7, maxWidth: 440, marginBottom: 34, letterSpacing: "0.01em" }}>
               {t.heroSub}
