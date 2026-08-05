@@ -866,6 +866,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (vs.length > 0) return Math.min(...vs);
     return item.service.duration || 0;
   };
+  // Extras can carry their own time (e.g. removal or intricate design =
+  // +30 min); per-unit extras count × quantity. Quick add-ons without a
+  // duration contribute 0 — exactly the old behaviour.
+  const itemExtrasDuration = (item) => (item.extras || []).reduce((s, e) => s + (parseInt(e.duration) || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
   const hasUnchosenVariant = selectedServices.some(it => (it.service.variants || []).length > 0 && !it.variant);
   // "Vanaf €30.00" prefix for totals while any variant is still unchosen.
   const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : "";
@@ -890,7 +894,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     }, 0);
   };
   const getDuration = () => {
-    return selectedServices.reduce((sum, item) => sum + itemBaseDuration(item), 0);
+    return selectedServices.reduce((sum, item) => sum + itemBaseDuration(item) + itemExtrasDuration(item), 0);
   };
   const getServiceLabel = () => {
     return selectedServices.map(item => {
@@ -1161,7 +1165,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // Precompute per-service: duration + eligible-staff list.
     const allStaff = initialSalon.staff || [];
     const serviceSlots = selectedServices.map(item => {
-      const duration = (item.variant ? item.variant.duration : item.service.duration) || 30;
+      const duration = ((item.variant ? item.variant.duration : item.service.duration) || 30) + itemExtrasDuration(item);
       const eligible = item.staff
         ? [item.staff]
         : allStaff.filter(s =>
@@ -2717,6 +2721,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                       </span>
                                     )}
                                     <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{cur}{(parseFloat(e.price) * (e.per_unit ? qty : 1)).toFixed(2)}</span>
+                                    {(parseInt(e.duration) || 0) > 0 && <span style={{ fontSize: 10, color: extraSel ? accent : c.textMuted }}>+{(parseInt(e.duration) || 0) * (e.per_unit ? qty : 1)} {t.min}</span>}
                                   </div>
                                 );
                               })}
@@ -3453,7 +3458,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               return (
                               <div key={e.id} className={`service-card ${extraSel ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                                  <div style={{ fontWeight: 500, fontSize: 12 }}>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
+                                  <div style={{ fontWeight: 500, fontSize: 12 }}>
+                                    + {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}
+                                    {(parseInt(e.duration) || 0) > 0 && <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400, marginLeft: 6 }}>+{(parseInt(e.duration) || 0) * (e.per_unit ? qty : 1)} {t.min}</span>}
+                                  </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     {extraSel && e.per_unit && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

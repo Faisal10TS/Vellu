@@ -189,7 +189,7 @@ serve(async (req) => {
   if (extraIdsFlat.length > 0) {
     const { data: extras, error: eErr } = await supabase
       .from("service_extras")
-      .select("id, service_id, name_nl, name_en, name_es, price, per_unit, max_quantity")
+      .select("id, service_id, name_nl, name_en, name_es, price, duration, per_unit, max_quantity")
       .in("id", extraIdsFlat);
     if (eErr) return err(500, "db_error_extras", origin);
     if (!extras || extras.length !== extraIdsFlat.length) return err(400, "invalid_extra", origin);
@@ -276,7 +276,10 @@ serve(async (req) => {
     const svcExtras = (extra_ids?.[svc.id] || []).map((eid: string) => extrasById[eid]).filter(Boolean);
     const variant = variantId ? variantsById[variantId] : null;
     const price = variant ? parseFloat(variant.price) * variantQty(variant) : parseFloat(svc.price);
-    const duration = variant ? parseInt(variant.duration) : parseInt(svc.duration);
+    // Extras can carry their own time (removal / intricate design = +30 min);
+    // per-unit extras count × quantity. No duration set = 0, old behaviour.
+    const extrasDur = svcExtras.reduce((s: number, e: any) => s + (parseInt(e.duration) || 0) * extraQty(e), 0);
+    const duration = (variant ? parseInt(variant.duration) : parseInt(svc.duration)) + extrasDur;
     const extrasPrice = svcExtras.reduce((s: number, e: any) => s + parseFloat(e.price || 0) * extraQty(e), 0);
     totalPrice += price + extrasPrice;
     totalDuration += duration;

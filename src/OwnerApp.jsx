@@ -1206,17 +1206,22 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name_nl: "", name_en: "", price: "", per_unit: false });
+  const [form, setForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", per_unit: false });
 
   const add = async () => {
     const primaryName = lang === "nl" ? form.name_nl : lang === "es" ? (form.name_es || form.name_en || form.name_nl) : (form.name_en || form.name_nl);
     if (!primaryName || !form.price) return;
     const price = parseFloat(form.price);
     if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+    // Optional extra time: empty = 0 min (quick add-on like gems); a value
+    // like 30 makes the booking longer (e.g. intricate design, removal).
+    const duration = form.duration === "" ? null : parseInt(form.duration);
+    if (duration !== null && (!Number.isFinite(duration) || duration < 0 || duration > 480)) { toast.show(lang === "nl" ? "Ongeldige duur" : lang === "es" ? "Duración no válida" : "Invalid duration", "error"); return; }
     const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }], lang);
     const { data, error } = await supabase.from("service_extras").insert({
       service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
       price,
+      duration,
       per_unit: !!form.per_unit,
       max_quantity: 10,
       // Append at the end of the list so drag-reorder positions stay stable.
@@ -1227,7 +1232,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
       return;
     }
     onAdd(data);
-    setForm({ name_nl: "", name_en: "", price: "", per_unit: false });
+    setForm({ name_nl: "", name_en: "", price: "", duration: "", per_unit: false });
     setOpen(false);
   };
 
@@ -1247,7 +1252,13 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
           lang={lang} accent={accent}
           placeholder={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"}
         />
-        <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : lang === "es" ? "Precio *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", width: "100%" }} />
+        <div style={{ display: "flex", gap: 6 }}>
+          <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : lang === "es" ? "Precio *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 0 }} />
+          <input className="input-field" placeholder={lang === "nl" ? "Extra tijd (min)" : lang === "es" ? "Tiempo extra (min)" : "Extra time (min)"} type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 0 }} />
+        </div>
+        <div style={{ fontSize: 9.5, color: c.textMuted, lineHeight: 1.4, padding: "0 2px" }}>
+          {lang === "nl" ? "Extra tijd is optioneel — laat leeg voor snelle extra's (steentjes), vul bijv. 30 in als de extra echt langer duurt (removal, intricate design)." : lang === "es" ? "El tiempo extra es opcional — déjalo vacío para extras rápidos, pon p. ej. 30 si el extra realmente tarda más." : "Extra time is optional — leave empty for quick add-ons (gems), enter e.g. 30 when the extra really takes longer (removal, intricate design)."}
+        </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", padding: "2px" }}>
           <input type="checkbox" checked={!!form.per_unit} onChange={e => setForm(f => ({...f, per_unit: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
           {lang === "nl" ? "Klant kan aantal kiezen (bijv. 3 gebroken nagels)" : lang === "es" ? "El cliente puede elegir una cantidad (p. ej. 3 uñas rotas)" : "Client can choose a quantity (e.g. 3 broken nails)"}
@@ -3142,7 +3153,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingVariant, setEditingVariant] = useState(null);
   const [editVariantForm, setEditVariantForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", description_nl: "", description_en: "", per_unit: false });
   const [editingExtra, setEditingExtra] = useState(null);
-  const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "", per_unit: false });
+  const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", per_unit: false });
   const [settingsTab, setSettingsTab] = useState("salon");
   // Plan gating: ONLY the paid Starter plan is limited. Trials and comped
   // accounts (plan == null) get the full Professional experience so they
@@ -9115,9 +9126,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 placeholder={lang === "nl" ? "bijv. Nail art" : lang === "es" ? "p. ej. Nail art" : "e.g. Nail art"}
                                               />
                                             </div>
-                                            <div style={{ marginBottom: 8 }}>
-                                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label>
-                                              <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                                            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label>
+                                                <input className="input-field" type="number" value={editExtraForm.price} onChange={ev => setEditExtraForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                                              </div>
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Extra tijd (min)" : lang === "es" ? "Tiempo extra (min)" : "Extra time (min)"}</label>
+                                                <input className="input-field" type="number" value={editExtraForm.duration} onChange={ev => setEditExtraForm(f => ({...f, duration: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : lang === "es" ? "opcional" : "optional"} />
+                                              </div>
                                             </div>
                                             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", marginBottom: 8 }}>
                                               <input type="checkbox" checked={!!editExtraForm.per_unit} onChange={ev => setEditExtraForm(f => ({...f, per_unit: ev.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
@@ -9126,9 +9143,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editExtraForm, [{ nl: "name_nl", en: "name_en" }], lang);
-                                                const { error } = await supabase.from("service_extras").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit }).eq("id", e.id);
+                                                const exDur = editExtraForm.duration === "" || editExtraForm.duration == null ? null : Math.max(0, Math.min(480, parseInt(editExtraForm.duration) || 0));
+                                                const { error } = await supabase.from("service_extras").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: exDur, per_unit: !!editExtraForm.per_unit }).eq("id", e.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
-                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), per_unit: !!editExtraForm.per_unit} : ex)} : svc); return d; });
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: exDur, per_unit: !!editExtraForm.per_unit} : ex)} : svc); return d; });
                                                 setEditingExtra(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                                               <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -9138,10 +9156,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
-                                            <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
+                                              {(parseInt(e.duration) || 0) > 0 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>+{parseInt(e.duration)} min</div>}
+                                            </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
-                                              <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, per_unit: !!e.per_unit }); }}
+                                              <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, duration: e.duration == null ? "" : String(e.duration), per_unit: !!e.per_unit }); }}
                                                 style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="edit" size={11} color="currentColor" />
                                               </button>
@@ -11595,15 +11616,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       if (!svc) continue;
                       const variant = svc.variants?.find(v => v.id === r.variant_id);
                       const staff = (salonData.staff || []).find(m => m.id === r.staff_id);
-                      // Extras add to price but not duration (matches client flow —
-                      // service_extras schema has no duration column).
                       const extras = (svc.extras || []).filter(ex => (r.extra_ids || []).includes(ex.id));
                       // Per-unit quantity: variant × its qty, each extra × its qty (clamped).
                       const vQty = variant && variant.per_unit ? Math.max(1, Math.min(parseInt(r.variant_qty) || 1, variant.max_quantity || 10)) : 1;
                       const eQty = (ex) => ex.per_unit ? Math.max(1, Math.min(parseInt((r.extra_qtys || {})[ex.id]) || 1, ex.max_quantity || 10)) : 1;
                       const extrasPrice = extras.reduce((s, ex) => s + parseFloat(ex.price || 0) * eQty(ex), 0);
+                      // Extras with their own duration (removal, intricate design)
+                      // lengthen the appointment; per-unit extras count × qty.
+                      const extrasDuration = extras.reduce((s, ex) => s + (parseInt(ex.duration) || 0) * eQty(ex), 0);
                       const price = (variant ? parseFloat(variant.price) * vQty : parseFloat(svc.price)) + extrasPrice;
-                      const duration = parseInt(variant ? variant.duration : svc.duration);
+                      const duration = parseInt(variant ? variant.duration : svc.duration) + extrasDuration;
                       const exNm = (ex) => lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl);
                       const extrasSuffix = extras.length
                         ? " + " + extras.map(ex => { const q = eQty(ex); return q > 1 ? `${exNm(ex)} ×${q}` : exNm(ex); }).join(", ")
