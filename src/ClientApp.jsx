@@ -2963,22 +2963,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.yourDetailsSub}</div>
                   </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                  {/* Honeypot — invisible to real users, bots fill it. Offscreen
-                      positioning beats display:none (savvier bots skip hidden
-                      inputs). tabIndex=-1 keeps keyboard users out. */}
-                  <input
-                    type="text"
-                    name="website"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    aria-hidden="true"
-                    value={form.website}
-                    onChange={e => setForm(f => ({...f, website: e.target.value}))}
-                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                  />
+                {/* A real <form> + name/autocomplete attributes: iOS and
+                    Android only reliably offer contact AutoFill and previously
+                    typed values inside an actual form whose fields they can
+                    identify. The honeypot moved to the END of the form — in
+                    front it broke Safari's field-group detection (this is what
+                    silently killed autofill for returning clients). */}
+                <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                   {/* Email first for client lookup */}
-                  <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                  <input className="input-field" placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                   
                   {/* Client found indicator */}
                   {clientFound && (
@@ -2992,13 +2985,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   )}
                   
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <input className="input-field" type="text" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                    <input className="input-field" type="text" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                    <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                    <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
-                  <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
-                  <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                  <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
-                </div>
+                  {/* Honeypot — invisible to real users, bots fill it. Offscreen
+                      positioning beats display:none (savvier bots skip hidden
+                      inputs). tabIndex=-1 keeps keyboard users out. Kept LAST
+                      so it can't disturb autofill field-group detection. */}
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    value={form.website}
+                    onChange={e => setForm(f => ({...f, website: e.target.value}))}
+                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                  />
+                </form>
                 
                 {/* No-show warning */}
                 {clientNoShows > 0 && (
@@ -3593,20 +3600,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {/* Step 3 — Details (mobile) */}
                   {step === 3 && <>
                     <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                      {/* Honeypot — see desktop branch for rationale */}
-                      <input
-                        type="text"
-                        name="website"
-                        tabIndex={-1}
-                        autoComplete="off"
-                        aria-hidden="true"
-                        value={form.website}
-                        onChange={e => setForm(f => ({...f, website: e.target.value}))}
-                        style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                      />
+                    {/* Real <form> + autofill attributes — see other branch. */}
+                    <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                       {/* Email first for client lookup */}
-                      <input className="input-field" placeholder={t.email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                      <input className="input-field" placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                       
                       {/* Client found indicator */}
                       {clientFound && (
@@ -3620,13 +3617,24 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       )}
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        <input className="input-field" type="text" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                        <input className="input-field" type="text" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                        <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                        <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
-                      <input className="input-field" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
-                      <input className="input-field" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                      <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                      <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
-                    </div>
+                      {/* Honeypot — kept LAST so it can't disturb autofill. */}
+                      <input
+                        type="text"
+                        name="website"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        aria-hidden="true"
+                        value={form.website}
+                        onChange={e => setForm(f => ({...f, website: e.target.value}))}
+                        style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                      />
+                    </form>
                     
                     {/* No-show warning */}
                     {clientNoShows > 0 && (
@@ -3939,14 +3947,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   })()}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <input className="input-field" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                      <input className="input-field" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                      <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                      <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                     </div>
-                    <input className="input-field" placeholder={T[lang].email} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                    <input className="input-field" placeholder={T[lang].email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                     {/* Phone follows the salon's phone_required setting, exactly
                         like the booking form — it made no sense for the same
                         setting to be enforced at booking but ignored here. */}
-                    <input className="input-field" placeholder={`${T[lang].phone}${initialSalon.phone_required ? ` (${T[lang].required})` : ` (${T[lang].optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                    <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${T[lang].phone}${initialSalon.phone_required ? ` (${T[lang].required})` : ` (${T[lang].optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
                     <textarea className="input-field" placeholder={T[lang].waitlistNotesPh} value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} rows={2} style={{ resize: "none" }} />
                   </div>
                   {waitlistError && (
