@@ -2612,6 +2612,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {/* Name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500, fontSize: 14, color: c.text, marginBottom: 4 }}>{svcName(s)}</div>
+                        {/* Same description the services list shows — it was
+                            missing HERE, so it vanished the moment a client
+                            tapped through to book (while variants kept
+                            theirs). Clamped to 2 lines, like the list. */}
+                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <NavIcon name="clock" size={10} color={c.textLabel} /> {svcDuration(s)}
