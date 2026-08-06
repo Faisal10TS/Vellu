@@ -174,10 +174,21 @@ serve(async (req) => {
       const mandateId = payment.mandateId || profile.mollie_mandate_id || "";
       const periodStart = new Date();
       const periodEnd = addInterval(periodStart, interval);
+      // Referral credit earned during the trial is honored at conversion:
+      // the first paid period is extended by the credited days AND the
+      // subscription only starts charging after them — so "2 weeks free"
+      // are genuinely free, not just a drifting expiry date.
+      let firstCreditsUsed = 0;
+      let firstEnd = periodEnd;
+      if ((profile.referral_credit_days || 0) > 0) {
+        firstCreditsUsed = profile.referral_credit_days || 0;
+        firstEnd = new Date(periodEnd);
+        firstEnd.setDate(firstEnd.getDate() + firstCreditsUsed);
+      }
       let subscriptionId = "";
       if (payment.customerId && mandateId) {
         const intervalStr = interval === "yearly" ? "12 months" : "1 month";
-        const startDate = periodEnd.toISOString().slice(0, 10);
+        const startDate = firstEnd.toISOString().slice(0, 10);
         const subRes = await mollieFetch(`/customers/${payment.customerId}/subscriptions`, {
           method: "POST",
           body: JSON.stringify({
@@ -210,20 +221,23 @@ serve(async (req) => {
         vat_rate: 0.21,
         period_start: periodStart.toISOString(),
       } : {};
-      await supabase
-        .from("profiles")
-        .update({
-          plan,
-          billing_interval: interval,
-          subscription_status: "active",
-          mollie_mandate_id: mandateId,
-          mollie_subscription_id: subscriptionId || profile.mollie_subscription_id,
-          current_period_start: periodStart.toISOString(),
-          plan_expires_at: periodEnd.toISOString(),
-          cancel_at_period_end: false,
-          cancelled_at: null,
-        })
-        .eq("id", ownerId);
+      const firstUpdates: Record<string, unknown> = {
+        plan,
+        billing_interval: interval,
+        subscription_status: "active",
+        mollie_mandate_id: mandateId,
+        mollie_subscription_id: subscriptionId || profile.mollie_subscription_id,
+        current_period_start: periodStart.toISOString(),
+        plan_expires_at: firstEnd.toISOString(),
+        cancel_at_period_end: false,
+        cancelled_at: null,
+      };
+      if (firstCreditsUsed > 0) {
+        firstUpdates.referral_credit_days = 0;
+        firstUpdates.referral_credit_days_redeemed =
+          ((profile as { referral_credit_days_redeemed?: number }).referral_credit_days_redeemed || 0) + firstCreditsUsed;
+      }
+      await supabase.from("profiles").update(firstUpdates).eq("id", ownerId);
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
           method: "POST",
@@ -236,8 +250,9 @@ serve(async (req) => {
               plan,
               billing_interval: interval,
               amount: parseFloat(payment.amount.value),
-              period_end: periodEnd.toISOString(),
+              period_end: firstEnd.toISOString(),
               business_name: (profile as Record<string, unknown>).business_name,
+              credits_used: firstCreditsUsed || 0,
               ...invoiceFields,
             },
           }),
@@ -347,6 +362,47 @@ serve(async (req) => {
         // only be tracked, not reconstructed.
         updates.referral_credit_days_redeemed =
           ((profile as { referral_credit_days_redeemed?: number }).referral_credit_days_redeemed || 0) + creditsUsed;
+      }
+      // Make the free days REAL: Mollie charges on its own fixed schedule,
+      // so extending plan_expires_at alone would keep collecting every
+      // interval and the credit would never become skipped payments.
+      // Reschedule: cancel the running subscription and recreate it starting
+      // when the credited period ends. Cancel-FIRST on purpose — if the
+      // recreate fails the customer keeps access until extraEnd and we miss
+      // at most one renewal (logged loudly for manual repair); the reverse
+      // order could double-charge them, which is worse.
+      if (creditsUsed > 0 && payment.customerId) {
+        const oldSubId = payment.subscriptionId || profile.mollie_subscription_id || "";
+        const mandateId = payment.mandateId || profile.mollie_mandate_id || "";
+        if (oldSubId && mandateId) {
+          const del = await mollieFetch(`/customers/${payment.customerId}/subscriptions/${oldSubId}`, { method: "DELETE" });
+          if (!del.ok) {
+            console.error("credit reschedule: cancel of", oldSubId, "failed:", del.status, del.raw, "— owner", ownerId, "keeps old schedule; credit only extends expiry this cycle");
+          } else {
+            const intervalStr = interval === "yearly" ? "12 months" : "1 month";
+            const subRes = await mollieFetch(`/customers/${payment.customerId}/subscriptions`, {
+              method: "POST",
+              body: JSON.stringify({
+                amount: payment.amount,
+                interval: intervalStr,
+                startDate: extraEnd.toISOString().slice(0, 10),
+                description: payment.description || `Vellu ${plan}`,
+                mandateId,
+                webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
+                metadata: { owner_id: ownerId, plan, billing_interval: interval },
+              }),
+            });
+            if (subRes.ok && subRes.data && typeof subRes.data === "object") {
+              updates.mollie_subscription_id = (subRes.data as { id: string }).id;
+            } else {
+              // Old subscription is cancelled and the new one failed: the
+              // customer keeps access until extraEnd, but nothing will renew
+              // after that. Log with everything needed for manual repair.
+              console.error("credit reschedule: RECREATE FAILED after cancel — restore subscription manually! owner", ownerId, "customer", payment.customerId, "mandate", mandateId, "startDate", extraEnd.toISOString().slice(0, 10), "resp:", subRes.status, subRes.raw);
+              updates.mollie_subscription_id = null;
+            }
+          }
+        }
       }
       await supabase.from("profiles").update(updates).eq("id", ownerId);
       try {
