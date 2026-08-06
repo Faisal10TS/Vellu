@@ -2616,11 +2616,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {/* Name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500, fontSize: 14, color: c.text, marginBottom: 4 }}>{svcName(s)}</div>
-                        {/* Same description the services list shows — it was
-                            missing HERE, so it vanished the moment a client
-                            tapped through to book (while variants kept
-                            theirs). Clamped to 2 lines, like the list. */}
-                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
+                        {/* Full description — the picker is where the client
+                            decides, so no clamp here (variants show their full
+                            text too). Only the salon-page list stays clamped
+                            as a teaser. */}
+                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.45 }}>{svcDesc(s)}</div>}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <NavIcon name="clock" size={10} color={c.textLabel} /> {svcDuration(s)}
@@ -3408,12 +3408,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
                                   {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {s.variants.length === 1 ? "variant" : t.variants.toLowerCase()}</span>}
                                 </div>
-                                {/* Same description the services list shows — this
-                                    MOBILE picker card was the remaining spot
-                                    without it (the desktop card was fixed
-                                    earlier), so on phones it still vanished
-                                    after tapping through to book. */}
-                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
+                                {/* Full description — the picker is where the
+                                    client decides, so no clamp here (variants
+                                    show their full text too). Only the
+                                    salon-page list stays clamped as a teaser. */}
+                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.45 }}>{svcDesc(s)}</div>}
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
