@@ -3408,6 +3408,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
                                   {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {s.variants.length === 1 ? "variant" : t.variants.toLowerCase()}</span>}
                                 </div>
+                                {/* Same description the services list shows — this
+                                    MOBILE picker card was the remaining spot
+                                    without it (the desktop card was fixed
+                                    earlier), so on phones it still vanished
+                                    after tapping through to book. */}
+                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
