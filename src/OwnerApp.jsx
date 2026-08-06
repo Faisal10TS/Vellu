@@ -369,12 +369,19 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
 
 // Referral program block — displays the owner's unique invite code + shareable
 // link, shows how many salons have signed up with it, and how many days of
-// free credit they've earned (3 weeks per referral). Billing credit is
+// free credit they've earned (2 weeks per referral). Billing credit is
 // redeemed by the Mollie webhook from profiles.referral_credit_days.
 function ReferralBlock({ salonData, lang, c, accent, toast }) {
   const [copied, setCopied] = useState(false);
   const code = salonData.referral_code || "";
   const referralUrl = code ? `https://vellu.cc/owner?ref=${code}` : "";
+  // The tile shows the OUTSTANDING balance (credit not yet applied to an
+  // invoice), not a lifetime total — the webhook zeroes referral_credit_days
+  // when it redeems them at billing and increments the redeemed counter.
+  // (A real counter, not count × rate: the reward changed 21 → 14 days, so
+  // history can't be reconstructed from the signup count.)
+  const creditOpen = salonData.referral_credit_days || 0;
+  const creditRedeemed = salonData.referral_credit_days_redeemed || 0;
 
   const copy = async () => {
     try {
@@ -388,8 +395,8 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 
   const share = async () => {
     const text = lang === "nl"
-      ? `Hey! Ik gebruik Vellu voor mijn online boekingen — geen commissie, alleen een vast maandbedrag. Meld je aan via mijn link en we krijgen allebei 3 weken gratis: ${referralUrl}`
-      : `Hey! I'm using Vellu for my online bookings — no commission, just a flat monthly fee. Sign up via my link and we both get 3 weeks free: ${referralUrl}`;
+      ? `Hey! Ik gebruik Vellu voor mijn online boekingen — geen commissie, alleen een vast maandbedrag. Meld je aan via mijn link en we krijgen allebei 2 weken gratis: ${referralUrl}`
+      : `Hey! I'm using Vellu for my online bookings — no commission, just a flat monthly fee. Sign up via my link and we both get 2 weeks free: ${referralUrl}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: "Vellu", text, url: referralUrl });
@@ -406,8 +413,8 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
       </div>
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
-          ? "Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei 3 weken gratis."
-          : "Share your link with another salon. If they sign up, you both get 3 weeks free."}
+          ? "Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei 2 weken gratis."
+          : "Share your link with another salon. If they sign up, you both get 2 weeks free."}
       </div>
 
       {/* Stats row */}
@@ -422,11 +429,16 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
         </div>
         <div style={{ padding: "12px 14px", background: `${accent}0a`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
           <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
-            {lang === "nl" ? "Dagen gratis" : lang === "es" ? "Días gratis" : "Free days"}
+            {lang === "nl" ? "Dagen tegoed" : lang === "es" ? "Días de crédito" : "Days credit"}
           </div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, color: accent, lineHeight: 1 }}>
-            {salonData.referral_credit_days || 0}
+            {creditOpen}
           </div>
+          {creditRedeemed > 0 && (
+            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 4 }}>
+              {lang === "nl" ? `${creditRedeemed} al verzilverd` : lang === "es" ? `${creditRedeemed} ya canjeados` : `${creditRedeemed} already redeemed`}
+            </div>
+          )}
         </div>
       </div>
 
@@ -453,11 +465,13 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
         </button>
       </div>
 
-      {salonData.referral_credit_days > 0 && (
+      {creditOpen > 0 && (
         <div style={{ marginTop: 12, fontSize: 10, color: c.success, textAlign: "center" }}>
           {lang === "nl"
-            ? `Je hebt ${salonData.referral_credit_days} dag${salonData.referral_credit_days === 1 ? "" : "en"} gratis verdiend. Deze worden verrekend bij de volgende facturatie.`
-            : `You've earned ${salonData.referral_credit_days} free day${salonData.referral_credit_days === 1 ? "" : "s"}. These will be applied at your next billing cycle.`}
+            ? `Nog ${creditOpen} dag${creditOpen === 1 ? "" : "en"} tegoed — wordt automatisch verrekend bij je volgende facturatie.`
+            : lang === "es"
+              ? `Aún ${creditOpen} día${creditOpen === 1 ? "" : "s"} de crédito — se aplicará automáticamente en tu próxima facturación.`
+              : `${creditOpen} day${creditOpen === 1 ? "" : "s"} of credit remaining — applied automatically at your next billing cycle.`}
         </div>
       )}
     </div>
@@ -3326,6 +3340,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           client_notes: clientNotesMap,
           referral_code: data.referral_code || "",
           referral_credit_days: data.referral_credit_days || 0,
+          referral_credit_days_redeemed: data.referral_credit_days_redeemed || 0,
           referral_count: referralCount || 0,
           plan: data.plan || null,
           plan_expires_at: data.plan_expires_at || null,

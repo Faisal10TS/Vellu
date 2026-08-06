@@ -1182,9 +1182,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
               }}>
                 {lang === "nl" ? (
-                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>3 weken gratis</strong>.</>
+                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>2 weken gratis</strong>.</>
                 ) : (
-                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>3 weeks free</strong>.</>
+                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>2 weeks free</strong>.</>
                 )}
               </div>
             )}

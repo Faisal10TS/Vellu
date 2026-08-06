@@ -160,7 +160,7 @@ serve(async (req) => {
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, email, business_name")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name")
     .eq("id", ownerId)
     .maybeSingle();
   if (!profile) {
@@ -340,7 +340,14 @@ serve(async (req) => {
         current_period_start: periodStart.toISOString(),
         plan_expires_at: extraEnd.toISOString(),
       };
-      if (creditsUsed > 0) updates.referral_credit_days = 0;
+      if (creditsUsed > 0) {
+        updates.referral_credit_days = 0;
+        // Lifetime redeemed counter — the dashboard shows open balance vs
+        // redeemed; with the reward rate change (21 → 14 days) history can
+        // only be tracked, not reconstructed.
+        updates.referral_credit_days_redeemed =
+          ((profile as { referral_credit_days_redeemed?: number }).referral_credit_days_redeemed || 0) + creditsUsed;
+      }
       await supabase.from("profiles").update(updates).eq("id", ownerId);
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
