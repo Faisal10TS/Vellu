@@ -3539,9 +3539,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [processingApptId, setProcessingApptId] = useState(null);
   const [invoicePickerFor, setInvoicePickerFor] = useState(null); // appointment id when the extra-profile picker is open
   // Counter sale (Sara-style "afrekenen"): appointment id the product-sale
-  // modal is open for + the {productId: qty} selection inside it.
+  // modal is open for — or the sentinel "walkin" for a standalone sale to
+  // someone without an appointment — + the {productId: qty} selection.
   const [productSaleFor, setProductSaleFor] = useState(null);
   const [productSaleSel, setProductSaleSel] = useState({});
+  // Optional client details for a walk-in sale (email enables invoicing).
+  const [walkinName, setWalkinName] = useState("");
+  const [walkinEmail, setWalkinEmail] = useState("");
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -4238,16 +4242,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // them up without special-casing.
   const prodName = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
   const addProductsToAppt = async () => {
-    const a = salonData.appointments.find(x => x.id === productSaleFor);
-    if (!a) { setProductSaleFor(null); return; }
     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
     if (!sel.length) { setProductSaleFor(null); return; }
     const items = sel.map(([pid, qty]) => {
       const p = (salonData.products || []).find(x => x.id === pid);
       return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
     }).filter(Boolean);
-    const extraTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
-    const label = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    const saleTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+    const saleLabel = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    // ── Walk-in sale: someone without an appointment buys a product. Saved
+    // as a 0-minute completed "appointment" so it automatically counts in
+    // revenue/analytics and can be invoiced when an email was captured. ──
+    if (productSaleFor === "walkin") {
+      const now = new Date();
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const row = {
+        owner_id: salonData.owner_id,
+        service_id: null,
+        service_name: `🛍 ${saleLabel}`,
+        service_price: +saleTotal.toFixed(2),
+        service_duration: 0,
+        date: fmt(getToday()),
+        time: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
+        client_name: walkinName.trim() || (lang === "nl" ? "Losse verkoop" : lang === "es" ? "Venta directa" : "Walk-in sale"),
+        client_email: walkinEmail.trim().toLowerCase(),
+        payment_method: "on-arrival",
+        status: "completed",
+        invoice_sent: false,
+        products: items,
+      };
+      const { data, error } = await supabase.from("appointments").insert(row).select().single();
+      if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+      update(d => { d.appointments = [data, ...d.appointments]; return d; });
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail("");
+      toast.show(lang === "nl" ? "Verkoop geregistreerd" : lang === "es" ? "Venta registrada" : "Sale recorded");
+      return;
+    }
+    const a = salonData.appointments.find(x => x.id === productSaleFor);
+    if (!a) { setProductSaleFor(null); return; }
+    const extraTotal = saleTotal;
+    const label = saleLabel;
     const newPrice = +(parseFloat(a.service_price || 0) + extraTotal).toFixed(2);
     const newName = `${a.service_name} + ${label}`;
     const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
@@ -4690,7 +4724,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}
         </button>
       )}
-      {a.status === "completed" && !a.invoice_sent && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
+      {/* Invoice needs an address to send to — a walk-in sale without a
+          captured email simply has no invoice button. */}
+      {a.status === "completed" && !a.invoice_sent && a.client_email && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
       {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
@@ -5068,11 +5104,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div onClick={e => e.stopPropagation()}
                style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-              {lang === "nl" ? "Product verkopen" : lang === "es" ? "Vender producto" : "Sell a product"}
+              {productSaleFor === "walkin"
+                ? (lang === "nl" ? "Losse verkoop" : lang === "es" ? "Venta directa" : "Walk-in sale")
+                : (lang === "nl" ? "Product verkopen" : lang === "es" ? "Vender producto" : "Sell a product")}
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>
-              {lang === "nl" ? "Wordt bij deze afspraak opgeteld en komt op de factuur." : lang === "es" ? "Se suma a esta cita y aparece en la factura." : "Added to this appointment and included on the invoice."}
+              {productSaleFor === "walkin"
+                ? (lang === "nl" ? "Voor iemand zonder afspraak. Telt mee in je omzet; met e-mailadres kun je een factuur sturen." : lang === "es" ? "Para alguien sin cita. Cuenta en tus ingresos; con correo puedes enviar factura." : "For someone without an appointment. Counts toward revenue; with an email you can send an invoice.")
+                : (lang === "nl" ? "Wordt bij deze afspraak opgeteld en komt op de factuur." : lang === "es" ? "Se suma a esta cita y aparece en la factura." : "Added to this appointment and included on the invoice.")}
             </div>
+            {productSaleFor === "walkin" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre del cliente (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
+                <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — voor factuur)" : lang === "es" ? "Correo (opcional — para factura)" : "Email (optional — for invoice)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
               {(salonData.products || []).filter(p => p.active).map(p => {
                 const qty = productSaleSel[p.id] || 0;
@@ -7027,11 +7073,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {calViewMode !== "year" && (<>
                 {/* Persistent "+ Afspraak" button — visible above the list on
                     every day so the owner can add multiple bookings without
-                    having to first empty the day. */}
-                <button className="btn-ghost" style={{ width: "100%", marginBottom: 12, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
-                  <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
-                </button>
+                    having to first empty the day. Pro salons with products get
+                    a walk-in sale button beside it (someone buys a product
+                    without an appointment). */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <button className="btn-ghost" style={{ flex: 1, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+                    onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                    <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
+                  </button>
+                  {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
+                    <button className="btn-ghost" style={{ flexShrink: 0, padding: "12px 16px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}
+                      title={lang === "nl" ? "Product verkopen zonder afspraak (walk-in)" : lang === "es" ? "Vender producto sin cita (walk-in)" : "Sell a product without an appointment (walk-in)"}
+                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setProductSaleFor("walkin"); }}>
+                      🛍 {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
+                    </button>
+                  )}
+                </div>
                 {calAppts.length === 0 ? (() => {
                   // Same logic as the day-timeline empty state: if working
                   // hours say nobody works this day, call it "unavailable"
