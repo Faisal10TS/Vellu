@@ -211,7 +211,7 @@ serve(async (req) => {
     if (prodIds.length > 20) return err(400, "too_many_products", origin);
     const { data: prods, error: pErr } = await supabase
       .from("products")
-      .select("id, owner_id, name_nl, name_en, name_es, price, active")
+      .select("id, owner_id, name_nl, name_en, name_es, price, active, stock")
       .in("id", prodIds)
       .eq("owner_id", salon.id)
       .eq("active", true);
@@ -639,6 +639,17 @@ serve(async (req) => {
   }).select("id").single();
 
   if (aErr || !appt) return err(500, "appointment_create_failed", origin);
+
+  // Best-effort stock decrement — only for products that track stock
+  // (stock != null). Never blocks the booking; floor at 0 (overselling a
+  // retail product is a shop-counter problem, not a booking blocker).
+  for (const it of orderedProducts) {
+    const p = productsById[it.id];
+    if (!p || p.stock == null) continue;
+    await supabase.from("products")
+      .update({ stock: Math.max(0, p.stock - it.qty) })
+      .eq("id", it.id);
+  }
 
   // ---------- 14. Create cancellation token ----------
   const cancelToken = generateToken();

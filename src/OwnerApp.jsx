@@ -3122,12 +3122,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingService, setEditingService] = useState(null);
   const [expandedServiceId, setExpandedServiceId] = useState(null);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
-  // Retail products (Professional): add/edit form state.
+  // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
   const [editingProduct, setEditingProduct] = useState(null);
-  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
   const [productPhotoUploading, setProductPhotoUploading] = useState(null);
+  const [productSearch, setProductSearch] = useState("");
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -3543,9 +3544,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // someone without an appointment — + the {productId: qty} selection.
   const [productSaleFor, setProductSaleFor] = useState(null);
   const [productSaleSel, setProductSaleSel] = useState({});
-  // Optional client details for a walk-in sale (email enables invoicing).
+  // Optional client details for a walk-in sale (email enables invoicing);
+  // staff attribution feeds per-employee revenue, like Sara's kassa does.
   const [walkinName, setWalkinName] = useState("");
   const [walkinEmail, setWalkinEmail] = useState("");
+  const [walkinStaff, setWalkinStaff] = useState("");
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -4241,6 +4244,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // in appointments.products — the existing invoice/analytics flows then pick
   // them up without special-casing.
   const prodName = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
+  // Best-effort: stock only decrements for products that track it (stock != null).
+  // A failed decrement never blocks the sale itself.
+  const decrementStock = async (items) => {
+    const updates = [];
+    for (const it of items) {
+      const p = (salonData.products || []).find(x => x.id === it.id);
+      if (!p || p.stock == null) continue;
+      updates.push({ id: p.id, stock: Math.max(0, p.stock - it.qty) });
+    }
+    if (!updates.length) return;
+    try {
+      await Promise.all(updates.map(u => supabase.from("products").update({ stock: u.stock }).eq("id", u.id)));
+      update(d => { d.products = d.products.map(x => { const u = updates.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
+    } catch { /* sale already recorded; stock can be corrected manually */ }
+  };
   const addProductsToAppt = async () => {
     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
     if (!sel.length) { setProductSaleFor(null); return; }
@@ -4270,11 +4288,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         status: "completed",
         invoice_sent: false,
         products: items,
+        staff_id: walkinStaff || null,
+        staff_name: walkinStaff ? ((salonData.staff || []).find(s => s.id === walkinStaff)?.name || null) : null,
       };
       const { data, error } = await supabase.from("appointments").insert(row).select().single();
       if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+      await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail("");
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff("");
       toast.show(lang === "nl" ? "Verkoop geregistreerd" : lang === "es" ? "Venta registrada" : "Sale recorded");
       return;
     }
@@ -4287,6 +4308,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
     const { error } = await supabase.from("appointments").update({ service_price: newPrice, service_name: newName, products: newProducts }).eq("id", a.id);
     if (error) { toast.show(t.somethingWrong, "error"); return; }
+    await decrementStock(items);
     update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts } : x); return d; });
     setProductSaleFor(null); setProductSaleSel({});
     toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
@@ -5117,6 +5139,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
                 <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre del cliente (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
                 <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — voor factuur)" : lang === "es" ? "Correo (opcional — para factura)" : "Email (optional — for invoice)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                {(salonData.staff || []).length > 0 && (
+                  <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
+                    <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
+                    {(salonData.staff || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                )}
               </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -5127,7 +5155,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15 }}>🛍</div>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
-                      <div style={{ fontSize: 11, color: c.textMuted }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted }}>
+                        {cur}{parseFloat(p.price).toFixed(2)}
+                        {p.stock != null && <span style={{ marginLeft: 8, color: p.stock === 0 ? c.danger : c.textMuted }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : lang === "es" ? "agotado" : "sold out") : `${lang === "nl" ? "voorraad" : lang === "es" ? "stock" : "stock"}: ${p.stock}`}</span>}
+                      </div>
                     </div>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                       <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] || 0) - 1) }))} style={{ width: 26, height: 26, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
@@ -9551,8 +9582,48 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <button className="btn-primary" style={{ padding: "10px 22px", fontSize: 11 }} onClick={goUpgrade}>{lang === "nl" ? "Bekijk Professional" : lang === "es" ? "Ver Professional" : "See Professional"}</button>
                   </div>
                 ) : (<>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {(salonData.products || []).map(p => (
+                  {/* Sara-style header: search + live inventory value chips
+                      (over stock-tracked products only). */}
+                  {(salonData.products || []).length > 0 && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                      <input className="input-field" placeholder={lang === "nl" ? "Zoeken…" : lang === "es" ? "Buscar…" : "Search…"} value={productSearch} onChange={e => setProductSearch(e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px" }} />
+                      {(() => {
+                        const tracked = (salonData.products || []).filter(p => p.stock != null);
+                        if (!tracked.length) return null;
+                        const saleVal = tracked.reduce((s, p) => s + (parseFloat(p.price) || 0) * p.stock, 0);
+                        const buyVal = tracked.reduce((s, p) => s + (parseFloat(p.purchase_price) || 0) * p.stock, 0);
+                        const chip = (label, val) => (
+                          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "7px 12px", flexShrink: 0 }}>
+                            <div style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel }}>{label}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: c.text, fontVariantNumeric: "tabular-nums" }}>{cur}{val.toFixed(2)}</div>
+                          </div>
+                        );
+                        return <>
+                          {chip(lang === "nl" ? "Verkoopwaarde" : lang === "es" ? "Valor venta" : "Sale value", saleVal)}
+                          {buyVal > 0 && chip(lang === "nl" ? "Inkoopwaarde" : lang === "es" ? "Valor compra" : "Purchase value", buyVal)}
+                        </>;
+                      })()}
+                    </div>
+                  )}
+                  <div style={{ overflowX: "auto" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 540 }}>
+                    {/* Column header — the professional table look. */}
+                    {(salonData.products || []).length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 14px", fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel }}>
+                        <div style={{ width: 40, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>{lang === "nl" ? "Product" : lang === "es" ? "Producto" : "Product"}</div>
+                        <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Compra" : "Cost"}</div>
+                        <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>
+                        <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>
+                        <div style={{ width: 32, flexShrink: 0 }} />
+                        <div style={{ width: 64, flexShrink: 0 }} />
+                      </div>
+                    )}
+                    {(salonData.products || []).filter(p => {
+                      if (!productSearch.trim()) return true;
+                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""}`.toLowerCase();
+                      return hay.includes(productSearch.trim().toLowerCase());
+                    }).map(p => (
                       editingProduct === p.id ? (
                         <div key={p.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                           <div style={{ marginBottom: 8 }}>
@@ -9565,16 +9636,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               setNl={v => setEditProductForm(f => ({...f, description_nl: v}))} setEn={v => setEditProductForm(f => ({...f, description_en: v}))}
                               lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
                           </div>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label>
-                            <input className="input-field" type="number" value={editProductForm.price} onChange={ev => setEditProductForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                            <div>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Verkoopprijs (${cur}) *` : lang === "es" ? `Precio venta (${cur}) *` : `Sale price (${cur}) *`}</label>
+                              <input className="input-field" type="number" value={editProductForm.price} onChange={ev => setEditProductForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Inkoopprijs (${cur})` : lang === "es" ? `Precio compra (${cur})` : `Purchase price (${cur})`}</label>
+                              <input className="input-field" type="number" value={editProductForm.purchase_price} onChange={ev => setEditProductForm(f => ({...f, purchase_price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</label>
+                              <input className="input-field" type="number" value={editProductForm.stock} onChange={ev => setEditProductForm(f => ({...f, stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : "empty = not tracked"} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
+                              <input className="input-field" type="number" value={editProductForm.min_stock} onChange={ev => setEditProductForm(f => ({...f, min_stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                            </div>
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                               const price = parseFloat(editProductForm.price);
                               if ((!editProductForm.name_nl && !editProductForm.name_en) || !Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Completa nombre y precio" : "Fill in name and price", "error"); return; }
+                              const numOrNull = (v) => { if (v === "" || v == null) return null; const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+                              const intOrNull = (v) => { if (v === "" || v == null) return null; const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                               const filled = await autoFillTranslations(editProductForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price };
+                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price, purchase_price: numOrNull(editProductForm.purchase_price), stock: intOrNull(editProductForm.stock), min_stock: intOrNull(editProductForm.min_stock) };
                               const { error } = await supabase.from("products").update(upd).eq("id", p.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, ...upd } : x); return d; });
@@ -9607,7 +9694,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl)}</div>
                             {!p.active && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Verborgen voor klanten" : lang === "es" ? "Oculto para clientes" : "Hidden from clients"}</div>}
                           </div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                          <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
+                          <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                          <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>
+                            {p.stock == null ? (
+                              <span style={{ fontSize: 12, color: c.textMuted }}>—</span>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: p.stock === 0 ? c.danger : (p.min_stock != null && p.stock < p.min_stock ? c.danger : c.text) }}>{p.stock}</span>
+                                {p.min_stock != null && p.stock < p.min_stock && (
+                                  <div style={{ fontSize: 8.5, fontWeight: 600, color: c.danger, marginTop: 1 }}>{lang === "nl" ? `tekort ${p.min_stock - p.stock}` : lang === "es" ? `faltan ${p.min_stock - p.stock}` : `short ${p.min_stock - p.stock}`}</div>
+                                )}
+                              </>
+                            )}
+                          </div>
                           <div onClick={async () => {
                             const next = !p.active;
                             const { error } = await supabase.from("products").update({ active: next }).eq("id", p.id);
@@ -9617,8 +9717,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             style={{ width: 32, height: 18, borderRadius: 9, background: p.active ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                             <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: p.active ? 16 : 2, transition: "left 0.2s" }} />
                           </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price }); }}
+                          <div style={{ display: "flex", gap: 4, width: 64, flexShrink: 0, justifyContent: "flex-end" }}>
+                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price, purchase_price: p.purchase_price == null ? "" : String(p.purchase_price), stock: p.stock == null ? "" : String(p.stock), min_stock: p.min_stock == null ? "" : String(p.min_stock) }); }}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <NavIcon name="edit" size={11} color="currentColor" />
                             </button>
@@ -9634,6 +9734,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       )
                     ))}
                   </div>
+                  </div>
                   {showNewProductForm ? (
                     <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginTop: 10 }}>
                       <div style={{ marginBottom: 8 }}>
@@ -9646,24 +9747,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           setNl={v => setNewProduct(f => ({...f, description_nl: v}))} setEn={v => setNewProduct(f => ({...f, description_en: v}))}
                           lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
                       </div>
-                      <div style={{ marginBottom: 10 }}>
-                        <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur}) *` : lang === "es" ? `Precio (${cur}) *` : `Price (${cur}) *`}</label>
-                        <input className="input-field" type="number" value={newProduct.price} onChange={e => setNewProduct(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                        <div>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Verkoopprijs (${cur}) *` : lang === "es" ? `Precio venta (${cur}) *` : `Sale price (${cur}) *`}</label>
+                          <input className="input-field" type="number" value={newProduct.price} onChange={e => setNewProduct(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Inkoopprijs (${cur})` : lang === "es" ? `Precio compra (${cur})` : `Purchase price (${cur})`}</label>
+                          <input className="input-field" type="number" value={newProduct.purchase_price} onChange={e => setNewProduct(f => ({...f, purchase_price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</label>
+                          <input className="input-field" type="number" value={newProduct.stock} onChange={e => setNewProduct(f => ({...f, stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : "empty = not tracked"} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
+                          <input className="input-field" type="number" value={newProduct.min_stock} onChange={e => setNewProduct(f => ({...f, min_stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button className="btn-primary" style={{ flex: 1, padding: "11px 16px", fontSize: 11 }} onClick={async () => {
                           const price = parseFloat(newProduct.price);
                           if ((!newProduct.name_nl && !newProduct.name_en) || !Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Completa nombre y precio" : "Fill in name and price", "error"); return; }
+                          const numOrNull = (v) => { if (v === "" || v == null) return null; const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+                          const intOrNull = (v) => { if (v === "" || v == null) return null; const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                           const filled = await autoFillTranslations(newProduct, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
                           const { data, error } = await supabase.from("products").insert({
                             owner_id: salonData.owner_id,
                             name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
                             description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
-                            price, active: true, position: (salonData.products || []).length
+                            price, purchase_price: numOrNull(newProduct.purchase_price), stock: intOrNull(newProduct.stock), min_stock: intOrNull(newProduct.min_stock),
+                            active: true, position: (salonData.products || []).length
                           }).select().single();
                           if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                           update(d => { d.products = [...(d.products || []), data]; return d; });
-                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
                           setShowNewProductForm(false);
                         }}><NavIcon name="plus" size={12} color={c.btnOnDark} /> {lang === "nl" ? "Product toevoegen" : lang === "es" ? "Añadir producto" : "Add product"}</button>
                         <button className="btn-ghost" style={{ padding: "11px 14px" }} onClick={() => setShowNewProductForm(false)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
