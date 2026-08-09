@@ -3093,7 +3093,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       client_no_shows: {},
       referral_code: "",
       referral_credit_days: 0,
-      referral_count: 0
+      referral_count: 0,
+      products: []
     };
   });
   const [saved, setSaved] = useState(false);
@@ -3121,6 +3122,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editingService, setEditingService] = useState(null);
   const [expandedServiceId, setExpandedServiceId] = useState(null);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
+  // Retail products (Professional): add/edit form state.
+  const [showNewProductForm, setShowNewProductForm] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+  const [productPhotoUploading, setProductPhotoUploading] = useState(null);
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -3236,7 +3243,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     const load = async () => {
       try {
-      const { data, error: profileError } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", user.slug).single();
+      const { data, error: profileError } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", user.slug).single();
       if (profileError) { console.error("Profile load error:", profileError); setDataLoaded(true); return; }
       if (data) {
         // Load all related data in parallel for faster dashboard load
@@ -3362,6 +3369,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
               extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
             })),
+          // Retail products (Professional) — the owner's RLS policy also
+          // returns inactive rows, so the dashboard can manage the full list.
+          products: (data.products || [])
+            .slice()
+            .sort((a, b) => ((a.position ?? 0) - (b.position ?? 0)) || ((a.created_at || "") < (b.created_at || "") ? -1 : 1)),
           appointments: appts || [],
           reviews: reviews || [],
           // Owner first, then the rest in their position order — the salon
@@ -3526,6 +3538,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
   const [invoicePickerFor, setInvoicePickerFor] = useState(null); // appointment id when the extra-profile picker is open
+  // Counter sale (Sara-style "afrekenen"): appointment id the product-sale
+  // modal is open for + the {productId: qty} selection inside it.
+  const [productSaleFor, setProductSaleFor] = useState(null);
+  const [productSaleSel, setProductSaleSel] = useState({});
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -4215,6 +4231,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Send an invoice using a specific profile. profileIdx === null uses the
   // primary (top-level profiles.* columns); a number picks that entry in
   // profiles.invoice_profiles. Each profile owns its own next-number counter.
+  // Owner rings up retail products on an appointment (counter sale, à la
+  // Sara's POS "afrekenen vanuit de agenda"). Folds the product total into
+  // service_price, appends names to service_name and records them structured
+  // in appointments.products — the existing invoice/analytics flows then pick
+  // them up without special-casing.
+  const prodName = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
+  const addProductsToAppt = async () => {
+    const a = salonData.appointments.find(x => x.id === productSaleFor);
+    if (!a) { setProductSaleFor(null); return; }
+    const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
+    if (!sel.length) { setProductSaleFor(null); return; }
+    const items = sel.map(([pid, qty]) => {
+      const p = (salonData.products || []).find(x => x.id === pid);
+      return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
+    }).filter(Boolean);
+    const extraTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+    const label = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    const newPrice = +(parseFloat(a.service_price || 0) + extraTotal).toFixed(2);
+    const newName = `${a.service_name} + ${label}`;
+    const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
+    const { error } = await supabase.from("appointments").update({ service_price: newPrice, service_name: newName, products: newProducts }).eq("id", a.id);
+    if (error) { toast.show(t.somethingWrong, "error"); return; }
+    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts } : x); return d; });
+    setProductSaleFor(null); setProductSaleSel({});
+    toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
+  };
+
   const sendInvoiceWith = async (id, profileIdx) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -4622,6 +4665,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => setRescheduling(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+          {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
+            <button className="btn-ghost" style={{ fontSize:10, padding: "0 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}>🛍</button>
+          )}
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : lang === "es" ? "Eliminar cita" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
             <NavIcon name="xmark" size={11} color="currentColor" />
@@ -4631,6 +4677,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {a.status === "completed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, padding: "6px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Prijs of datum aanpassen (bv. correctie)" : lang === "es" ? "Editar precio o fecha (p. ej. corrección)" : "Edit price or date (e.g. correction)"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+          {salonData.plan === "professional" && !a.invoice_sent && (salonData.products || []).some(p => p.active) && (
+            <button className="btn-ghost" style={{ fontSize:10, padding: "6px 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen — komt op de factuur" : lang === "es" ? "Vender producto — aparece en la factura" : "Sell a product — lands on the invoice"}>🛍</button>
+          )}
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : lang === "es" ? "Eliminar cita" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
             <NavIcon name="xmark" size={11} color="currentColor" />
           </button>
@@ -5007,6 +5056,60 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <button className="btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => setInvoicePickerFor(null)}>
               {lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}
             </button>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* Counter-sale modal (afrekenen) — ring up retail products on an
+          appointment; the invoice that follows includes them automatically. */}
+      {productSaleFor && createPortal((
+        <div onClick={() => setProductSaleFor(null)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={e => e.stopPropagation()}
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Product verkopen" : lang === "es" ? "Vender producto" : "Sell a product"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>
+              {lang === "nl" ? "Wordt bij deze afspraak opgeteld en komt op de factuur." : lang === "es" ? "Se suma a esta cita y aparece en la factura." : "Added to this appointment and included on the invoice."}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {(salonData.products || []).filter(p => p.active).map(p => {
+                const qty = productSaleSel[p.id] || 0;
+                return (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
+                    {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15 }}>🛍</div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                    </div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] || 0) - 1) }))} style={{ width: 26, height: 26, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                      <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
+                      <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) }))} style={{ width: 26, height: 26, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {(() => {
+              const tot = Object.entries(productSaleSel).reduce((s, [pid, q]) => {
+                const p = (salonData.products || []).find(x => x.id === pid);
+                return s + (p ? (parseFloat(p.price) || 0) * q : 0);
+              }, 0);
+              return tot > 0 ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal extra" : "Total extra"}</span>
+                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>+{cur}{tot.toFixed(2)}</span>
+                </div>
+              ) : null;
+            })()}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-primary" style={{ flex: 1, padding: "12px 16px", fontSize: 12 }} disabled={!Object.values(productSaleSel).some(q => q > 0)} onClick={addProductsToAppt}>
+                {lang === "nl" ? "Toevoegen aan afspraak" : lang === "es" ? "Añadir a la cita" : "Add to appointment"}
+              </button>
+              <button className="btn-ghost" style={{ padding: "12px 16px", fontSize: 12 }} onClick={() => setProductSaleFor(null)}>{t.cancelEdit}</button>
+            </div>
           </div>
         </div>
       ), document.body)}
@@ -9368,6 +9471,153 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Nieuwe dienst toevoegen" : lang === "es" ? "Añadir nuevo servicio" : "Add new service"}
                   </button>
                 )}
+              </div>
+
+              {/* ═══ PRODUCTEN (Professional) ═══
+                  Retail products the salon sells alongside treatments. Clients
+                  can add them while booking; the owner can ring them up on an
+                  appointment (🛍 on the agenda card); both end up on the
+                  invoice automatically because price + label live on the
+                  appointment row. */}
+              <div className="glass-card" style={{ padding: 24, marginTop: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400 }}>{lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products"}</div>
+                  {salonData.plan === "professional" && <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.products || []).length}</div>}
+                </div>
+                <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
+                  {lang === "nl" ? "Verkoop producten naast je behandelingen. Klanten kunnen ze meebestellen bij het boeken, en jij kunt ze aanslaan bij het afrekenen (🛍 op de afspraak-kaart) — alles komt automatisch op de factuur." : lang === "es" ? "Vende productos junto a tus tratamientos. Los clientes pueden añadirlos al reservar y tú puedes cobrarlos al finalizar (🛍 en la cita) — todo aparece en la factura." : "Sell products alongside your treatments. Clients can add them while booking, and you can ring them up at checkout (🛍 on the appointment card) — everything lands on the invoice automatically."}
+                </div>
+                {salonData.plan !== "professional" ? (
+                  <div style={{ background: `${accent}0d`, border: `1.5px dashed ${accent}44`, borderRadius: 14, padding: "20px 18px", textAlign: "center" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{lang === "nl" ? "Beschikbaar op Professional" : lang === "es" ? "Disponible en Professional" : "Available on Professional"}</div>
+                    <div style={{ fontSize: 11, color: c.textSub, marginBottom: 12, lineHeight: 1.5 }}>{lang === "nl" ? "Upgrade om producten te verkopen op je boekingspagina en bij het afrekenen." : lang === "es" ? "Mejora tu plan para vender productos en tu página de reservas y al cobrar." : "Upgrade to sell products on your booking page and at checkout."}</div>
+                    <button className="btn-primary" style={{ padding: "10px 22px", fontSize: 11 }} onClick={goUpgrade}>{lang === "nl" ? "Bekijk Professional" : lang === "es" ? "Ver Professional" : "See Professional"}</button>
+                  </div>
+                ) : (<>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {(salonData.products || []).map(p => (
+                      editingProduct === p.id ? (
+                        <div key={p.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
+                          <div style={{ marginBottom: 8 }}>
+                            <AutoTranslateField nlValue={editProductForm.name_nl} enValue={editProductForm.name_en}
+                              setNl={v => setEditProductForm(f => ({...f, name_nl: v}))} setEn={v => setEditProductForm(f => ({...f, name_en: v}))}
+                              lang={lang} accent={accent} label={lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : "e.g. Cuticle oil"} />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <AutoTranslateField nlValue={editProductForm.description_nl} enValue={editProductForm.description_en}
+                              setNl={v => setEditProductForm(f => ({...f, description_nl: v}))} setEn={v => setEditProductForm(f => ({...f, description_en: v}))}
+                              lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
+                          </div>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label>
+                            <input className="input-field" type="number" value={editProductForm.price} onChange={ev => setEditProductForm(f => ({...f, price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                              const price = parseFloat(editProductForm.price);
+                              if ((!editProductForm.name_nl && !editProductForm.name_en) || !Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Completa nombre y precio" : "Fill in name and price", "error"); return; }
+                              const filled = await autoFillTranslations(editProductForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
+                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price };
+                              const { error } = await supabase.from("products").update(upd).eq("id", p.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, ...upd } : x); return d; });
+                              setEditingProduct(null);
+                            }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
+                            <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingProduct(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
+                          <label style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", cursor: "pointer", position: "relative" }} title={lang === "nl" ? "Foto uploaden" : lang === "es" ? "Subir foto" : "Upload photo"}>
+                            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 15 }}>{productPhotoUploading === p.id ? "…" : "🛍"}</span>}
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              setProductPhotoUploading(p.id);
+                              try {
+                                const fileName = `${salonData.owner_id}/product_${Date.now()}.${file.name.split(".").pop()}`;
+                                const compressed = await compressImage(file);
+                                const { error } = await supabase.storage.from("business-images").upload(fileName, compressed);
+                                if (!error) {
+                                  const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                                  await supabase.from("products").update({ photo_url: publicUrl }).eq("id", p.id);
+                                  update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, photo_url: publicUrl } : x); return d; });
+                                }
+                              } finally { setProductPhotoUploading(null); }
+                            }} />
+                          </label>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl)}</div>
+                            {!p.active && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Verborgen voor klanten" : lang === "es" ? "Oculto para clientes" : "Hidden from clients"}</div>}
+                          </div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                          <div onClick={async () => {
+                            const next = !p.active;
+                            const { error } = await supabase.from("products").update({ active: next }).eq("id", p.id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, active: next } : x); return d; });
+                          }} title={lang === "nl" ? "Zichtbaar voor klanten aan/uit" : "Visible to clients on/off"}
+                            style={{ width: 32, height: 18, borderRadius: 9, background: p.active ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: p.active ? 16 : 2, transition: "left 0.2s" }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price }); }}
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <NavIcon name="edit" size={11} color="currentColor" />
+                            </button>
+                            <button onClick={async () => {
+                              const { error } = await supabase.from("products").delete().eq("id", p.id);
+                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => { d.products = (d.products || []).filter(x => x.id !== p.id); return d; });
+                            }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <NavIcon name="xmark" size={11} color="currentColor" />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                  {showNewProductForm ? (
+                    <div style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12, marginTop: 10 }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <AutoTranslateField nlValue={newProduct.name_nl} enValue={newProduct.name_en}
+                          setNl={v => setNewProduct(f => ({...f, name_nl: v}))} setEn={v => setNewProduct(f => ({...f, name_en: v}))}
+                          lang={lang} accent={accent} label={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : "e.g. Cuticle oil"} />
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <AutoTranslateField nlValue={newProduct.description_nl} enValue={newProduct.description_en}
+                          setNl={v => setNewProduct(f => ({...f, description_nl: v}))} setEn={v => setNewProduct(f => ({...f, description_en: v}))}
+                          lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
+                      </div>
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Prijs (${cur}) *` : lang === "es" ? `Precio (${cur}) *` : `Price (${cur}) *`}</label>
+                        <input className="input-field" type="number" value={newProduct.price} onChange={e => setNewProduct(f => ({...f, price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={cur} />
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn-primary" style={{ flex: 1, padding: "11px 16px", fontSize: 11 }} onClick={async () => {
+                          const price = parseFloat(newProduct.price);
+                          if ((!newProduct.name_nl && !newProduct.name_en) || !Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Completa nombre y precio" : "Fill in name and price", "error"); return; }
+                          const filled = await autoFillTranslations(newProduct, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
+                          const { data, error } = await supabase.from("products").insert({
+                            owner_id: salonData.owner_id,
+                            name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
+                            description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
+                            price, active: true, position: (salonData.products || []).length
+                          }).select().single();
+                          if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+                          update(d => { d.products = [...(d.products || []), data]; return d; });
+                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "" });
+                          setShowNewProductForm(false);
+                        }}><NavIcon name="plus" size={12} color={c.btnOnDark} /> {lang === "nl" ? "Product toevoegen" : lang === "es" ? "Añadir producto" : "Add product"}</button>
+                        <button className="btn-ghost" style={{ padding: "11px 14px" }} onClick={() => setShowNewProductForm(false)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="btn-ghost" style={{ width: "100%", marginTop: 10, padding: "14px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowNewProductForm(true)}>
+                      <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Nieuw product toevoegen" : lang === "es" ? "Añadir nuevo producto" : "Add new product"}
+                    </button>
+                  )}
+                </>)}
               </div>
               </>}
 

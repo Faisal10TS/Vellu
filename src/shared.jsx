@@ -2088,6 +2088,7 @@ const planMatrix = (lang) => {
       [nl ? "Eigen logo & kleuren" : "Your logo & colors", true, true],
       [nl ? "Categorieën, varianten & extra's" : "Categories, variants & extras", true, true],
       [nl ? "Portfolio foto's per behandeling" : "Portfolio photos per treatment", true, true],
+      [nl ? "Producten verkopen (online + afrekenen)" : "Sell products (online + checkout)", false, true],
       [nl ? "Meerdere locaties" : "Multiple locations", false, true],
     ]},
     { group: nl ? "Klanten & inzicht" : "Clients & insights", rows: [

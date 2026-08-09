@@ -240,7 +240,7 @@ function SalonRoute({ lang, setLang }) {
   useEffect(() => {
     const load = async () => {
       // Check Supabase
-      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*))").eq("slug", slug).single();
+      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load related data in parallel for faster page load
       const [
@@ -316,6 +316,11 @@ function SalonRoute({ lang, setLang }) {
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
             extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
           })),
+        // Retail products (Professional plan). Anonymous visitors only get
+        // active rows (RLS); sort mirrors the owner's list order.
+        products: (data.products || [])
+          .slice()
+          .sort((a, b) => ((a.position ?? 0) - (b.position ?? 0)) || ((a.created_at || "") < (b.created_at || "") ? -1 : 1)),
         appointments: [],
         reviews: reviews || [],
         // Owner first, then the rest in their drag/position order — the salon

@@ -116,6 +116,7 @@ serve(async (req) => {
     extra_ids,              // { [service_id]: [extra_id] }
     extra_qtys,             // { [extra_id]: quantity } — per_unit extras only
     staff_ids_per_service,  // { [service_id]: staff_id | null }
+    product_ids,            // { [product_id]: quantity } — retail products (Professional)
     discount_code,
     date,
     time,
@@ -144,7 +145,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -197,6 +198,27 @@ serve(async (req) => {
       if (!service_ids.includes(e.service_id)) return err(400, "extra_service_mismatch", origin);
       extrasById[e.id] = e;
     }
+  }
+
+  // ---------- 4b. Validate retail products (Professional plan) ----------
+  const productSel: Record<string, number> = {};
+  let productsById: Record<string, any> = {};
+  const prodIds = Object.keys(product_ids || {}).filter((k) => (parseInt((product_ids as Record<string, unknown>)[k] as string) || 0) > 0);
+  if (prodIds.length > 0) {
+    // Products are a Professional feature; a Starter salon's page never
+    // offers them, so receiving them here means a forged request.
+    if (salon.plan !== "professional") return err(400, "products_not_available", origin);
+    if (prodIds.length > 20) return err(400, "too_many_products", origin);
+    const { data: prods, error: pErr } = await supabase
+      .from("products")
+      .select("id, owner_id, name_nl, name_en, name_es, price, active")
+      .in("id", prodIds)
+      .eq("owner_id", salon.id)
+      .eq("active", true);
+    if (pErr) return err(500, "db_error_products", origin);
+    if (!prods || prods.length !== prodIds.length) return err(400, "invalid_product", origin);
+    for (const p of prods) productsById[p.id] = p;
+    for (const pid of prodIds) productSel[pid] = Math.max(1, Math.min(20, parseInt((product_ids as Record<string, unknown>)[pid] as string) || 1));
   }
 
   // ---------- 5. Validate staff (if provided) ----------
@@ -311,6 +333,18 @@ serve(async (req) => {
       label: shortLabel,
     });
     runningOffset += duration;
+  }
+
+  // Retail products ride along with the booking: price added before the
+  // discount (like everything else), names appended to the combined label,
+  // and a structured record kept for invoices/analytics. No duration.
+  const orderedProducts = Object.entries(productSel).map(([pid, qty]) => {
+    const p = productsById[pid];
+    return { id: pid, name: nmOf(p), price: parseFloat(p.price) || 0, qty };
+  });
+  if (orderedProducts.length > 0) {
+    totalPrice += orderedProducts.reduce((s, it) => s + it.price * it.qty, 0);
+    serviceNameParts.push(...orderedProducts.map((it) => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name));
   }
 
   // ---------- 7. Apply discount (if any) ----------
@@ -595,6 +629,8 @@ serve(async (req) => {
     // Ordered per-service breakdown — enables the agenda to show each
     // stylist's own sub-slot at the correct start time.
     service_breakdown: serviceBreakdown,
+    // Structured product order — the label/price above already include them.
+    products: orderedProducts.length > 0 ? orderedProducts : null,
     client_allergies: allergies,
     location_id: location_id || null,
     // Client's chosen UI language — lets send-reminders localize the reminder

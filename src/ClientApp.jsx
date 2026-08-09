@@ -608,6 +608,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(null);
+  // Retail products the client adds to their booking ({productId: qty},
+  // Professional salons only — Starter salons simply have no products).
+  const [productSel, setProductSel] = useState({});
   const [discountError, setDiscountError] = useState("");
   const [clientFound, setClientFound] = useState(false);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
@@ -873,11 +876,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const hasUnchosenVariant = selectedServices.some(it => (it.service.variants || []).length > 0 && !it.variant);
   // "Vanaf €30.00" prefix for totals while any variant is still unchosen.
   const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : "";
+  // Product helpers — name in the visitor's language + running total of the
+  // client's product selection. Products count toward the price (and the
+  // discount, mirroring the server) but never toward the duration.
+  const prodNameOf = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
+  const productsTotal = () => Object.entries(productSel).reduce((s, [pid, q]) => {
+    const p = (initialSalon.products || []).find(x => x.id === pid);
+    return s + (p ? (parseFloat(p.price) || 0) * q : 0);
+  }, 0);
   const getPrice = () => {
     let total = selectedServices.reduce((sum, item) => {
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
       return sum + itemBasePrice(item) + extrasTotal;
-    }, 0);
+    }, 0) + productsTotal();
     if (appliedDiscount) {
       if (appliedDiscount.type === "percent") {
         total = Math.max(0, total * (1 - appliedDiscount.amount / 100));
@@ -891,7 +902,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return selectedServices.reduce((sum, item) => {
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
       return sum + itemBasePrice(item) + extrasTotal;
-    }, 0);
+    }, 0) + productsTotal();
   };
   const getDuration = () => {
     return selectedServices.reduce((sum, item) => sum + itemBaseDuration(item) + itemExtrasDuration(item), 0);
@@ -908,7 +919,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setProductSel({}); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
   // Seed the day multi-select when the waitlist modal opens (with the day the
   // customer was looking at), and clear it when it closes.
@@ -1386,6 +1397,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           extra_ids,
           extra_qtys,
           staff_ids_per_service,
+          // Retail products: {productId: qty}. Server validates + reprices.
+          product_ids: productSel,
           discount_code: appliedDiscount?.code || null,
           date,
           time,
@@ -1897,6 +1910,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                   );
                 })}
+              </section>
+            )}
+
+            {/* PRODUCTS — retail showcase (Professional salons). Clients add
+                them during booking; this section is the shop window. */}
+            {(initialSalon.products || []).length > 0 && (
+              <section className="profile-section">
+                <h2 className="profile-section-title">{lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products"}</h2>
+                <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 14 }}>
+                  {lang === "nl" ? "Verkrijgbaar in de salon — voeg ze toe bij het boeken van je afspraak." : lang === "es" ? "Disponibles en el salón — añádelos al reservar tu cita." : "Available in the salon — add them when booking your appointment."}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 10 }}>
+                  {(initialSalon.products || []).map(p => (
+                    <div key={p.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                      {p.photo_url
+                        ? <img src={p.photo_url} alt={prodNameOf(p)} loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
+                        : <div style={{ width: "100%", aspectRatio: "1", background: c.inputBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🛍</div>}
+                      <div style={{ padding: "10px 12px 12px" }}>
+                        <div style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{prodNameOf(p)}</div>
+                        {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
+                            {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                          </div>
+                        )}
+                        <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, marginTop: 6 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </section>
             )}
 
@@ -2770,6 +2812,43 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   );
                 })}
 
+                {/* Retail products (Professional salons) — add to the visit;
+                    paid in the salon like the rest. Price only, no duration. */}
+                {(initialSalon.products || []).length > 0 && (
+                  <div style={{ marginTop: 20 }}>
+                    <SL>{lang === "nl" ? "Producten toevoegen" : lang === "es" ? "Añadir productos" : "Add products"}</SL>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {(initialSalon.products || []).map(p => {
+                        const qty = productSel[p.id] || 0;
+                        return (
+                          <div key={p.id} onClick={() => setProductSel(s => ({ ...s, [p.id]: qty > 0 ? 0 : 1 }))}
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 14, cursor: "pointer", background: qty > 0 ? `${accent}10` : c.bgCard, border: `1.5px solid ${qty > 0 ? accent : c.border}`, transition: "all 0.15s" }}>
+                            {p.photo_url
+                              ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                              : <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>🛍</div>}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accent : c.text }}>{prodNameOf(p)}</div>
+                              {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
+                                <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
+                                  {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                                </div>
+                              )}
+                            </div>
+                            {qty > 0 && (
+                              <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                                <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
+                                <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                              </span>
+                            )}
+                            <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0 }}>{qty > 1 ? `${cur}${(parseFloat(p.price) * qty).toFixed(2)}` : `${cur}${parseFloat(p.price).toFixed(2)}`}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Reviews */}
                 {initialSalon.reviews?.length > 0 && (
                   <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
@@ -3513,6 +3592,39 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                       );
                     })}
+                    {/* Retail products (Professional salons) — mobile picker. */}
+                    {(initialSalon.products || []).length > 0 && (
+                      <div style={{ marginTop: 16 }}>
+                        <SL>{lang === "nl" ? "Producten toevoegen" : lang === "es" ? "Añadir productos" : "Add products"}</SL>
+                        {(initialSalon.products || []).map(p => {
+                          const qty = productSel[p.id] || 0;
+                          return (
+                            <div key={p.id} onClick={() => setProductSel(s => ({ ...s, [p.id]: qty > 0 ? 0 : 1 }))}
+                              className={`service-card ${qty > 0 ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
+                              {p.photo_url
+                                ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
+                                : <div style={{ width: 36, height: 36, borderRadius: 9, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14 }}>🛍</div>}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 500, fontSize: 12 }}>{prodNameOf(p)}</div>
+                                {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
+                                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
+                                    {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                                  </div>
+                                )}
+                              </div>
+                              {qty > 0 && (
+                                <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                                  <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                  <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
+                                  <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                </span>
+                              )}
+                              <div style={{ fontFamily: displayFont, fontSize: 15, color: accent, flexShrink: 0 }}>{cur}{(parseFloat(p.price) * (qty || 1)).toFixed(2)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div style={{ marginTop: 14 }}>
                       {selectedServices.length > 0 && missingVariants.length > 0 && (
                         <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 10, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10 }}>

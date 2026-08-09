@@ -364,7 +364,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               {[
                 { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"] } },
-                { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"] } },
+                { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Producten verkopen", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Sell products", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"] } },
               ].map((plan, i) => {
                 const yearlyTotal = plan.price * 10; // 2 months free
                 const displayPrice = billingCycle === "yearly" ? yearlyTotal : plan.price;
