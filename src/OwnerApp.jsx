@@ -6162,11 +6162,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Quick Actions — primary first, rest ghost */}
-              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr 1fr 1fr ${appts.length > 0 ? "1fr" : ""}`, gap: 8, marginBottom: 22 }}>
+              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""}`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
+                {/* Kassa — walk-in verkoop rechtstreeks vanaf het dashboard,
+                    zodat een productverkoop geen omweg via de agenda vergt. */}
+                {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
+                  <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: accent, borderColor: `${accent}44` }}
+                    onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setProductSaleFor("walkin"); }}>
+                    🛍 {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
+                  </button>
+                )}
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
                   <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
                 </button>
@@ -7319,7 +7327,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
                     <button className="btn-ghost" style={{ flexShrink: 0, padding: "12px 16px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}
                       title={lang === "nl" ? "Product verkopen zonder afspraak (walk-in)" : lang === "es" ? "Vender producto sin cita (walk-in)" : "Sell a product without an appointment (walk-in)"}
-                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setProductSaleFor("walkin"); }}>
+                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setProductSaleFor("walkin"); }}>
                       🛍 {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
                     </button>
                   )}
