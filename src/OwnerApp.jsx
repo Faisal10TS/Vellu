@@ -10540,51 +10540,71 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         }} />
                       </div>
                       
-                      {!isClosed ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                          <select 
-                            value={hours.open}
-                            onChange={e => update(d => {
-                              if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
-                              d.business_hours[day] = { ...d.business_hours[day], open: e.target.value };
-                              return d;
-                            })}
-                            style={{ 
-                              background: c.bgCardHover, 
-                              border: "1px solid " + c.inputBorder, 
-                              borderRadius: 8, 
-                              padding: "6px 8px", 
-                              color: c.text, 
-                              fontSize: 11,
-                              fontFamily: "'Jost',sans-serif",
-                              cursor: "pointer"
-                            }}
-                          >
-                            {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
-                          </select>
-                          <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
-                          <select 
-                            value={hours.close}
-                            onChange={e => update(d => {
-                              if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
-                              d.business_hours[day] = { ...d.business_hours[day], close: e.target.value };
-                              return d;
-                            })}
-                            style={{ 
-                              background: c.bgCardHover, 
-                              border: "1px solid " + c.inputBorder, 
-                              borderRadius: 8, 
-                              padding: "6px 8px", 
-                              color: c.text, 
-                              fontSize: 11,
-                              fontFamily: "'Jost',sans-serif",
-                              cursor: "pointer"
-                            }}
-                          >
-                            {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
-                          </select>
+                      {!isClosed ? (() => {
+                        // Middagpauze: optionele break_start/break_end binnen de
+                        // dag. HH:MM-strings vergelijken lexicaal correct, dus
+                        // gewone < volstaat voor open < start < eind < close.
+                        const hasBreak = !!(hours.break_start && hours.break_end);
+                        const selStyle = { background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" };
+                        const setDay = (patch) => update(d => {
+                          if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
+                          const next = { ...d.business_hours[day], ...patch };
+                          // Houd de pauze altijd geldig binnen open/close; valt
+                          // hij erbuiten (bv. na het verschuiven van open), gooi
+                          // hem weg in plaats van kapotte keys op te slaan.
+                          if (next.break_start && next.break_end) {
+                            if (!(next.open < next.break_start && next.break_start < next.break_end && next.break_end < next.close)) {
+                              delete next.break_start; delete next.break_end;
+                            }
+                          } else { delete next.break_start; delete next.break_end; }
+                          d.business_hours[day] = next;
+                          return d;
+                        });
+                        const toggleBreak = () => {
+                          if (hasBreak) { setDay({ break_start: null, break_end: null }); return; }
+                          // Standaard 12:00–13:00; past dat niet binnen de dag,
+                          // pak de eerste twee opties ná openingstijd.
+                          let bs = "12:00", be = "13:00";
+                          if (!(hours.open < bs && be < hours.close)) {
+                            const inside = TIMES.filter(x => x > hours.open && x < hours.close);
+                            if (inside.length < 2) return;
+                            bs = inside[0]; be = inside[1];
+                          }
+                          setDay({ break_start: bs, break_end: be });
+                        };
+                        return (
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <select value={hours.open} onChange={e => setDay({ open: e.target.value })} style={selStyle}>
+                              {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                            </select>
+                            <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
+                            <select value={hours.close} onChange={e => setDay({ close: e.target.value })} style={selStyle}>
+                              {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                            </select>
+                            <button type="button" onClick={toggleBreak}
+                              style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 100, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", cursor: "pointer", border: `1px solid ${hasBreak ? accent : c.inputBorder}`, background: hasBreak ? `${accent}14` : "transparent", color: hasBreak ? accent : c.textMuted, whiteSpace: "nowrap" }}>
+                              {lang === "nl" ? "Middagpauze" : lang === "es" ? "Pausa de mediodía" : "Midday break"}
+                            </button>
+                          </div>
+                          {hasBreak && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                              <span style={{ fontSize: 9.5, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Pauze" : lang === "es" ? "Pausa" : "Break"}</span>
+                              <select value={hours.break_start} onChange={e => setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (TIMES.find(x => x > e.target.value && x < hours.close) || hours.break_end) : hours.break_end })} style={selStyle}>
+                                {TIMES.filter(x => x > hours.open && x < hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              </select>
+                              <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
+                              <select value={hours.break_end} onChange={e => setDay({ break_end: e.target.value })} style={selStyle}>
+                                {TIMES.filter(x => x > (hours.break_start || hours.open) && x < hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              </select>
+                              <span style={{ fontSize: 10, color: c.textMuted }}>
+                                {lang === "nl" ? "dicht tussen deze tijden" : lang === "es" ? "cerrado entre estas horas" : "closed between these times"}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      ) : (
+                        );
+                      })() : (
                         <div style={{ fontSize: 11, color: c.textLabel, fontStyle: "italic" }}>{t.closed}</div>
                       )}
                     </div>

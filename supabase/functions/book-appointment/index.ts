@@ -471,6 +471,19 @@ serve(async (req) => {
   const apptStartMin = toMinutes(time);
   const apptEndMin = apptStartMin + totalDuration;
   if (apptStartMin < openMin || apptEndMin > closeMin) return err(400, "outside_hours", origin);
+  // Midday break (middagpauze): optional break_start/break_end on the weekday
+  // split the day into a morning and an afternoon segment. The WHOLE
+  // appointment must fit inside one segment — same rule as the closing time,
+  // applied per segment. Days without the keys behave exactly as before.
+  // Note: exception windows and team-union hours never carry break keys, so
+  // this only fires on the salon's own business_hours.
+  if (dayHours.break_start && dayHours.break_end) {
+    const breakStartMin = toMinutes(dayHours.break_start);
+    const breakEndMin = toMinutes(dayHours.break_end);
+    const fitsMorning = apptEndMin <= breakStartMin;
+    const fitsAfternoon = apptStartMin >= breakEndMin;
+    if (!fitsMorning && !fitsAfternoon) return err(400, "outside_hours", origin);
+  }
 
   // Also verify each picked stylist is personally open at the booked time. A
   // team salon can be "open" because one staff works while a DIFFERENT staff

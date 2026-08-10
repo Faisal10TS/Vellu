@@ -50,6 +50,15 @@ function toMinutes(hhmm: string) {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + (m || 0);
 }
+// Midday break (middagpauze): optional break_start/break_end on a weekday
+// split the day into two segments; the whole appointment must fit inside one.
+// Days without the keys always pass. Mirrors book-appointment.
+function fitsMiddayBreak(day: { break_start?: string; break_end?: string } | null | undefined, startMin: number, endMin: number) {
+  if (!day?.break_start || !day?.break_end) return true;
+  const bs = toMinutes(day.break_start);
+  const be = toMinutes(day.break_end);
+  return endMin <= bs || startMin >= be;
+}
 
 const RATE_LIMIT = new Map<string, { count: number; resetAt: number }>();
 const RATE_WINDOW_MS = 60000;
@@ -276,10 +285,12 @@ serve(async (req) => {
     } else {
       if (!salonDay || salonDay.closed) return err(400, "closed", origin);
       if (startMin < toMinutes(fbOpen) || endMin > toMinutes(fbClose)) return err(400, "outside_hours", origin);
+      if (!fitsMiddayBreak(salonDay, startMin, endMin)) return err(400, "outside_hours", origin);
     }
   } else {
     if (!salonDay || salonDay.closed) return err(400, "closed", origin);
     if (startMin < toMinutes(salonDay.open) || endMin > toMinutes(salonDay.close)) return err(400, "outside_hours", origin);
+    if (!fitsMiddayBreak(salonDay, startMin, endMin)) return err(400, "outside_hours", origin);
   }
 
   const breakMin = parseInt(salon.break_minutes || 0);

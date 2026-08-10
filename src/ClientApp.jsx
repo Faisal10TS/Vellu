@@ -337,8 +337,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [selectedServices, setSelectedServices] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
   
-  // Location-aware business hours and break minutes
-  const activeHours = (selectedLocation?.business_hours) || initialSalon.business_hours || DEFAULT_HOURS;
+  // Business hours: ALWAYS the salon's own (profile) hours. Locations are
+  // seeded with hard-coded DEFAULT_HOURS and there is NO per-location hours
+  // editor, so preferring location hours silently shadowed the hours the
+  // owner actually maintains (My Whims' lunch break disappeared this way) —
+  // and book-appointment validates against profile hours, so client and
+  // server disagreed. Re-introduce the preference only WITH an editor.
+  const activeHours = initialSalon.business_hours || DEFAULT_HOURS;
   const activeBreakMinutes = selectedLocation?.break_minutes ?? initialSalon.break_minutes ?? 0;
   
   // Day override helpers (blocked/exception days)
@@ -1278,6 +1283,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (startMin < salonOpen) return false;
       if (startMin + totalDuration > salonClose) return false;
 
+      // Middagpauze: optional break_start/break_end split the day into a
+      // morning and afternoon segment. The FULL booking must fit inside one
+      // segment — same rule as the closing time, applied per segment. Days
+      // without the keys behave exactly as before. Mirrors book-appointment.
+      if (dayHours.break_start && dayHours.break_end) {
+        const breakStart = toMin(dayHours.break_start);
+        const breakEnd = toMin(dayHours.break_end);
+        const fitsMorning = startMin + totalDuration <= breakStart;
+        const fitsAfternoon = startMin >= breakEnd;
+        if (!fitsMorning && !fitsAfternoon) return false;
+      }
+
       // Per-service sub-window: at least one eligible staff must cover it.
       // Walk services sequentially — each sub-window starts right after the
       // previous one ends (no gaps within a single booking).
@@ -1645,8 +1662,26 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (mins >= closeMins) {
       return { salonIsOpen: false, salonStatusLabel: t.closedNow };
     }
+    // Middagpauze: tijdens de pauze is de salon dicht (heropent om break_end);
+    // vóór de pauze sluit hij eerst om break_start.
+    if (todayHoursObj.break_start && todayHoursObj.break_end) {
+      const toM = (s) => { const [h, m] = String(s).split(":").map(Number); return h * 60 + (m || 0); };
+      const bs = toM(todayHoursObj.break_start), be = toM(todayHoursObj.break_end);
+      if (mins >= bs && mins < be) {
+        return { salonIsOpen: false, salonStatusLabel: `${t.closedNow} · ${t.opensAt} ${todayHoursObj.break_end}` };
+      }
+      if (mins < bs) {
+        return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${todayHoursObj.break_start}` };
+      }
+    }
     return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${todayHoursObj.close}` };
   })();
+
+  // "09:00 – 12:00 & 13:00 – 17:00" wanneer een dag een middagpauze heeft;
+  // zonder pauze het vertrouwde "09:00 – 17:00".
+  const fmtDayHours = (h) => h.break_start && h.break_end
+    ? `${h.open} – ${h.break_start} & ${h.break_end} – ${h.close}`
+    : `${h.open} – ${h.close}`;
 
   const avgRating = initialSalon.reviews?.length > 0
     ? (initialSalon.reviews.reduce((s, r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)
@@ -2235,7 +2270,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <NavIcon name="calendar" size={13} color={accent} />
                       <div style={{ fontSize: 12, color: c.text }}>
                         <span style={{ fontWeight: 600, color: accent }}>{dayLabel}</span>
-                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {hrs.open} – {hrs.close}</span>
+                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {fmtDayHours(hrs)}</span>
                       </div>
                     </div>
                   );
@@ -2257,7 +2292,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   return (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 2px", fontSize: 12 }}>
                       <span style={{ color: c.text, fontWeight: 600 }}>{FULL_DAYS[todayDayIndex]}</span>
-                      <span style={{ color: todayHrs.closed ? c.textMuted : accent, fontWeight: 600 }}>{todayHrs.closed ? t.closed : `${todayHrs.open} – ${todayHrs.close}`}</span>
+                      <span style={{ color: todayHrs.closed ? c.textMuted : accent, fontWeight: 600 }}>{todayHrs.closed ? t.closed : fmtDayHours(todayHrs)}</span>
                     </div>
                   );
                 })()}
@@ -2268,7 +2303,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       return (
                         <div key={dayIdx} className="profile-hours-row">
                           <span style={{ color: c.textLabel }}>{FULL_DAYS[dayIdx]}</span>
-                          <span style={{ color: dayHrs.closed ? c.textMuted : c.textSub }}>{dayHrs.closed ? t.closed : `${dayHrs.open} – ${dayHrs.close}`}</span>
+                          <span style={{ color: dayHrs.closed ? c.textMuted : c.textSub }}>{dayHrs.closed ? t.closed : fmtDayHours(dayHrs)}</span>
                         </div>
                       );
                     })}
