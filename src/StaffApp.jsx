@@ -128,7 +128,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // their own agenda. We filter to "mine" client-side against staff_id,
         // staff_assignments and service_breakdown.
         const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }, { data: staffRows }] = await Promise.all([
-          supabase.from("appointments").select("*").eq("owner_id", salonProfile.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
+          // Server-side gefilterd: staff_list_appointments (SECURITY DEFINER)
+          // stript prijs- en contactvelden volgens de owner-toggles vóórdat
+          // er iets over de lijn gaat — de UI-gating hieronder is dus geen
+          // enige verdedigingslinie meer. Reshape naar { data } zodat de
+          // destructuring hieronder gelijk blijft.
+          supabase.rpc("staff_list_appointments", { p_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] })
+            .then(r => ({ data: (r.data || []).sort((a, b) => String(b.date).localeCompare(String(a.date))), error: r.error })),
           supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
           supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
           supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
