@@ -11394,6 +11394,39 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {lang === "nl" ? "Nu abonneren" : lang === "es" ? "Suscríbete ahora" : "Subscribe now"}
                         </button>
                       )}
+                      {/* Starter-trial → Professional: er loopt nog geen Mollie-
+                          abonnement, dus upgraden is hier gewoon het plan
+                          omzetten. Gratis tot de proef eindigt; "Nu abonneren"
+                          rekent daarna vanzelf de Professional-prijs. */}
+                      {isTrial && (bp.plan || "starter") === "starter" && (
+                        <button
+                          className="btn-ghost"
+                          style={{ color: ACCENT, borderColor: `${ACCENT}55` }}
+                          onClick={async () => {
+                            const { error } = await supabase.from("profiles").update({ plan: "professional" }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.plan = "professional"; return d; });
+                            setBillingProfile(p => p ? { ...p, plan: "professional" } : { plan: "professional" });
+                            toast.show(lang === "nl" ? "Je proefperiode is nu Professional — alle Pro-functies staan open. Wisselen kan altijd nog." : lang === "es" ? "Tu prueba ahora es Professional — todas las funciones Pro están abiertas." : "Your trial is now Professional — all Pro features are unlocked. You can switch back anytime.");
+                          }}
+                        >
+                          {lang === "nl" ? "Upgraden naar Professional" : lang === "es" ? "Cambia al plan Professional" : "Upgrade to Professional"}
+                        </button>
+                      )}
+                      {isTrial && bp.plan === "professional" && (
+                        <button
+                          className="btn-ghost"
+                          onClick={async () => {
+                            const { error } = await supabase.from("profiles").update({ plan: "starter" }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.plan = "starter"; return d; });
+                            setBillingProfile(p => p ? { ...p, plan: "starter" } : { plan: "starter" });
+                            toast.show(lang === "nl" ? "Teruggezet naar Starter." : lang === "es" ? "Cambiado a Starter." : "Switched back to Starter.");
+                          }}
+                        >
+                          {lang === "nl" ? "Terug naar Starter" : lang === "es" ? "Volver a Starter" : "Back to Starter"}
+                        </button>
+                      )}
                       {isActive && !willCancel && bp.plan === "starter" && (
                         <button
                           className="btn-primary"
