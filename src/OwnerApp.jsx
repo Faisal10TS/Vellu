@@ -3557,6 +3557,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [walkinName, setWalkinName] = useState("");
   const [walkinEmail, setWalkinEmail] = useState("");
   const [walkinStaff, setWalkinStaff] = useState("");
+  // Kassa: hoe er is afgerekend. "request" wordt payment_method "online"
+  // zodat de factuur-mail het betaalverzoek-blok meestuurt.
+  const [walkinPay, setWalkinPay] = useState("pin");
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -4292,7 +4295,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         time: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
         client_name: walkinName.trim() || (lang === "nl" ? "Losse verkoop" : lang === "es" ? "Venta directa" : "Walk-in sale"),
         client_email: walkinEmail.trim().toLowerCase(),
-        payment_method: "on-arrival",
+        // "request" → "online": zo stuurt de factuur-mail automatisch het
+        // betaalverzoek-blok mee. Contant/pin = al betaald → kale factuur/bon.
+        payment_method: walkinPay === "request" ? "online" : walkinPay,
         status: "completed",
         invoice_sent: false,
         products: items,
@@ -4303,8 +4308,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff("");
-      toast.show(lang === "nl" ? "Verkoop geregistreerd" : lang === "es" ? "Venta registrada" : "Sale recorded");
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin");
+      // Kassa: met een e-mailadres gaat de factuur/bon er direct achteraan —
+      // afrekenen en factureren is dan één handeling, zoals bij Sara.
+      if (row.client_email) {
+        await sendInvoiceWith(data.id, null, data);
+      } else {
+        toast.show(lang === "nl" ? "Verkoop geregistreerd" : lang === "es" ? "Venta registrada" : "Sale recorded");
+      }
       return;
     }
     const a = salonData.appointments.find(x => x.id === productSaleFor);
@@ -4436,12 +4447,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     w.document.close();
   };
 
-  const sendInvoiceWith = async (id, profileIdx) => {
+  // apptOverride: de kassa-flow factureert direct na het aanmaken van de
+  // verkoop-rij — die zit dan nog niet in salonData (state is nog niet
+  // geflusht), dus de verse rij gaat als object mee.
+  const sendInvoiceWith = async (id, profileIdx, apptOverride) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     setInvoicePickerFor(null);
     try {
-      const a = salonData.appointments.find(x => x.id === id);
+      const a = apptOverride || salonData.appointments.find(x => x.id === id);
       if (a) {
         const extras = salonData.invoice_profiles || [];
         const isExtra = profileIdx !== null && profileIdx !== undefined && extras[profileIdx];
@@ -5254,13 +5268,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>
               {productSaleFor === "walkin"
-                ? (lang === "nl" ? "Voor iemand zonder afspraak. Telt mee in je omzet; met e-mailadres kun je een factuur sturen." : lang === "es" ? "Para alguien sin cita. Cuenta en tus ingresos; con correo puedes enviar factura." : "For someone without an appointment. Counts toward revenue; with an email you can send an invoice.")
+                ? (lang === "nl" ? "Voor iemand zonder afspraak. Telt mee in je omzet en voorraad; met e-mailadres gaat de factuur er direct achteraan." : lang === "es" ? "Para alguien sin cita. Cuenta en ingresos y stock; con correo la factura sale al instante." : "For someone without an appointment. Counts toward revenue and stock; with an email the invoice goes out instantly.")
                 : (lang === "nl" ? "Wordt bij deze afspraak opgeteld en komt op de factuur." : lang === "es" ? "Se suma a esta cita y aparece en la factura." : "Added to this appointment and included on the invoice.")}
             </div>
             {productSaleFor === "walkin" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
                 <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre del cliente (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
-                <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — voor factuur)" : lang === "es" ? "Correo (opcional — para factura)" : "Email (optional — for invoice)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — factuur gaat direct mee)" : lang === "es" ? "Correo (opcional — factura al instante)" : "Email (optional — invoice sent instantly)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[
+                    ["pin", lang === "es" ? "Tarjeta" : "Pin"],
+                    ["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"],
+                    ["request", lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request"],
+                  ].map(([val, label]) => (
+                    <button key={val} type="button" onClick={() => setWalkinPay(val)}
+                      style={{ flex: 1, padding: "9px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.03em", cursor: "pointer", border: `1.5px solid ${walkinPay === val ? accent : c.inputBorder}`, background: walkinPay === val ? `${accent}14` : "transparent", color: walkinPay === val ? accent : c.textSub, transition: "all 0.15s" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {walkinPay === "request" && !walkinEmail.trim() && (
+                  <div style={{ fontSize: 10, color: c.warning }}>
+                    {lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : lang === "es" ? "Añade un correo — la solicitud de pago va en la factura." : "Add an email — the payment request travels in the invoice email."}
+                  </div>
+                )}
                 {(salonData.staff || []).length > 0 && (
                   <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
                     <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
@@ -5304,8 +5335,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               ) : null;
             })()}
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-primary" style={{ flex: 1, padding: "12px 16px", fontSize: 12 }} disabled={!Object.values(productSaleSel).some(q => q > 0)} onClick={addProductsToAppt}>
-                {lang === "nl" ? "Toevoegen aan afspraak" : lang === "es" ? "Añadir a la cita" : "Add to appointment"}
+              <button className="btn-primary" style={{ flex: 1, padding: "12px 16px", fontSize: 12 }} disabled={!Object.values(productSaleSel).some(q => q > 0) || (productSaleFor === "walkin" && walkinPay === "request" && !walkinEmail.trim())} onClick={addProductsToAppt}>
+                {productSaleFor === "walkin"
+                  ? (lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out")
+                  : (lang === "nl" ? "Toevoegen aan afspraak" : lang === "es" ? "Añadir a la cita" : "Add to appointment")}
               </button>
               <button className="btn-ghost" style={{ padding: "12px 16px", fontSize: 12 }} onClick={() => setProductSaleFor(null)}>{t.cancelEdit}</button>
             </div>
