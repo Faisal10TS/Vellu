@@ -3268,7 +3268,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           supabase.from("locations").select("*").eq("owner_id", data.id).order("position"),
           supabase.from("client_no_shows").select("client_email, no_show_count, blocked").eq("owner_id", data.id),
           // How many other salons signed up using this owner's referral code.
-          supabase.from("profiles").select("*", { count: "exact", head: true }).eq("referred_by", data.id),
+          // Other profiles rows are no longer directly readable (RLS), so this
+          // runs through a SECURITY DEFINER counter that returns just the int;
+          // .then() reshapes it to the { count } the destructuring expects.
+          supabase.rpc("my_referral_count").then(r => ({ count: r.data ?? 0, error: r.error })),
           // Manual client notes — used by the agenda card to surface a
           // client-specific note (e.g. "prefers less pressure", "always late")
           // right at the point of service, so staff don't have to open a
@@ -3668,7 +3671,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (slugCheckRef.current) clearTimeout(slugCheckRef.current);
     slugCheckRef.current = setTimeout(async () => {
       const { data, error } = await supabase
-        .from("profiles").select("id").eq("slug", slugDraft).maybeSingle();
+        .from("public_salons").select("id").eq("slug", slugDraft).maybeSingle();
       if (error) {
         setSlugStatus({ state: "invalid", message: lang === "nl" ? "Kon niet controleren, probeer opnieuw" : lang === "es" ? "No se pudo comprobar, inténtalo de nuevo" : "Couldn't check, try again" });
         return;
@@ -12336,21 +12339,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const email = addApptForm.client_email.toLowerCase().trim();
                     const nameTrim = addApptForm.client_name.trim();
                     const allergiesTrim = (addApptForm.client_allergies || "").trim();
+                    // get_or_create_client (SECURITY DEFINER RPC) — clients van
+                    // andere salons zijn niet meer leesbaar via RLS, dus een
+                    // gewone select/insert zou hier stuklopen op het unieke
+                    // e-mailadres. De RPC dedupliceert server-side en geeft
+                    // alleen de id terug.
                     let clientId = null;
-                    const { data: existing } = await supabase.from("clients").select("id, allergies").eq("email", email).maybeSingle();
-                    if (existing) {
-                      clientId = existing.id;
-                      // Keep the client record in sync when the owner typed or
-                      // corrected allergy info during this booking.
-                      if (allergiesTrim && allergiesTrim !== (existing.allergies || "")) {
-                        await supabase.from("clients").update({ allergies: allergiesTrim }).eq("id", existing.id);
-                      }
-                    }
-                    else {
-                      const nameParts = nameTrim.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null, allergies: allergiesTrim || null }).select("id").single();
-                      if (nc) clientId = nc.id;
-                    }
+                    const nameParts = nameTrim.split(" ");
+                    const { data: rpcId } = await supabase.rpc("get_or_create_client", {
+                      p_email: email,
+                      p_first: nameParts[0] || nameTrim,
+                      p_last: nameParts.slice(1).join(" ") || "",
+                      p_phone: addApptForm.client_phone || null,
+                      p_allergies: allergiesTrim || null,
+                    });
+                    if (rpcId) clientId = rpcId;
                     // Insert appointment — primary service_id is the first row so
                     // legacy code paths that expect a single service_id still work.
                     const apptData = {

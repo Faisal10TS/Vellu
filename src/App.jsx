@@ -239,8 +239,11 @@ function SalonRoute({ lang, setLang }) {
 
   useEffect(() => {
     const load = async () => {
-      // Check Supabase
-      const { data, error } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).single();
+      // public_salons is a column-safe VIEW over profiles: the anon key can no
+      // longer read the base table, so financial/private columns never reach
+      // the wire. discount_codes arrives pre-filtered to active codes and
+      // payment_configured is already a boolean.
+      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load related data in parallel for faster page load
       const [
@@ -260,6 +263,7 @@ function SalonRoute({ lang, setLang }) {
       ]);
       setSalon({
         id: data.slug,
+        slug: data.slug,
         owner_id: data.id,
         name: data.business_name || data.owner_name || "Studio",
         city: data.city || "Nederland",
@@ -288,7 +292,7 @@ function SalonRoute({ lang, setLang }) {
         // Whether the "pay afterwards via payment request" option makes sense:
         // the salon set up a pay link and/or an IBAN for the invoice email.
         // Boolean only — the actual details never enter the public payload.
-        payment_configured: !!(data.payment_link || data.iban),
+        payment_configured: !!data.payment_configured,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",

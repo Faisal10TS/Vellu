@@ -2319,17 +2319,18 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const duration = variant ? variant.duration : (svc?.duration || 60);
                     const email = addApptForm.client_email.toLowerCase().trim();
                     const nameTrim = addApptForm.client_name.trim();
+                    // Via get_or_create_client RPC — clients van andere salons
+                    // zijn door RLS niet leesbaar; de RPC dedupliceert op het
+                    // globale unieke e-mailadres en geeft alleen de id terug.
                     let clientId = null;
-                    // NOTE: clients.email is globally unique right now so we don't scope by
-                    // owner_id. Cross-salon client-row sharing is a data-model issue tracked
-                    // for a future migration (see book-appointment for context).
-                    const { data: existing } = await supabase.from("clients").select("id").eq("email", email).maybeSingle();
-                    if (existing) clientId = existing.id;
-                    else {
-                      const nameParts = nameTrim.split(" ");
-                      const { data: nc } = await supabase.from("clients").insert({ email, first_name: nameParts[0] || nameTrim, last_name: nameParts.slice(1).join(" ") || "", phone: addApptForm.client_phone || null }).select("id").single();
-                      if (nc) clientId = nc.id;
-                    }
+                    const nameParts = nameTrim.split(" ");
+                    const { data: rpcId } = await supabase.rpc("get_or_create_client", {
+                      p_email: email,
+                      p_first: nameParts[0] || nameTrim,
+                      p_last: nameParts.slice(1).join(" ") || "",
+                      p_phone: addApptForm.client_phone || null,
+                    });
+                    if (rpcId) clientId = rpcId;
                     const apptData = {
                       owner_id: salonProfile.id, service_id: svc?.id, client_id: clientId,
                       service_name: svcLabel, service_price: price, service_duration: duration,

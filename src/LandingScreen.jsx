@@ -560,7 +560,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
     let cancelled = false;
     (async () => {
       const { data } = await supabase
-        .from("profiles")
+        .from("public_salons")
         .select("id,slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
         .eq("directory_visible", true)
         .in("subscription_status", ["active", "trialing"])
@@ -998,7 +998,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     if (!urlRef) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from("profiles").select("business_name").eq("referral_code", urlRef.toUpperCase()).maybeSingle();
+      const { data } = await supabase.from("public_salons").select("business_name").eq("referral_code", urlRef.toUpperCase()).maybeSingle();
       if (!cancelled && data?.business_name) setReferrerName(data.business_name);
     })();
     return () => { cancelled = true; };
@@ -1024,7 +1024,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
     if (mode === "signup") {
       let slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
       // Check slug uniqueness
-      const { data: existing } = await supabase.from("profiles").select("id").eq("slug", slug).maybeSingle();
+      const { data: existing } = await supabase.from("public_salons").select("id").eq("slug", slug).maybeSingle();
       if (existing) {
         const originalSlug = slug;
         slug = slug + "-" + Math.random().toString(36).slice(2, 6);
