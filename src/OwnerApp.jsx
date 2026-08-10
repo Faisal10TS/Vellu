@@ -3124,11 +3124,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
+  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
   const [editingProduct, setEditingProduct] = useState(null);
-  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
+  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
   const [productPhotoUploading, setProductPhotoUploading] = useState(null);
   const [productSearch, setProductSearch] = useState("");
+  const [showOrderList, setShowOrderList] = useState(false);
+  const [stockImporting, setStockImporting] = useState(false);
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -3336,6 +3338,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // explicitly switched off (DB default is true).
           directory_visible: data.directory_visible !== false,
           staff_see_all: data.staff_see_all || false,
+          // Staff visibility toggles — DB default true (= old behaviour).
+          staff_view_revenue: data.staff_view_revenue !== false,
+          staff_view_client_contact: data.staff_view_client_contact !== false,
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
@@ -4314,6 +4319,120 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
   };
 
+  // ── Producten: Excel (CSV) export / voorraad-import / bestellijst ──
+  // CSV met BOM + puntkomma's opent direct netjes in NL/EU Excel; decimalen
+  // exporteren met komma zodat Excel ze als getal leest.
+  const csvEsc = (v) => { const s = v == null ? "" : String(v); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csvNum = (v) => v == null ? "" : String(v).replace(".", ",");
+  const downloadCsv = (rows, filename) => {
+    const csv = "﻿" + rows.map(r => r.map(csvEsc).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+  const exportProductsCsv = () => {
+    const rows = [["id", "Naam", "Name (EN)", "Leverancier", "Inkoopprijs", "Verkoopprijs", "Voorraad", "Min. voorraad", "Actief"]];
+    for (const p of (salonData.products || [])) {
+      rows.push([p.id, p.name_nl || "", p.name_en || "", p.supplier || "", csvNum(p.purchase_price), csvNum(p.price), p.stock == null ? "" : p.stock, p.min_stock == null ? "" : p.min_stock, p.active ? "ja" : "nee"]);
+    }
+    downloadCsv(rows, "vellu-producten.csv");
+  };
+  // Voorraad-import: herkent onze eigen export (match op id) maar ook een
+  // kale Excel-lijst met kolommen naam + voorraad. Lege voorraad-cellen
+  // worden overgeslagen (= niet bijhouden), nooit op 0 gezet.
+  const importStockCsv = async (file) => {
+    if (stockImporting) return;
+    setStockImporting(true);
+    try {
+      let text = await file.text();
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const firstLine = text.split(/\r?\n/)[0] || "";
+      const delim = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ";" : ",";
+      const parseLine = (line) => {
+        const out = []; let cur = "", q = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+          else if (ch === '"') q = true;
+          else if (ch === delim) { out.push(cur); cur = ""; }
+          else cur += ch;
+        }
+        out.push(cur); return out;
+      };
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      const header = lines.length ? parseLine(lines[0]).map(h => h.trim().toLowerCase()) : [];
+      const idIdx = header.indexOf("id");
+      const stockIdx = header.findIndex(h => ["voorraad", "stock", "existencias"].includes(h));
+      const nameIdx = header.findIndex(h => ["naam", "name", "product", "nombre"].includes(h));
+      if (lines.length < 2 || stockIdx === -1 || (idIdx === -1 && nameIdx === -1)) {
+        toast.show(lang === "nl" ? "Kolommen niet herkend — gebruik het export-bestand of kolommen 'Naam' + 'Voorraad'" : lang === "es" ? "Columnas no reconocidas — usa el archivo de exportación o columnas 'Nombre' + 'Existencias'" : "Columns not recognized — use the export file or columns 'Name' + 'Stock'", "error");
+        return;
+      }
+      const prods = salonData.products || [];
+      const updates = []; let misses = 0;
+      for (const line of lines.slice(1)) {
+        const cells = parseLine(line);
+        const raw = (cells[stockIdx] || "").trim();
+        if (raw === "") continue;
+        const n = parseInt(raw.replace(",", "."));
+        if (!Number.isFinite(n) || n < 0) continue;
+        let p = idIdx !== -1 ? prods.find(x => x.id === (cells[idIdx] || "").trim()) : null;
+        if (!p && nameIdx !== -1) {
+          const nm = (cells[nameIdx] || "").trim().toLowerCase();
+          if (nm) p = prods.find(x => (x.name_nl || "").toLowerCase() === nm || (x.name_en || "").toLowerCase() === nm);
+        }
+        if (!p) { misses++; continue; }
+        updates.push({ id: p.id, stock: n });
+      }
+      if (!updates.length) {
+        toast.show(lang === "nl" ? "Geen producten gevonden die matchen" : lang === "es" ? "No se encontraron productos coincidentes" : "No matching products found", "error");
+        return;
+      }
+      const results = await Promise.all(updates.map(u => supabase.from("products").update({ stock: u.stock }).eq("id", u.id)));
+      const failed = results.filter(r => r.error).length;
+      const applied = updates.filter((u, i) => !results[i].error);
+      update(d => { d.products = d.products.map(x => { const u = applied.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
+      const okMsg = lang === "nl" ? `Voorraad bijgewerkt voor ${applied.length} product(en)` : lang === "es" ? `Existencias actualizadas para ${applied.length} producto(s)` : `Stock updated for ${applied.length} product(s)`;
+      const missMsg = misses > 0 ? (lang === "nl" ? ` — ${misses} regel(s) niet gevonden` : lang === "es" ? ` — ${misses} fila(s) no encontradas` : ` — ${misses} row(s) not found`) : "";
+      toast.show(okMsg + missMsg, failed > 0 ? "error" : undefined);
+    } catch {
+      toast.show(t.somethingWrong, "error");
+    } finally { setStockImporting(false); }
+  };
+  // Bestellijst: alles onder het minimum, gegroepeerd per leverancier —
+  // "e lista di te bestellen di e agensia". Tekort = wat je moet bijbestellen
+  // om weer op het minimum te zitten.
+  const orderListGroups = () => {
+    const items = (salonData.products || [])
+      .filter(p => p.stock != null && p.min_stock != null && p.stock < p.min_stock)
+      .map(p => ({ ...p, shortage: p.min_stock - p.stock }));
+    const groups = {};
+    for (const it of items) { const k = it.supplier || ""; (groups[k] = groups[k] || []).push(it); }
+    return Object.entries(groups).sort(([a], [b]) => (a || "zzz").localeCompare(b || "zzz"));
+  };
+  const exportOrderListCsv = () => {
+    const rows = [[lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier", lang === "nl" ? "Product" : "Product", lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock", lang === "nl" ? "Minimum" : "Minimum", lang === "nl" ? "Bestellen" : lang === "es" ? "Pedir" : "To order"]];
+    for (const [sup, items] of orderListGroups()) for (const it of items) rows.push([sup || "—", prodName(it) || it.name_nl || "", it.stock, it.min_stock, it.shortage]);
+    downloadCsv(rows, "vellu-bestellijst.csv");
+  };
+  const printOrderList = () => {
+    const groups = orderListGroups();
+    const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const title = lang === "nl" ? "Bestellijst" : lang === "es" ? "Lista de pedidos" : "Order list";
+    const cols = lang === "nl" ? ["Product", "Voorraad", "Minimum", "Bestellen"] : lang === "es" ? ["Producto", "Existencias", "Mínimo", "Pedir"] : ["Product", "Stock", "Minimum", "To order"];
+    const body = groups.map(([sup, items]) => `
+      <h2>${esc(sup || (lang === "nl" ? "Zonder leverancier" : lang === "es" ? "Sin proveedor" : "No supplier"))}</h2>
+      <table><thead><tr>${cols.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+      <tbody>${items.map(it => `<tr><td>${esc(prodName(it) || it.name_nl)}</td><td>${it.stock}</td><td>${it.min_stock}</td><td><b>${it.shortage}</b></td></tr>`).join("")}</tbody></table>`).join("");
+    const w = window.open("", "_blank", "width=720,height=900");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><title>${esc(title)} — ${esc(salonData.business_name || "Vellu")}</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:18px 0 6px}p.sub{color:#777;font-size:11px;margin:0 0 8px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left}th{background:#f4f4f4}</style>
+      </head><body><h1>${esc(title)}</h1><p class="sub">${esc(salonData.business_name || "")} · ${esc(fmt(getToday()))}</p>${body}
+      <script>window.onload=function(){window.print()}<\/script></body></html>`);
+    w.document.close();
+  };
+
   const sendInvoiceWith = async (id, profileIdx) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -5186,6 +5305,55 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {lang === "nl" ? "Toevoegen aan afspraak" : lang === "es" ? "Añadir a la cita" : "Add to appointment"}
               </button>
               <button className="btn-ghost" style={{ padding: "12px 16px", fontSize: 12 }} onClick={() => setProductSaleFor(null)}>{t.cancelEdit}</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* Bestellijst — everything below its minimum, grouped per supplier.
+          Print gives a clean sheet to hand to (or mail) the supplier;
+          CSV opens in Excel. */}
+      {showOrderList && createPortal((
+        <div onClick={() => setShowOrderList(false)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={e => e.stopPropagation()}
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 480, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
+              {lang === "nl" ? "Bestellijst" : lang === "es" ? "Lista de pedidos" : "Order list"}
+            </div>
+            <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>
+              {lang === "nl" ? "Alles onder je minimum-voorraad, per leverancier." : lang === "es" ? "Todo por debajo de tu mínimo, por proveedor." : "Everything below your minimum stock, per supplier."}
+            </div>
+            {(() => {
+              const groups = orderListGroups();
+              if (!groups.length) return (
+                <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
+                  {lang === "nl" ? "Niets te bestellen — alles is op voorraad. 🎉" : lang === "es" ? "Nada que pedir — todo en stock. 🎉" : "Nothing to order — everything is in stock. 🎉"}
+                </div>
+              );
+              return groups.map(([sup, items]) => (
+                <div key={sup || "__none"} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: accent, marginBottom: 6 }}>
+                    {sup || (lang === "nl" ? "Zonder leverancier" : lang === "es" ? "Sin proveedor" : "No supplier")}
+                  </div>
+                  {items.map(it => (
+                    <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.text }}>{prodName(it) || it.name_nl}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, flexShrink: 0 }}>{it.stock} / {it.min_stock}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: c.danger, flexShrink: 0 }}>+{it.shortage}</div>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              {orderListGroups().length > 0 && <>
+                <button className="btn-primary" style={{ flex: 1, padding: "11px 16px", fontSize: 11 }} onClick={printOrderList}>
+                  {lang === "nl" ? "Printen" : lang === "es" ? "Imprimir" : "Print"}
+                </button>
+                <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11 }} onClick={exportOrderListCsv}>Excel</button>
+              </>}
+              <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11 }} onClick={() => setShowOrderList(false)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
             </div>
           </div>
         </div>
@@ -9605,6 +9773,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       })()}
                     </div>
                   )}
+                  {(salonData.products || []).length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                      {(() => {
+                        const shortages = (salonData.products || []).filter(p => p.stock != null && p.min_stock != null && p.stock < p.min_stock).length;
+                        return (
+                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, display: "inline-flex", alignItems: "center", gap: 6, ...(shortages > 0 ? { color: c.danger, borderColor: `${c.danger}44` } : {}) }} onClick={() => setShowOrderList(true)}>
+                            {lang === "nl" ? "Bestellijst" : lang === "es" ? "Lista de pedidos" : "Order list"}{shortages > 0 ? ` (${shortages})` : ""}
+                          </button>
+                        );
+                      })()}
+                      <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10 }} onClick={exportProductsCsv}>
+                        {lang === "nl" ? "Export (Excel)" : lang === "es" ? "Exportar (Excel)" : "Export (Excel)"}
+                      </button>
+                      <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", opacity: stockImporting ? 0.5 : 1 }}>
+                        <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={stockImporting} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importStockCsv(f); }} />
+                        {stockImporting ? "…" : (lang === "nl" ? "Import voorraad" : lang === "es" ? "Importar existencias" : "Import stock")}
+                      </label>
+                    </div>
+                  )}
+                  <datalist id="vellu-suppliers">
+                    {[...new Set((salonData.products || []).map(p => p.supplier).filter(Boolean))].map(s => <option key={s} value={s} />)}
+                  </datalist>
                   <div style={{ overflowX: "auto" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 540 }}>
                     {/* Column header — the professional table look. */}
@@ -9621,7 +9811,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                     {(salonData.products || []).filter(p => {
                       if (!productSearch.trim()) return true;
-                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""}`.toLowerCase();
+                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""}`.toLowerCase();
                       return hay.includes(productSearch.trim().toLowerCase());
                     }).map(p => (
                       editingProduct === p.id ? (
@@ -9653,6 +9843,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
                               <input className="input-field" type="number" value={editProductForm.min_stock} onChange={ev => setEditProductForm(f => ({...f, min_stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
                             </div>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
+                              <input className="input-field" value={editProductForm.supplier} onChange={ev => setEditProductForm(f => ({...f, supplier: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel — voor de bestellijst" : lang === "es" ? "opcional — para la lista de pedidos" : "optional — for the order list"} list="vellu-suppliers" />
+                            </div>
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
@@ -9661,7 +9855,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               const numOrNull = (v) => { if (v === "" || v == null) return null; const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                               const intOrNull = (v) => { if (v === "" || v == null) return null; const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                               const filled = await autoFillTranslations(editProductForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price, purchase_price: numOrNull(editProductForm.purchase_price), stock: intOrNull(editProductForm.stock), min_stock: intOrNull(editProductForm.min_stock) };
+                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price, purchase_price: numOrNull(editProductForm.purchase_price), stock: intOrNull(editProductForm.stock), min_stock: intOrNull(editProductForm.min_stock), supplier: editProductForm.supplier.trim() || null };
                               const { error } = await supabase.from("products").update(upd).eq("id", p.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, ...upd } : x); return d; });
@@ -9692,6 +9886,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </label>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl)}</div>
+                            {p.supplier && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.supplier}</div>}
                             {!p.active && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Verborgen voor klanten" : lang === "es" ? "Oculto para clientes" : "Hidden from clients"}</div>}
                           </div>
                           <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
@@ -9718,7 +9913,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: p.active ? 16 : 2, transition: "left 0.2s" }} />
                           </div>
                           <div style={{ display: "flex", gap: 4, width: 64, flexShrink: 0, justifyContent: "flex-end" }}>
-                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price, purchase_price: p.purchase_price == null ? "" : String(p.purchase_price), stock: p.stock == null ? "" : String(p.stock), min_stock: p.min_stock == null ? "" : String(p.min_stock) }); }}
+                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price, purchase_price: p.purchase_price == null ? "" : String(p.purchase_price), stock: p.stock == null ? "" : String(p.stock), min_stock: p.min_stock == null ? "" : String(p.min_stock), supplier: p.supplier || "" }); }}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <NavIcon name="edit" size={11} color="currentColor" />
                             </button>
@@ -9764,6 +9959,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
                           <input className="input-field" type="number" value={newProduct.min_stock} onChange={e => setNewProduct(f => ({...f, min_stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
                         </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
+                          <input className="input-field" value={newProduct.supplier} onChange={e => setNewProduct(f => ({...f, supplier: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel — voor de bestellijst" : lang === "es" ? "opcional — para la lista de pedidos" : "optional — for the order list"} list="vellu-suppliers" />
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button className="btn-primary" style={{ flex: 1, padding: "11px 16px", fontSize: 11 }} onClick={async () => {
@@ -9777,11 +9976,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
                             description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
                             price, purchase_price: numOrNull(newProduct.purchase_price), stock: intOrNull(newProduct.stock), min_stock: intOrNull(newProduct.min_stock),
+                            supplier: newProduct.supplier.trim() || null,
                             active: true, position: (salonData.products || []).length
                           }).select().single();
                           if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                           update(d => { d.products = [...(d.products || []), data]; return d; });
-                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "" });
+                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
                           setShowNewProductForm(false);
                         }}><NavIcon name="plus" size={12} color={c.btnOnDark} /> {lang === "nl" ? "Product toevoegen" : lang === "es" ? "Añadir producto" : "Add product"}</button>
                         <button className="btn-ghost" style={{ padding: "11px 14px" }} onClick={() => setShowNewProductForm(false)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -9893,6 +10093,42 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       style={{ width: 36, height: 20, borderRadius: 10, background: salonData.staff_see_all ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                       <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.staff_see_all ? 18 : 2, transition: "left 0.2s" }} />
                     </div>
+                  </div>
+                )}
+                {/* Staff visibility rights — what employees can see in their
+                    own dashboard. Persisted immediately (no save button needed)
+                    so the owner can flip them and it just works. */}
+                {(salonData.staff || []).length > 0 && (
+                  <div style={{ padding: "12px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: c.text, marginBottom: 3 }}>
+                      {lang === "nl" ? "Wat medewerkers zien" : lang === "es" ? "Qué ve el personal" : "What staff can see"}
+                    </div>
+                    <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4, marginBottom: 10 }}>
+                      {lang === "nl" ? "Zet uit wat je team niet hoort te zien. Wijzigingen gelden direct."
+                        : lang === "es" ? "Desactiva lo que tu equipo no debe ver. Los cambios aplican al instante."
+                        : "Switch off what your team shouldn't see. Changes apply immediately."}
+                    </div>
+                    {[
+                      { key: "staff_view_revenue", label: lang === "nl" ? "Omzet & prijzen" : lang === "es" ? "Ingresos y precios" : "Revenue & prices", sub: lang === "nl" ? "Omzet-tegels, grafieken, prijzen op afspraken en omzetrapport" : lang === "es" ? "Ingresos, gráficos, precios en citas e informe" : "Revenue tiles, charts, prices on appointments and the revenue report" },
+                      { key: "staff_view_client_contact", label: lang === "nl" ? "Klantgegevens (e-mail, telefoon, notities)" : lang === "es" ? "Datos de clientes (correo, teléfono, notas)" : "Client details (email, phone, notes)", sub: lang === "nl" ? "Namen en de agenda blijven altijd zichtbaar" : lang === "es" ? "Los nombres y la agenda siguen visibles" : "Names and the agenda always stay visible" },
+                    ].map(row => (
+                      <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: `1px solid ${c.border}` }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 11, color: c.text }}>{row.label}</div>
+                          <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 1 }}>{row.sub}</div>
+                        </div>
+                        <div
+                          onClick={async () => {
+                            const next = salonData[row.key] === false;
+                            const { error } = await supabase.from("profiles").update({ [row.key]: next }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d[row.key] = next; return d; });
+                          }}
+                          style={{ width: 36, height: 20, borderRadius: 10, background: salonData[row.key] !== false ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                          <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData[row.key] !== false ? 18 : 2, transition: "left 0.2s" }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {(salonData.staff || []).length === 0 && (
@@ -11762,6 +11998,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   show_owner_on_booking: !!salonData.show_owner_on_booking,
                   directory_visible: salonData.directory_visible !== false,
                   staff_see_all: !!salonData.staff_see_all,
+                  staff_view_revenue: salonData.staff_view_revenue !== false,
+                  staff_view_client_contact: salonData.staff_view_client_contact !== false,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24,

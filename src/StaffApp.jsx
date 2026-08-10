@@ -28,6 +28,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // agenda show the whole salon with a per-stylist filter; otherwise only
   // this stylist's own appointments (the default).
   const seeAll = salonProfile.staff_see_all === true;
+  // Owner-configurable visibility (Instellingen → Team): hide revenue/prices
+  // and client contact details from staff. Missing column (older rows) or
+  // true = current behaviour, everything visible.
+  const showMoney = salonProfile.staff_view_revenue !== false;
+  const showContact = salonProfile.staff_view_client_contact !== false;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const toast = useToast();
 
@@ -275,7 +280,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${cur}${a.service_price}\\nStatus: ${a.status}`,
+        `DESCRIPTION:${a.client_name}${showContact ? `\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}` : ""}${showMoney ? `\\n${cur}${a.service_price}` : ""}\\nStatus: ${a.status}`,
         `LOCATION:${salonProfile.business_name}`,
         `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
@@ -501,7 +506,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const ApptCard = ({ a }) => {
-    const note = clientNotes[(a.client_email || "").toLowerCase()];
+    const note = showContact ? clientNotes[(a.client_email || "").toLowerCase()] : null;
     const phoneDigits = (a.client_phone || "").replace(/\D/g, "");
     const mine = isMineAppt(a);
     // When viewing the team (Everyone or a colleague), show whose appointment
@@ -521,8 +526,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {slots.map((s, i) => (
             <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}</div>
           ))}
-          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>
-          {a.client_phone && (
+          {showContact && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>}
+          {showContact && a.client_phone && (
             <a href={`tel:${a.client_phone}`} style={{ fontSize: 10, color: c.textMuted, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2 }}>
               <NavIcon name="phone" size={9} color={c.textMuted} /> {a.client_phone}
             </a>
@@ -538,13 +543,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status}</span>
-          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
+          {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
         </div>
       </div>
       {a.status === "confirmed" && mine && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
-          {phoneDigits && (
+          {showContact && phoneDigits && (
             <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg({ salonName: salonProfile.business_name, clientName: a.client_name, service: a.service_name, date: a.date, time: a.time, lang }))} target="_blank" rel="noopener noreferrer"
               className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
@@ -556,7 +561,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             window.open(getGoogleCalUrl({
               title: `${a.client_name} — ${a.service_name}`,
               date: a.date, time: a.time, duration: dur,
-              description: `${a.service_name}\n${a.client_name}\n${cur}${a.service_price}`,
+              description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${cur}${a.service_price}` : ""}`,
               location: salonProfile.business_name || ""
             }), "_blank");
           }}>{t.addToGoogleCal}</button>
@@ -776,7 +781,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, textTransform: "capitalize" }}>{todayDate}</div>
                     </div>
-                    {todayAppts.length > 0 && (
+                    {showMoney && todayAppts.length > 0 && (
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : lang === "es" ? "Previsto" : "Expected"}</div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(0)}</div>
@@ -801,8 +806,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   )}
                 </div>
 
-                {/* KPI cards stacked — with sparklines */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
+                {/* KPI cards stacked — with sparklines. All revenue → hidden
+                    entirely when the owner turned staff revenue off. */}
+                {showMoney && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
                   {/* WEEK REVENUE */}
                   <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -840,7 +846,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{cur}{totalEarnings.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments"}</div>
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* Primary CTA */}
@@ -849,8 +855,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
               </button>
 
-              {/* Revenue Chart + Popular Services */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
+              {/* Revenue Chart + Popular Services — all revenue-driven, so the
+                  whole block disappears when staff revenue is turned off. */}
+              {showMoney && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
                 {/* Revenue area chart — 8 weeks */}
                 {(() => {
                   const weeks = [];
@@ -1017,7 +1024,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     );
                   })()}
                 </div>
-              </div>
+              </div>}
             </div>
             );
           })()}
@@ -1139,10 +1146,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Voltooid" : lang === "es" ? "Completada" : "Completed"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodDone}</div>
                 </div>
-                <div>
+                {showMoney && <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(0)}</div>
-                </div>
+                </div>}
               </div>
 
               {/* WEEK VIEW */}
@@ -1489,7 +1496,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             }
             const q = clientSearch.trim().toLowerCase();
             const list = Array.from(byEmail.values())
-              .filter(cl => !q || cl.name.toLowerCase().includes(q) || cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+              .filter(cl => !q || cl.name.toLowerCase().includes(q) || (showContact && (cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))))
               .sort((a, b) => (b.next ? 1 : 0) - (a.next ? 1 : 0) || a.name.localeCompare(b.name));
 
             return (
@@ -1513,7 +1520,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
 
                 <div style={{ position: "relative", marginBottom: 12 }}>
-                  <input className="input-field" placeholder={lang === "nl" ? "Zoek op naam, e-mail of telefoon" : lang === "es" ? "Buscar por nombre, correo o teléfono" : "Search by name, email or phone"}
+                  <input className="input-field" placeholder={showContact ? (lang === "nl" ? "Zoek op naam, e-mail of telefoon" : lang === "es" ? "Buscar por nombre, correo o teléfono" : "Search by name, email or phone") : (lang === "nl" ? "Zoek op naam" : lang === "es" ? "Buscar por nombre" : "Search by name")}
                     value={clientSearch} onChange={e => setClientSearch(e.target.value)}
                     style={{ width: "100%", padding: "12px 40px 12px 16px", fontSize: 12 }} />
                   {clientSearch && (
@@ -1534,7 +1541,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 ) : (
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                     {list.map((cl, i) => {
-                      const note = clientNotes[cl.email];
+                      const note = showContact ? clientNotes[cl.email] : null;
                       return (
                         <div key={cl.email} onClick={() => setClientView(cl)}
                           style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr auto" : "1fr 1fr auto", gap: 12, padding: "12px 14px", borderTop: i > 0 ? `1px solid ${c.border}` : "none", cursor: "pointer", alignItems: "center" }}>
@@ -1552,11 +1559,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.email}</div>
+                            {showContact && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.email}</div>}
                           </div>
                           {!isMobile && (
                             <div style={{ fontSize: 11, color: c.textLabel }}>
-                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : lang === "es" ? "visita" : "visit") : (lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits")} · ${cur}${cl.totalSpent.toFixed(0)}` : (lang === "nl" ? "Nog geen bezoeken" : lang === "es" ? "Sin visitas todavía" : "No visits yet")}
+                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : lang === "es" ? "visita" : "visit") : (lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits")}${showMoney ? ` · ${cur}${cl.totalSpent.toFixed(0)}` : ""}` : (lang === "nl" ? "Nog geen bezoeken" : lang === "es" ? "Sin visitas todavía" : "No visits yet")}
                               {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : lang === "es" ? "Última: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
                             </div>
                           )}
@@ -1582,8 +1589,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                         <div>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>{clientView.name}</div>
-                          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>{clientView.email}</div>
-                          {clientView.phone && (
+                          {showContact && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>{clientView.email}</div>}
+                          {showContact && clientView.phone && (
                             <a href={`tel:${clientView.phone}`} style={{ fontSize: 12, color: c.textMuted, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3 }}>
                               <NavIcon name="phone" size={11} color={c.textMuted} /> {clientView.phone}
                             </a>
@@ -1596,16 +1603,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Bezoeken" : lang === "es" ? "Visitas" : "Visits"}</div>
                           <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: c.text }}>{clientView.visitCount}</div>
                         </div>
-                        <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
+                        {showMoney && <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : lang === "es" ? "Gastado" : "Spent"}</div>
                           <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>{cur}{clientView.totalSpent.toFixed(0)}</div>
-                        </div>
+                        </div>}
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : lang === "es" ? "Última" : "Last"}</div>
                           <div style={{ fontSize: 12, color: c.text, marginTop: 3 }}>{clientView.lastVisit ? fmtDate(clientView.lastVisit) : "—"}</div>
                         </div>
                       </div>
-                      {clientNotes[clientView.email] && (
+                      {showContact && clientNotes[clientView.email] && (
                         <div style={{ padding: "10px 14px", background: `${accent}0c`, borderLeft: `3px solid ${accent}`, borderRadius: 4, marginBottom: 14 }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Notitie (alleen jullie zien dit)" : lang === "es" ? "Nota (solo para el personal)" : "Note (staff-only)"}</div>
                           <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{clientNotes[clientView.email]}</div>
@@ -1624,7 +1631,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
                                 <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
-                                <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                                {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
                               </div>
                             </div>
                           ))}
@@ -1662,22 +1669,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
               {completedAppts.length > 0 && (<>
-                {/* Stat cards */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                {/* Stat cards — money tiles drop out when revenue is hidden;
+                    the unsent/sent counters stay (staff still send invoices). */}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : showMoney ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
+                  {showMoney && <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{totalEarnings.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
-                  </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
+                  </div>}
+                  {showMoney && <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(0)}</div>
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
-                  </div>
+                  </div>}
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent"}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>
+                    {showMoney && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>}
                   </div>
                   <div className="stat-card" style={{ padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent"}</div>
@@ -1691,7 +1699,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     name on the PDF and hides the team chips. salonProfile is
                     the raw profiles row, which carries the company block
                     fields (business_name, address, kvk, btw, iban). */}
-                <RevenueReportBlock
+                {showMoney && <RevenueReportBlock
                   salonData={salonProfile}
                   completedAppts={completedAppts}
                   lang={lang}
@@ -1699,7 +1707,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   accent={accent}
                   toast={toast}
                   fixedStaffName={myStaff.name}
-                />
+                />}
 
                 {/* Search + filter toolbar */}
                 <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
@@ -1801,7 +1809,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
 
                         {/* Price */}
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                        {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
