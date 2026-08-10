@@ -8129,6 +8129,75 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 );
               })()}
 
+              {/* Product sales — who sold what. Reads the structured
+                  appointments.products records (walk-in kassa + verkoop bij
+                  afspraak + online meebestellen), grouped per staff member so
+                  the owner sees exactly which medewerker sold which products. */}
+              {salonData.plan === "professional" && (() => {
+                const sales = appts.filter(a => a.status === "completed" && Array.isArray(a.products) && a.products.length > 0);
+                if (sales.length === 0) return null;
+                const byStaff = {};
+                let totalRev = 0, totalItems = 0;
+                const byProduct = {};
+                for (const a of sales) {
+                  const who = (a.staff_name || "").split(",")[0].trim() || (lang === "nl" ? "Zonder medewerker" : lang === "es" ? "Sin empleado" : "No staff member");
+                  const g = (byStaff[who] = byStaff[who] || { revenue: 0, items: 0 });
+                  for (const it of a.products) {
+                    const rev = (parseFloat(it.price) || 0) * (it.qty || 1);
+                    g.revenue += rev; g.items += (it.qty || 1);
+                    totalRev += rev; totalItems += (it.qty || 1);
+                    const p = (byProduct[it.name] = byProduct[it.name] || { revenue: 0, qty: 0 });
+                    p.revenue += rev; p.qty += (it.qty || 1);
+                  }
+                }
+                const staffRows = Object.entries(byStaff).sort(([, a], [, b]) => b.revenue - a.revenue);
+                const topProducts = Object.entries(byProduct).sort(([, a], [, b]) => b.qty - a.qty).slice(0, 5);
+                const maxRev = Math.max(...staffRows.map(([, g]) => g.revenue), 1);
+                return (
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
+                        🛍 {lang === "nl" ? "Productverkoop" : lang === "es" ? "Venta de productos" : "Product sales"}
+                      </div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        {lang === "nl" ? "Laatste 90 dagen" : lang === "es" ? "Últimos 90 días" : "Last 90 days"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{totalRev.toFixed(2)}</span>
+                      <span style={{ fontSize: 10, color: c.textMuted }}>{totalItems} {lang === "nl" ? "stuks verkocht" : lang === "es" ? "unidades vendidas" : "items sold"}</span>
+                    </div>
+                    <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                      {lang === "nl" ? "Verkocht door" : lang === "es" ? "Vendido por" : "Sold by"}
+                    </div>
+                    {staffRows.map(([who, g], idx) => (
+                      <div key={who} style={{ marginBottom: idx === staffRows.length - 1 ? 0 : 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{who}</span>
+                          <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{g.revenue.toFixed(2)} <span style={{ color: c.textMuted, fontSize: 10 }}>· {g.items}×</span></span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(g.revenue / maxRev) * 100}%`, transition: "width 0.6s" }} />
+                        </div>
+                      </div>
+                    ))}
+                    {topProducts.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, margin: "14px 0 8px", paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
+                          {lang === "nl" ? "Best verkocht" : lang === "es" ? "Más vendidos" : "Best sellers"}
+                        </div>
+                        {topProducts.map(([nm, p]) => (
+                          <div key={nm} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 11, marginBottom: 4 }}>
+                            <span style={{ color: c.textSub, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nm}</span>
+                            <span style={{ color: c.textMuted, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{p.qty}× · {cur}{p.revenue.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Busiest days */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.busiestDays}</SL>
