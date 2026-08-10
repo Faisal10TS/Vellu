@@ -27,6 +27,81 @@ import {
 // imported eagerly without pulling in the heavy deps:
 import { periodPreset } from "./revenueReport.helpers.js";
 
+// Camera barcode scanner (kassa + productformulier). ZXing wordt lazy
+// geladen (~100KB) zodat het de dashboard-bundle niet raakt; werkt daarmee
+// ook op iOS Safari, waar de native BarcodeDetector ontbreekt. Continuous:
+// blijft scannen tot de gebruiker sluit (kassa-modus); per code 2s debounce
+// tegen dubbel piepen. Handmatige invoer eronder als camera-fallback.
+function BarcodeScannerModal({ onDetect, onClose, c, accent, lang, hint }) {
+  const videoRef = useRef(null);
+  const controlsRef = useRef(null);
+  const lastRef = useRef({ code: "", at: 0 });
+  const [camError, setCamError] = useState(null);
+  const [manual, setManual] = useState("");
+  const [lastHit, setLastHit] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const reader = new BrowserMultiFormatReader();
+        const controls = await reader.decodeFromConstraints(
+          { video: { facingMode: "environment" } },
+          videoRef.current,
+          (result) => {
+            if (!result) return;
+            const code = String(result.getText() || "").trim();
+            if (!code) return;
+            const now = Date.now();
+            if (code === lastRef.current.code && now - lastRef.current.at < 2000) return;
+            lastRef.current = { code, at: now };
+            try { if (navigator.vibrate) navigator.vibrate(60); } catch { /* iOS */ }
+            setLastHit(code);
+            onDetect(code);
+          }
+        );
+        if (cancelled) { try { controls.stop(); } catch { /* already gone */ } return; }
+        controlsRef.current = controls;
+      } catch (e) {
+        if (!cancelled) setCamError(e?.name === "NotAllowedError"
+          ? (lang === "nl" ? "Geen camera-toegang — sta de camera toe in je browser, of typ de code hieronder." : lang === "es" ? "Sin acceso a la cámara — permítela en el navegador o escribe el código." : "No camera access — allow the camera in your browser, or type the code below.")
+          : (lang === "nl" ? "Camera niet beschikbaar — typ de code hieronder." : lang === "es" ? "Cámara no disponible — escribe el código." : "Camera unavailable — type the code below."));
+      }
+    })();
+    return () => { cancelled = true; try { controlsRef.current?.stop(); } catch { /* noop */ } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return createPortal((
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 400, fontFamily: "'Jost', sans-serif" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 18, maxWidth: 420, width: "100%", color: c.text }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22 }}>{lang === "nl" ? "Scan barcode" : lang === "es" ? "Escanear código" : "Scan barcode"}</div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        {hint && <div style={{ fontSize: 11, color: c.textSub, marginBottom: 10 }}>{hint}</div>}
+        {!camError ? (
+          <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "#000", marginBottom: 10 }}>
+            <video ref={videoRef} style={{ width: "100%", display: "block", maxHeight: 300, objectFit: "cover" }} muted playsInline />
+            {/* Richtlijn-balk zodat je weet waar je de code houdt */}
+            <div style={{ position: "absolute", left: "10%", right: "10%", top: "50%", height: 2, background: `${accent}cc`, boxShadow: `0 0 12px ${accent}` }} />
+            {lastHit && (
+              <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, textAlign: "center", fontSize: 11, color: "#fff", background: "rgba(0,0,0,0.55)", borderRadius: 8, padding: "4px 8px", fontVariantNumeric: "tabular-nums" }}>{lastHit}</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: c.warning, marginBottom: 10, lineHeight: 1.5 }}>{camError}</div>
+        )}
+        <form onSubmit={e => { e.preventDefault(); const v = manual.trim(); if (v) { onDetect(v); setManual(""); } }} style={{ display: "flex", gap: 6 }}>
+          <input className="input-field" inputMode="numeric" placeholder={lang === "nl" ? "Of typ de code…" : lang === "es" ? "O escribe el código…" : "Or type the code…"} value={manual} onChange={e => setManual(e.target.value)} style={{ flex: 1, fontSize: 12 }} />
+          <button type="submit" className="btn-ghost" style={{ padding: "10px 14px", fontSize: 11 }}>OK</button>
+        </form>
+      </div>
+    </div>
+  ), document.body);
+}
+
 // Sortable wrapper for a service card. Uses a render-prop so the caller can
 // place the drag handle wherever it wants inside the existing complex card
 // JSX without having to rewrite the whole thing.
@@ -3124,13 +3199,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
+  const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
   const [editingProduct, setEditingProduct] = useState(null);
-  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
+  const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
   const [productPhotoUploading, setProductPhotoUploading] = useState(null);
   const [productSearch, setProductSearch] = useState("");
   const [showOrderList, setShowOrderList] = useState(false);
   const [stockImporting, setStockImporting] = useState(false);
+  // Barcode-scanner: welk doel de gescande code krijgt — "kassa" telt het
+  // product op in de verkoop-modal, "new"/"edit" vullen het barcode-veld.
+  const [scanTarget, setScanTarget] = useState(null);
+  const [kassaSearch, setKassaSearch] = useState("");
+  // Kadobon in de kassa: bedrag-invoer; bij afrekenen wordt een code
+  // gegenereerd en een gift_vouchers-rij aangemaakt.
+  const [kassaVoucher, setKassaVoucher] = useState("");
+  const [showVouchers, setShowVouchers] = useState(false);
+  const [vouchers, setVouchers] = useState(null);
+  const [voucherRedeem, setVoucherRedeem] = useState({});
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -4270,19 +4355,50 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.products = d.products.map(x => { const u = updates.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
     } catch { /* sale already recorded; stock can be corrected manually */ }
   };
-  const addProductsToAppt = async () => {
+  // Kassa-invoer via barcode: camera-scan én vaste USB-scanner komen hier
+  // samen. Een USB-scanner gedraagt zich als toetsenbord (typt de code +
+  // Enter in het zoekveld); de camera geeft dezelfde string. Match op het
+  // exacte barcode-veld van een actief product → +1 in het mandje.
+  const handleKassaCode = (code) => {
+    const p = (salonData.products || []).find(x => x.active && (x.barcode || "").trim() === code.trim());
+    if (!p) {
+      toast.show(lang === "nl" ? `Onbekende barcode: ${code}` : lang === "es" ? `Código desconocido: ${code}` : `Unknown barcode: ${code}`, "error");
+      return false;
+    }
+    setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) }));
+    setKassaSearch("");
+    toast.show(`+1 ${prodName(p)}`);
+    return true;
+  };
+
+  // ── Walk-in/kassa-verkoop: producten en/of een kadobon, zonder afspraak.
+  // Opgeslagen als 0-minuten completed "appointment" zodat het automatisch
+  // meetelt in omzet/analytics en factureerbaar is. Gedeeld door de
+  // Kassa-tab én de (oude) walk-in modal. ──
+  const completeWalkinSale = async () => {
     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
-    if (!sel.length) { setProductSaleFor(null); return; }
+    const voucherAmt = parseFloat(kassaVoucher) || 0;
+    if (!sel.length && !(voucherAmt > 0)) { setProductSaleFor(null); return; }
     const items = sel.map(([pid, qty]) => {
       const p = (salonData.products || []).find(x => x.id === pid);
       return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
     }).filter(Boolean);
+    // Kadobon: krijgt een unieke code (zonder verwarrende tekens), wordt als
+    // rij in gift_vouchers bijgehouden en als regel op de bon/factuur gezet.
+    let voucherCode = null;
+    if (voucherAmt > 0) {
+      const alphabet = "ACDEFGHJKLMNPQRSTUVWXYZ23456789";
+      voucherCode = "KB-" + Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => alphabet[b % alphabet.length]).join("");
+      const { error: vErr } = await supabase.from("gift_vouchers").insert({
+        owner_id: salonData.owner_id, code: voucherCode, amount: voucherAmt, remaining: voucherAmt,
+        buyer_name: walkinName.trim() || null, buyer_email: walkinEmail.trim().toLowerCase() || null,
+      });
+      if (vErr) { toast.show(t.somethingWrong, "error"); return; }
+      items.push({ id: "giftcard", name: `${lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"} ${voucherCode}`, price: voucherAmt, qty: 1 });
+    }
     const saleTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
     const saleLabel = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
-    // ── Walk-in sale: someone without an appointment buys a product. Saved
-    // as a 0-minute completed "appointment" so it automatically counts in
-    // revenue/analytics and can be invoiced when an email was captured. ──
-    if (productSaleFor === "walkin") {
+    {
       const now = new Date();
       const pad2 = (n) => String(n).padStart(2, "0");
       const row = {
@@ -4308,7 +4424,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin");
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher("");
+      if (voucherCode) toast.show(lang === "nl" ? `Kadobon ${voucherCode} aangemaakt (${cur}${voucherAmt.toFixed(2)})` : lang === "es" ? `Tarjeta ${voucherCode} creada` : `Gift card ${voucherCode} created`);
       // Kassa: met een e-mailadres gaat de factuur/bon er direct achteraan —
       // afrekenen en factureren is dan één handeling, zoals bij Sara.
       if (row.client_email) {
@@ -4318,10 +4435,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
       return;
     }
+  };
+
+  // Modal-router: walk-in verkoop → kassa-motor hierboven; anders producten
+  // aanslaan op een bestaande afspraak (komt op dezelfde factuur).
+  const addProductsToAppt = async () => {
+    if (productSaleFor === "walkin") return completeWalkinSale();
+    const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
+    if (!sel.length) { setProductSaleFor(null); return; }
+    const items = sel.map(([pid, qty]) => {
+      const p = (salonData.products || []).find(x => x.id === pid);
+      return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
+    }).filter(Boolean);
     const a = salonData.appointments.find(x => x.id === productSaleFor);
     if (!a) { setProductSaleFor(null); return; }
-    const extraTotal = saleTotal;
-    const label = saleLabel;
+    const extraTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+    const label = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
     const newPrice = +(parseFloat(a.service_price || 0) + extraTotal).toFixed(2);
     const newName = `${a.service_name} + ${label}`;
     const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
@@ -4345,9 +4474,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
   const exportProductsCsv = () => {
-    const rows = [["id", "Naam", "Name (EN)", "Leverancier", "Inkoopprijs", "Verkoopprijs", "Voorraad", "Min. voorraad", "Actief"]];
+    const rows = [["id", "Naam", "Name (EN)", "Barcode", "Leverancier", "Inkoopprijs", "Verkoopprijs", "Voorraad", "Min. voorraad", "Actief"]];
     for (const p of (salonData.products || [])) {
-      rows.push([p.id, p.name_nl || "", p.name_en || "", p.supplier || "", csvNum(p.purchase_price), csvNum(p.price), p.stock == null ? "" : p.stock, p.min_stock == null ? "" : p.min_stock, p.active ? "ja" : "nee"]);
+      rows.push([p.id, p.name_nl || "", p.name_en || "", p.barcode || "", p.supplier || "", csvNum(p.purchase_price), csvNum(p.price), p.stock == null ? "" : p.stock, p.min_stock == null ? "" : p.min_stock, p.active ? "ja" : "nee"]);
     }
     downloadCsv(rows, "vellu-producten.csv");
   };
@@ -4378,6 +4507,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const idIdx = header.indexOf("id");
       const stockIdx = header.findIndex(h => ["voorraad", "stock", "existencias"].includes(h));
       const nameIdx = header.findIndex(h => ["naam", "name", "product", "nombre"].includes(h));
+      const barcodeIdx = header.findIndex(h => ["barcode", "ean", "código de barras"].includes(h));
       if (lines.length < 2 || stockIdx === -1 || (idIdx === -1 && nameIdx === -1)) {
         toast.show(lang === "nl" ? "Kolommen niet herkend — gebruik het export-bestand of kolommen 'Naam' + 'Voorraad'" : lang === "es" ? "Columnas no reconocidas — usa el archivo de exportación o columnas 'Nombre' + 'Existencias'" : "Columns not recognized — use the export file or columns 'Name' + 'Stock'", "error");
         return;
@@ -4391,6 +4521,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const n = parseInt(raw.replace(",", "."));
         if (!Number.isFinite(n) || n < 0) continue;
         let p = idIdx !== -1 ? prods.find(x => x.id === (cells[idIdx] || "").trim()) : null;
+        if (!p && barcodeIdx !== -1) {
+          const bc = (cells[barcodeIdx] || "").trim();
+          if (bc) p = prods.find(x => (x.barcode || "").trim() === bc);
+        }
         if (!p && nameIdx !== -1) {
           const nm = (cells[nameIdx] || "").trim().toLowerCase();
           if (nm) p = prods.find(x => (x.name_nl || "").toLowerCase() === nm || (x.name_en || "").toLowerCase() === nm);
@@ -4941,6 +5075,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
+    // Kassa: volwaardig verkooppunt (producten + kadobonnen) voor
+    // Professional — Starter ziet de tab ook, maar krijgt een upsell.
+    ...(salonData.plan === "professional" ? [["kassa", "facturen", lang === "es" ? "Caja" : "Kassa"]] : []),
     ["klanten", "team", lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"],
     ["analytics", "analytics", t.analytics],
     ["facturen", "facturen", t.invoices],
@@ -5300,8 +5437,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 )}
               </div>
             )}
+            {/* Scan/zoek-balk: autofocus zodat een vaste USB-scanner (die als
+                toetsenbord typt + Enter geeft) direct in dit veld landt; de
+                📷-knop opent de camera-scanner voor telefoons/tablets. */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <input className="input-field" autoFocus value={kassaSearch}
+                placeholder={lang === "nl" ? "Zoek of scan barcode…" : lang === "es" ? "Busca o escanea…" : "Search or scan barcode…"}
+                onChange={e => setKassaSearch(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const q = kassaSearch.trim();
+                  if (!q) return;
+                  // Exacte barcode-match eerst (USB-scanner pad); anders: is er
+                  // precies één zoekresultaat, tel die op (snel toetsenbord-pad).
+                  if (handleKassaCode(q)) return;
+                  const matches = (salonData.products || []).filter(p => p.active && `${p.name_nl || ""} ${p.name_en || ""} ${p.barcode || ""}`.toLowerCase().includes(q.toLowerCase()));
+                  if (matches.length === 1) {
+                    setProductSaleSel(s => ({ ...s, [matches[0].id]: Math.min(20, (s[matches[0].id] || 0) + 1) }));
+                    setKassaSearch("");
+                    toast.show(`+1 ${prodName(matches[0])}`);
+                  }
+                }}
+                style={{ flex: 1, fontSize: 12 }} />
+              <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", fontSize: 15, flexShrink: 0 }}>📷</button>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-              {(salonData.products || []).filter(p => p.active).map(p => {
+              {(salonData.products || []).filter(p => p.active).filter(p => {
+                if (!kassaSearch.trim()) return true;
+                return `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase().includes(kassaSearch.trim().toLowerCase());
+              }).map(p => {
                 const qty = productSaleSel[p.id] || 0;
                 return (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
@@ -5342,6 +5507,79 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </button>
               <button className="btn-ghost" style={{ padding: "12px 16px", fontSize: 12 }} onClick={() => setProductSaleFor(null)}>{t.cancelEdit}</button>
             </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* Barcode-scanner (camera). Doel bepaalt wat er met de code gebeurt:
+          kassa = product +1 en blijven scannen; new/edit = veld vullen en
+          sluiten. USB-scanners hebben deze modal niet nodig — die typen
+          rechtstreeks in het kassa-zoekveld of het barcode-veld. */}
+      {scanTarget && (
+        <BarcodeScannerModal
+          c={c} accent={accent} lang={lang}
+          hint={scanTarget === "kassa"
+            ? (lang === "nl" ? "Elk gescand product komt er direct bij. Sluit als je klaar bent." : lang === "es" ? "Cada producto escaneado se añade al momento." : "Every scanned product is added instantly. Close when done.")
+            : (lang === "nl" ? "Scan de streepjescode op het product om het veld te vullen." : lang === "es" ? "Escanea el código del producto para rellenar el campo." : "Scan the product's barcode to fill the field.")}
+          onClose={() => setScanTarget(null)}
+          onDetect={(code) => {
+            if (scanTarget === "kassa") { handleKassaCode(code); return; }
+            if (scanTarget === "new") setNewProduct(f => ({ ...f, barcode: code }));
+            if (scanTarget === "edit") setEditProductForm(f => ({ ...f, barcode: code }));
+            setScanTarget(null);
+          }}
+        />
+      )}
+
+      {/* Kadobonnen-beheer: saldo bekijken en afboeken wanneer een klant de
+          bon inwisselt (bij een behandeling of losse verkoop). */}
+      {showVouchers && createPortal((
+        <div onClick={() => setShowVouchers(false)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 340, fontFamily: "'Jost', sans-serif", color: c.text }}>
+          <div onClick={e => e.stopPropagation()}
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, marginBottom: 4 }}>🎁 {lang === "nl" ? "Kadobonnen" : lang === "es" ? "Tarjetas regalo" : "Gift cards"}</div>
+            <div style={{ fontSize: 11, color: c.textSub, marginBottom: 14 }}>
+              {lang === "nl" ? "Wisselt een klant een bon in? Boek het bedrag hier af — het restsaldo blijft geldig." : lang === "es" ? "¿Un cliente canjea una tarjeta? Descuenta el importe aquí." : "Client redeeming a card? Deduct the amount here — the rest stays valid."}
+            </div>
+            {vouchers === null ? (
+              <div style={{ fontSize: 12, color: c.textMuted, padding: "14px 0" }}>…</div>
+            ) : vouchers.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.textMuted, padding: "14px 0" }}>{lang === "nl" ? "Nog geen kadobonnen verkocht." : lang === "es" ? "Aún no hay tarjetas vendidas." : "No gift cards sold yet."}</div>
+            ) : vouchers.map(v => (
+              <div key={v.id} style={{ padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 8, opacity: v.active && v.remaining > 0 ? 1 : 0.55 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{v.code}</span>
+                  <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{parseFloat(v.remaining).toFixed(2)} <span style={{ color: c.textMuted, fontSize: 10 }}>/ {cur}{parseFloat(v.amount).toFixed(2)}</span></span>
+                </div>
+                <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                  {[v.buyer_name, v.buyer_email, new Date(v.created_at).toLocaleDateString("nl-NL")].filter(Boolean).join(" · ")}
+                  {!v.active && ` · ${lang === "nl" ? "gedeactiveerd" : "deactivated"}`}
+                  {v.active && v.remaining <= 0 && ` · ${lang === "nl" ? "volledig gebruikt" : "fully used"}`}
+                </div>
+                {v.active && v.remaining > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <input className="input-field" type="number" min="0" placeholder={`${cur} ${lang === "nl" ? "bedrag" : "amount"}`} value={voucherRedeem[v.id] || ""} onChange={e => setVoucherRedeem(s => ({ ...s, [v.id]: e.target.value }))} style={{ width: 110, fontSize: 11, padding: "8px 10px" }} />
+                    <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                      const amt = parseFloat(voucherRedeem[v.id]);
+                      if (!Number.isFinite(amt) || amt <= 0) return;
+                      const next = Math.max(0, parseFloat(v.remaining) - amt);
+                      const { error } = await supabase.from("gift_vouchers").update({ remaining: next }).eq("id", v.id);
+                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                      setVouchers(list => list.map(x => x.id === v.id ? { ...x, remaining: next } : x));
+                      setVoucherRedeem(s => ({ ...s, [v.id]: "" }));
+                      toast.show(lang === "nl" ? `Afgeboekt — restsaldo ${cur}${next.toFixed(2)}` : lang === "es" ? `Descontado — saldo ${cur}${next.toFixed(2)}` : `Deducted — balance ${cur}${next.toFixed(2)}`);
+                    }}>{lang === "nl" ? "Afboeken" : lang === "es" ? "Descontar" : "Deduct"}</button>
+                    <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "8px 12px", fontSize: 10, color: c.danger, borderColor: `${c.danger}33` }} onClick={async () => {
+                      const { error } = await supabase.from("gift_vouchers").update({ active: false }).eq("id", v.id);
+                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                      setVouchers(list => list.map(x => x.id === v.id ? { ...x, active: false } : x));
+                    }}>{lang === "nl" ? "Deactiveren" : lang === "es" ? "Desactivar" : "Deactivate"}</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 6, padding: "10px 14px", fontSize: 11 }} onClick={() => setShowVouchers(false)}>{lang === "nl" ? "Sluiten" : lang === "es" ? "Cerrar" : "Close"}</button>
           </div>
         </div>
       ), document.body)}
@@ -6171,7 +6409,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     zodat een productverkoop geen omweg via de agenda vergt. */}
                 {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
                   <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: accent, borderColor: `${accent}44` }}
-                    onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setProductSaleFor("walkin"); }}>
+                    onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
                     🛍 {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
                   </button>
                 )}
@@ -6379,6 +6617,142 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* KASSA — volwaardig verkooppunt (Professional): producten
+              aantikken of scannen, kadobon verkopen, klant/medewerker/
+              betaalwijze kiezen en afrekenen. Deelt alle state en de
+              verkoop-motor (completeWalkinSale) met de walk-in flow. */}
+          {view === "kassa" && (
+            <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
+              {isMobile && <PTitle sub={lang === "nl" ? "Verkoop producten en kadobonnen" : lang === "es" ? "Vende productos y tarjetas regalo" : "Sell products and gift cards"}>Kassa</PTitle>}
+              {salonData.plan !== "professional" ? (
+                <UpgradeCard feature="Kassa" lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+              ) : (
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.4fr 1fr", gap: 14, alignItems: "start" }}>
+                {/* Links: zoeken/scannen + product-grid */}
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16 }}>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                    <input className="input-field" autoFocus={!isMobile} value={kassaSearch}
+                      placeholder={lang === "nl" ? "Zoek of scan barcode…" : lang === "es" ? "Busca o escanea…" : "Search or scan barcode…"}
+                      onChange={e => setKassaSearch(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const q = kassaSearch.trim();
+                        if (!q) return;
+                        if (handleKassaCode(q)) return;
+                        const matches = (salonData.products || []).filter(p => p.active && `${p.name_nl || ""} ${p.name_en || ""} ${p.barcode || ""}`.toLowerCase().includes(q.toLowerCase()));
+                        if (matches.length === 1) {
+                          setProductSaleSel(s => ({ ...s, [matches[0].id]: Math.min(20, (s[matches[0].id] || 0) + 1) }));
+                          setKassaSearch("");
+                          toast.show(`+1 ${prodName(matches[0])}`);
+                        }
+                      }}
+                      style={{ flex: 1, fontSize: 12 }} />
+                    <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", fontSize: 15, flexShrink: 0 }}>📷</button>
+                  </div>
+                  {(salonData.products || []).filter(p => p.active).length === 0 ? (
+                    <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
+                      {lang === "nl" ? "Nog geen producten — voeg ze toe bij Instellingen → Diensten." : lang === "es" ? "Aún no hay productos — añádelos en Ajustes." : "No products yet — add them in Settings → Services."}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+                      {(salonData.products || []).filter(p => p.active).filter(p => {
+                        if (!kassaSearch.trim()) return true;
+                        return `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase().includes(kassaSearch.trim().toLowerCase());
+                      }).map(p => {
+                        const qty = productSaleSel[p.id] || 0;
+                        return (
+                          <div key={p.id} onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) }))}
+                            style={{ position: "relative", cursor: "pointer", padding: 10, borderRadius: 14, background: qty > 0 ? `${accent}10` : c.bg, border: `1.5px solid ${qty > 0 ? accent : c.border}`, textAlign: "center", transition: "all 0.15s" }}>
+                            {qty > 0 && <div style={{ position: "absolute", top: 6, right: 6, minWidth: 20, height: 20, borderRadius: 10, background: accent, color: c.btnOnDark, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{qty}</div>}
+                            {p.photo_url
+                              ? <img src={p.photo_url} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", marginBottom: 6 }} />
+                              : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17, marginBottom: 6 }}>🛍</div>}
+                            <div style={{ fontSize: 11, fontWeight: 500, color: c.text, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{prodName(p)}</div>
+                            <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                            {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : "sold out") : `${lang === "nl" ? "voorraad" : "stock"}: ${p.stock}`}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Kadobon verkopen */}
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: c.text }}>🎁 {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
+                    <input className="input-field" type="number" min="0" value={kassaVoucher} onChange={e => setKassaVoucher(e.target.value)} placeholder={`${cur} ${lang === "nl" ? "bedrag" : lang === "es" ? "importe" : "amount"}`} style={{ width: 110, fontSize: 12 }} />
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "krijgt automatisch een unieke code (op de factuur)" : lang === "es" ? "recibe un código único (en la factura)" : "gets a unique code automatically (on the invoice)"}</span>
+                    <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "7px 12px", fontSize: 10 }} onClick={async () => {
+                      setShowVouchers(true); setVouchers(null);
+                      const { data } = await supabase.from("gift_vouchers").select("*").eq("owner_id", salonData.owner_id).order("created_at", { ascending: false }).limit(100);
+                      setVouchers(data || []);
+                    }}>{lang === "nl" ? "Kadobonnen beheren" : lang === "es" ? "Gestionar tarjetas" : "Manage gift cards"}</button>
+                  </div>
+                </div>
+                {/* Rechts: mandje + afrekenen */}
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
+                  <SL>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Checkout"}</SL>
+                  {(() => {
+                    const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
+                    const voucherAmt = parseFloat(kassaVoucher) || 0;
+                    const items = sel.map(([pid, qty]) => { const p = (salonData.products || []).find(x => x.id === pid); return p ? { p, qty } : null; }).filter(Boolean);
+                    const tot = items.reduce((s, it) => s + (parseFloat(it.p.price) || 0) * it.qty, 0) + voucherAmt;
+                    return (<>
+                      {items.length === 0 && voucherAmt <= 0 && (
+                        <div style={{ fontSize: 11, color: c.textMuted, padding: "10px 0" }}>{lang === "nl" ? "Tik producten aan of scan ze — ze verschijnen hier." : lang === "es" ? "Toca o escanea productos — aparecen aquí." : "Tap or scan products — they show up here."}</div>
+                      )}
+                      {items.map(({ p, qty }) => (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${c.border}` }}>
+                          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prodName(p)}</div>
+                          <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) }))} style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>−</button>
+                          <span style={{ minWidth: 14, textAlign: "center", fontSize: 12, fontWeight: 600 }}>{qty}</span>
+                          <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) }))} style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>+</button>
+                          <span style={{ width: 58, textAlign: "right", fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {voucherAmt > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.border}`, fontSize: 12 }}>
+                          <span>🎁 {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
+                          <span style={{ color: accent }}>{cur}{voucherAmt.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "12px 0" }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal" : "Total"}</span>
+                        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{cur}{tot.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
+                        <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — factuur gaat direct mee)" : lang === "es" ? "Correo (opcional)" : "Email (optional — invoice sent instantly)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                        {(salonData.staff || []).length > 0 && (
+                          <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
+                            <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
+                            {(salonData.staff || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        )}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {[["pin", lang === "es" ? "Tarjeta" : "Pin"], ["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["request", lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request"]].map(([val, label]) => (
+                            <button key={val} type="button" onClick={() => setWalkinPay(val)}
+                              style={{ flex: 1, padding: "9px 6px", borderRadius: 10, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${walkinPay === val ? accent : c.inputBorder}`, background: walkinPay === val ? `${accent}14` : "transparent", color: walkinPay === val ? accent : c.textSub }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {walkinPay === "request" && !walkinEmail.trim() && (
+                          <div style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : "Add an email — the payment request travels in the invoice email."}</div>
+                        )}
+                        <button className="btn-primary" style={{ width: "100%", padding: "13px 16px", fontSize: 12 }}
+                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId}
+                          onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
+                          {lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${cur}${tot.toFixed(2)}` : ""}
+                        </button>
+                      </div>
+                    </>);
+                  })()}
+                </div>
+              </div>
+              )}
             </div>
           )}
 
@@ -7327,7 +7701,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
                     <button className="btn-ghost" style={{ flexShrink: 0, padding: "12px 16px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}
                       title={lang === "nl" ? "Product verkopen zonder afspraak (walk-in)" : lang === "es" ? "Vender producto sin cita (walk-in)" : "Sell a product without an appointment (walk-in)"}
-                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setProductSaleFor("walkin"); }}>
+                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
                       🛍 {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
                     </button>
                   )}
@@ -9924,7 +10298,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                     {(salonData.products || []).filter(p => {
                       if (!productSearch.trim()) return true;
-                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""}`.toLowerCase();
+                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase();
                       return hay.includes(productSearch.trim().toLowerCase());
                     }).map(p => (
                       editingProduct === p.id ? (
@@ -9956,9 +10330,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
                               <input className="input-field" type="number" value={editProductForm.min_stock} onChange={ev => setEditProductForm(f => ({...f, min_stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
                             </div>
-                            <div style={{ gridColumn: "1 / -1" }}>
+                            <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
                               <input className="input-field" value={editProductForm.supplier} onChange={ev => setEditProductForm(f => ({...f, supplier: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel — voor de bestellijst" : lang === "es" ? "opcional — para la lista de pedidos" : "optional — for the order list"} list="vellu-suppliers" />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <input className="input-field" inputMode="numeric" value={editProductForm.barcode} onChange={ev => setEditProductForm(f => ({...f, barcode: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
+                                <button type="button" className="btn-ghost" onClick={() => setScanTarget("edit")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", fontSize: 14, flexShrink: 0 }}>📷</button>
+                              </div>
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
@@ -9968,7 +10349,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               const numOrNull = (v) => { if (v === "" || v == null) return null; const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                               const intOrNull = (v) => { if (v === "" || v == null) return null; const n = parseInt(v); return Number.isFinite(n) && n >= 0 ? n : null; };
                               const filled = await autoFillTranslations(editProductForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price, purchase_price: numOrNull(editProductForm.purchase_price), stock: intOrNull(editProductForm.stock), min_stock: intOrNull(editProductForm.min_stock), supplier: editProductForm.supplier.trim() || null };
+                              const upd = { name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null, description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, price, purchase_price: numOrNull(editProductForm.purchase_price), stock: intOrNull(editProductForm.stock), min_stock: intOrNull(editProductForm.min_stock), supplier: editProductForm.supplier.trim() || null, barcode: editProductForm.barcode.trim() || null };
                               const { error } = await supabase.from("products").update(upd).eq("id", p.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, ...upd } : x); return d; });
@@ -10026,7 +10407,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: p.active ? 16 : 2, transition: "left 0.2s" }} />
                           </div>
                           <div style={{ display: "flex", gap: 4, width: 64, flexShrink: 0, justifyContent: "flex-end" }}>
-                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price, purchase_price: p.purchase_price == null ? "" : String(p.purchase_price), stock: p.stock == null ? "" : String(p.stock), min_stock: p.min_stock == null ? "" : String(p.min_stock), supplier: p.supplier || "" }); }}
+                            <button onClick={() => { setEditingProduct(p.id); setEditProductForm({ name_nl: p.name_nl || "", name_en: p.name_en || "", description_nl: p.description_nl || "", description_en: p.description_en || "", price: p.price, purchase_price: p.purchase_price == null ? "" : String(p.purchase_price), stock: p.stock == null ? "" : String(p.stock), min_stock: p.min_stock == null ? "" : String(p.min_stock), supplier: p.supplier || "", barcode: p.barcode || "" }); }}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <NavIcon name="edit" size={11} color="currentColor" />
                             </button>
@@ -10072,9 +10453,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
                           <input className="input-field" type="number" value={newProduct.min_stock} onChange={e => setNewProduct(f => ({...f, min_stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
                         </div>
-                        <div style={{ gridColumn: "1 / -1" }}>
+                        <div>
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
                           <input className="input-field" value={newProduct.supplier} onChange={e => setNewProduct(f => ({...f, supplier: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel — voor de bestellijst" : lang === "es" ? "opcional — para la lista de pedidos" : "optional — for the order list"} list="vellu-suppliers" />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input className="input-field" inputMode="numeric" value={newProduct.barcode} onChange={e => setNewProduct(f => ({...f, barcode: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
+                            <button type="button" className="btn-ghost" onClick={() => setScanTarget("new")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", fontSize: 14, flexShrink: 0 }}>📷</button>
+                          </div>
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
@@ -10090,11 +10478,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
                             price, purchase_price: numOrNull(newProduct.purchase_price), stock: intOrNull(newProduct.stock), min_stock: intOrNull(newProduct.min_stock),
                             supplier: newProduct.supplier.trim() || null,
+                            barcode: newProduct.barcode.trim() || null,
                             active: true, position: (salonData.products || []).length
                           }).select().single();
                           if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                           update(d => { d.products = [...(d.products || []), data]; return d; });
-                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "" });
+                          setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
                           setShowNewProductForm(false);
                         }}><NavIcon name="plus" size={12} color={c.btnOnDark} /> {lang === "nl" ? "Product toevoegen" : lang === "es" ? "Añadir producto" : "Add product"}</button>
                         <button className="btn-ghost" style={{ padding: "11px 14px" }} onClick={() => setShowNewProductForm(false)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
