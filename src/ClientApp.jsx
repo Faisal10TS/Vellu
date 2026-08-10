@@ -1879,7 +1879,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             {/* Owner tag only surfaces when the salon opted in via
                                 Settings → Team. Clients otherwise see all team
                                 members as equals. */}
-                            {initialSalon.show_owner_on_booking && member.user_id && member.user_id === initialSalon.owner_id && (
+                            {initialSalon.show_owner_on_booking && (member.is_owner === true || (member.user_id && member.user_id === initialSalon.owner_id)) && (
                               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Eigenaar" : lang === "es" ? "Propietario" : "Owner"}
                               </span>
