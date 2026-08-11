@@ -109,7 +109,7 @@ let vatRows="";
 const TAXL=b.tax_label?esc(String(b.tax_label)):txt(lang,"Btw","VAT","IVA");
 // Belasting komt sinds de per-jurisdictie-omzetting kant-en-klaar mee als
 // tax_lines: een regel per tarief, al uitgerekend door src/taxEngine.js. Dat
-// moet, want een factuur kan twee grondslagen hebben \u2014 op Bonaire is de
+// moet, want een factuur kan twee grondslagen hebben — op Bonaire is de
 // behandeling belast (ABB) en het doorverkochte product niet, want daarover is
 // bij invoer al ABB betaald. Eén percentage over het totaal klopt dan nooit.
 //
@@ -124,15 +124,22 @@ const pctStr=(v:any)=>parseFloat((parseFloat(v)||0).toFixed(2)).toString().repla
 if(showTaxLine&&taxLines&&taxLines.length){
   const taxTotal=taxLines.reduce((n:number,l:any)=>n+(parseFloat(l.tax)||0),0);
   const netTotal=gross-taxTotal;
+  // De grondslag erbij zodra die kleiner is dan het factuurtotaal. Op Bonaire
+  // staat er anders "ABB 6%  5,66" naast een subtotaal van 144,34 en dat is
+  // 3,9% — de klant of een controleur kan het niet narekenen omdat het
+  // onbelaste product nergens zichtbaar is. Bij één tarief dat het hele
+  // bedrag dekt (NL/BE) blijft de factuur er precies uitzien zoals voorheen.
+  const baseSum=taxLines.reduce((n:number,l:any)=>n+(parseFloat(l.gross)||0),0);
+  const showBase=taxLines.length>1||baseSum<gross-0.005;
   vatRows=`${row(`${txt(lang,"Subtotaal","Subtotal","Subtotal")} (${txt(lang,"excl.","excl.","sin")} ${TAXL})`,fP(netTotal))}`
-    +taxLines.map((l:any)=>row(`${TAXL} ${pctStr(l.rate)}%`+(taxLines.length>1?` (${txt(lang,"over","on","sobre")} ${fP(parseFloat(l.gross)||0)})`:""),fP(parseFloat(l.tax)||0))).join("");
+    +taxLines.map((l:any)=>row(`${TAXL} ${pctStr(l.rate)}%`+(showBase?` (${txt(lang,"over","on","sobre")} ${fP(parseFloat(l.gross)||0)})`:""),fP(parseFloat(l.tax)||0))).join("");
 }else if(showTaxLine&&!taxLines&&b.salon_btw&&rate>0){
   const net=gross/(1+rate);const vat=gross-net;
   vatRows=`${row(`${txt(lang,"Subtotaal","Subtotal","Subtotal")} (${txt(lang,"excl.","excl.","sin")} ${TAXL})`,fP(net))}${row(`${TAXL} ${pctStr(rate*100)}%`,fP(vat))}`;
 }
 const totLabel=vatRows?`${txt(lang,"Totaal","Total","Total")} (${txt(lang,"incl.","incl.","con")} ${TAXL})`:txt(lang,"Totaal","Total","Total");
 // Alleen melden dat er geen belasting is berekend als dat ook echt zo is. Op
-// Aruba zit de belasting wél in de prijs, hij mag er alleen niet bij staan \u2014
+// Aruba zit de belasting wél in de prijs, hij mag er alleen niet bij staan —
 // "geen belasting in rekening gebracht" zou daar pertinent onwaar zijn.
 const taxCharged=(taxLines&&taxLines.length>0)||(!!b.salon_btw&&rate>0);
 const noVatNote=taxCharged?"":`<p style="color:#aaa;font-size:11px;text-align:center;margin:0 0 8px;">${txt(lang,"Geen belasting in rekening gebracht.","No tax charged.","No se aplican impuestos.")}</p>`;
