@@ -1961,7 +1961,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div key={p.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                       {p.photo_url
                         ? <img src={p.photo_url} alt={prodNameOf(p)} loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
-                        : <div style={{ width: "100%", aspectRatio: "1", background: c.inputBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🛍</div>}
+                        : <div style={{ width: "100%", aspectRatio: "1", background: c.inputBg, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={26} color={c.textMuted} /></div>}
                       <div style={{ padding: "10px 12px 12px" }}>
                         <div style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{prodNameOf(p)}</div>
                         {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
@@ -2380,7 +2380,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowReviewForm(false)}>
             <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
+                <div style={{ marginBottom: 12, opacity: 0.5 }}><NavIcon name="star2" size={34} color={c.textMuted} /></div>
                 <div style={{ fontFamily: displayFont, fontSize: 24, fontWeight: 300 }}>
                   {t.howWasAppt}
                 </div>
@@ -2860,7 +2860,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 14, cursor: "pointer", background: qty > 0 ? `${accent}10` : c.bgCard, border: `1.5px solid ${qty > 0 ? accent : c.border}`, transition: "all 0.15s" }}>
                             {p.photo_url
                               ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
-                              : <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>🛍</div>}
+                              : <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={17} color={c.textMuted} /></div>}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accent : c.text }}>{prodNameOf(p)}</div>
                               {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
@@ -3638,7 +3638,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               className={`service-card ${qty > 0 ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
                               {p.photo_url
                                 ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
-                                : <div style={{ width: 36, height: 36, borderRadius: 9, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14 }}>🛍</div>}
+                                : <div style={{ width: 36, height: 36, borderRadius: 9, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color={c.textMuted} /></div>}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{prodNameOf(p)}</div>
                                 {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
@@ -3918,7 +3918,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               ) : (
                 /* Done screen mobile */
                 <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
-                  <div style={{ fontSize: 48, marginBottom: 20 }}>✨</div>
+                  <div style={{ marginBottom: 20, opacity: 0.6 }}><NavIcon name="sparkle" size={44} color={accent} /></div>
                   <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
                   <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
                     {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
@@ -3997,7 +3997,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setShowReviewForm(false)}>
             <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 420, width: "100%" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>⭐</div>
+                <div style={{ marginBottom: 12, opacity: 0.5 }}><NavIcon name="star2" size={34} color={c.textMuted} /></div>
                 <div style={{ fontFamily: displayFont, fontSize: 24, fontWeight: 300 }}>
                   {t.howWasAppt}
                 </div>

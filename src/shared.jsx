@@ -2026,6 +2026,15 @@ function NavIcon({ name, size = 18, color = "currentColor" }) {
     gift: <svg {...props}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
     diamond: <svg {...props}><path d="M12 2L2 12l10 10 10-10z" fill="none"/></svg>,
     target: <svg {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+    // Kassa: geldlade onder, toetsenblok + display erboven — herkenbaar als
+    // kassa i.p.v. de factuur-icoon die de Facturen-tab al gebruikt.
+    kassa: <svg {...props}><rect x="2.5" y="13" width="19" height="8" rx="1.8"/><rect x="6" y="5.5" width="12" height="7.5" rx="1.5"/><line x1="8.5" y1="8.5" x2="15.5" y2="8.5"/><line x1="9.5" y1="17" x2="14.5" y2="17"/></svg>,
+    // Winkeltas — retailproducten in de kassa en op de boekingspagina.
+    bag: <svg {...props}><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+    // Streepjescode in een scan-kader — de scanknoppen.
+    barcode: <svg {...props}><path d="M3 8V5.5A2.5 2.5 0 015.5 3H8"/><path d="M16 3h2.5A2.5 2.5 0 0121 5.5V8"/><path d="M21 16v2.5a2.5 2.5 0 01-2.5 2.5H16"/><path d="M8 21H5.5A2.5 2.5 0 013 18.5V16"/><line x1="7.5" y1="8" x2="7.5" y2="16"/><line x1="11" y1="8" x2="11" y2="16"/><line x1="14" y1="8" x2="14" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/></svg>,
+    note: <svg {...props}><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8.5" x2="16" y2="8.5"/><line x1="8" y1="12.5" x2="16" y2="12.5"/><line x1="8" y1="16.5" x2="13" y2="16.5"/></svg>,
+    ban: <svg {...props}><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>,
   };
   return icons[name] || null;
 }

@@ -4406,7 +4406,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
-        service_name: `🛍 ${saleLabel}`,
+        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}`,
         service_price: +saleTotal.toFixed(2),
         service_duration: 0,
         date: fmt(getToday()),
@@ -4941,7 +4941,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {showWarn && (
               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.warning}22`, color: c.warning, border: `1px solid ${c.warning}44`, fontWeight: 600, letterSpacing: "0.04em" }}
                 title={lang === "nl" ? `${noShowInfo.no_show_count} no-shows bij jouw salon` : lang === "es" ? `${noShowInfo.no_show_count} ausencias en tu salón` : `${noShowInfo.no_show_count} no-shows at your salon`}>
-                ⚠ {noShowInfo.no_show_count}× NO-SHOW
+                <NavIcon name="alerttri" size={10} color="currentColor" /> {noShowInfo.no_show_count}× NO-SHOW
               </span>
             )}
             {showBlocked && (
@@ -4979,12 +4979,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       </div>
       {a.client_allergies && (
         <div style={{ fontSize: 10, color: c.warning, background: `${c.warning}14`, border: `1px solid ${c.warning}28`, borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
-          ⚠️ {t.clientAllergies}: {a.client_allergies}
+          <NavIcon name="alerttri" size={11} color="currentColor" /> {t.clientAllergies}: {a.client_allergies}
         </div>
       )}
       {clientNote && (
         <div style={{ fontSize: 10, color: c.textSub, background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 8, padding: "6px 10px", marginBottom: 6, display: "flex", gap: 6, alignItems: "flex-start" }} title={clientNote}>
-          <span style={{ fontSize: 10 }}>📝</span>
+          <NavIcon name="note" size={10} color="currentColor" />
           <span style={{ flex: 1, lineHeight: 1.4 }}>{clientNote}</span>
         </div>
       )}
@@ -4994,7 +4994,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => setRescheduling(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
           {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
-            <button className="btn-ghost" style={{ fontSize:10, padding: "0 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}>🛍</button>
+            <button className="btn-ghost" style={{ fontSize:10, padding: "0 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
           )}
           <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : lang === "es" ? "Eliminar cita" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
@@ -5006,7 +5006,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
           <button className="btn-ghost" style={{ flex: 1, fontSize:10, padding: "6px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Prijs of datum aanpassen (bv. correctie)" : lang === "es" ? "Editar precio o fecha (p. ej. corrección)" : "Edit price or date (e.g. correction)"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
           {salonData.plan === "professional" && !a.invoice_sent && (salonData.products || []).some(p => p.active) && (
-            <button className="btn-ghost" style={{ fontSize:10, padding: "6px 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen — komt op de factuur" : lang === "es" ? "Vender producto — aparece en la factura" : "Sell a product — lands on the invoice"}>🛍</button>
+            <button className="btn-ghost" style={{ fontSize:10, padding: "6px 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen — komt op de factuur" : lang === "es" ? "Vender producto — aparece en la factura" : "Sell a product — lands on the invoice"}><NavIcon name="bag" size={12} color="currentColor" /></button>
           )}
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen" : lang === "es" ? "Eliminar cita" : "Delete appointment"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
             <NavIcon name="xmark" size={11} color="currentColor" />
@@ -5079,7 +5079,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     ["agenda", "agenda", t.agenda],
     // Kassa: volwaardig verkooppunt (producten + kadobonnen) voor
     // Professional — Starter ziet de tab ook, maar krijgt een upsell.
-    ...(salonData.plan === "professional" ? [["kassa", "facturen", lang === "es" ? "Caja" : "Kassa"]] : []),
+    ...(salonData.plan === "professional" ? [["kassa", "kassa", lang === "es" ? "Caja" : "Kassa"]] : []),
     ["klanten", "team", lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"],
     ["analytics", "analytics", t.analytics],
     ["facturen", "facturen", t.invoices],
@@ -5441,7 +5441,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             )}
             {/* Scan/zoek-balk: autofocus zodat een vaste USB-scanner (die als
                 toetsenbord typt + Enter geeft) direct in dit veld landt; de
-                📷-knop opent de camera-scanner voor telefoons/tablets. */}
+                De scanknop opent de camera-scanner voor telefoons/tablets. */}
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
               <input className="input-field" autoFocus value={kassaSearch}
                 placeholder={lang === "nl" ? "Zoek of scan barcode…" : lang === "es" ? "Busca o escanea…" : "Search or scan barcode…"}
@@ -5462,7 +5462,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   }
                 }}
                 style={{ flex: 1, fontSize: 12 }} />
-              <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", fontSize: 15, flexShrink: 0 }}>📷</button>
+              <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
               {(salonData.products || []).filter(p => p.active).filter(p => {
@@ -5472,7 +5472,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const qty = productSaleSel[p.id] || 0;
                 return (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
-                    {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15 }}>🛍</div>}
+                    {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color="c.textMuted" /></div>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>
@@ -5540,7 +5540,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 340, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={e => e.stopPropagation()}
                style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, marginBottom: 4 }}>🎁 {lang === "nl" ? "Kadobonnen" : lang === "es" ? "Tarjetas regalo" : "Gift cards"}</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, marginBottom: 4 }}><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobonnen" : lang === "es" ? "Tarjetas regalo" : "Gift cards"}</div>
             <div style={{ fontSize: 11, color: c.textSub, marginBottom: 14 }}>
               {lang === "nl" ? "Wisselt een klant een bon in? Boek het bedrag hier af — het restsaldo blijft geldig." : lang === "es" ? "¿Un cliente canjea una tarjeta? Descuenta el importe aquí." : "Client redeeming a card? Deduct the amount here — the rest stays valid."}
             </div>
@@ -5604,7 +5604,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const groups = orderListGroups();
               if (!groups.length) return (
                 <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
-                  {lang === "nl" ? "Niets te bestellen — alles is op voorraad. 🎉" : lang === "es" ? "Nada que pedir — todo en stock. 🎉" : "Nothing to order — everything is in stock. 🎉"}
+                  {lang === "nl" ? "Niets te bestellen — alles is op voorraad." : lang === "es" ? "Nada que pedir — todo en stock." : "Nothing to order — everything is in stock."}
                 </div>
               );
               return groups.map(([sup, items]) => (
@@ -6412,7 +6412,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
                   <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: accent, borderColor: `${accent}44` }}
                     onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
-                    🛍 {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
+                    <NavIcon name="kassa" size={14} color="currentColor" /> {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
                   </button>
                 )}
                 <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
@@ -6653,7 +6653,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         }
                       }}
                       style={{ flex: 1, fontSize: 12 }} />
-                    <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", fontSize: 15, flexShrink: 0 }}>📷</button>
+                    <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                   </div>
                   {(salonData.products || []).filter(p => p.active).length === 0 ? (
                     <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
@@ -6672,7 +6672,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {qty > 0 && <div style={{ position: "absolute", top: 6, right: 6, minWidth: 20, height: 20, borderRadius: 10, background: accent, color: c.btnOnDark, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{qty}</div>}
                             {p.photo_url
                               ? <img src={p.photo_url} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", marginBottom: 6 }} />
-                              : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 17, marginBottom: 6 }}>🛍</div>}
+                              : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}><NavIcon name="bag" size={18} color="c.textMuted" /></div>}
                             <div style={{ fontSize: 11, fontWeight: 500, color: c.text, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{prodName(p)}</div>
                             <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
                             {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : "sold out") : `${lang === "nl" ? "voorraad" : "stock"}: ${p.stock}`}</div>}
@@ -6683,7 +6683,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   )}
                   {/* Kadobon verkopen */}
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: c.text }}>🎁 {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
+                    <span style={{ fontSize: 12, color: c.text }}><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
                     <input className="input-field" type="number" min="0" value={kassaVoucher} onChange={e => setKassaVoucher(e.target.value)} placeholder={`${cur} ${lang === "nl" ? "bedrag" : lang === "es" ? "importe" : "amount"}`} style={{ width: 110, fontSize: 12 }} />
                     <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "krijgt automatisch een unieke code (op de factuur)" : lang === "es" ? "recibe un código único (en la factura)" : "gets a unique code automatically (on the invoice)"}</span>
                     <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "7px 12px", fontSize: 10 }} onClick={async () => {
@@ -6716,7 +6716,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ))}
                       {voucherAmt > 0 && (
                         <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.border}`, fontSize: 12 }}>
-                          <span>🎁 {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
+                          <span><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
                           <span style={{ color: accent }}>{cur}{voucherAmt.toFixed(2)}</span>
                         </div>
                       )}
@@ -6840,7 +6840,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     }}
                     title={lang === "nl" ? "Blokkeer een tijd of dag" : lang === "es" ? "Bloquear una hora o un día" : "Block a time or day"}
                   >
-                    <span aria-hidden="true">🚫</span>
+                    <NavIcon name="ban" size={12} color="currentColor" />
                     {lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time"}
                   </button>
                 </div>
@@ -7704,7 +7704,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <button className="btn-ghost" style={{ flexShrink: 0, padding: "12px 16px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}
                       title={lang === "nl" ? "Product verkopen zonder afspraak (walk-in)" : lang === "es" ? "Vender producto sin cita (walk-in)" : "Sell a product without an appointment (walk-in)"}
                       onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
-                      🛍 {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
+                      <NavIcon name="kassa" size={13} color="currentColor" /> {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
                     </button>
                   )}
                 </div>
@@ -8533,7 +8533,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
-                        🛍 {lang === "nl" ? "Productverkoop" : lang === "es" ? "Venta de productos" : "Product sales"}
+                        <NavIcon name="bag" size={12} color={c.textLabel} /> {lang === "nl" ? "Productverkoop" : lang === "es" ? "Venta de productos" : "Product sales"}
                       </div>
                       <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                         {lang === "nl" ? "Laatste 90 dagen" : lang === "es" ? "Últimos 90 días" : "Last 90 days"}
@@ -8860,8 +8860,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       display: "flex", alignItems: "center", gap: 6,
                     }}>
                       {slugStatus.state === "available" && <span>✓</span>}
-                      {slugStatus.state === "taken" && <span>⚠</span>}
-                      {slugStatus.state === "invalid" && <span>⚠</span>}
+                      {slugStatus.state === "taken" && <NavIcon name="alerttri" size={12} color="currentColor" />}
+                      {slugStatus.state === "invalid" && <NavIcon name="alerttri" size={12} color="currentColor" />}
                       {slugStatus.state === "checking" && <span>…</span>}
                       <span>{slugStatus.message}</span>
                     </div>
@@ -10221,7 +10221,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ PRODUCTEN (Professional) ═══
                   Retail products the salon sells alongside treatments. Clients
                   can add them while booking; the owner can ring them up on an
-                  appointment (🛍 on the agenda card); both end up on the
+                  appointment (sale button on the agenda card); both end up on the
                   invoice automatically because price + label live on the
                   appointment row. */}
               <div className="glass-card" style={{ padding: 24, marginTop: 16 }}>
@@ -10230,7 +10230,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {salonData.plan === "professional" && <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.products || []).length}</div>}
                 </div>
                 <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
-                  {lang === "nl" ? "Verkoop producten naast je behandelingen. Klanten kunnen ze meebestellen bij het boeken, en jij kunt ze aanslaan bij het afrekenen (🛍 op de afspraak-kaart) — alles komt automatisch op de factuur." : lang === "es" ? "Vende productos junto a tus tratamientos. Los clientes pueden añadirlos al reservar y tú puedes cobrarlos al finalizar (🛍 en la cita) — todo aparece en la factura." : "Sell products alongside your treatments. Clients can add them while booking, and you can ring them up at checkout (🛍 on the appointment card) — everything lands on the invoice automatically."}
+                  {lang === "nl" ? "Verkoop producten naast je behandelingen. Klanten kunnen ze meebestellen bij het boeken, en jij kunt ze aanslaan bij het afrekenen (via de verkoop-knop op de afspraak-kaart) — alles komt automatisch op de factuur." : lang === "es" ? "Vende productos junto a tus tratamientos. Los clientes pueden añadirlos al reservar y tú puedes cobrarlos al finalizar (con el botón de venta en la cita) — todo aparece en la factura." : "Sell products alongside your treatments. Clients can add them while booking, and you can ring them up at checkout (via the sale button on the appointment card) — everything lands on the invoice automatically."}
                 </div>
                 {salonData.plan !== "professional" ? (
                   <div style={{ background: `${accent}0d`, border: `1.5px dashed ${accent}44`, borderRadius: 14, padding: "20px 18px", textAlign: "center" }}>
@@ -10340,7 +10340,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input className="input-field" inputMode="numeric" value={editProductForm.barcode} onChange={ev => setEditProductForm(f => ({...f, barcode: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
-                                <button type="button" className="btn-ghost" onClick={() => setScanTarget("edit")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", fontSize: 14, flexShrink: 0 }}>📷</button>
+                                <button type="button" className="btn-ghost" onClick={() => setScanTarget("edit")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                               </div>
                             </div>
                           </div>
@@ -10363,7 +10363,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ) : (
                         <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
                           <label style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", cursor: "pointer", position: "relative" }} title={lang === "nl" ? "Foto uploaden" : lang === "es" ? "Subir foto" : "Upload photo"}>
-                            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 15 }}>{productPhotoUploading === p.id ? "…" : "🛍"}</span>}
+                            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 13, display: "inline-flex" }}>{productPhotoUploading === p.id ? "…" : <NavIcon name="bag" size={15} color="c.textMuted" />}</span>}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                               const file = e.target.files[0];
                               if (!file) return;
@@ -10463,7 +10463,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
                           <div style={{ display: "flex", gap: 6 }}>
                             <input className="input-field" inputMode="numeric" value={newProduct.barcode} onChange={e => setNewProduct(f => ({...f, barcode: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
-                            <button type="button" className="btn-ghost" onClick={() => setScanTarget("new")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", fontSize: 14, flexShrink: 0 }}>📷</button>
+                            <button type="button" className="btn-ghost" onClick={() => setScanTarget("new")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                           </div>
                         </div>
                       </div>
