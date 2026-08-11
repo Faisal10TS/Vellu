@@ -145,7 +145,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan, staff_view_revenue, staff_view_client_contact")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -727,6 +727,8 @@ serve(async (req) => {
         owner_email: ownerEmail,
         staff_emails: staffEmails,
         owner_lang: ["NL", "BE", "AW", "CW", "BQ"].includes(salon.country_code || "NL") ? "nl" : "en",
+        staff_view_revenue: salon.staff_view_revenue,
+        staff_view_client_contact: salon.staff_view_client_contact,
       }));
     }
     // NOTE: no invoice at booking time anymore. "online" now means "payment

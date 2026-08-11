@@ -116,6 +116,7 @@ async function notifyOwnerCancellation(b: {
   salon_accent?: string; salon_logo?: string; lang?: string;
   client_name?: string; client_phone?: string | null; service_name?: string;
   date?: string; time?: string; reason?: string | null;
+  staff_view_revenue?: boolean; staff_view_client_contact?: boolean;
 }) {
   try {
     if (!b.owner_email) return;
@@ -130,6 +131,8 @@ async function notifyOwnerCancellation(b: {
         booking: {
           owner_email: b.owner_email,
           staff_emails: b.staff_email ? [b.staff_email] : [],
+          staff_view_revenue: b.staff_view_revenue,
+          staff_view_client_contact: b.staff_view_client_contact,
           client_name: b.client_name,
           client_phone: b.client_phone || null,
           service_name: b.service_name,
@@ -275,13 +278,13 @@ serve(async (req) => {
 
   await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
 
-  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string } = {};
+  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string; staff_view_revenue?: boolean; staff_view_client_contact?: boolean } = {};
   let salonSlug = "";
   let waitlistEnabled = true;
   if (appt.owner_id) {
     const { data: owner } = await supabase
       .from("profiles")
-      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code")
+      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code, staff_view_revenue, staff_view_client_contact")
       .eq("id", appt.owner_id)
       .maybeSingle();
     if (owner) {
@@ -290,6 +293,8 @@ serve(async (req) => {
       notify.salon_accent = owner.accent_color || "";
       notify.salon_logo = owner.logo_url || "";
       notify.owner_id = appt.owner_id;
+      notify.staff_view_revenue = owner.staff_view_revenue;
+      notify.staff_view_client_contact = owner.staff_view_client_contact;
       // Dutch for the Dutch-language markets, English elsewhere. Falls back to
       // Dutch when country_code is unset (old rows), matching send-reminders.
       notify.lang = DUTCH_COUNTRIES.has(owner.country_code || "NL") ? "nl" : "en";
@@ -321,6 +326,8 @@ serve(async (req) => {
     notifyOwnerCancellation({
       owner_email: notify.owner_email,
       staff_email: notify.staff_email,
+      staff_view_revenue: notify.staff_view_revenue,
+      staff_view_client_contact: notify.staff_view_client_contact,
       salon_name: notify.salon_name,
       salon_accent: notify.salon_accent,
       salon_logo: notify.salon_logo,

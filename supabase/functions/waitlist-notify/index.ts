@@ -112,7 +112,7 @@ serve(async (req) => {
   // Resolve the salon. If it doesn't exist, do nothing (can't leak anything).
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code")
+    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, staff_view_revenue, staff_view_client_contact")
     .eq("id", ownerId)
     .maybeSingle();
   if (!salon) return json(404, { error: "salon_not_found" }, origin);
@@ -170,6 +170,8 @@ serve(async (req) => {
     ...brand,
     owner_email: salonEmail,
     staff_emails: staffEmails,
+    staff_view_revenue: salon.staff_view_revenue,
+    staff_view_client_contact: salon.staff_view_client_contact,
     client_name: clientName,
     client_email: clientEmail,
     client_phone: clientPhone,
