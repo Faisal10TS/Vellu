@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES, ownerLangFor
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow
 } from "./shared.jsx";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
@@ -2102,7 +2102,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }] = await Promise.all([
         supabase
           .from("appointments")
-          .select("id, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
+          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
           .eq("owner_id", ownerId)
           .order("date", { ascending: false }),
         supabase
@@ -2165,7 +2165,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         .filter((cl) => !cl.hidden)
         .map((cl) => {
           const upcoming = cl.appts
-            .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
+            .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a) && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
             .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
           cl.next = upcoming[0] || null;
           return cl;
@@ -3216,6 +3216,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showVouchers, setShowVouchers] = useState(false);
   const [vouchers, setVouchers] = useState(null);
   const [voucherRedeem, setVoucherRedeem] = useState({});
+  const [productReportBusy, setProductReportBusy] = useState(false);
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -3521,8 +3522,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   const accent = salonData.accent;
   const appts = salonData.appointments;
-  const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
-  const allVisibleAppts = appts.filter(a => a.status !== "cancelled");
+  const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a));
+  // Agenda-tak: kassa-verkopen horen hier niet — die staan in de Kassa-tab.
+  const allVisibleAppts = appts.filter(a => a.status !== "cancelled" && !isSaleRow(a));
+  // Alles behalve verkopen: voor tellingen die over AFSPRAKEN gaan (aantal
+  // afspraken, drukste dagen/uren) — geldbedragen gebruiken juist wel `appts`.
+  const apptsNoSales = appts.filter(a => !isSaleRow(a));
   const completedAppts = appts.filter(a => a.status === "completed");
   // Dashboard staff scope — everything on that tab (today's list, expected
   // revenue, the week/month KPI cards and their sparklines) reads from these
@@ -4418,6 +4423,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         payment_method: walkinPay === "request" ? "online" : walkinPay,
         status: "completed",
         invoice_sent: false,
+        // Kassa-verkoop, geen afspraak: telt mee in omzet/facturen/analytics
+        // maar wordt uit alle agenda-weergaven gefilterd.
+        is_sale: true,
         products: items,
         staff_id: walkinStaff || null,
         staff_name: walkinStaff ? ((salonData.staff || []).find(s => s.id === walkinStaff)?.name || null) : null,
@@ -4462,6 +4470,48 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts } : x); return d; });
     setProductSaleFor(null); setProductSaleSel({});
     toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
+  };
+
+  // Alle rijen met productregels binnen een periode: kassa-verkopen EN
+  // producten die bij een afspraak zijn aangeslagen. Allebei productomzet.
+  const productSalesBetween = (from, to) => (salonData.appointments || []).filter(a =>
+    a.status !== "cancelled" && a.status !== "no_show" &&
+    Array.isArray(a.products) && a.products.length > 0 &&
+    a.date >= from && a.date <= to
+  );
+  // PDF-rapport productverkoop (dag of maand). jsPDF wordt lazy geladen.
+  const downloadProductReport = async (scope) => {
+    if (productReportBusy) return;
+    setProductReportBusy(true);
+    try {
+      const today = fmt(getToday());
+      const from = scope === "month" ? today.slice(0, 8) + "01" : today;
+      const to = today;
+      const rows = productSalesBetween(from, to);
+      if (rows.length === 0) {
+        toast.show(lang === "nl" ? "Geen productverkopen in deze periode" : lang === "es" ? "Sin ventas de productos en este período" : "No product sales in this period", "error");
+        return;
+      }
+      const mod = await import("./productReport.js");
+      const label = scope === "month"
+        ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
+        : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      mod.generateProductReportPDF({
+        salon: salonData,
+        appointments: rows,
+        range: { from, to, label },
+        lang,
+        currencySymbol: cur,
+        moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
+        taxLabel: tax.label,
+        taxIdLabel: tax.idLabel,
+        taxRate: (salonData.btw_rate ?? 21) / 100,
+        showTax: !!salonData.btw_id,
+      });
+    } catch (e) {
+      console.error("product report error:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setProductReportBusy(false); }
   };
 
   // ── Producten: Excel (CSV) export / voorraad-import / bestellijst ──
@@ -6692,6 +6742,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       setVouchers(data || []);
                     }}>{lang === "nl" ? "Kadobonnen beheren" : lang === "es" ? "Gestionar tarjetas" : "Manage gift cards"}</button>
                   </div>
+                  {/* Verkopen van vandaag: dagoverzicht + PDF-rapport. Dit is
+                      waar een verkoop landt — NIET in de agenda. */}
+                  {(() => {
+                    const today = fmt(getToday());
+                    const rows = productSalesBetween(today, today)
+                      .sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+                    const dayTotal = rows.reduce((sum, a) => sum + (Array.isArray(a.products) ? a.products.reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0) : 0), 0);
+                    const payLabel = (pm) => pm === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
+                      : pm === "pin" ? (lang === "es" ? "Tarjeta" : "Pin")
+                      : pm === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request")
+                      : (lang === "nl" ? "In de salon" : lang === "es" ? "En el salón" : "In salon");
+                    return (
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>
+                            {lang === "nl" ? "Vandaag verkocht" : lang === "es" ? "Vendido hoy" : "Sold today"}
+                          </span>
+                          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{dayTotal.toFixed(2)}</span>
+                        </div>
+                        {rows.length === 0 ? (
+                          <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px" }}>
+                            {lang === "nl" ? "Nog niets verkocht vandaag." : lang === "es" ? "Aún no hay ventas hoy." : "Nothing sold yet today."}
+                          </div>
+                        ) : rows.map(a => {
+                          const amt = (a.products || []).reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0);
+                          const what = (a.products || []).map(it => (parseInt(it.qty) || 1) > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+                          return (
+                            <div key={a.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>
+                              <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
+                              <span style={{ flex: 1, minWidth: 0, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{what}</span>
+                              <span style={{ color: c.textMuted, flexShrink: 0, fontSize: 10 }}>{[a.staff_name ? String(a.staff_name).split(",")[0].trim() : "", payLabel(a.payment_method)].filter(Boolean).join(" · ")}</span>
+                              <span style={{ color: accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{amt.toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("day")}>
+                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"}
+                          </button>
+                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("month")}>
+                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 {/* Rechts: mandje + afrekenen */}
                 <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
@@ -8265,13 +8361,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {/* Total appointments */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalAppts}</div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{appts.length}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{apptsNoSales.length}</div>
                         <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 6 }}>
                           <div>
                             <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>{t.treatments}</div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub }}>
                               <div style={{ flex: 1, height: 4, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
-                                <div style={{ height: "100%", background: accent, width: `${appts.length > 0 ? (completedAppts.length / appts.length) * 100 : 0}%` }} />
+                                <div style={{ height: "100%", background: accent, width: `${apptsNoSales.length > 0 ? (apptsNoSales.filter(a => a.status === "completed").length / apptsNoSales.length) * 100 : 0}%` }} />
                               </div>
                               <span style={{ fontVariantNumeric: "tabular-nums" }}>{completedAppts.length}</span>
                             </div>
@@ -8580,7 +8676,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {(() => {
                   const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
                   const dayCounts = [0,0,0,0,0,0,0];
-                  appts.forEach(a => {
+                  apptsNoSales.forEach(a => {
                     // Parse local-date from YYYY-MM-DD so getDay() reflects the salon's local day,
                     // not a UTC-shifted one.
                     if (!a.date) return;
@@ -8606,7 +8702,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <SL>{lang === "nl" ? "Drukste uren" : lang === "es" ? "Horas de mayor actividad" : "Busiest hours"}</SL>
                 {(() => {
                   const hourCounts = {};
-                  appts.forEach(a => { if (a.time) { const h = parseInt(a.time.split(":")[0]); hourCounts[h] = (hourCounts[h] || 0) + 1; } });
+                  apptsNoSales.forEach(a => { if (a.time) { const h = parseInt(a.time.split(":")[0]); hourCounts[h] = (hourCounts[h] || 0) + 1; } });
                   const hours = [];
                   for (let h = 8; h <= 21; h++) hours.push(h);
                   const max = Math.max(...hours.map(h => hourCounts[h] || 0), 1);

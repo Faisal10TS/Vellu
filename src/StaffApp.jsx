@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, curSym, taxForCountry, ownerLangFor
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, ownerLangFor
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -212,7 +212,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // which stay personal regardless of the dashboard/agenda filter.
   const myAppts = seeAll ? appointments.filter(isMineAppt) : appointments;
   // Scoped set — dashboard + agenda follow the chip (Everyone or one stylist).
-  const scopedAppts = !seeAll ? appointments : (staffFilter ? appointments.filter(a => involvesStaff(a, staffFilter)) : appointments);
+  // Agenda-tak: kassa-verkopen van de salon horen niet in de agenda van een
+  // medewerker. Omzet/facturen lopen via myAppts en blijven dus intact.
+  const scopedAppts = (!seeAll ? appointments : (staffFilter ? appointments.filter(a => involvesStaff(a, staffFilter)) : appointments)).filter(a => !isSaleRow(a));
 
   // The staff filter scopes the appointment LISTS (dashboard today + agenda).
   // Earnings/analytics and the whole Facturen tab stay PERSONAL — a stylist

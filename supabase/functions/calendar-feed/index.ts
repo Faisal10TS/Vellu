@@ -92,11 +92,15 @@ serve(async (req) => {
 
   const { data: appts } = await supabase
     .from("appointments")
-    .select("id, date, time, service_name, service_duration, client_name, client_phone, staff_name, status")
+    .select("id, date, time, service_name, service_duration, client_name, client_phone, staff_name, status, is_sale, service_id, products")
     .eq("owner_id", salon.id)
     .gte("date", fmt(from))
     .lte("date", fmt(to))
     .not("status", "in", '("cancelled","no_show")')
+    // Kassa-verkopen zijn geen afspraken: ze mogen niet in de telefoonagenda
+    // van de eigenaar verschijnen (oude rijen missen de vlag, vandaar de
+    // structurele check verderop).
+    .not("is_sale", "is", true)
     .order("date", { ascending: true });
 
   const stamp = `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;
@@ -118,6 +122,8 @@ serve(async (req) => {
 
   for (const a of appts || []) {
     if (!a.date || !a.time) continue;
+    // Oude verkoop-rijen (van vóór de is_sale-vlag) structureel herkennen.
+    if (!a.service_id && (parseInt(a.service_duration) || 0) === 0 && Array.isArray(a.products) && a.products.length > 0) continue;
     const dur = parseInt(a.service_duration || 60) || 60;
     const end = addMinutes(a.date, a.time, dur);
     const summaryParts = [a.client_name || "Afspraak"];

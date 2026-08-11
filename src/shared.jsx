@@ -1971,6 +1971,16 @@ function Layout({ children, accent = ACCENT, maxWidth = "100%" }) {
   );
 }
 
+// Kassa-verkoop of echte afspraak? Verkopen worden als 0-minuten "afspraak"
+// opgeslagen zodat ze automatisch in omzet/facturen/analytics meetellen, maar
+// ze horen NIET in de agenda. Naast de is_sale-vlag (nieuwe rijen) herkennen
+// we oude rijen structureel: geen dienst + 0 minuten + productregels. Dat is
+// robuuster dan het service_name-label, dat per taal verschilt.
+export const isSaleRow = (a) => !!a && (
+  a.is_sale === true ||
+  (!a.service_id && (parseInt(a.service_duration) || 0) === 0 && Array.isArray(a.products) && a.products.length > 0)
+);
+
 function NavIcon({ name, size = 18, color = "currentColor" }) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", focusable: "false" };
   const icons = {
