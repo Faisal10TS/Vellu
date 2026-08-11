@@ -719,6 +719,126 @@ function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
   );
 }
 
+// Klanten-IMPORT — voor salons die overstappen vanuit een andere app.
+// Leest een CSV met (minimaal) een naam en zet elke regel in manual_clients,
+// de tabel voor handmatig toegevoegde klanten. Duplicaten op e-mail of naam
+// worden overgeslagen zodat je hetzelfde bestand rustig twee keer kunt sturen.
+function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
+  const [busy, setBusy] = useState(false);
+
+  const parse = async (file) => {
+    let text = await file.text();
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const first = text.split(/\r?\n/)[0] || "";
+    const delim = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ";" : ",";
+    const cut = (line) => {
+      const out = []; let cur = "", q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (q) { if (ch === '\"') { if (line[i + 1] === '\"') { cur += '\"'; i++; } else q = false; } else cur += ch; }
+        else if (ch === '\"') q = true;
+        else if (ch === delim) { out.push(cur); cur = ""; }
+        else cur += ch;
+      }
+      out.push(cur); return out;
+    };
+    const rows = text.split(/\r?\n/).filter(l => l.trim());
+    if (rows.length < 2) return [];
+    const head = cut(rows[0]).map(h => h.trim().toLowerCase());
+    return rows.slice(1).map(l => {
+      const cells = cut(l); const o = {};
+      head.forEach((h, i) => { o[h] = (cells[i] || "").trim(); });
+      return o;
+    });
+  };
+  const pick = (r, names) => { for (const n of names) if (r[n]) return r[n]; return ""; };
+
+  const run = async (file) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const rows = await parse(file);
+      // Wat is er al? Handmatige klanten én klanten uit bestaande afspraken.
+      const [{ data: existing }, { data: fromAppts }] = await Promise.all([
+        supabase.from("manual_clients").select("name, email").eq("owner_id", ownerId),
+        supabase.from("appointments").select("client_email").eq("owner_id", ownerId),
+      ]);
+      const seenMail = new Set([
+        ...(existing || []).map(x => (x.email || "").toLowerCase()).filter(Boolean),
+        ...(fromAppts || []).map(x => (x.client_email || "").toLowerCase()).filter(Boolean),
+      ]);
+      const seenName = new Set((existing || []).map(x => (x.name || "").toLowerCase()).filter(Boolean));
+      const toInsert = []; let skipped = 0;
+      for (const r of rows) {
+        const first = pick(r, ["voornaam", "first name", "firstname", "nombre"]);
+        const last = pick(r, ["achternaam", "last name", "lastname", "apellido"]);
+        const name = (pick(r, ["naam", "name", "klant", "client", "cliente", "volledige naam", "full name"]) || (first + " " + last)).trim();
+        if (!name) { skipped++; continue; }
+        const email = pick(r, ["e-mail", "email", "mail", "emailadres", "e-mailadres", "correo"]).toLowerCase();
+        const phone = pick(r, ["telefoon", "phone", "tel", "mobiel", "mobile", "telefoonnummer", "tel\u00e9fono"]);
+        if ((email && seenMail.has(email)) || (!email && seenName.has(name.toLowerCase()))) { skipped++; continue; }
+        if (email) seenMail.add(email); else seenName.add(name.toLowerCase());
+        toInsert.push({
+          owner_id: ownerId, name,
+          email: email || null, phone: phone || null,
+          notes: pick(r, ["notitie", "notities", "note", "notes", "opmerking", "nota"]) || null,
+        });
+      }
+      if (!toInsert.length) {
+        toast.show(lang === "nl" ? ("Niets ge\u00efmporteerd \u2014 " + skipped + " regel(s) overgeslagen (al bekend of geen naam)") : lang === "es" ? "Nada importado" : ("Nothing imported \u2014 " + skipped + " row(s) skipped"), "error");
+        return;
+      }
+      // In blokken van 200 zodat een lange lijst niet op één request stukloopt.
+      let done = 0;
+      for (let i = 0; i < toInsert.length; i += 200) {
+        const { error } = await supabase.from("manual_clients").insert(toInsert.slice(i, i + 200));
+        if (error) { console.error("client import:", error); break; }
+        done += Math.min(200, toInsert.length - i);
+      }
+      toast.show(lang === "nl"
+        ? (done + " klant(en) ge\u00efmporteerd" + (skipped ? (" \u00b7 " + skipped + " overgeslagen") : "") + " \u2014 ververs de Klanten-pagina")
+        : lang === "es" ? (done + " cliente(s) importado(s)")
+        : (done + " client(s) imported" + (skipped ? (" \u00b7 " + skipped + " skipped") : "")));
+    } catch (e) {
+      console.error("client import failed:", e);
+      toast.show(lang === "nl" ? "Import mislukt" : lang === "es" ? "Error al importar" : "Import failed", "error");
+    } finally { setBusy(false); }
+  };
+
+  const template = () => {
+    const rows = [["Naam", "E-mail", "Telefoon", "Notitie"], ["Anna de Vries", "anna@voorbeeld.nl", "0612345678", ""]];
+    const csv = "\uFEFF" + rows.map(r => r.join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = "vellu-voorbeeld-klanten.csv"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  return (
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+        {lang === "nl" ? "Klanten importeren" : lang === "es" ? "Importar clientes" : "Import clients"}
+      </div>
+      <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {lang === "nl"
+          ? "Overstappen vanuit een andere app? Exporteer daar je klantenlijst als CSV en upload hem hier. De kolommen Naam, E-mail, Telefoon en Notitie worden herkend; klanten die je al hebt worden overgeslagen."
+          : lang === "es"
+          ? "\u00bfVienes de otra app? Exporta tus clientes como CSV y s\u00fabelo aqu\u00ed. Se reconocen Nombre, Correo, Tel\u00e9fono y Nota; los duplicados se omiten."
+          : "Switching from another app? Export your client list there as CSV and upload it here. Name, Email, Phone and Note columns are recognised; clients you already have are skipped."}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
+          <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
+          <NavIcon name="upload" size={13} color="currentColor" />
+          {busy ? (lang === "nl" ? "Bezig\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
+        </label>
+        <button className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, color: c.textMuted }} onClick={template}>
+          {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Client CSV export block — sits in Instellingen → Overig. One button,
 // no options: generates a CSV of every unique client who has booked at
 // this salon, aggregated with visit/spend stats. Useful for marketing
@@ -3217,6 +3337,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [vouchers, setVouchers] = useState(null);
   const [voucherRedeem, setVoucherRedeem] = useState({});
   const [productReportBusy, setProductReportBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(null);
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
@@ -4532,6 +4653,106 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     downloadCsv(rows, "vellu-producten.csv");
   };
+  // ── Overstappen vanuit een andere salon-app ───────────────────────────
+  // Eén generieke CSV-parser voor beide imports. Herkent zowel puntkomma's
+  // (NL/EU-Excel) als komma's, en geeft rijen als {kolomnaam: waarde}-objecten
+  // met genormaliseerde (lowercase) kolomnamen terug.
+  const parseCsvRows = async (file) => {
+    let text = await file.text();
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const firstLine = text.split(/\r?\n/)[0] || "";
+    const delim = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ";" : ",";
+    const parseLine = (line) => {
+      const out = []; let cur = "", q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === delim) { out.push(cur); cur = ""; }
+        else cur += ch;
+      }
+      out.push(cur); return out;
+    };
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { header: [], rows: [] };
+    const header = parseLine(lines[0]).map(h => h.trim().toLowerCase().replace(/^\ufeff/, ""));
+    const rows = lines.slice(1).map(l => {
+      const cells = parseLine(l);
+      const o = {};
+      header.forEach((h, i) => { o[h] = (cells[i] || "").trim(); });
+      return o;
+    });
+    return { header, rows };
+  };
+  // Pak de eerste kolom die matcht — andere apps noemen dingen anders
+  // (Naam/Name/Product/Nombre, E-mail/Email/Mail, ...).
+  const pick = (row, names) => {
+    for (const n of names) if (row[n] !== undefined && row[n] !== "") return row[n];
+    return "";
+  };
+  const numOf = (v) => { const n = parseFloat(String(v).replace(/[^0-9,.-]/g, "").replace(",", ".")); return Number.isFinite(n) ? n : null; };
+
+  const importProductsCsv = async (file) => {
+    if (importBusy) return;
+    setImportBusy("products");
+    try {
+      const { rows } = await parseCsvRows(file);
+      const existing = salonData.products || [];
+      const toInsert = []; let skipped = 0;
+      for (const r of rows) {
+        const name = pick(r, ["naam", "name", "product", "productnaam", "product naam", "nombre", "artikel", "omschrijving"]);
+        const price = numOf(pick(r, ["verkoopprijs", "prijs", "price", "sale price", "verkoop", "precio", "verkoopprijs (incl)"]));
+        if (!name || price === null) { skipped++; continue; }
+        const barcode = String(pick(r, ["barcode", "ean", "streepjescode", "código de barras"]) || "").trim();
+        // Duplicaat = zelfde barcode, of zelfde naam (hoofdletterongevoelig).
+        const dupe = existing.some(p =>
+          (barcode && (p.barcode || "").trim() === barcode) ||
+          (p.name_nl || "").toLowerCase() === name.toLowerCase() ||
+          (p.name_en || "").toLowerCase() === name.toLowerCase()
+        ) || toInsert.some(p => (p.name_nl || "").toLowerCase() === name.toLowerCase());
+        if (dupe) { skipped++; continue; }
+        toInsert.push({
+          owner_id: salonData.owner_id,
+          name_nl: name, name_en: name, name_es: name,
+          price,
+          purchase_price: numOf(pick(r, ["inkoopprijs", "inkoop", "cost", "purchase price", "precio compra"])),
+          stock: (() => { const v = numOf(pick(r, ["voorraad", "stock", "existencias", "aantal", "huidig"])); return v === null ? null : Math.max(0, Math.round(v)); })(),
+          min_stock: (() => { const v = numOf(pick(r, ["min. voorraad", "min voorraad", "minimum", "min", "min stock"])); return v === null ? null : Math.max(0, Math.round(v)); })(),
+          barcode: barcode || null,
+          supplier: String(pick(r, ["leverancier", "supplier", "proveedor"]) || "").trim() || null,
+          active: true,
+          position: existing.length + toInsert.length,
+        });
+      }
+      if (!toInsert.length) {
+        toast.show(lang === "nl" ? `Niets geïmporteerd — ${skipped} regel(s) overgeslagen (al aanwezig of geen naam/prijs)` : lang === "es" ? "Nada importado" : `Nothing imported — ${skipped} row(s) skipped`, "error");
+        return;
+      }
+      const { data, error } = await supabase.from("products").insert(toInsert).select();
+      if (error) { toast.show(t.somethingWrong, "error"); return; }
+      update(d => { d.products = [...(d.products || []), ...(data || [])]; return d; });
+      toast.show(lang === "nl" ? `${data.length} product(en) geïmporteerd${skipped ? ` · ${skipped} overgeslagen` : ""}` : lang === "es" ? `${data.length} producto(s) importado(s)` : `${data.length} product(s) imported${skipped ? ` · ${skipped} skipped` : ""}`);
+    } catch (e) {
+      console.error("product import:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setImportBusy(null); }
+  };
+
+  // Voorbeeldbestand zodat de salon weet welke kolommen we verwachten.
+  const downloadImportTemplate = (kind) => {
+    if (kind === "products") {
+      downloadCsv([
+        ["Naam", "Verkoopprijs", "Inkoopprijs", "Barcode", "Voorraad", "Min. voorraad", "Leverancier"],
+        ["Nagelriemolie", "12,50", "5,50", "8718964012345", "10", "2", "Beauty Distri"],
+      ], "vellu-voorbeeld-producten.csv");
+    } else {
+      downloadCsv([
+        ["Naam", "E-mail", "Telefoon", "Notitie"],
+        ["Anna de Vries", "anna@voorbeeld.nl", "0612345678", "Houdt van korte nagels"],
+      ], "vellu-voorbeeld-klanten.csv");
+    }
+  };
+
   // Voorraad-import: herkent onze eigen export (match op id) maar ook een
   // kale Excel-lijst met kolommen naam + voorraad. Lege voorraad-cellen
   // worden overgeslagen (= niet bijhouden), nooit op 0 gezet.
@@ -6839,6 +7060,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                         {walkinPay === "request" && !walkinEmail.trim() && (
                           <div style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : "Add an email — the payment request travels in the invoice email."}</div>
+                        )}
+                        {/* Vellu verwerkt zelf geen kaartbetalingen: de klant
+                            pint op de eigen betaalautomaat van de salon en hier
+                            leg je alleen vast HOE er betaald is. Alleen het
+                            betaalverzoek loopt echt via Vellu (link in de mail). */}
+                        {walkinPay !== "request" && (
+                          <div style={{ fontSize: 9.5, color: c.textMuted, lineHeight: 1.45 }}>
+                            {walkinPay === "pin"
+                              ? (lang === "nl" ? "De klant pint op je eigen betaalautomaat; Vellu legt de betaalwijze vast voor je kasoverzicht."
+                                 : lang === "es" ? "El cliente paga en tu propio datáfono; Vellu solo registra el método de pago."
+                                 : "The client pays on your own card terminal; Vellu records the payment method for your cash-up.")
+                              : (lang === "nl" ? "Contant aangenomen — Vellu legt het vast voor je kasoverzicht."
+                                 : lang === "es" ? "Efectivo recibido — Vellu lo registra para tu caja."
+                                 : "Cash taken — Vellu records it for your cash-up.")}
+                          </div>
                         )}
                         <button className="btn-primary" style={{ width: "100%", padding: "13px 16px", fontSize: 12 }}
                           disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId}
@@ -10375,6 +10611,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={stockImporting} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importStockCsv(f); }} />
                         {stockImporting ? "…" : (lang === "nl" ? "Import voorraad" : lang === "es" ? "Importar existencias" : "Import stock")}
                       </label>
+                      {/* Overstappen vanuit een andere app: hele productenlijst
+                          in één keer inlezen (duplicaten worden overgeslagen). */}
+                      <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: accent, borderColor: `${accent}44`, opacity: importBusy ? 0.5 : 1 }}>
+                        <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={!!importBusy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importProductsCsv(f); }} />
+                        <NavIcon name="upload" size={11} color="currentColor" />
+                        {importBusy === "products" ? "…" : (lang === "nl" ? "Producten importeren" : lang === "es" ? "Importar productos" : "Import products")}
+                      </label>
+                      <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: c.textMuted }} onClick={() => downloadImportTemplate("products")}>
+                        {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
+                      </button>
                     </div>
                   )}
                   <datalist id="vellu-suppliers">
@@ -12557,6 +12803,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 toast={toast}
               />
               )}
+
+              {/* Klanten-import staat BEWUST buiten de Pro-check: overstappen
+                  vanuit een andere app is onboarding, geen premium-functie. */}
+              <ClientImportBlock
+                ownerId={salonData.owner_id}
+                lang={lang}
+                c={c}
+                accent={accent}
+                toast={toast}
+              />
 
               {/* Referral program — each owner has a unique 8-char code. When
                   a new salon signs up via /owner?ref=CODE, both sides get
