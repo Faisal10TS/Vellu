@@ -3336,6 +3336,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showVouchers, setShowVouchers] = useState(false);
   const [vouchers, setVouchers] = useState(null);
   const [voucherRedeem, setVoucherRedeem] = useState({});
+  // Kadobon INWISSELEN aan de kassa: code intypen of scannen; het saldo gaat
+  // automatisch van het totaal af en wordt bij het afrekenen afgeboekt.
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemVoucher, setRedeemVoucher] = useState(null);
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  // Na het afrekenen: een bevestiging met bedrag, betaalwijze en knoppen voor
+  // bon/factuur. Zonder dat weet je alleen DAT er iets geregistreerd is.
+  const [lastSale, setLastSale] = useState(null);
+  const [saleDetail, setSaleDetail] = useState(null);
+  const [saleDeleteArm, setSaleDeleteArm] = useState(false);
+  const [receiptBusy, setReceiptBusy] = useState(false);
   const [productReportBusy, setProductReportBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(null);
   // Services filter + group collapse. A Set of category ids (the string
@@ -4481,6 +4492,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // in appointments.products — the existing invoice/analytics flows then pick
   // them up without special-casing.
   const prodName = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
+  // Productfoto: één plek voor uploaden en verwijderen, gebruikt door zowel
+  // de miniatuur in de productlijst als het foto-veld in het bewerkformulier.
+  const uploadProductPhoto = async (productId, file, ev) => {
+    if (ev && ev.target) ev.target.value = "";
+    if (!file) return;
+    setProductPhotoUploading(productId);
+    try {
+      const fileName = `${salonData.owner_id}/product_${Date.now()}.${file.name.split(".").pop()}`;
+      const compressed = await compressImage(file);
+      const { error } = await supabase.storage.from("business-images").upload(fileName, compressed);
+      if (error) { toast.show(t.somethingWrong, "error"); return; }
+      const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+      await supabase.from("products").update({ photo_url: publicUrl }).eq("id", productId);
+      update(d => { d.products = d.products.map(x => x.id === productId ? { ...x, photo_url: publicUrl } : x); return d; });
+    } catch (e) {
+      console.error("product photo:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setProductPhotoUploading(null); }
+  };
+  const removeProductPhoto = async (productId) => {
+    const { error } = await supabase.from("products").update({ photo_url: null }).eq("id", productId);
+    if (error) { toast.show(t.somethingWrong, "error"); return; }
+    update(d => { d.products = d.products.map(x => x.id === productId ? { ...x, photo_url: null } : x); return d; });
+  };
   // Best-effort: stock only decrements for products that track it (stock != null).
   // A failed decrement never blocks the sale itself.
   const decrementStock = async (items) => {
@@ -4506,10 +4541,113 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? `Onbekende barcode: ${code}` : lang === "es" ? `Código desconocido: ${code}` : `Unknown barcode: ${code}`, "error");
       return false;
     }
+    // Scannen start meteen de volgende verkoop \u2014 het bevestigingsscherm van
+    // de vorige klant mag niet in de weg blijven staan.
+    setLastSale(null);
     setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) }));
     setKassaSearch("");
     toast.show(`+1 ${prodName(p)}`);
     return true;
+  };
+
+  // ── Kadobon inwisselen ─────────────────────────────────────
+  // Zoekt de bon op code (hoofdletterongevoelig) en zet 'm klaar. Het echte
+  // afboeken gebeurt pas bij het afrekenen, zodat een afgebroken verkoop
+  // nooit saldo opsnoept.
+  const lookupVoucher = async (raw) => {
+    const code = String(raw || "").trim().toUpperCase();
+    if (!code || redeemBusy) return;
+    setRedeemBusy(true);
+    try {
+      const { data } = await supabase.from("gift_vouchers")
+        .select("id, code, amount, remaining, active")
+        .eq("owner_id", salonData.owner_id).ilike("code", code).maybeSingle();
+      if (!data) {
+        toast.show(lang === "nl" ? `Kadobon ${code} niet gevonden` : lang === "es" ? `Tarjeta ${code} no encontrada` : `Gift card ${code} not found`, "error");
+        return;
+      }
+      if (data.active === false) {
+        toast.show(lang === "nl" ? "Deze kadobon is gedeactiveerd" : lang === "es" ? "Esta tarjeta está desactivada" : "This gift card is deactivated", "error");
+        return;
+      }
+      const left = parseFloat(data.remaining) || 0;
+      if (left <= 0) {
+        toast.show(lang === "nl" ? "Deze kadobon is al helemaal gebruikt" : lang === "es" ? "Esta tarjeta ya se usó por completo" : "This gift card is already fully used", "error");
+        return;
+      }
+      setRedeemVoucher({ id: data.id, code: data.code, remaining: left });
+      setRedeemCode("");
+      toast.show(`${data.code} · ${lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} ${cur}${left.toFixed(2)}`);
+    } catch (e) {
+      console.error("voucher lookup:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setRedeemBusy(false); }
+  };
+
+  // ── Kassabon (PDF) ────────────────────────────────────────
+  // Een echte bon voor de klant: bonrol-formaat, alle regels, betaalwijze en
+  // belasting. Werkt ook zonder e-mailadres — precies het geval waarin een
+  // factuur-mail geen optie is.
+  const downloadReceipt = async (sale) => {
+    if (!sale || receiptBusy) return;
+    setReceiptBusy(true);
+    try {
+      const mod = await import("./productReport.js");
+      mod.generateReceiptPDF({
+        salon: salonData,
+        sale,
+        lang,
+        currencySymbol: cur,
+        moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
+        taxLabel: tax.label,
+        taxIdLabel: tax.idLabel,
+        taxRate: (salonData.btw_rate ?? 21) / 100,
+        showTax: !!salonData.btw_id,
+      });
+    } catch (e) {
+      console.error("receipt error:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setReceiptBusy(false); }
+  };
+
+  // Verkoop terugdraaien: voorraad terug, ingewisseld kadobonsaldo terug en
+  // een in deze bon verkochte kadobon weer ongeldig.
+  const deleteSale = async (sale) => {
+    if (!sale) return;
+    const items = Array.isArray(sale.products) ? sale.products : [];
+    try {
+      const { error } = await supabase.from("appointments").delete().eq("id", sale.id).eq("owner_id", salonData.owner_id);
+      if (error) { toast.show(t.somethingWrong, "error"); return; }
+      const back = [];
+      for (const it of items) {
+        const prod = (salonData.products || []).find(x => x.id === it.id);
+        if (!prod || prod.stock == null) continue;
+        back.push({ id: prod.id, stock: prod.stock + (parseInt(it.qty) || 1) });
+      }
+      if (back.length) {
+        await Promise.all(back.map(u => supabase.from("products").update({ stock: u.stock }).eq("id", u.id)));
+        update(d => { d.products = d.products.map(x => { const u = back.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
+      }
+      for (const it of items) {
+        if (!it.voucher_id) continue;
+        if (it.kind === "voucher_redeem") {
+          const { data: v } = await supabase.from("gift_vouchers").select("amount, remaining").eq("id", it.voucher_id).maybeSingle();
+          if (v) {
+            const restored = Math.min(parseFloat(v.amount) || 0, (parseFloat(v.remaining) || 0) + Math.abs(parseFloat(it.price) || 0));
+            await supabase.from("gift_vouchers").update({ remaining: +restored.toFixed(2) }).eq("id", it.voucher_id);
+          }
+        } else if (it.kind === "voucher_sale") {
+          await supabase.from("gift_vouchers").update({ active: false, remaining: 0 }).eq("id", it.voucher_id);
+        }
+      }
+      update(d => { d.appointments = d.appointments.filter(a => a.id !== sale.id); return d; });
+      setSaleDetail(null); setSaleDeleteArm(false);
+      if (lastSale && lastSale.id === sale.id) setLastSale(null);
+      toast.show(lang === "nl" ? "Verkoop verwijderd — voorraad teruggeboekt" : lang === "es" ? "Venta eliminada — stock restaurado" : "Sale deleted — stock restored");
+    } catch (e) {
+      console.error("delete sale:", e);
+      toast.show(t.somethingWrong, "error");
+    }
   };
 
   // ── Walk-in/kassa-verkoop: producten en/of een kadobon, zonder afspraak.
@@ -4530,23 +4668,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (voucherAmt > 0) {
       const alphabet = "ACDEFGHJKLMNPQRSTUVWXYZ23456789";
       voucherCode = "KB-" + Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => alphabet[b % alphabet.length]).join("");
-      const { error: vErr } = await supabase.from("gift_vouchers").insert({
+      const { data: vRow, error: vErr } = await supabase.from("gift_vouchers").insert({
         owner_id: salonData.owner_id, code: voucherCode, amount: voucherAmt, remaining: voucherAmt,
         buyer_name: walkinName.trim() || null, buyer_email: walkinEmail.trim().toLowerCase() || null,
-      });
+      }).select().single();
       if (vErr) { toast.show(t.somethingWrong, "error"); return; }
-      items.push({ id: "giftcard", name: `${lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"} ${voucherCode}`, price: voucherAmt, qty: 1 });
+      items.push({ id: "giftcard", kind: "voucher_sale", voucher_id: vRow ? vRow.id : null, name: `${lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"} ${voucherCode}`, price: voucherAmt, qty: 1 });
     }
     const saleTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
-    const saleLabel = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    // Kadobon inwisselen. De omzet is al geboekt toen de bon VERKOCHT werd, dus
+    // dit deel mag niet nog een keer meetellen: het komt als negatieve regel in
+    // de verkoop en verlaagt zo zowel het te betalen bedrag als de omzet.
+    let redeemAmt = 0;
+    if (redeemVoucher && saleTotal > 0) {
+      // Vers ophalen — tussendoor kan de bon elders al gebruikt zijn.
+      const { data: fresh } = await supabase.from("gift_vouchers").select("remaining, active").eq("id", redeemVoucher.id).maybeSingle();
+      const left = fresh && fresh.active !== false ? (parseFloat(fresh.remaining) || 0) : 0;
+      redeemAmt = Math.min(left, saleTotal);
+      if (redeemAmt <= 0) {
+        toast.show(lang === "nl" ? "Deze kadobon heeft geen saldo meer" : lang === "es" ? "Esta tarjeta ya no tiene saldo" : "This gift card has no balance left", "error");
+        setRedeemVoucher(null);
+        return;
+      }
+      const { error: rErr } = await supabase.from("gift_vouchers")
+        .update({ remaining: +(left - redeemAmt).toFixed(2) }).eq("id", redeemVoucher.id);
+      if (rErr) { toast.show(t.somethingWrong, "error"); return; }
+      items.push({
+        id: "voucher_redeem", kind: "voucher_redeem", voucher_id: redeemVoucher.id,
+        name: `${lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"} ${redeemVoucher.code} ${lang === "nl" ? "ingewisseld" : lang === "es" ? "canjeada" : "redeemed"}`,
+        price: -redeemAmt, qty: 1,
+      });
+    }
+    const netTotal = +(saleTotal - redeemAmt).toFixed(2);
+    const saleLabel = items.filter(it => it.kind !== "voucher_redeem").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
     {
       const now = new Date();
       const pad2 = (n) => String(n).padStart(2, "0");
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
-        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}`,
-        service_price: +saleTotal.toFixed(2),
+        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${redeemAmt > 0 ? ` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${cur}${redeemAmt.toFixed(2)})` : ""}`,
+        service_price: netTotal,
         service_duration: 0,
         date: fmt(getToday()),
         time: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
@@ -4556,6 +4718,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // betaalverzoek-blok mee. Contant/pin = al betaald → kale factuur/bon.
         payment_method: walkinPay === "request" ? "online" : walkinPay,
         status: "completed",
+        // Pin/contant is op dat moment afgerekend → meteen als betaald
+        // gemarkeerd. Een betaalverzoek blijft openstaan tot je 'm afvinkt.
+        paid_at: (walkinPay === "request" && netTotal > 0) ? null : new Date().toISOString(),
         invoice_sent: false,
         // Kassa-verkoop, geen afspraak: telt mee in omzet/facturen/analytics
         // maar wordt uit alle agenda-weergaven gefilterd.
@@ -4568,14 +4733,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher("");
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode("");
+      // Bevestiging in beeld houden: bedrag, betaalwijze en knoppen voor de bon.
+      setLastSale(data);
       if (voucherCode) toast.show(lang === "nl" ? `Kadobon ${voucherCode} aangemaakt (${cur}${voucherAmt.toFixed(2)})` : lang === "es" ? `Tarjeta ${voucherCode} creada` : `Gift card ${voucherCode} created`);
       // Kassa: met een e-mailadres gaat de factuur/bon er direct achteraan —
       // afrekenen en factureren is dan één handeling, zoals bij Sara.
       if (row.client_email) {
         await sendInvoiceWith(data.id, null, data);
       } else {
-        toast.show(lang === "nl" ? "Verkoop geregistreerd" : lang === "es" ? "Venta registrada" : "Sale recorded");
+        toast.show(`${lang === "nl" ? "Afgerekend" : lang === "es" ? "Cobrado" : "Checked out"} · ${cur}${netTotal.toFixed(2)}`);
       }
       return;
     }
@@ -5817,6 +5984,118 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         />
       )}
 
+      {/* Verkoop-detail — klik op een regel bij "Vandaag verkocht". Achter de
+          balie moet je een aanslag kunnen nakijken, een bon meegeven, de
+          factuur alsnog mailen of een misser terugdraaien. */}
+      {saleDetail && createPortal((() => {
+        const sale = (salonData.appointments || []).find(a => a.id === saleDetail.id) || saleDetail;
+        const lines = Array.isArray(sale.products) ? sale.products : [];
+        const amt = (it) => (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
+        const gross = lines.filter(it => amt(it) > 0).reduce((x, it) => x + amt(it), 0);
+        const redeemed = lines.filter(it => amt(it) < 0).reduce((x, it) => x + Math.abs(amt(it)), 0);
+        // Producten aangeslagen op een behandeling: die behandeling zit wel in
+        // het totaal maar niet in products. Toon 'm dan als eigen regel.
+        const rest = Math.round(((parseFloat(sale.service_price) || 0) - (gross - redeemed)) * 100) / 100;
+        const payTxt = sale.payment_method === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
+          : sale.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request")
+          : (lang === "es" ? "Tarjeta" : "Pin");
+        const close = () => { setSaleDetail(null); setSaleDeleteArm(false); };
+        const Row = ({ label, value, tone }) => (
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, padding: "4px 0", color: tone || c.textSub }}>
+            <span>{label}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
+          </div>
+        );
+        return (
+          <div onClick={close}
+               style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 345, fontFamily: "'Jost', sans-serif", color: c.text }}>
+            <div onClick={e => e.stopPropagation()}
+                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 430, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, lineHeight: 1.15 }}>
+                    <NavIcon name="kassa" size={15} color="currentColor" /> {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                    {new Date(sale.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short" })} {"·"} {sale.time}
+                  </div>
+                </div>
+                <button type="button" onClick={close} aria-label={t.close || "Sluiten"} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", padding: 2 }}>
+                  <NavIcon name="xmark" size={16} color="currentColor" />
+                </button>
+              </div>
+
+              {(sale.client_name || sale.client_email) && (
+                <div style={{ fontSize: 11, color: c.textSub, marginBottom: 10 }}>
+                  <NavIcon name="user" size={12} color="currentColor" /> {sale.client_name}
+                  {sale.client_email ? ` · ${sale.client_email}` : ""}
+                </div>
+              )}
+
+              <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14 }}>
+                {lines.length === 0 && Math.abs(rest) < 0.01 && <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Geen regels" : "No lines"}</div>}
+                {Math.abs(rest) >= 0.01 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, padding: "5px 0", borderBottom: lines.length ? `1px solid ${c.border}` : "none" }}>
+                    <span style={{ minWidth: 0 }}>{String(sale.service_name || "").split(" + ")[0]}</span>
+                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{rest.toFixed(2)}</span>
+                  </div>
+                )}
+                {lines.map((it, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, padding: "5px 0", borderBottom: i < lines.length - 1 ? `1px solid ${c.border}` : "none", color: amt(it) < 0 ? c.success : c.text }}>
+                    <span style={{ minWidth: 0 }}>{(parseInt(it.qty) || 1) > 1 ? `${it.qty}× ` : ""}{it.name}</span>
+                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{amt(it).toFixed(2)}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${c.border}` }}>
+                  {redeemed > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${cur}${(gross + Math.max(0, rest)).toFixed(2)}`} />}
+                  {redeemed > 0 && <Row label={lang === "nl" ? "Kadobon ingewisseld" : lang === "es" ? "Tarjeta canjeada" : "Gift card redeemed"} value={`−${cur}${redeemed.toFixed(2)}`} tone={c.success} />}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal" : "Total"}</span>
+                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, color: accent }}>{cur}{(parseFloat(sale.service_price) || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: c.textSub }}>{payTxt}</span>
+                {sale.staff_name && <span style={{ fontSize: 11, color: c.textMuted }}>{"·"} {String(sale.staff_name).split(",")[0].trim()}</span>}
+                {/* Betaalstatus is handmatig: Vellu ziet geen pinautomaat, dus
+                    dit vinkje is de administratie van de salon zelf. */}
+                <button type="button" onClick={() => togglePaid(sale)}
+                  style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 999, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1px solid ${sale.paid_at ? `${c.success}55` : c.inputBorder}`, background: sale.paid_at ? `${c.success}14` : "transparent", color: sale.paid_at ? c.success : c.textMuted }}>
+                  {sale.paid_at ? (lang === "nl" ? "Betaald" : lang === "es" ? "Pagada" : "Paid") : (lang === "nl" ? "Markeer als betaald" : lang === "es" ? "Marcar como pagada" : "Mark as paid")}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 7, marginTop: 16, flexWrap: "wrap" }}>
+                <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale)}>
+                  <NavIcon name="download" size={12} color="currentColor" /> {lang === "nl" ? "Bonnetje (PDF)" : lang === "es" ? "Recibo (PDF)" : "Receipt (PDF)"}
+                </button>
+                <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: (!sale.client_email || !!processingApptId) ? 0.45 : 1 }}
+                  disabled={!sale.client_email || !!processingApptId}
+                  title={!sale.client_email ? (lang === "nl" ? "Geen e-mailadres bij deze verkoop" : "No email on this sale") : ""}
+                  onClick={() => sendInvoice(sale.id)}>
+                  <NavIcon name="mail" size={12} color="currentColor" /> {sale.invoice_sent ? (lang === "nl" ? "Factuur opnieuw" : lang === "es" ? "Reenviar factura" : "Resend invoice") : (lang === "nl" ? "Factuur mailen" : lang === "es" ? "Enviar factura" : "Email invoice")}
+                </button>
+              </div>
+
+              {/* Terugdraaien in twee stappen — dit haalt ook de voorraad en
+                  het kadobonsaldo terug, dus geen per-ongeluk-klik. */}
+              <button className="btn-ghost" style={{ width: "100%", marginTop: 7, padding: "10px 12px", fontSize: 11, color: c.danger, borderColor: saleDeleteArm ? c.danger : undefined }}
+                onClick={() => { if (saleDeleteArm) deleteSale(sale); else setSaleDeleteArm(true); }}>
+                <NavIcon name="ban" size={12} color="currentColor" /> {saleDeleteArm
+                  ? (lang === "nl" ? "Zeker weten? Klik nog een keer" : lang === "es" ? "¿Seguro? Haz clic otra vez" : "Sure? Click again")
+                  : (lang === "nl" ? "Verkoop verwijderen" : lang === "es" ? "Eliminar venta" : "Delete sale")}
+              </button>
+              <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+                {lang === "nl" ? "Verwijderen zet de voorraad terug en geeft een ingewisselde kadobon zijn saldo terug."
+                  : lang === "es" ? "Al eliminar se restaura el stock y el saldo de la tarjeta canjeada."
+                  : "Deleting restores the stock and refunds a redeemed gift card's balance."}
+              </div>
+            </div>
+          </div>
+        );
+      })(), document.body)}
+
       {/* Kadobonnen-beheer: saldo bekijken en afboeken wanneer een klant de
           bon inwisselt (bij een behandeling of losse verkoop). */}
       {showVouchers && createPortal((
@@ -6951,7 +7230,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       }).map(p => {
                         const qty = productSaleSel[p.id] || 0;
                         return (
-                          <div key={p.id} onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) }))}
+                          <div key={p.id} onClick={() => { if (lastSale) setLastSale(null); setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) })); }}
                             style={{ position: "relative", cursor: "pointer", padding: 10, borderRadius: 14, background: qty > 0 ? `${accent}10` : c.bg, border: `1.5px solid ${qty > 0 ? accent : c.border}`, textAlign: "center", transition: "all 0.15s" }}>
                             {qty > 0 && <div style={{ position: "absolute", top: 6, right: 6, minWidth: 20, height: 20, borderRadius: 10, background: accent, color: c.btnOnDark, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{qty}</div>}
                             {p.photo_url
@@ -7003,7 +7282,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const amt = (a.products || []).reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0);
                           const what = (a.products || []).map(it => (parseInt(it.qty) || 1) > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
                           return (
-                            <div key={a.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>
+                            <div key={a.id} role="button" tabIndex={0}
+                              onClick={() => { setSaleDeleteArm(false); setSaleDetail(a); }}
+                              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSaleDeleteArm(false); setSaleDetail(a); } }}
+                              title={lang === "nl" ? "Openen: bon, factuur of verwijderen" : lang === "es" ? "Abrir: recibo, factura o eliminar" : "Open: receipt, invoice or delete"}
+                              style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: `1px solid ${c.border}`, fontSize: 11, cursor: "pointer" }}>
                               <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
                               <span style={{ flex: 1, minWidth: 0, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{what}</span>
                               <span style={{ color: c.textMuted, flexShrink: 0, fontSize: 10 }}>{[a.staff_name ? String(a.staff_name).split(",")[0].trim() : "", payLabel(a.payment_method)].filter(Boolean).join(" · ")}</span>
@@ -7027,10 +7310,60 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
                   <SL>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Checkout"}</SL>
                   {(() => {
+                    // Net afgerekend? Dan wordt dit vak de bevestiging: bedrag,
+                    // betaalstatus, de regels en een bon voor de klant. Een toast
+                    // alleen is te weinig om op af te gaan achter de balie.
+                    if (lastSale) {
+                      const sale = (salonData.appointments || []).find(a => a.id === lastSale.id) || lastSale;
+                      const lines = Array.isArray(sale.products) ? sale.products : [];
+                      const payTxt = sale.payment_method === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
+                        : sale.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request")
+                        : (lang === "es" ? "Tarjeta" : "Pin");
+                      return (
+                        <div>
+                          <div style={{ textAlign: "center", padding: "4px 0 12px" }}>
+                            <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${c.success}1a`, border: `1px solid ${c.success}55`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                              <NavIcon name="check" size={17} color={c.success} />
+                            </div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent, lineHeight: 1.1 }}>{cur}{(parseFloat(sale.service_price) || 0).toFixed(2)}</div>
+                            <div style={{ fontSize: 11, color: sale.paid_at ? c.success : c.warning, marginTop: 3 }}>
+                              {sale.paid_at
+                                ? `${lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"} · ${payTxt} · ${sale.time}`
+                                : `${lang === "nl" ? "Nog niet betaald" : lang === "es" ? "Pendiente de pago" : "Not paid yet"} · ${payTxt}`}
+                            </div>
+                            {sale.invoice_sent && sale.client_email && (
+                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>{lang === "nl" ? "Factuur gemaild naar" : lang === "es" ? "Factura enviada a" : "Invoice emailed to"} {sale.client_email}</div>
+                            )}
+                          </div>
+                          <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 9 }}>
+                            {lines.map((it, i) => (
+                              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, padding: "3px 0", color: (parseFloat(it.price) || 0) < 0 ? c.success : c.textSub }}>
+                                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(parseInt(it.qty) || 1) > 1 ? `${it.qty}× ` : ""}{it.name}</span>
+                                <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{((parseFloat(it.price) || 0) * (parseInt(it.qty) || 1)).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 14 }}>
+                            <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale)}>
+                              <NavIcon name="download" size={12} color="currentColor" /> {lang === "nl" ? "Bonnetje (PDF)" : lang === "es" ? "Recibo (PDF)" : "Receipt (PDF)"}
+                            </button>
+                            <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11 }} onClick={() => { setSaleDeleteArm(false); setSaleDetail(sale); }}>
+                              <NavIcon name="note" size={12} color="currentColor" /> {lang === "nl" ? "Details, factuur of corrigeren" : lang === "es" ? "Detalles, factura o corregir" : "Details, invoice or fix"}
+                            </button>
+                            <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 12 }} onClick={() => setLastSale(null)}>
+                              {lang === "nl" ? "Volgende klant" : lang === "es" ? "Siguiente cliente" : "Next customer"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
                     const voucherAmt = parseFloat(kassaVoucher) || 0;
                     const items = sel.map(([pid, qty]) => { const p = (salonData.products || []).find(x => x.id === pid); return p ? { p, qty } : null; }).filter(Boolean);
-                    const tot = items.reduce((s, it) => s + (parseFloat(it.p.price) || 0) * it.qty, 0) + voucherAmt;
+                    const gross = items.reduce((s, it) => s + (parseFloat(it.p.price) || 0) * it.qty, 0) + voucherAmt;
+                    // Een ingewisselde kadobon betaalt hooguit het hele mandje.
+                    const redeemPreview = redeemVoucher ? Math.min(redeemVoucher.remaining, gross) : 0;
+                    const tot = +(gross - redeemPreview).toFixed(2);
                     return (<>
                       {items.length === 0 && voucherAmt <= 0 && (
                         <div style={{ fontSize: 11, color: c.textMuted, padding: "10px 0" }}>{lang === "nl" ? "Tik producten aan of scan ze — ze verschijnen hier." : lang === "es" ? "Toca o escanea productos — aparecen aquí." : "Tap or scan products — they show up here."}</div>
@@ -7050,8 +7383,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <span style={{ color: accent }}>{cur}{voucherAmt.toFixed(2)}</span>
                         </div>
                       )}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "12px 0" }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal" : "Total"}</span>
+                      {/* Kadobon INWISSELEN. Het saldo gaat hier al van het
+                          totaal af; pas bij Afrekenen wordt het echt afgeboekt,
+                          zodat een afgebroken verkoop geen saldo opsnoept. */}
+                      {(items.length > 0 || voucherAmt > 0) && (
+                        <div style={{ marginTop: 10 }}>
+                          {redeemVoucher ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, background: `${c.success}0f`, border: `1px solid ${c.success}44` }}>
+                              <NavIcon name="gift" size={13} color={c.success} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{redeemVoucher.code}</div>
+                                <div style={{ fontSize: 9.5, color: c.textMuted }}>
+                                  {lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} {cur}{redeemVoucher.remaining.toFixed(2)}
+                                  {redeemPreview < redeemVoucher.remaining ? ` · ${lang === "nl" ? "blijft over" : lang === "es" ? "queda" : "left over"} ${cur}${(redeemVoucher.remaining - redeemPreview).toFixed(2)}` : ""}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: 12, color: c.success, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{"−"}{cur}{redeemPreview.toFixed(2)}</span>
+                              <button type="button" aria-label={lang === "nl" ? "Kadobon loskoppelen" : "Remove gift card"} onClick={() => setRedeemVoucher(null)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>{"×"}</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input className="input-field" value={redeemCode}
+                                onChange={e => setRedeemCode(e.target.value.toUpperCase())}
+                                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); lookupVoucher(redeemCode); } }}
+                                placeholder={lang === "nl" ? "Kadobon inwisselen (code)" : lang === "es" ? "Canjear tarjeta (código)" : "Redeem gift card (code)"}
+                                style={{ flex: 1, fontSize: 11 }} />
+                              <button type="button" className="btn-ghost" disabled={!redeemCode.trim() || redeemBusy} onClick={() => lookupVoucher(redeemCode)}
+                                style={{ padding: "0 12px", fontSize: 10, flexShrink: 0, opacity: (!redeemCode.trim() || redeemBusy) ? 0.45 : 1 }}>
+                                {lang === "nl" ? "Toepassen" : lang === "es" ? "Aplicar" : "Apply"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {redeemPreview > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textMuted, marginTop: 12 }}>
+                          <span>{lang === "nl" ? "Subtotaal" : "Subtotal"}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{cur}{gross.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: redeemPreview > 0 ? "2px 0 12px" : "12px 0" }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{redeemPreview > 0 ? (lang === "nl" ? "Nog te betalen" : lang === "es" ? "A pagar" : "Left to pay") : (lang === "nl" ? "Totaal" : "Total")}</span>
                         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{cur}{tot.toFixed(2)}</span>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -10672,6 +11044,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               setNl={v => setEditProductForm(f => ({...f, description_nl: v}))} setEn={v => setEditProductForm(f => ({...f, description_en: v}))}
                               lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
                           </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 5, display: "block" }}>
+                              {lang === "nl" ? "Foto (optioneel)" : lang === "es" ? "Foto (opcional)" : "Photo (optional)"}
+                            </label>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <label style={{ width: 58, height: 58, flexShrink: 0, borderRadius: 12, overflow: "hidden", background: c.inputBg, border: `1.5px dashed ${accent}55`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                                {productPhotoUploading === p.id
+                                  ? <span style={{ fontSize: 9, color: c.textMuted }}>{"\u2026"}</span>
+                                  : p.photo_url
+                                    ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    : <NavIcon name="camera" size={18} color={accent} />}
+                                <input type="file" accept="image/*" style={{ display: "none" }} onChange={ev => uploadProductPhoto(p.id, ev.target.files[0], ev)} />
+                              </label>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>
+                                  {lang === "nl" ? "Te zien op je boekingspagina en in de kassa \u2014 sneller aantikken bij het afrekenen."
+                                    : lang === "es" ? "Se ve en tu p\u00e1gina de reservas y en la caja \u2014 m\u00e1s r\u00e1pido de tocar al cobrar."
+                                    : "Shows on your booking page and in the till \u2014 quicker to tap at checkout."}
+                                </div>
+                                {p.photo_url && (
+                                  <button type="button" className="btn-ghost" style={{ marginTop: 6, padding: "6px 10px", fontSize: 10, color: c.danger }} onClick={() => removeProductPhoto(p.id)}>
+                                    {lang === "nl" ? "Foto verwijderen" : lang === "es" ? "Eliminar foto" : "Remove photo"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                             <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Verkoopprijs (${cur}) *` : lang === "es" ? `Precio venta (${cur}) *` : `Sale price (${cur}) *`}</label>
@@ -10721,21 +11120,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
                           <label style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", cursor: "pointer", position: "relative" }} title={lang === "nl" ? "Foto uploaden" : lang === "es" ? "Subir foto" : "Upload photo"}>
                             {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 13, display: "inline-flex" }}>{productPhotoUploading === p.id ? "…" : <NavIcon name="bag" size={15} color="c.textMuted" />}</span>}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
-                              const file = e.target.files[0];
-                              if (!file) return;
-                              setProductPhotoUploading(p.id);
-                              try {
-                                const fileName = `${salonData.owner_id}/product_${Date.now()}.${file.name.split(".").pop()}`;
-                                const compressed = await compressImage(file);
-                                const { error } = await supabase.storage.from("business-images").upload(fileName, compressed);
-                                if (!error) {
-                                  const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                                  await supabase.from("products").update({ photo_url: publicUrl }).eq("id", p.id);
-                                  update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, photo_url: publicUrl } : x); return d; });
-                                }
-                              } finally { setProductPhotoUploading(null); }
-                            }} />
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={ev => uploadProductPhoto(p.id, ev.target.files[0], ev)} />
                           </label>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl)}</div>

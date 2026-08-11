@@ -84,10 +84,13 @@ export function generateProductReportPDF({
     for (const it of items) {
       const qty = parseInt(it.qty) || 1;
       const rev = (parseFloat(it.price) || 0) * qty;
-      rowRevenue += rev; rowQty += qty;
+      // Een ingewisselde kadobon is een negatieve regel: die hoort wel in het
+      // geld (er kwam minder binnen) maar is geen verkocht stuk.
+      const counts = rev >= 0 && it.kind !== "voucher_redeem";
+      rowRevenue += rev; rowQty += counts ? qty : 0;
       names.push(qty > 1 ? `${s(it.name)} ×${qty}` : s(it.name));
       const p = byProduct.get(s(it.name)) || { qty: 0, revenue: 0 };
-      p.qty += qty; p.revenue += rev;
+      p.qty += counts ? qty : 0; p.revenue += rev;
       byProduct.set(s(it.name), p);
     }
     const d = byDay.get(a.date) || { qty: 0, revenue: 0 };
@@ -273,4 +276,148 @@ export function generateProductReportPDF({
   doc.save(filename);
 
   return { filename, totalRevenue, totalQty, transactions: lines.length };
+}
+
+
+/**
+ * Kassabon (bonnetje) voor één verkoop — bonrol-formaat (80 mm), hoogte groeit
+ * mee met het aantal regels. Dit is wat de klant meekrijgt als er geen
+ * e-mailadres is: wat is er gekocht, wat is er betaald en hoe.
+ *
+ * @param {object} o
+ * @param {object} o.salon  profiel (business_name, address, kvk_number, btw_id, slug)
+ * @param {object} o.sale   de appointments-rij van de verkoop (products, service_price, ...)
+ */
+export function generateReceiptPDF({
+  salon, sale, lang = "nl",
+  currencySymbol = "\u20ac", moneyLocale = "nl-NL",
+  taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
+}) {
+  const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
+  const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const payLabel = (pm) => (PAY_LABEL[lang] || PAY_LABEL.nl)[pm] || (PAY_LABEL[lang] || PAY_LABEL.nl)["on-arrival"];
+
+  const W = 226;      // 80 mm in pt
+  const m = 14;
+  const nameW = 134;
+
+  const items = (Array.isArray(sale.products) ? sale.products : []).map((it) => {
+    const qty = parseInt(it.qty) || 1;
+    return { qty, name: s(it.name), amount: (parseFloat(it.price) || 0) * qty };
+  });
+  let gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
+  let redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  const total = Number(sale.service_price);
+  const grandTotal = Number.isFinite(total) ? total : gross - redeemed;
+  // Zijn de producten op een BEHANDELING aangeslagen? Dan zit de behandeling
+  // wel in het totaal maar niet in products \u2014 zonder deze regel telt de bon
+  // niet op. Het verschil krijgt gewoon zijn eigen regel.
+  const rest = Math.round((grandTotal - (gross - redeemed)) * 100) / 100;
+  if (Math.abs(rest) >= 0.01) {
+    items.unshift({ qty: 1, name: s(sale.service_name || T("Behandeling", "Treatment", "Tratamiento")).split(" + ")[0], amount: rest });
+    gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
+    redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  }
+
+  // Eerst meten met een wegwerp-doc, dan pas de bon op maat maken — anders is
+  // een bon met twee producten een halve lege pagina.
+  const probe = new jsPDF({ unit: "pt", format: [W, 400] });
+  probe.setFont("helvetica", "normal");
+  probe.setFontSize(8);
+  const wrapped = items.map((it) => probe.splitTextToSize(`${it.qty > 1 ? it.qty + " x " : ""}${it.name}`, nameW));
+  const itemLines = wrapped.reduce((n, l) => n + l.length, 0);
+
+  const head = [s(salon.address), s(salon.city), s(salon.phone)].filter(Boolean);
+  const ids = [];
+  if (salon.kvk_number) ids.push(`KVK ${s(salon.kvk_number)}`);
+  if (showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
+
+  const H = 22 + 14 + head.length * 10 + (ids.length ? 12 : 0) + 12
+    + 11 + (sale.client_name ? 11 : 0) + 10
+    + itemLines * 11 + 10
+    + (redeemed > 0 ? 22 : 0) + 15 + (showTax ? 11 : 0) + 10
+    + 11 + (sale.payment_method === "online" ? 11 : 0) + (sale.staff_name ? 11 : 0)
+    + 14 + 12 + 12 + 16;
+
+  const doc = new jsPDF({ unit: "pt", format: [W, Math.round(H)] });
+  let y = 22;
+
+  const centre = (txt, size, style, color, gap) => {
+    doc.setFont("helvetica", style); doc.setFontSize(size); doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(txt, W / 2, y, { align: "center" });
+    y += gap;
+  };
+  const pair = (left, right, size, style, color, gap) => {
+    doc.setFont("helvetica", style); doc.setFontSize(size); doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(left, m, y);
+    doc.text(right, W - m, y, { align: "right" });
+    y += gap;
+  };
+  const rule = () => {
+    doc.setDrawColor(205, 205, 205); doc.setLineWidth(0.5);
+    doc.line(m, y - 5, W - m, y - 5);
+    y += 5;
+  };
+
+  // Kop
+  centre(s(salon.business_name || salon.name || "Vellu"), 12, "bold", [26, 23, 20], 14);
+  for (const h of head) centre(h, 7.5, "normal", [125, 125, 125], 10);
+  if (ids.length) centre(ids.join("   "), 7, "normal", [150, 150, 150], 12);
+  else y += 2;
+  rule();
+
+  // Wanneer + bonnummer
+  const shortId = String(sale.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
+  pair(`${fmtDate(sale.date, lang)}  ${s(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${shortId}`, 7.5, "normal", [125, 125, 125], 11);
+  if (sale.client_name) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(125, 125, 125);
+    doc.text(s(sale.client_name), m, y); y += 11;
+  }
+  rule();
+
+  // Regels
+  items.forEach((it, idx) => {
+    const ls = wrapped[idx];
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    if (it.amount < 0) doc.setTextColor(70, 130, 90); else doc.setTextColor(40, 40, 40);
+    ls.forEach((l, k) => {
+      doc.text(l, m, y);
+      // Negatief bedrag als "-€25,00" en niet als "€-25,00".
+      if (k === ls.length - 1) doc.text(it.amount < 0 ? `-${money(Math.abs(it.amount))}` : money(it.amount), W - m, y, { align: "right" });
+      y += 11;
+    });
+  });
+  rule();
+
+  // Totalen
+  if (redeemed > 0) {
+    pair(T("Subtotaal", "Subtotal", "Subtotal"), money(gross), 8, "normal", [125, 125, 125], 11);
+    pair(T("Kadobon", "Gift card", "Tarjeta regalo"), `-${money(redeemed)}`, 8, "normal", [70, 130, 90], 11);
+  }
+  pair(T("TOTAAL", "TOTAL", "TOTAL"), money(grandTotal), 11, "bold", [26, 23, 20], 15);
+  if (showTax) {
+    const net = grandTotal / (1 + (Number(taxRate) || 0));
+    pair(`${T("Incl.", "Incl.", "Inc.")} ${Math.round((Number(taxRate) || 0) * 100)}% ${taxLabel}`, money(grandTotal - net), 7.5, "normal", [150, 150, 150], 11);
+  }
+  rule();
+
+  // Betaling
+  pair(T("Betaald met", "Paid with", "Pagado con"), payLabel(sale.payment_method), 8, "normal", [40, 40, 40], 11);
+  if (sale.payment_method === "online") {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(165, 130, 60);
+    doc.text(T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago"), m, y);
+    y += 11;
+  }
+  if (sale.staff_name) pair(T("Verkocht door", "Sold by", "Vendido por"), String(sale.staff_name).split(",")[0].trim(), 7.5, "normal", [125, 125, 125], 11);
+  y += 3;
+  rule();
+
+  centre(T("Bedankt en tot ziens!", "Thank you, see you soon!", "\u00a1Gracias, hasta pronto!"), 8, "normal", [125, 125, 125], 12);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
+  doc.text(`vellu.cc${salon.slug ? "/" + salon.slug : ""}`, W / 2, y, { align: "center" });
+
+  const filename = `bon-${s(sale.date)}-${shortId || "vellu"}.pdf`;
+  doc.save(filename);
+  return { filename, total: grandTotal, redeemed, lines: items.length };
 }
