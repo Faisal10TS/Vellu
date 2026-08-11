@@ -4588,7 +4588,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Een echte bon voor de klant: bonrol-formaat, alle regels, betaalwijze en
   // belasting. Werkt ook zonder e-mailadres — precies het geval waarin een
   // factuur-mail geen optie is.
-  const downloadReceipt = async (sale) => {
+  // mode "print" opent direct het printvenster (bonprinter aan de balie),
+  // "save" downloadt de PDF om te mailen of te bewaren.
+  const downloadReceipt = async (sale, mode = "save") => {
     if (!sale || receiptBusy) return;
     setReceiptBusy(true);
     try {
@@ -4596,6 +4598,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       mod.generateReceiptPDF({
         salon: salonData,
         sale,
+        output: mode,
         lang,
         currencySymbol: cur,
         moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
@@ -6067,8 +6070,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               <div style={{ display: "flex", gap: 7, marginTop: 16, flexWrap: "wrap" }}>
-                <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale)}>
-                  <NavIcon name="download" size={12} color="currentColor" /> {lang === "nl" ? "Bonnetje (PDF)" : lang === "es" ? "Recibo (PDF)" : "Receipt (PDF)"}
+                <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, color: accent, borderColor: `${accent}55`, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "print")}>
+                  <NavIcon name="printer" size={13} color="currentColor" /> {lang === "nl" ? "Bon printen" : lang === "es" ? "Imprimir recibo" : "Print receipt"}
+                </button>
+                <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "save")}>
+                  <NavIcon name="download" size={12} color="currentColor" /> {lang === "nl" ? "Bon als PDF" : lang === "es" ? "Recibo en PDF" : "Receipt as PDF"}
                 </button>
                 <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: (!sale.client_email || !!processingApptId) ? 0.45 : 1 }}
                   disabled={!sale.client_email || !!processingApptId}
@@ -7344,9 +7350,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             ))}
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 14 }}>
-                            <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale)}>
-                              <NavIcon name="download" size={12} color="currentColor" /> {lang === "nl" ? "Bonnetje (PDF)" : lang === "es" ? "Recibo (PDF)" : "Receipt (PDF)"}
-                            </button>
+                            {/* Printen staat vooraan: dat is wat de klant aan de
+                                balie meekrijgt. De PDF is voor mailen/bewaren. */}
+                            <div style={{ display: "flex", gap: 7 }}>
+                              <button className="btn-ghost" style={{ flex: 2, padding: "11px 12px", fontSize: 11, color: accent, borderColor: `${accent}55`, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "print")}>
+                                <NavIcon name="printer" size={13} color="currentColor" /> {lang === "nl" ? "Bon printen" : lang === "es" ? "Imprimir recibo" : "Print receipt"}
+                              </button>
+                              <button className="btn-ghost" style={{ flex: 1, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "save")} title={lang === "nl" ? "Bon downloaden als PDF" : "Download receipt as PDF"}>
+                                <NavIcon name="download" size={12} color="currentColor" /> PDF
+                              </button>
+                            </div>
                             <button className="btn-ghost" style={{ padding: "11px 14px", fontSize: 11 }} onClick={() => { setSaleDeleteArm(false); setSaleDetail(sale); }}>
                               <NavIcon name="note" size={12} color="currentColor" /> {lang === "nl" ? "Details, factuur of corrigeren" : lang === "es" ? "Detalles, factura o corregir" : "Details, invoice or fix"}
                             </button>

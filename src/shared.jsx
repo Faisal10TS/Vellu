@@ -1992,6 +1992,8 @@ function NavIcon({ name, size = 18, color = "currentColor" }) {
     plus: <svg {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
     download: <svg {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
     upload: <svg {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+    // Bonprinter aan de balie: papier erin boven, bonnetje eruit onder.
+    printer: <svg {...props}><polyline points="6 9 6 2.5 18 2.5 18 9"/><path d="M6 17.5H4.5A2.5 2.5 0 012 15v-3.5A2.5 2.5 0 014.5 9h15A2.5 2.5 0 0122 11.5V15a2.5 2.5 0 01-2.5 2.5H18"/><rect x="6" y="14" width="12" height="7.5" rx="1"/></svg>,
     share: <svg {...props}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
     copy: <svg {...props}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
     eye: <svg {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,

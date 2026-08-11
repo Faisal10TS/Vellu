@@ -292,6 +292,7 @@ export function generateReceiptPDF({
   salon, sale, lang = "nl",
   currencySymbol = "\u20ac", moneyLocale = "nl-NL",
   taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
+  output = "save",
 }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
   const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -418,6 +419,26 @@ export function generateReceiptPDF({
   doc.text(`vellu.cc${salon.slug ? "/" + salon.slug : ""}`, W / 2, y, { align: "center" });
 
   const filename = `bon-${s(sale.date)}-${shortId || "vellu"}.pdf`;
-  doc.save(filename);
+  if (output === "print") {
+    // autoPrint() zet een OpenAction in de PDF: zodra een viewer 'm laadt
+    // springt het printvenster open. Via een onzichtbare iframe blijft de kassa
+    // gewoon in beeld — geen tabblad dat de balie-medewerker moet wegklikken.
+    doc.autoPrint();
+    const url = doc.output("bloburl");
+    try {
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;";
+      frame.src = url;
+      document.body.appendChild(frame);
+      // Ruim opruimen: de blob mag pas weg als het printvenster klaar is.
+      setTimeout(() => { try { frame.remove(); URL.revokeObjectURL(url); } catch { /* al opgeruimd */ } }, 120000);
+    } catch {
+      // Blokkeert de browser de iframe, dan alsnog een tabblad.
+      window.open(url, "_blank");
+    }
+  } else {
+    doc.save(filename);
+  }
   return { filename, total: grandTotal, redeemed, lines: items.length };
 }
