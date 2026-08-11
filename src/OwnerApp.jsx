@@ -3342,6 +3342,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // "__uncat" for services without a category) that are currently hidden.
   const [serviceSearch, setServiceSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  // Salons met veel diensten (TTNB heeft er 18 in 7 categorieën) kregen een
+  // eindeloze lijst te zien. Start daarom ingeklapt: één keer, zodra de
+  // diensten binnen zijn — daarna houdt de eigenaar zelf de regie.
+  const groupsInitialised = useRef(false);
+  useEffect(() => {
+    if (groupsInitialised.current) return;
+    const svcs = salonData?.services || [];
+    if (svcs.length === 0) return;
+    groupsInitialised.current = true;
+    const init = new Set();
+    for (const s of svcs) init.add(s.category_id || "__uncat");
+    setCollapsedGroups(init);
+  }, [salonData?.services]);
   const [editingLocation, setEditingLocation] = useState(null);
   const [editLocForm, setEditLocForm] = useState({ name: "", address: "", city: "", phone: "" });
   const [editSvcForm, setEditSvcForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "", category_id: "" });
@@ -10594,6 +10607,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       })()}
                     </div>
                   )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                    {/* Importeren + voorbeeldbestand staan ALTIJD hier: juist een
+                        salon die overstapt heeft nog nul producten. */}
+                    <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: accent, borderColor: `${accent}44`, opacity: importBusy ? 0.5 : 1 }}>
+                      <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={!!importBusy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importProductsCsv(f); }} />
+                      <NavIcon name="upload" size={11} color="currentColor" />
+                      {importBusy === "products" ? "…" : (lang === "nl" ? "Producten importeren" : lang === "es" ? "Importar productos" : "Import products")}
+                    </label>
+                    <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: c.textMuted }} onClick={() => downloadImportTemplate("products")}>
+                      {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
+                    </button>
+                  </div>
                   {(salonData.products || []).length > 0 && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
                       {(() => {
@@ -10611,16 +10636,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={stockImporting} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importStockCsv(f); }} />
                         {stockImporting ? "…" : (lang === "nl" ? "Import voorraad" : lang === "es" ? "Importar existencias" : "Import stock")}
                       </label>
-                      {/* Overstappen vanuit een andere app: hele productenlijst
-                          in één keer inlezen (duplicaten worden overgeslagen). */}
-                      <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: accent, borderColor: `${accent}44`, opacity: importBusy ? 0.5 : 1 }}>
-                        <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={!!importBusy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importProductsCsv(f); }} />
-                        <NavIcon name="upload" size={11} color="currentColor" />
-                        {importBusy === "products" ? "…" : (lang === "nl" ? "Producten importeren" : lang === "es" ? "Importar productos" : "Import products")}
-                      </label>
-                      <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: c.textMuted }} onClick={() => downloadImportTemplate("products")}>
-                        {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
-                      </button>
                     </div>
                   )}
                   <datalist id="vellu-suppliers">
