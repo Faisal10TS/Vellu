@@ -18,8 +18,11 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow
 } from "./shared.jsx";
+// Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
+// genoeg om gewoon mee te bundelen — jsPDF blijft lazy.
+import { computeTax, linesFromSale, buildSnapshot, taxForSale } from "./taxEngine.js";
 
 // PDF generator is lazy-loaded on first use — see RevenueReportBlock.download().
 // This keeps jsPDF (~400KB) out of the initial owner dashboard bundle.
@@ -965,13 +968,15 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       // tax-inclusive; the report only breaks out tax when the salon is tax-
       // registered (has a tax id) and a rate > 0 — same rule as the invoice.
       const _money = currencyForCountry(salonData.country_code);
-      const _tax = taxForCountry(salonData.country_code);
-      const _rate = (parseFloat(salonData.btw_rate ?? 21) || 0) / 100;
+      const _tax = resolveTax(salonData);
       const result = mod.generateRevenueReportPDF({
         salon: salonData, appointments: inRange, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
-        taxLabel: _tax.label, taxIdLabel: _tax.idLabel, taxRate: _rate, showTax: !!salonData.btw_id && _rate > 0,
+        taxCfg: _tax,
+        // Losse velden blijven meegaan voor de kop en als terugval.
+        taxLabel: _tax.label, taxIdLabel: _tax.idLabel,
+        taxRate: _tax.serviceRate / 100, showTax: _tax.showTaxInternal,
       });
       toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : lang === "es" ? `PDF descargado (${result.count} citas)` : `PDF downloaded (${result.count} appointments)`);
     } catch (e) {
@@ -3535,6 +3540,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           kvk_number: data.kvk_number || "",
           btw_id: data.btw_id || "",
           btw_rate: data.btw_rate ?? 21,
+          // Belasting per jurisdictie. `?? null` en niet `?? true`, zodat
+          // resolveTax het verschil ziet tussen "niet ingesteld" (val terug op
+          // de landregel) en "bewust uitgezet".
+          tax_registered: data.tax_registered ?? null,
+          tax_region: data.tax_region || null,
+          products_taxable: data.products_taxable ?? null,
+          product_tax_rate: data.product_tax_rate ?? null,
+          next_receipt_number: data.next_receipt_number ?? 1,
           iban: data.iban || "",
           iban_holder: data.iban_holder || "",
           payment_link: data.payment_link || "",
@@ -3726,7 +3739,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const cur = curSym(salonData.country_code);
   // Tax presentation for this salon's country (label + fiscal-number label +
   // default rate). NL/BE → BTW/BTW-id, Bonaire → ABB/CRIB, etc.
-  const tax = taxForCountry(salonData.country_code);
+  const tax = taxForCountry(salonData.country_code, salonData.tax_region);
+  // Alles wat rekent leest hiervandaan, nooit rechtstreeks btw_rate: resolveTax
+  // weet dat een doorverkocht product op de BES-eilanden onbelast is, dat Aruba
+  // het bedrag niet op een klantdocument mag zetten en dat een leeg tariefveld
+  // geen 0% betekent.
+  const taxCfg = resolveTax(salonData);
   // SEPA/euro region? The automatic payment-QR (EPC069-12) only works for
   // euro/SEPA banks, so for non-SEPA regions (Bonaire/Aruba/Curaçao, whose
   // banks don't even issue IBANs) we relabel the account field and drop the QR.
@@ -4602,10 +4620,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         lang,
         currencySymbol: cur,
         moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
-        taxLabel: tax.label,
         taxIdLabel: tax.idLabel,
-        taxRate: (salonData.btw_rate ?? 21) / 100,
-        showTax: !!salonData.btw_id,
+        taxCfg,
+        receiptNumber: sale.receipt_number ?? null,
       });
     } catch (e) {
       console.error("receipt error:", e);
@@ -4707,6 +4724,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     {
       const now = new Date();
       const pad2 = (n) => String(n).padStart(2, "0");
+      const receiptNo = parseInt(salonData.next_receipt_number) || 1;
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
@@ -4731,9 +4749,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         products: items,
         staff_id: walkinStaff || null,
         staff_name: walkinStaff ? ((salonData.staff || []).find(s => s.id === walkinStaff)?.name || null) : null,
+        // Doorlopend bonnummer: een vereenvoudigde factuur vereist dat, en een
+        // afgekapte UUID is niet oplopend.
+        receipt_number: receiptNo,
+        // De berekening bevriezen. Verhoogt de salon volgend jaar zijn tarief,
+        // dan mag de bon van vandaag niet meebewegen — die is al uitgereikt.
+        tax_snapshot: buildSnapshot(
+          computeTax(linesFromSale({ products: items, service_price: netTotal }), taxCfg),
+          taxCfg,
+          { country: salonData.country_code, region: salonData.tax_region || null, currency: cur, at: new Date().toISOString() },
+        ),
       };
       const { data, error } = await supabase.from("appointments").insert(row).select().single();
       if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+      // Nummer pas ophogen als de verkoop echt is weggeschreven, anders ontstaan
+      // er gaten in de reeks bij een mislukte aanslag.
+      supabase.from("profiles").update({ next_receipt_number: receiptNo + 1 }).eq("id", salonData.owner_id)
+        .then(() => update(d => { d.next_receipt_number = receiptNo + 1; return d; }));
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
       setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode("");
@@ -4807,10 +4839,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         lang,
         currencySymbol: cur,
         moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
-        taxLabel: tax.label,
         taxIdLabel: tax.idLabel,
-        taxRate: (salonData.btw_rate ?? 21) / 100,
-        showTax: !!salonData.btw_id,
+        taxCfg,
       });
     } catch (e) {
       console.error("product report error:", e);
@@ -5076,7 +5106,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // so the client never has to type it (other providers pass through).
           payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (salonData.payment_link || ""), a.service_price),
           salon_accent: salonData.accent || "",
-          salon_btw_rate: salonData.btw_rate ?? 21,
+          // 0 als het bedrag niet op een klantdocument mag (Aruba). Zo laat ook
+          // een nog niet bijgewerkte factuurmail de belastingregel weg — de
+          // deploy van de edge-functie mag hier nooit de enige beveiliging zijn.
+          salon_btw_rate: taxCfg.showTax ? taxCfg.serviceRate : 0,
+          // Nieuw contract: de mail rekent niet meer zelf met één tarief maar
+          // krijgt de kant-en-klare uitsplitsing. show_tax_line is false op
+          // Aruba, waar het bedrag niet op een factuur mag staan.
+          tax_lines: (() => {
+            const t = taxForSale(a, taxCfg);
+            return t.byRate.map((r) => ({ rate: r.rate, gross: r.gross, net: r.net, tax: r.tax }));
+          })(),
+          show_tax_line: taxCfg.showTax,
+          tax_items: (() => {
+            const t = taxForSale(a, taxCfg);
+            return t.lines.map((l) => ({ kind: l.kind, name: l.name, qty: l.qty || 1, gross: l.gross, rate: l.rate }));
+          })(),
           salon_logo: salonData.logo_url || "",
           // Currency + tax label from the salon's country → invoice shows $ / ABB
           // for a Bonaire salon (send-emails defaults to € / BTW if omitted).
@@ -10014,7 +10059,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{tax.idLabel === "BTW-id" ? t.btwId : tax.idLabel}</div>
-                      <input className="input-field" placeholder={tax.idLabel === "BTW-id" ? "NL123456789B01" : ""} value={salonData.btw_id || ""} onChange={e => update(d => { d.btw_id = e.target.value; return d; })} style={{ width: "100%" }} />
+                      <input className="input-field" placeholder={tax.idLabel === "BTW-id" ? "NL123456789B01" : ""} value={salonData.btw_id || ""}
+                        onChange={e => update(d => {
+                          d.btw_id = e.target.value;
+                          // Vult iemand een fiscaal nummer in, dan is de kans
+                          // groot dat hij ook belastingplichtig is. Zet de
+                          // schakelaar hieronder alvast aan \u2014 hij kan hem zelf
+                          // weer uitzetten, en dat blijft dan staan.
+                          if (e.target.value.trim() && !d.tax_registered) d.tax_registered = true;
+                          return d;
+                        })} style={{ width: "100%" }} />
                       <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.idLabel === "BTW-id"
                         ? (lang === "nl" ? "Je BTW-identificatienummer (optioneel)." : lang === "es" ? "Tu número de IVA (opcional)." : "Your VAT ID (optional).")
                         : tax.idLabel === "CRIB"
@@ -10029,13 +10083,161 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ? (lang === "nl" ? "Je IBAN (optioneel) — komt op de factuur en wordt gebruikt voor de betaal-QR." : lang === "es" ? "Tu IBAN (opcional) — se muestra en la factura y se usa para el QR de pago." : "Your IBAN (optional) — shown on the invoice and used for the payment QR.")
                       : (lang === "nl" ? "Je lokale bankrekeningnummer (optioneel) — komt op de factuur zodat klanten kunnen overmaken." : lang === "es" ? "Tu número de cuenta bancaria local (opcional) — se muestra en la factura para que los clientes puedan transferir." : "Your local bank account number (optional) — shown on the invoice so clients can transfer.")}</div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? `${tax.label}-percentage` : lang === "es" ? `Porcentaje de ${tax.label}` : `${tax.label} percentage`}</div>
-                    <input className="input-field" type="number" min="0" max="100" step="1" placeholder={String(tax.defaultRate)} value={salonData.btw_rate ?? 21} onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })} style={{ width: "100%" }} />
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.label === "BTW"
-                      ? (lang === "nl" ? "21% voor nagels/schoonheid, 9% voor reguliere kappersdiensten. Wordt op de factuur als BTW-regel getoond zodra je een BTW-id hebt ingevuld." : lang === "es" ? "21% para uñas/belleza, 9% para servicios típicos de peluquería. Se muestra como una línea de IVA en la factura una vez que hayas introducido un número de IVA." : "21% for nails/beauty, 9% for typical hairdresser services. Shown as a VAT line on the invoice once you've entered a BTW-id.")
-                      : (lang === "nl" ? `Wordt op de factuur als ${tax.label}-regel getoond zodra je een ${tax.idLabel} hebt ingevuld.` : lang === "es" ? `Se muestra como una línea de ${tax.label} en la factura cuando hayas introducido un ${tax.idLabel}.` : `Shown as a ${tax.label} line on the invoice once you've entered a ${tax.idLabel}.`)}</div>
-                  </div>
+                  {/* \u2500\u2500 Belasting \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+                      Vellu bepaalt niets zelf: het toont per land een standaard
+                      en laat de eigenaar bevestigen. De regels verschillen echt
+                      \u2014 op de BES-eilanden is een behandeling belast en een
+                      doorverkocht product niet, en op Aruba mag het bedrag
+                      helemaal niet op een klantfactuur staan. */}
+                  {(() => {
+                    const regions = TAX_REGIONS_BY_COUNTRY[salonData.country_code] || null;
+                    const cc = salonData.country_code || "NL";
+                    const isBQ = cc === "BQ";
+                    const isAW = cc === "AW";
+                    const isCW = cc === "CW";
+                    const registered = !!taxCfg.registered;
+                    const prodTaxable = !!taxCfg.productsTaxable;
+                    const L = tax.label;
+                    const Toggle = ({ on, onClick, label, hint }) => (
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0" }}>
+                        <button type="button" role="switch" aria-checked={on} onClick={onClick}
+                          style={{ width: 40, height: 23, flexShrink: 0, marginTop: 1, borderRadius: 999, border: "none", cursor: "pointer", padding: 2, background: on ? accent : c.inputBorder, transition: "background 0.15s" }}>
+                          <span style={{ display: "block", width: 19, height: 19, borderRadius: "50%", background: "#fff", transform: on ? "translateX(17px)" : "translateX(0)", transition: "transform 0.15s" }} />
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{label}</div>
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.55 }}>{hint}</div>
+                        </div>
+                      </div>
+                    );
+                    return (
+                      <div style={{ border: `1px solid ${c.border}`, borderRadius: 14, padding: 16 }}>
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                          {lang === "nl" ? "Belasting" : lang === "es" ? "Impuestos" : "Tax"}
+                        </div>
+
+                        {/* Eiland: BQ dekt drie eilanden met verschillende tarieven. */}
+                        {regions && (
+                          <div style={{ marginBottom: 4 }}>
+                            <div style={{ fontSize: 9, color: c.textLabel, margin: "10px 0 5px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                              {lang === "nl" ? "Eiland" : lang === "es" ? "Isla" : "Island"}
+                            </div>
+                            <select className="input-field" style={{ width: "100%" }}
+                              value={salonData.tax_region || "BQ-BON"}
+                              onChange={e => update(d => {
+                                d.tax_region = e.target.value;
+                                // Tarief meebewegen met het eiland, tenzij de
+                                // eigenaar zelf iets anders had ingevuld.
+                                const r = taxRuleFor(d.country_code, e.target.value);
+                                d.btw_rate = r.serviceRate ?? d.btw_rate;
+                                return d;
+                              })}>
+                              {regions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.55 }}>
+                              {lang === "nl" ? "Bonaire, Saba en Sint Eustatius vallen onder hetzelfde land maar hebben verschillende ABB-tarieven. Kies waar je salon staat \u2014 dat bepaalt het tarief, ook voor toeristen."
+                                : lang === "es" ? "Bonaire, Saba y San Eustaquio comparten pa\u00eds pero tienen tipos de ABB distintos. Elige d\u00f3nde est\u00e1 tu sal\u00f3n \u2014 eso determina el tipo, tambi\u00e9n para turistas."
+                                : "Bonaire, Saba and Sint Eustatius share a country code but have different ABB rates. Pick where your salon is \u2014 that sets the rate, tourists included."}
+                            </div>
+                          </div>
+                        )}
+
+                        <Toggle on={registered}
+                          onClick={() => update(d => { d.tax_registered = !registered; return d; })}
+                          label={lang === "nl" ? `Ik breng ${L} in rekening` : lang === "es" ? `Cobro ${L}` : `I charge ${L}`}
+                          hint={lang === "nl" ? `Zet dit aan als je bij de Belastingdienst geregistreerd bent en ${L} moet afdragen. Weet je het niet zeker? Vraag het je boekhouder \u2014 Vellu kan dit niet voor je bepalen.`
+                            : lang === "es" ? `Act\u00edvalo si est\u00e1s registrado en la oficina tributaria y debes pagar ${L}. \u00bfNo est\u00e1s seguro? Pregunta a tu contable \u2014 Vellu no puede determinarlo.`
+                            : `Turn this on if you're registered with the tax authority and have to remit ${L}. Not sure? Ask your accountant \u2014 Vellu can't determine this for you.`} />
+
+                        {!registered && (
+                          <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.55, padding: "0 0 4px 52px" }}>
+                            {lang === "nl" ? `Er komt geen ${L}-regel op je bonnen, facturen en rapporten. Je blijft wel verplicht een bon of factuur uit te reiken.`
+                              : lang === "es" ? `No aparecer\u00e1 ninguna l\u00ednea de ${L} en tus recibos, facturas ni informes. Sigues obligado a entregar un recibo o factura.`
+                              : `No ${L} line will appear on your receipts, invoices and reports. You are still required to issue a receipt or invoice.`}
+                          </div>
+                        )}
+
+                        {registered && (<>
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                              {lang === "nl" ? `${L} op behandelingen (%)` : lang === "es" ? `${L} en tratamientos (%)` : `${L} on treatments (%)`}
+                            </div>
+                            <input className="input-field" type="number" min="0" max="100" step="0.5"
+                              placeholder={String(taxCfg.suggestedRate ?? "")}
+                              value={salonData.btw_rate ?? ""}
+                              onChange={e => update(d => { d.btw_rate = e.target.value === "" ? "" : parseFloat(e.target.value); return d; })}
+                              style={{ width: "100%" }} />
+                            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.55 }}>
+                              {isBQ ? (taxCfg.serviceRate === 4
+                                  ? (lang === "nl" ? "Op Saba en Sint Eustatius is het ABB-tarief voor diensten 4%. Een salonbehandeling is een dienst, ook als je klant een toerist is."
+                                     : lang === "es" ? "En Saba y San Eustaquio el ABB sobre servicios es del 4%. Un tratamiento es un servicio, tambi\u00e9n para turistas."
+                                     : "On Saba and Sint Eustatius the ABB rate for services is 4%. A salon treatment is a service, also when your client is a tourist.")
+                                  : (lang === "nl" ? "Op Bonaire is het ABB-tarief voor diensten 6%. Een salonbehandeling is een dienst, ook als je klant een toerist is \u2014 er is geen vrijstelling voor buitenlandse klanten."
+                                     : lang === "es" ? "En Bonaire el ABB sobre servicios es del 6%. Un tratamiento es un servicio, tambi\u00e9n para turistas."
+                                     : "On Bonaire the ABB rate for services is 6%. A salon treatment is a service, also when your client is a tourist \u2014 there is no exemption for foreign clients."))
+                                : isAW ? (lang === "nl" ? "Op Aruba geldt sinds 1 januari 2023 \u00e9\u00e9n gecombineerd tarief van 7% (BBO 2,5% + BAVP 1,5% + BAZV 3%). Je prijzen zijn inclusief dit tarief; Vellu telt er nooit iets bovenop."
+                                     : lang === "es" ? "En Aruba rige desde el 1 de enero de 2023 un tipo combinado del 7% (BBO 2,5% + BAVP 1,5% + BAZV 3%). Tus precios lo incluyen; Vellu nunca lo a\u00f1ade encima."
+                                     : "Aruba has had one combined rate of 7% since 1 January 2023 (BBO 2.5% + BAVP 1.5% + BAZV 3%). Your prices include it; Vellu never adds it on top.")
+                                : isCW ? (lang === "nl" ? "Het algemene OB-tarief op Cura\u00e7ao is 6%, maar er bestaan ook tarieven van 0%, 7% en 9%. Wij hebben niet kunnen vaststellen waar salondiensten onder vallen. Vul in wat je boekhouder of de Belastingdienst je opgeeft."
+                                     : lang === "es" ? "El tipo general de OB en Cura\u00e7ao es del 6%, pero tambi\u00e9n existen 0%, 7% y 9%. No hemos podido determinar cu\u00e1l se aplica a los servicios de sal\u00f3n. Introduce lo que te indique tu contable."
+                                     : "The general OB rate on Cura\u00e7ao is 6%, but 0%, 7% and 9% also exist. We could not establish which applies to salon services. Enter what your accountant or the tax authority tells you.")
+                                : (lang === "nl" ? "Het tarief dat je over je behandelingen afdraagt. Knippen en nagels/schoonheid vallen niet altijd onder hetzelfde tarief \u2014 laat je boekhouder bevestigen wat voor jouw diensten geldt."
+                                   : lang === "es" ? "El tipo que pagas sobre tus tratamientos. Pregunta a tu contable qu\u00e9 tipo aplica a tus servicios."
+                                   : "The rate you remit on your treatments. Haircutting and nails/beauty don't always fall under the same rate \u2014 have your accountant confirm which applies to your services.")}
+                            </div>
+                          </div>
+
+                          <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 12 }}>
+                            <Toggle on={prodTaxable}
+                              onClick={() => update(d => { d.products_taxable = !prodTaxable; return d; })}
+                              label={lang === "nl" ? `Ik breng ${L} in rekening over verkochte producten` : lang === "es" ? `Cobro ${L} sobre los productos que vendo` : `I charge ${L} on products I sell`}
+                              hint={isBQ ? (lang === "nl" ? "Op de BES-eilanden is de verkoop van een product alleen belast als je zelf producent bent. Verkoop je ingekochte producten door (shampoo, nagellak), dan breng je daar g\u00e9\u00e9n ABB over in rekening \u2014 die is al bij invoer betaald en zit in je inkoopprijs. Laat dit uit, tenzij je boekhouder zegt dat je producent bent."
+                                     : lang === "es" ? "En las islas BES la venta de un producto solo tributa si eres productor. Si revendes productos comprados, no cobras ABB \u2014 ya se pag\u00f3 en la importaci\u00f3n. D\u00e9jalo desactivado salvo que tu contable diga lo contrario."
+                                     : "On the BES islands selling a product is only taxable if you are a producer yourself. If you resell products you bought in, you do not charge ABB \u2014 it was already paid on import and sits in your cost price. Leave this off unless your accountant says you are a producer.")
+                                : isAW ? (lang === "nl" ? "Op Aruba is de doorverkoop van een ge\u00efmporteerd product volledig belast tegen 7%, ook als je bij invoer al BBO hebt betaald. Die invoer-BBO haal je terug via je maandaangifte, niet via de bon. Laat dit dus aan staan."
+                                     : lang === "es" ? "En Aruba la reventa de un producto importado tributa al 7%, aunque ya pagaras BBO en la importaci\u00f3n. Eso se recupera en la declaraci\u00f3n mensual, no en el recibo. D\u00e9jalo activado."
+                                     : "On Aruba the resale of an imported product is fully taxable at 7%, even if you already paid BBO on import. You recover that through your monthly return, not on the receipt. Leave this on.")
+                                : isCW ? (lang === "nl" ? "Op Cura\u00e7ao is de doorverkoop van een ge\u00efmporteerd product belast, ook als je bij invoer al OB hebt betaald. Bij invoer geldt een ander tarief dan bij verkoop; laat je boekhouder bevestigen welk tarief je bij verkoop hanteert."
+                                     : lang === "es" ? "En Cura\u00e7ao la reventa de un producto importado tributa, aunque ya pagaras OB en la importaci\u00f3n. Confirma con tu contable qu\u00e9 tipo aplicas en la venta."
+                                     : "On Cura\u00e7ao the resale of an imported product is taxable, even if you already paid OB on import. Import and sale carry different rates; have your accountant confirm the rate you apply on sale.")
+                                : (lang === "nl" ? "Verkoop je producten tegen een ander tarief dan je behandelingen? Vul dat hieronder in. Laat je het leeg, dan geldt het tarief van je behandelingen."
+                                   : lang === "es" ? "\u00bfVendes productos con un tipo distinto al de tus tratamientos? Introd\u00facelo abajo. Si lo dejas vac\u00edo se aplica el de los tratamientos."
+                                   : "Do you sell products at a different rate than your treatments? Enter it below. Leave it empty and your treatment rate applies.")} />
+                            {prodTaxable && (
+                              <div style={{ padding: "0 0 4px 52px" }}>
+                                <input className="input-field" type="number" min="0" max="100" step="0.5"
+                                  placeholder={`${lang === "nl" ? "gelijk aan behandelingen" : lang === "es" ? "igual que tratamientos" : "same as treatments"} (${taxCfg.serviceRate}%)`}
+                                  value={salonData.product_tax_rate ?? ""}
+                                  onChange={e => update(d => { d.product_tax_rate = e.target.value === "" ? null : parseFloat(e.target.value); return d; })}
+                                  style={{ width: "100%" }} />
+                              </div>
+                            )}
+                          </div>
+                        </>)}
+
+                        {/* Aruba: niet uitzetbaar, want het is geen voorkeur maar een verbod. */}
+                        {isAW && registered && (
+                          <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: `${c.warning}12`, border: `1px solid ${c.warning}40`, fontSize: 10, color: c.textSub, lineHeight: 1.55 }}>
+                            <NavIcon name="alerttri" size={12} color={c.warning} />{" "}
+                            {lang === "nl" ? "Op Aruba mag het bedrag aan BBO/BAVP/BAZV sinds 1 januari 2019 niet apart op de factuur worden vermeld. Vellu laat de belastingregel op je bonnen en facturen daarom weg. Je omzetrapport toont hem w\u00e9l \u2014 dat is voor jou en je boekhouder, niet voor je klant."
+                              : lang === "es" ? "En Aruba el importe de BBO/BAVP/BAZV no puede figurar por separado en la factura desde el 1 de enero de 2019. Vellu lo omite en recibos y facturas. Tu informe de ingresos s\u00ed lo muestra \u2014 eso es para ti y tu contable."
+                              : "On Aruba the BBO/BAVP/BAZV amount may not be stated separately on the invoice since 1 January 2019. Vellu therefore omits the tax line from your receipts and invoices. Your revenue report does show it \u2014 that is for you and your accountant."}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 12, fontSize: 10, color: c.textMuted, lineHeight: 1.6 }}>
+                          {lang === "nl" ? "Je prijzen zijn altijd inclusief belasting. Vellu telt nooit een percentage bovenop de prijs die je klant ziet \u2014 op de bon wordt de belasting eruit teruggerekend. Dat is in Nederland en Belgi\u00eb gebruikelijk en op Bonaire, Aruba en Cura\u00e7ao wettelijk verplicht."
+                            : lang === "es" ? "Tus precios siempre incluyen impuestos. Vellu nunca a\u00f1ade un porcentaje encima del precio que ve tu cliente \u2014 en el recibo se calcula hacia atr\u00e1s. Es la pr\u00e1ctica habitual en Pa\u00edses Bajos y B\u00e9lgica y obligatorio en Bonaire, Aruba y Cura\u00e7ao."
+                            : "Your prices always include tax. Vellu never adds a percentage on top of the price your client sees \u2014 on the receipt it is calculated back out. That is standard in the Netherlands and Belgium and legally required on Bonaire, Aruba and Cura\u00e7ao."}
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 9.5, color: c.textMuted, lineHeight: 1.6, opacity: 0.85 }}>
+                          {lang === "nl" ? "Vellu geeft geen fiscaal advies. De tarieven en labels hier zijn standaardwaarden op basis van je land en eiland, geen bevestiging dat ze voor jouw salon gelden. Of je belastingplichtig bent, welk tarief van toepassing is en of je in aanmerking komt voor een ontheffing bepaalt de Belastingdienst \u2014 niet Vellu. Laat je instellingen bevestigen door je boekhouder voordat je de eerste factuur verstuurt."
+                            : lang === "es" ? "Vellu no ofrece asesoramiento fiscal. Los tipos y etiquetas aqu\u00ed son valores por defecto seg\u00fan tu pa\u00eds e isla, no una confirmaci\u00f3n de que se apliquen a tu sal\u00f3n. Consulta a tu contable antes de enviar tu primera factura."
+                            : "Vellu does not provide tax advice. The rates and labels here are defaults based on your country and island, not confirmation that they apply to your salon. Whether you are liable, which rate applies and whether you qualify for an exemption are decided by the tax authority \u2014 not by Vellu. Have your accountant confirm your settings before you send your first invoice."}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
@@ -13284,7 +13486,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   address: salonData.address || null,
                   kvk_number: salonData.kvk_number || null,
                   btw_id: salonData.btw_id || null,
-                  btw_rate: salonData.btw_rate === "" || salonData.btw_rate == null ? 21 : salonData.btw_rate,
+                  // Leeg tariefveld: terugvallen op het landtarief, niet op 21 —
+                  // dat zou een Bonaire-salon op het Nederlandse tarief zetten.
+                  btw_rate: salonData.btw_rate === "" || salonData.btw_rate == null
+                    ? (taxRuleFor(salonData.country_code, salonData.tax_region).serviceRate ?? 0)
+                    : salonData.btw_rate,
+                  tax_registered: !!salonData.tax_registered,
+                  tax_region: salonData.tax_region || null,
+                  products_taxable: salonData.products_taxable == null
+                    ? taxRuleFor(salonData.country_code, salonData.tax_region).productsTaxable
+                    : !!salonData.products_taxable,
+                  product_tax_rate: salonData.product_tax_rate === "" || salonData.product_tax_rate == null ? null : salonData.product_tax_rate,
                   iban: salonData.iban || null,
                   iban_holder: salonData.iban_holder || null,
                   payment_link: salonData.payment_link || null,

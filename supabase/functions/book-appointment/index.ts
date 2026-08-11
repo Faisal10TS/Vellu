@@ -700,7 +700,10 @@ serve(async (req) => {
     // Currency symbol from the salon's country (mirrors shared.jsx CURRENCIES) —
     // so a Bonaire client's confirmation shows $ instead of €. send-emails
     // defaults to € when this is absent.
-    currency: ({ BQ: "$", AW: "Afl. ", CW: "NAf. ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
+    // CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
+    // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet
+    // terugzetten naar "NAf." — dat geld bestaat niet meer.
+    currency: ({ BQ: "$", AW: "Afl. ", CW: "Cg ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
   let emailsSent = false;

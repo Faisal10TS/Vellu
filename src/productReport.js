@@ -14,9 +14,12 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { computeTax, linesFromSale, taxForSale } from "./taxEngine.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e
 const s = (v) => (v === null || v === undefined ? "" : String(v));
+// 6 in plaats van 6.0, maar 8.5 blijft 8.5 \u2014 tarieven zijn niet altijd rond.
+const fmtPct = (r) => String(Math.round((Number(r) || 0) * 100) / 100);
 
 const MONTHS = {
   nl: ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"],
@@ -55,11 +58,16 @@ const PAY_LABEL = {
 export function generateProductReportPDF({
   salon, appointments, range, lang = "nl",
   currencySymbol = "€", moneyLocale = "nl-NL",
-  taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
+  taxIdLabel = "BTW-id", taxCfg = null,
 }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const taxPct = Math.round((Number(taxRate) || 0) * 100);
+  const cfg = taxCfg || {};
+  const taxLabel = cfg.label || "BTW";
+  // Dit is een INTERN stuk voor de eigenaar en zijn boekhouder. Op Aruba mag
+  // het belastingbedrag niet op een klantfactuur, maar hier hoort het juist
+  // wel te staan \u2014 vandaar showTaxInternal en niet showTax.
+  const showTax = !!cfg.showTaxInternal;
   const payLabel = (pm) => (PAY_LABEL[lang] || PAY_LABEL.nl)[pm] || (PAY_LABEL[lang] || PAY_LABEL.nl)["on-arrival"];
 
   const pageW = doc.internal.pageSize.getWidth();
@@ -74,6 +82,11 @@ export function generateProductReportPDF({
   const byDay = new Map();       // date -> { qty, revenue }
   const byPay = new Map();       // payment_method -> { count, revenue }
   const lines = [];              // flat transaction lines for the detail table
+  // Grondslag per tarief. Nodig omdat \u00e9\u00e9n periode meerdere tarieven kan
+  // bevatten: op de BES-eilanden is een behandeling belast en een doorverkocht
+  // product niet, en in NL kan een salon 9% op diensten en 21% op producten
+  // hanteren. Een enkel percentage over het totaal klopt dan nooit.
+  const byRate = new Map();      // tarief -> grondslag in centen
   let totalRevenue = 0, totalQty = 0;
 
   for (const a of appointments) {
@@ -101,6 +114,21 @@ export function generateProductReportPDF({
     pm.count += 1; pm.revenue += rowRevenue;
     byPay.set(a.payment_method || "on-arrival", pm);
 
+    // Belasting over de PRODUCTregels van deze rij. De motor weet zelf welke
+    // regels belast zijn; een ingewisselde kadobon is een betaalmiddel en telt
+    // niet mee in de grondslag.
+    {
+      const t = computeTax(items.map((it) => {
+        const q = parseInt(it.qty) || 1;
+        return {
+          kind: it.kind === "voucher_redeem" ? "voucher"
+            : (it.kind === "voucher_sale" || it.id === "giftcard") ? "voucher_issue"
+            : "product",
+          name: s(it.name), qty: q, gross: (parseFloat(it.price) || 0) * q,
+        };
+      }), cfg);
+      for (const r of t.byRate) byRate.set(r.rate, (byRate.get(r.rate) || 0) + Math.round(r.gross * 100));
+    }
     totalRevenue += rowRevenue; totalQty += rowQty;
     lines.push({
       date: a.date, time: a.time || "",
@@ -113,8 +141,15 @@ export function generateProductReportPDF({
   }
   lines.sort((x, y) => (`${x.date} ${x.time}`).localeCompare(`${y.date} ${y.time}`));
 
-  const totalNet = showTax ? totalRevenue / (1 + taxRate) : totalRevenue;
-  const totalTax = totalRevenue - totalNet;
+  // Afronden op rapportniveau per tarief, zodat netto + belasting exact
+  // optellen tot de grondslag \u2014 nooit per regel afronden en dan sommeren.
+  const rateRows = [...byRate.entries()].sort((a, b) => b[0] - a[0]).map(([rate, grossC]) => {
+    const netC = Math.round(grossC / (1 + rate / 100));
+    return { rate, gross: grossC / 100, net: netC / 100, tax: (grossC - netC) / 100 };
+  });
+  const taxableGross = rateRows.reduce((n, r) => n + r.gross, 0);
+  const totalTax = rateRows.reduce((n, r) => n + r.tax, 0);
+  const totalNet = totalRevenue - totalTax;
 
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -163,9 +198,11 @@ export function generateProductReportPDF({
     [T("Transacties", "Transactions", "Transacciones"), String(lines.length)],
     [T("Omzet", "Revenue", "Ingresos"), money(totalRevenue)],
   ];
-  if (showTax) {
+  // Maximaal vier tegels: de kolombreedte is (paginabreedte / aantal) en bij
+  // vijf tegels lopen de bedragen in elkaar. De uitsplitsing per tarief staat
+  // in de tabel eronder.
+  if (showTax && rateRows.length > 0) {
     summary.push([`${T("Excl.", "Excl.", "Sin")} ${taxLabel}`, money(totalNet)]);
-    summary.push([`${taxLabel} ${taxPct}%`, money(totalTax)]);
   }
   let sx = margin;
   const colW = (pageW - margin * 2) / summary.length;
@@ -217,6 +254,38 @@ export function generateProductReportPDF({
     });
   }
 
+  // ── Belasting per tarief ──────────────────────────────────
+  // Als tabel en niet als tegel, want de grondslag verschilt per tarief. Voor
+  // een salon op de BES-eilanden staat hier vaak niets: doorverkochte producten
+  // zijn daar onbelast. Dat is de juiste uitkomst, geen ontbrekend blok.
+  if (showTax && rateRows.length) {
+    autoTable(doc, {
+      ...tableTheme,
+      startY: doc.lastAutoTable.finalY + 22,
+      head: [[T("Tarief", "Rate", "Tipo"), T("Grondslag", "Taxable amount", "Base imponible"), T("Excl.", "Excl.", "Sin"), taxLabel]],
+      body: rateRows.map((r) => [`${fmtPct(r.rate)}%`, money(r.gross), money(r.net), money(r.tax)]),
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+      foot: rateRows.length > 1
+        ? [[T("Totaal", "Total", "Total"), money(taxableGross), money(taxableGross - totalTax), money(totalTax)]]
+        : undefined,
+    });
+    // Onbelaste omzet expliciet benoemen, anders lijkt het rapport een fout te
+    // maken: de omzet is hoger dan de grondslag.
+    const untaxed = Math.round((totalRevenue - taxableGross) * 100) / 100;
+    if (untaxed > 0.005) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        T(`Niet belast: ${money(untaxed)} — doorverkoop van producten is hier niet ${taxLabel}-plichtig.`,
+          `Untaxed: ${money(untaxed)} — reselling products is not subject to ${taxLabel} here.`,
+          `Sin impuesto: ${money(untaxed)} — la reventa de productos no est\u00e1 sujeta a ${taxLabel} aqu\u00ed.`),
+        margin, doc.lastAutoTable.finalY + 13,
+      );
+      doc.lastAutoTable.finalY += 13;
+    }
+  }
+
   // ── Per day (only useful for multi-day ranges) ───────────────────────
   if (byDay.size > 1) {
     const dayRows = [...byDay.entries()]
@@ -254,9 +323,9 @@ export function generateProductReportPDF({
       doc.setTextColor(160, 160, 160);
       doc.text(
         T(
-          `Bedragen in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}% (inbegrepen)` : ""}. Alleen productverkoop — behandelingen staan in het omzetrapport.`,
-          `Amounts in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}% (included)` : ""}. Product sales only — treatments are in the revenue report.`,
-          `Importes en ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}% (incluido)` : ""}. Solo venta de productos.`
+          `Bedragen in ${currencySymbol}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
+          `Amounts in ${currencySymbol}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon\u2019s settings; Vellu does not provide tax advice.`,
+          `Importes en ${currencySymbol}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuraci\u00f3n de este sal\u00f3n; Vellu no ofrece asesoramiento fiscal.`
         ),
         margin, pageH - 32
       );
@@ -291,7 +360,7 @@ export function generateProductReportPDF({
 export function generateReceiptPDF({
   salon, sale, lang = "nl",
   currencySymbol = "\u20ac", moneyLocale = "nl-NL",
-  taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
+  taxIdLabel = "BTW-id", taxCfg = null, receiptNumber = null,
   output = "save",
 }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
@@ -302,25 +371,26 @@ export function generateReceiptPDF({
   const m = 14;
   const nameW = 134;
 
-  const items = (Array.isArray(sale.products) ? sale.products : []).map((it) => {
-    const qty = parseInt(it.qty) || 1;
-    return { qty, name: s(it.name), amount: (parseFloat(it.price) || 0) * qty };
-  });
-  let gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
-  let redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
-  const total = Number(sale.service_price);
-  const grandTotal = Number.isFinite(total) ? total : gross - redeemed;
-  // Zijn de producten op een BEHANDELING aangeslagen? Dan zit de behandeling
-  // wel in het totaal maar niet in products \u2014 zonder deze regel telt de bon
-  // niet op. Het verschil krijgt gewoon zijn eigen regel.
-  const rest = Math.round((grandTotal - (gross - redeemed)) * 100) / 100;
-  if (Math.abs(rest) >= 0.01) {
-    items.unshift({ qty: 1, name: s(sale.service_name || T("Behandeling", "Treatment", "Tratamiento")).split(" + ")[0], amount: rest });
-    gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
-    redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
-  }
+  // De belastingmotor levert zowel de regels als de groepering per tarief. Hij
+  // weet dat een doorverkocht product op de BES-eilanden onbelast is en dat een
+  // kadobon een betaalmiddel is en geen korting \u2014 twee dingen die deze bon
+  // eerder fout deed. Een bevroren snapshot wint van de huidige instellingen,
+  // zodat het herdrukken van een oude bon niet meebeweegt met een tariefwijziging.
+  const tax = taxForSale(sale, taxCfg || {});
+  const taxLabel = tax.label || "BTW";
+  const items = tax.lines.map((l) => ({
+    qty: parseInt(l.qty) || 1,
+    name: s(l.name) || T("Behandeling", "Treatment", "Tratamiento"),
+    amount: Number(l.gross) || 0,
+  }));
+  const gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
+  const redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  const grandTotal = tax.grandTotal;
+  // Blijft leeg op Aruba: daar mag het belastingBEDRAG sinds 1-1-2019 niet
+  // apart op een document voor de klant staan.
+  const rateRows = tax.showTax ? tax.byRate : [];
 
-  // Eerst meten met een wegwerp-doc, dan pas de bon op maat maken — anders is
+  // Eerst meten met een wegwerp-doc, dan pas de bon op maat maken \u2014 anders is
   // een bon met twee producten een halve lege pagina.
   const probe = new jsPDF({ unit: "pt", format: [W, 400] });
   probe.setFont("helvetica", "normal");
@@ -331,12 +401,16 @@ export function generateReceiptPDF({
   const head = [s(salon.address), s(salon.city), s(salon.phone)].filter(Boolean);
   const ids = [];
   if (salon.kvk_number) ids.push(`KVK ${s(salon.kvk_number)}`);
-  if (showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
+  if (tax.showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
+
+  // \u00c9\u00e9n tarief past op \u00e9\u00e9n regel; bij meerdere tarieven komt er een kopregel
+  // boven, want "incl. 6% ABB" klopt dan niet meer voor de hele bon.
+  const taxBlockLines = rateRows.length === 0 ? 0 : rateRows.length === 1 ? 1 : rateRows.length + 1;
 
   const H = 22 + 14 + head.length * 10 + (ids.length ? 12 : 0) + 12
     + 11 + (sale.client_name ? 11 : 0) + 10
     + itemLines * 11 + 10
-    + (redeemed > 0 ? 22 : 0) + 15 + (showTax ? 11 : 0) + 10
+    + (redeemed > 0 ? 22 : 0) + 15 + taxBlockLines * 11 + 10
     + 11 + (sale.payment_method === "online" ? 11 : 0) + (sale.staff_name ? 11 : 0)
     + 14 + 12 + 12 + 16;
 
@@ -368,8 +442,13 @@ export function generateReceiptPDF({
   rule();
 
   // Wanneer + bonnummer
+  // Een vereenvoudigde factuur vereist een DOORLOPEND nummer. Rijen van v\u00f3\u00f3r
+  // die feature hebben er geen; die vallen terug op de afgekorte id, zodat een
+  // herdruk van een oude bon nog steeds herkenbaar is.
   const shortId = String(sale.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
-  pair(`${fmtDate(sale.date, lang)}  ${s(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${shortId}`, 7.5, "normal", [125, 125, 125], 11);
+  const docNo = receiptNumber != null ? String(receiptNumber).padStart(5, "0")
+    : (sale.receipt_number != null ? String(sale.receipt_number).padStart(5, "0") : shortId);
+  pair(`${fmtDate(sale.date, lang)}  ${s(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${docNo}`, 7.5, "normal", [125, 125, 125], 11);
   if (sale.client_name) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(125, 125, 125);
     doc.text(s(sale.client_name), m, y); y += 11;
@@ -397,9 +476,16 @@ export function generateReceiptPDF({
     pair(T("Kadobon", "Gift card", "Tarjeta regalo"), `-${money(redeemed)}`, 8, "normal", [70, 130, 90], 11);
   }
   pair(T("TOTAAL", "TOTAL", "TOTAL"), money(grandTotal), 11, "bold", [26, 23, 20], 15);
-  if (showTax) {
-    const net = grandTotal / (1 + (Number(taxRate) || 0));
-    pair(`${T("Incl.", "Incl.", "Inc.")} ${Math.round((Number(taxRate) || 0) * 100)}% ${taxLabel}`, money(grandTotal - net), 7.5, "normal", [150, 150, 150], 11);
+  // Per tarief, want \u00e9\u00e9n bon kan twee grondslagen hebben: op Bonaire is de
+  // behandeling belast en het doorverkochte product niet.
+  if (rateRows.length === 1) {
+    pair(`${T("Incl.", "Incl.", "Inc.")} ${fmtPct(rateRows[0].rate)}% ${taxLabel}`, money(rateRows[0].tax), 7.5, "normal", [150, 150, 150], 11);
+  } else if (rateRows.length > 1) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(150, 150, 150);
+    doc.text(`${T("Waarvan", "Of which", "Del cual")} ${taxLabel}:`, m, y); y += 11;
+    for (const r of rateRows) {
+      pair(`  ${fmtPct(r.rate)}% ${T("over", "on", "sobre")} ${money(r.gross)}`, money(r.tax), 7, "normal", [150, 150, 150], 11);
+    }
   }
   rule();
 

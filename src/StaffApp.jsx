@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, ownerLangFor
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -23,7 +23,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Currency symbol from the salon's country_code — all amounts staff see (their
   // revenue, service prices, client spend) show this instead of a hardcoded €.
   const cur = curSym(salonProfile.country_code);
-  const tax = taxForCountry(salonProfile.country_code);
+  // Labels voor het fiscale nummer en de belasting zelf. tax_region moet mee:
+  // één landcode (BQ) dekt Bonaire, Saba én Sint Eustatius.
+  const tax = taxForCountry(salonProfile.country_code, salonProfile.tax_region);
+  // De volledige belastingconfig van de SALON. Een medewerker factureert onder
+  // de fiscale regels van de zaak waar hij werkt, niet onder die van Nederland;
+  // hier komen dus het dienstentarief en de vraag of het bedrag überhaupt op een
+  // klantdocument mag staan (op Aruba niet) vandaan.
+  const salonTax = resolveTax(salonProfile);
+  // Buiten de SEPA-zone bestaat er geen IBAN: banken op Bonaire/Aruba/Curaçao
+  // geven gewone rekeningnummers uit. Dan past het label noch het NL-voorbeeld.
+  const isSepa = ["NL", "BE"].includes(salonProfile.country_code || "NL");
+  // Sturen op de landcode en niet op de labeltekst: België heeft "BTW-nr." en
+  // viel daardoor in de generieke tak, met een hulptekst over "belasting" in
+  // plaats van over BTW. Een label is bedoeld om gelezen te worden, niet om
+  // logica op te bouwen.
+  const isVatCountry = ["NL", "BE"].includes(salonProfile.country_code || "NL");
   // When the owner enabled "team sees each other's agenda", the dashboard +
   // agenda show the whole salon with a per-stylist filter; otherwise only
   // this stylist's own appointments (the default).
@@ -369,7 +384,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // Exact invoice amount appended for bunq.me/PayPal.Me links.
         payment_link: getPaymentLinkWithAmount(invoiceForm.payment_link || "", a.service_price),
         salon_accent: salonProfile.accent_color || "",
-        salon_btw_rate: salonProfile.btw_rate ?? 21,
+        // Het dienstentarief van de salon. Nooit hardcoded 21: dat is het
+        // NL-BTW-tarief en op een eilandsalon (ABB 6%/4%, BBO 7%) simpelweg
+        // fout. resolveTax valt netjes terug op het tarief van de jurisdictie.
+        // 0 zodra het bedrag niet op een klantdocument mag: dan laat óók een nog
+        // niet bijgewerkte factuurmail de regel weg. De deploy van de
+        // edge-functie mag nooit de enige beveiliging zijn.
+        salon_btw_rate: salonTax.showTax ? salonTax.serviceRate : 0,
+        // Mag het belastingbedrag op een document voor de KLANT staan? Op Aruba
+        // niet — daar mag het BBO/BAVP/BAZV-bedrag sinds 1-1-2019 niet apart op
+        // de factuur. De factuurmail beslist hiermee of hij de regel toont.
+        show_tax_line: salonTax.showTax,
         salon_logo: salonProfile.logo_url || "",
         currency: cur, tax_label: tax.label, tax_id_label: tax.idLabel,
         lang
@@ -1969,13 +1994,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <input className="input-field" placeholder="12345678" value={invoiceForm.kvk_number} onChange={e => setInvoiceForm(f => ({...f, kvk_number: e.target.value}))} style={{ width: "100%" }} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
-                        <input className="input-field" placeholder="NL123456789B01" value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ width: "100%" }} />
+                        <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{isVatCountry ? t.btwId : tax.idLabel}</div>
+                        <input className="input-field" placeholder={salonProfile.country_code === "NL" ? "NL123456789B01" : ""} value={invoiceForm.btw_id} onChange={e => setInvoiceForm(f => ({...f, btw_id: e.target.value}))} style={{ width: "100%" }} />
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{isVatCountry
+                          ? (lang === "nl" ? "Je eigen BTW-identificatienummer (optioneel)." : lang === "es" ? "Tu propio número de IVA (opcional)." : "Your own VAT ID (optional).")
+                          : salonProfile.country_code === "BQ"
+                            ? (lang === "nl" ? "Je eigen CRIB-nummer van de Belastingdienst Caribisch Nederland (optioneel). Laat leeg als je geen ABB in rekening brengt." : lang === "es" ? "Tu propio número CRIB de la oficina tributaria del Caribe Neerlandés (opcional). Déjalo en blanco si no cobras ABB." : "Your own CRIB number from the Caribbean Netherlands tax office (optional). Leave blank if you don't charge ABB.")
+                            : (lang === "nl" ? `Je eigen ${tax.idLabel} (optioneel). Laat leeg als je geen belasting in rekening brengt.` : lang === "es" ? `Tu propio ${tax.idLabel} (opcional). Déjalo en blanco si no cobras impuestos.` : `Your own ${tax.idLabel} (optional). Leave blank if you don't charge tax.`)}</div>
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
-                      <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{isSepa ? t.ibanNumber : (lang === "nl" ? "Rekeningnummer" : lang === "es" ? "Número de cuenta" : "Account number")}</div>
+                      <input className="input-field" placeholder={isSepa ? "NL00 RABO 0000 0000 00" : (lang === "nl" ? "Je rekeningnummer" : lang === "es" ? "Tu número de cuenta" : "Your account number")} value={invoiceForm.iban} onChange={e => setInvoiceForm(f => ({...f, iban: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{isSepa
+                        ? (lang === "nl" ? "Je IBAN (optioneel) — komt op jouw factuur en wordt gebruikt voor de betaal-QR." : lang === "es" ? "Tu IBAN (opcional) — se muestra en tu factura y se usa para el QR de pago." : "Your IBAN (optional) — shown on your invoice and used for the payment QR.")
+                        : (lang === "nl" ? "Je lokale bankrekeningnummer (optioneel) — komt op jouw factuur zodat klanten kunnen overmaken." : lang === "es" ? "Tu número de cuenta bancaria local (opcional) — se muestra en tu factura para que los clientes puedan transferir." : "Your local bank account number (optional) — shown on your invoice so clients can transfer.")}</div>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       <div>
@@ -1996,9 +2029,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 14, marginTop: 4 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : lang === "es" ? "Solicitudes de pago" : "Payment requests"}</div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-                        {lang === "nl"
-                          ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met het exacte factuurbedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet. Klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle banken, gewoon vanuit hun eigen bank-app."
-                          : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with the exact invoice amount: a scan-to-pay QR code based on your IBAN (amount + reference pre-filled) and optionally a button via your own bunq.me or PayPal.Me link, without an amount — it's appended automatically per invoice. Clients don't need to bank where you bank: it works with every bank, straight from their own banking app."}
+                        {isSepa
+                          ? (lang === "nl"
+                            ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met het exacte factuurbedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet. Klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle banken, gewoon vanuit hun eigen bank-app."
+                            : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with the exact invoice amount: a scan-to-pay QR code based on your IBAN (amount + reference pre-filled) and optionally a button via your own bunq.me or PayPal.Me link, without an amount — it's appended automatically per invoice. Clients don't need to bank where you bank: it works with every bank, straight from their own banking app.")
+                          : (lang === "nl"
+                            ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met jouw bankgegevens (rekeninghouder + rekeningnummer), het exacte factuurbedrag in jouw valuta en een betaalkenmerk, plus optioneel een knop via je eigen betaallink. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet."
+                            : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with your bank details (account holder + account number), the exact invoice amount in your currency and a payment reference, plus optionally a button via your own payment link. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone.")}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>

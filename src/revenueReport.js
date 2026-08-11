@@ -4,16 +4,23 @@
 // straight to an accountant or attach to a tax filing:
 //   - Clean header with salon branding + report period
 //   - Company block (salon name, address, KVK, BTW, IBAN) on the right
-//   - Summary: totals, BTW breakdown, avg per appointment
+//   - Summary: totals, tax breakdown PER RATE, avg per appointment
 //   - Detailed table: every completed appointment in range
 //   - Footer with page numbers + generation timestamp
 //
 // Uses jsPDF + jspdf-autotable. Fully client-side — no server round trip,
 // no external service, works offline. A typical 100-appointment month is
 // ~3 pages and ~30 KB.
+//
+// Dit is een INTERN document: het gaat naar de eigenaar en zijn boekhouder,
+// niet naar de klant. Daarom stuurt showTaxInternal wat hier zichtbaar is en
+// niet showTax — een Arubaanse eigenaar mag het bedrag aan BBO/BAVP/BAZV niet
+// op de klantfactuur zetten, maar moet het in zijn eigen omzetoverzicht wél
+// terugzien.
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { computeTax, linesFromSale } from "./taxEngine.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
@@ -42,18 +49,45 @@ const fmtDateNL = (isoDate, lang = "nl") => {
 //   salon: { business_name, address, city, kvk_number, btw_id, iban, invoice_prefix, logo_url, salon_email }
 //   appointments: array of appointment rows (status=completed, date within range)
 //   range: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", label: "April 2026" }
-//   lang: "nl" | "en"  (column headers only; numeric formatting stays NL)
+//   lang: "nl" | "en" | "es"
 //   staffName: optional — set when the report is filtered to one team member;
 //     shown in the header and appended to the filename.
-export function generateRevenueReportPDF({ salon, appointments, range, lang = "nl", staffName = "", currencySymbol = "€", moneyLocale = "nl-NL", taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true }) {
+//   taxCfg: de uitkomst van resolveTax(profile) uit shared.jsx — de enige juiste
+//     bron van tarieven. Ontbreekt hij, dan valt dit bestand terug op de losse
+//     taxLabel/taxIdLabel/taxRate/showTax-parameters van vroeger (één tarief
+//     over alles), zodat een oude aanroeper blijft werken.
+export function generateRevenueReportPDF({
+  salon, appointments, range, lang = "nl", staffName = "",
+  currencySymbol = "€", moneyLocale = "nl-NL",
+  taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
+  taxCfg = null,
+}) {
   const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595.28 x 841.89 pt
 
-  // Currency + tax are driven by the salon's country (passed in by the caller):
-  // NL/BE → € + BTW, Bonaire → $ + ABB, etc. Prices are tax-INCLUSIVE, so
-  // net = gross / (1 + rate). `showTax` is false for salons that don't charge
-  // tax — then net = gross and no tax rows are drawn.
+  // Currency is driven by the salon's country (passed in by the caller):
+  // NL/BE → € + BTW, Bonaire → $ + ABB, etc.
   const eur = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const taxPct = Math.round((Number(taxRate) || 0) * 100);
+  const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
+  // Tarieven zijn percentages (21, niet 0.21) en hoeven geen heel getal te zijn
+  // — 2,5% BBO bestaat echt. Vandaar de locale-notatie in plaats van Math.round.
+  const pct = (r) => `${(Math.round((Number(r) || 0) * 100) / 100).toLocaleString(moneyLocale)}%`;
+
+  // De oude aanroeper geeft losse parameters door en rekent met één tarief over
+  // alles; taxRate is daar een BREUK (0.21) terwijl resolveTax percentages
+  // teruggeeft (21). Die vertaling gebeurt hier, zodat er verderop nog maar één
+  // vorm bestaat: de cfg van de belastingmotor.
+  const legacyPct = (Number(taxRate) || 0) * 100;
+  const cfg = taxCfg || {
+    label: taxLabel,
+    idLabel: taxIdLabel,
+    serviceRate: legacyPct,
+    productRate: legacyPct,
+    registered: !!showTax,
+    showTax: !!showTax,
+    showTaxInternal: !!showTax,
+  };
+  const label = cfg.label || taxLabel;
+  const idLabel = cfg.idLabel || taxIdLabel;
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -63,7 +97,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(26, 23, 20);
-  doc.text(lang === "nl" ? "Omzetrapport" : lang === "es" ? "Informe de ingresos" : "Revenue report", margin, 60);
+  doc.text(T("Omzetrapport", "Revenue report", "Informe de ingresos"), margin, 60);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
@@ -72,7 +106,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   if (staffName) {
     doc.setFontSize(10);
     doc.setTextColor(...ACCENT);
-    doc.text(`${lang === "nl" ? "Medewerker" : lang === "es" ? "Miembro del equipo" : "Team member"}: ${s(staffName)}`, margin, 94);
+    doc.text(`${T("Medewerker", "Team member", "Miembro del equipo")}: ${s(staffName)}`, margin, 94);
   }
 
   // Vellu wordmark top-right (just text, no image — keeps PDF tiny)
@@ -99,7 +133,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     s(salon.address),
     [s(salon.postcode), s(salon.city)].filter(Boolean).join(" "),
     salon.kvk_number ? `KVK: ${s(salon.kvk_number)}` : "",
-    salon.btw_id ? `${taxIdLabel}: ${s(salon.btw_id)}` : "",
+    salon.btw_id ? `${idLabel}: ${s(salon.btw_id)}` : "",
     salon.iban ? `IBAN: ${s(salon.iban)}` : "",
     s(salon.salon_email),
   ].filter(Boolean);
@@ -109,10 +143,31 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   }
 
   // ── SUMMARY ──────────────────────────────────────────────
-  const totalGross = appointments.reduce((sum, a) => sum + (parseFloat(a.service_price) || 0), 0);
-  const totalNet = showTax ? totalGross / (1 + taxRate) : totalGross;
-  const totalBtw = totalGross - totalNet;
+  // Belasting komt uit de belastingmotor en niet uit één deling over het totaal.
+  // Reden: één rapport kan meerdere grondslagen bevatten. Een Bonaire-salon die
+  // producten aanslaat op een behandeling verkoopt 6% ABB-plichtige diensten
+  // naast doorverkochte producten waarover al bij invoer ABB is betaald — die
+  // mogen hier niet nog een keer belast worden. linesFromSale trekt elke rij
+  // uiteen in regels, computeTax groepeert ze per tarief en rondt één keer op
+  // documentniveau af, zodat netto + belasting exact de grondslag is.
+  const allLines = appointments.flatMap((a) => linesFromSale(a));
+  const computed = computeTax(allLines, cfg);
+  // Intern document: showTaxInternal, niet showTax (zie kop van dit bestand).
+  const showTaxRows = computed.showTaxInternal;
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const totalGross = computed.grandTotal;
+  const totalBtw = showTaxRows ? computed.taxTotal : 0;
+  const totalNet = round2(totalGross - totalBtw);
   const avg = appointments.length ? totalGross / appointments.length : 0;
+  // Wat er naast de belaste grondslag in de omzet zit. Onbelast = de regels
+  // zonder tarief (op de BES-eilanden de doorverkochte producten); kadobonnen
+  // zijn een betaalmiddel en verlagen wél het ontvangen bedrag maar geen
+  // grondslag — beide krijgen een eigen regel, anders telt de tabel niet op.
+  const untaxedGross = round2(
+    computed.lines.filter((l) => !l.taxable && l.kind !== "voucher").reduce((n, l) => n + l.gross, 0)
+  );
+  const voucherPaid = round2(computed.paidByVoucher);
 
   y = Math.max(y + 34, 220);
   doc.setDrawColor(230, 230, 230);
@@ -122,7 +177,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(26, 23, 20);
-  doc.text(lang === "nl" ? "Samenvatting" : lang === "es" ? "Resumen" : "Summary", margin, y);
+  doc.text(T("Samenvatting", "Summary", "Resumen"), margin, y);
 
   const summaryY = y + 20;
   const col1X = margin;
@@ -132,9 +187,14 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
-  doc.text(lang === "nl" ? "Aantal afspraken" : lang === "es" ? "Citas" : "Appointments", col1X, summaryY);
-  doc.text(showTax ? (lang === "nl" ? `Omzet incl. ${taxLabel}` : lang === "es" ? `Ingresos incl. ${taxLabel}` : `Revenue incl. ${taxLabel}`) : (lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"), col2X, summaryY);
-  doc.text(lang === "nl" ? "Gem. per afspraak" : lang === "es" ? "Prom. por cita." : "Avg per appt.", col3X, summaryY);
+  doc.text(T("Aantal afspraken", "Appointments", "Citas"), col1X, summaryY);
+  doc.text(
+    showTaxRows
+      ? T(`Omzet incl. ${label}`, `Revenue incl. ${label}`, `Ingresos incl. ${label}`)
+      : T("Omzet", "Revenue", "Ingresos"),
+    col2X, summaryY
+  );
+  doc.text(T("Gem. per afspraak", "Avg per appt.", "Prom. por cita."), col3X, summaryY);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -143,24 +203,77 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   doc.text(eur(totalGross), col2X, summaryY + 18);
   doc.text(eur(avg), col3X, summaryY + 18);
 
-  // Tax breakdown — only for salons that actually charge tax (showTax).
+  // ── TAX BREAKDOWN ────────────────────────────────────────
+  // Bij één tarief blijven het twee tegels — dat is het beeld dat de NL-salons
+  // kennen. Zodra er meerdere grondslagen zijn passen er geen tegels meer naast
+  // elkaar (de breedte per tegel wordt dan onleesbaar smal), dus wordt het een
+  // echte tabel die per tarief grondslag en belasting laat zien én optelt.
   const btwY = summaryY + 44;
-  if (showTax) {
+  let breakdownBottom = 0;
+  // De uitsplitsing is niet alleen nodig bij MEERDERE tarieven. Op de
+  // BES-eilanden is er precies één tarief (diensten) terwijl de doorverkochte
+  // producten onbelast zijn — dan staat er anders "ABB 5,66" naast een omzet
+  // van 115, wat neerkomt op 4,9% en nergens uit te herleiden is. Hetzelfde
+  // geldt voor ingewisselde kadobonnen: die verlagen de omzet maar niet de
+  // grondslag. Zodra een van die twee speelt, hoort de tabel er te staan.
+  const needsBreakdown = computed.byRate.length > 1
+    || Math.abs(untaxedGross) >= 0.01
+    || voucherPaid >= 0.01;
+  if (showTaxRows && computed.byRate.length === 1 && !needsBreakdown) {
+    const only = computed.byRate[0];
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(120, 120, 120);
-    doc.text(`${taxLabel} (${taxPct}%)`, col1X, btwY);
-    doc.text(lang === "nl" ? `Netto (excl. ${taxLabel})` : lang === "es" ? `Neto (excl. ${taxLabel})` : `Net (excl. ${taxLabel})`, col2X, btwY);
+    doc.text(`${label} (${pct(only.rate)})`, col1X, btwY);
+    doc.text(T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`), col2X, btwY);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(26, 23, 20);
     doc.text(eur(totalBtw), col1X, btwY + 16);
     doc.text(eur(totalNet), col2X, btwY + 16);
+    breakdownBottom = btwY + 16;
+  } else if (showTaxRows && computed.byRate.length >= 1) {
+    const rows = computed.byRate.map((r) => [`${label} ${pct(r.rate)}`, eur(r.gross), eur(r.tax)]);
+    if (Math.abs(untaxedGross) >= 0.01) {
+      rows.push([T("Onbelast", "Untaxed", "Sin impuesto"), eur(untaxedGross), eur(0)]);
+    }
+    if (voucherPaid >= 0.01) {
+      rows.push([T("Ingewisselde kadobonnen", "Gift cards redeemed", "Tarjetas regalo canjeadas"), `-${eur(voucherPaid)}`, eur(0)]);
+    }
+    autoTable(doc, {
+      startY: btwY - 8,
+      head: [[
+        T("Tarief", "Rate", "Tipo"),
+        T("Grondslag", "Taxable base", "Base imponible"),
+        T(label, label, label),
+      ]],
+      body: rows,
+      foot: [[T("Totaal", "Total", "Total"), eur(totalGross), eur(totalBtw)]],
+      theme: "plain",
+      headStyles: { fillColor: [245, 243, 239], textColor: [80, 80, 80], fontStyle: "bold", fontSize: 9 },
+      footStyles: { fillColor: [245, 243, 239], textColor: [26, 23, 20], fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: [60, 60, 60] },
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+      margin: { left: margin, right: margin },
+      tableWidth: Math.min(320, pageW - margin * 2),
+    });
+    breakdownBottom = doc.lastAutoTable.finalY + 4;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      `${T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`)}: ${eur(totalNet)}`,
+      margin, breakdownBottom + 12
+    );
+    breakdownBottom += 12;
   }
 
   // ── TABLE ────────────────────────────────────────────────
-  const tableStartY = showTax ? btwY + 48 : summaryY + 40;
+  // Volgt uit wat er werkelijk boven staat: één tegelrij, een tabel met n
+  // tarieven, of helemaal niets. Nooit een vaste offset — die klopte alleen bij
+  // precies één belastingregel.
+  const tableStartY = breakdownBottom ? breakdownBottom + 26 : summaryY + 40;
 
   // Sort appointments by date asc then time asc for a chronological ledger
   const sorted = [...appointments].sort((a, b) => {
@@ -168,15 +281,28 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     return (a.time || "") < (b.time || "") ? -1 : 1;
   });
 
+  // Voetnoot op elke pagina: Vellu rekent met de instellingen van déze salon en
+  // is geen belastingadviseur. Eerst opmeten, want de onderrand van de tabel
+  // moet er ruimte voor laten — anders schuift de laatste rij eroverheen.
+  const disclaimer = T(
+    "Belastingbedragen zijn berekend op basis van de instellingen van deze salon. Vellu geeft geen fiscaal advies.",
+    "Tax amounts are calculated from this salon's settings. Vellu does not provide tax advice.",
+    "Los importes de impuestos se calculan segun la configuracion de este salon. Vellu no ofrece asesoramiento fiscal."
+  );
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const disclaimerLines = doc.splitTextToSize(disclaimer, pageW - margin * 2);
+  const ratesNote = showTaxRows ? ` · ${label} ${computed.byRate.map((r) => pct(r.rate)).join(" / ")}` : "";
+
   autoTable(doc, {
     startY: tableStartY,
     head: [[
-      lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date",
-      lang === "nl" ? "Tijd" : lang === "es" ? "Hora" : "Time",
-      lang === "nl" ? "Klant" : lang === "es" ? "Cliente" : "Client",
-      lang === "nl" ? "Behandeling" : lang === "es" ? "Servicio" : "Service",
-      lang === "nl" ? "Medewerker" : lang === "es" ? "Personal" : "Staff",
-      lang === "nl" ? "Bedrag" : lang === "es" ? "Importe" : "Amount",
+      T("Datum", "Date", "Fecha"),
+      T("Tijd", "Time", "Hora"),
+      T("Klant", "Client", "Cliente"),
+      T("Behandeling", "Service", "Servicio"),
+      T("Medewerker", "Staff", "Personal"),
+      T("Bedrag", "Amount", "Importe"),
     ]],
     body: sorted.map(a => [
       a.date,
@@ -188,7 +314,7 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     ]),
     foot: [[
       "", "", "",
-      lang === "nl" ? "Totaal" : "Total",
+      T("Totaal", "Total", "Total"),
       "",
       eur(totalGross),
     ]],
@@ -212,25 +338,32 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
     columnStyles: {
       5: { halign: "right", fontStyle: "bold" },
     },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, bottom: 46 + 12 * disclaimerLines.length },
     didDrawPage: () => {
       // Footer: page number + generated date
       const pageStr = `${doc.internal.getCurrentPageInfo().pageNumber} / ${doc.internal.getNumberOfPages()}`;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(160, 160, 160);
+      let noteY = pageH - 32 - 12 * disclaimerLines.length;
+      for (const line of disclaimerLines) {
+        doc.text(line, margin, noteY);
+        noteY += 12;
+      }
       // Currency/tax basis note: amounts reflect the salon's CURRENT region.
       // Values are never converted, so a report spanning a region change shows
       // pre-switch earnings in the new symbol/rate — flag that here.
       doc.text(
-        lang === "nl"
-          ? `Bedragen in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}%` : ""}. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`
-          : `Amounts in ${currencySymbol}${showTax ? ` · ${taxLabel} ${taxPct}%` : ""}. After a region change, earlier amounts are not converted.`,
+        T(
+          `Bedragen in ${currencySymbol}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
+          `Amounts in ${currencySymbol}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
+          `Importes en ${currencySymbol}${ratesNote}, impuestos incluidos. Tras un cambio de region, los importes anteriores no se convierten.`
+        ),
         margin,
         pageH - 32
       );
       doc.text(
-        `${lang === "nl" ? "Gegenereerd op" : lang === "es" ? "Generado el" : "Generated on"} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
+        `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
         margin,
         pageH - 20
       );
@@ -242,11 +375,24 @@ export function generateRevenueReportPDF({ salon, appointments, range, lang = "n
   const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
   const fnStaff = staffName ? "-" + s(staffName).replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 30) : "";
   const fnRange = (range.from || "").slice(0, 7); // YYYY-MM for month files
-  const filename = `${fnSalon}${fnStaff}-${lang === "nl" ? "omzet" : lang === "es" ? "ingresos" : "revenue"}-${fnRange || range.from || "report"}.pdf`;
+  const filename = `${fnSalon}${fnStaff}-${T("omzet", "revenue", "ingresos")}-${fnRange || range.from || "report"}.pdf`;
 
   doc.save(filename);
 
-  return { filename, pages: doc.internal.getNumberOfPages(), totalGross, totalNet, totalBtw, count: appointments.length };
+  return {
+    filename,
+    pages: doc.internal.getNumberOfPages(),
+    totalGross,
+    totalNet,
+    totalBtw,
+    count: appointments.length,
+    // Per tarief, zodat een aanroeper (of een test) kan controleren waar de
+    // belasting vandaan komt in plaats van één samengeklapt bedrag te zien.
+    byRate: computed.byRate,
+    untaxedGross,
+    paidByVoucher: voucherPaid,
+    taxLabel: label,
+  };
 }
 
 // periodPreset lives in revenueReport.helpers.js so it can be imported eagerly

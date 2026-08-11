@@ -162,7 +162,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Je markeert per aanmelding "benaderd" of verwijdert 'm.
 
 # Valuta & regio (Instellingen → Salon → "Regio & valuta")
-- Vellu toont alle bedragen in de valuta van je salon; die volgt uit je regio/land. Nederland/België = euro (€), Bonaire = US dollar ($), Aruba = Arubaanse florin (Afl.), Curaçao = Antilliaanse gulden (NAf.). Je KUNT je valuta dus wél wijzigen — via je regio.
+- Vellu toont alle bedragen in de valuta van je salon; die volgt uit je regio/land. Nederland/België = euro (€), Bonaire = US dollar ($), Aruba = Arubaanse florin (Afl.), Curaçao en Sint Maarten = Caribische gulden (Cg). Je KUNT je valuta dus wél wijzigen — via je regio.
 - Regio wijzigen: Instellingen → Salon → "Regio & valuta". Verhuisd, of bij het aanmelden het verkeerde land gekozen? Verander het daar en klik Opslaan; álle prijzen, facturen, e-mails en het dashboard schuiven meteen mee. Bestaande bedragen worden in het nieuwe symbool getoond (niet omgerekend).
 - Het belasting-label past automatisch aan bij je regio: Nederland/België tonen BTW, Bonaire toont ABB (het tarief stel je zelf in bij de factuurgegevens).
 - Vellu's eigen abonnement wordt altijd in euro's gefactureerd; een salon buiten de eurozone betaalt met creditcard of Apple Pay en de kaart rekent automatisch om.

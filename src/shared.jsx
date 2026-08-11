@@ -443,25 +443,23 @@ const LANGUAGES = [
 
 // ─── COUNTRY REGISTRY ────────────────────────────────────────
 // `defaultLang` is a suggestion used when the salon picks a country at
-// signup — they can still flip the language toggle. VAT rate + currency
-// are for future invoice + pricing logic (kept here so per-country rules
-// live in one place). "launched" controls whether a country shows up in
-// the signup dropdown — flip to true as you formally go live there.
+// signup — they can still flip the language toggle. "launched" controls
+// whether a country shows up in the signup dropdown — flip to true as you
+// formally go live there. Tax lives in TAX_RULES below, never here: a rate
+// in two places is a rate that will disagree with itself.
 const COUNTRIES = [
-  { code: "NL", name: "Nederland / Netherlands", defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
-  { code: "BE", name: "België / Belgium",        defaultLang: "nl", currency: "EUR", vatRate: 0.21, launched: true },
-  // Dutch Caribbean. `currency` IS now read (see currencyForCountry / fmtMoney
-  // below) so prices show in the local currency. `vatRate` here is just a hint;
-  // the salon sets its own rate in Settings (btw_rate), and the tax LABEL comes
-  // from TAX_BY_COUNTRY (Bonaire = ABB, not BTW).
-  { code: "AW", name: "Aruba",                   defaultLang: "nl", currency: "AWG", vatRate: null, launched: true },
-  { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "ANG", vatRate: null, launched: true },
-  { code: "BQ", name: "Bonaire",                 defaultLang: "nl", currency: "USD", vatRate: null, launched: true },
-  { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", vatRate: 0.19, launched: false },
-  { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", vatRate: 0.20, launched: false },
-  { code: "GB", name: "United Kingdom",          defaultLang: "en", currency: "GBP", vatRate: 0.20, launched: false },
-  { code: "ES", name: "España / Spain",          defaultLang: "en", currency: "EUR", vatRate: 0.21, launched: false },
-  { code: "IT", name: "Italia / Italy",          defaultLang: "en", currency: "EUR", vatRate: 0.22, launched: false },
+  { code: "NL", name: "Nederland / Netherlands", defaultLang: "nl", currency: "EUR", launched: true },
+  { code: "BE", name: "België / Belgium",        defaultLang: "nl", currency: "EUR", launched: true },
+  // Dutch Caribbean. `currency` IS read (see currencyForCountry / fmtMoney
+  // below) so prices show in the local currency.
+  { code: "AW", name: "Aruba",                   defaultLang: "nl", currency: "AWG", launched: true },
+  { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "XCG", launched: true },
+  { code: "BQ", name: "Bonaire, Saba, Sint Eustatius", defaultLang: "nl", currency: "USD", launched: true },
+  { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", launched: false },
+  { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", launched: false },
+  { code: "GB", name: "United Kingdom",          defaultLang: "en", currency: "GBP", launched: false },
+  { code: "ES", name: "España / Spain",          defaultLang: "en", currency: "EUR", launched: false },
+  { code: "IT", name: "Italia / Italy",          defaultLang: "en", currency: "EUR", launched: false },
 ];
 
 // ─── CURRENCY & TAX (per country) ────────────────────────────
@@ -474,7 +472,9 @@ const CURRENCIES = {
   USD: { code: "USD", symbol: "$",     locale: "en-US" },
   GBP: { code: "GBP", symbol: "£",     locale: "en-GB" },
   AWG: { code: "AWG", symbol: "Afl. ", locale: "en-US" }, // Aruban florin
-  ANG: { code: "ANG", symbol: "NAf. ", locale: "en-US" }, // Netherlands Antillean guilder
+  // Caribische gulden — verving op 31 maart 2025 de Antilliaanse gulden (ANG)
+  // op Curaçao en Sint Maarten, 1:1. Officiële schrijfwijze is "Cg", zonder punt.
+  XCG: { code: "XCG", symbol: "Cg ",   locale: "en-US" },
 };
 
 // The language the SALON OWNER receives system emails in, derived from the
@@ -506,20 +506,103 @@ function fmtMoney(amount, countryCode, decimals = 2) {
   return cur.symbol + n.toLocaleString(cur.locale, opts);
 }
 
-// Per-country tax presentation. `label` shows on invoices/reports (BTW vs ABB),
-// `idLabel` is the fiscal-number field label, `defaultRate` is a suggestion the
-// salon can override via btw_rate. NL/BE/BQ are confirmed; VERIFY AW/CW rates
-// and labels before formally launching there.
-const TAX_BY_COUNTRY = {
-  NL: { label: "BTW", idLabel: "BTW-id",      defaultRate: 21 },
-  BE: { label: "BTW", idLabel: "BTW-nr.",     defaultRate: 21 },
-  BQ: { label: "ABB", idLabel: "CRIB",        defaultRate: 6  }, // Bonaire
-  AW: { label: "BBO", idLabel: "Fiscaal nr.", defaultRate: 0  }, // Aruba — verify
-  CW: { label: "OB",  idLabel: "Fiscaal nr.", defaultRate: 0  }, // Curaçao — verify
+// ─── TAX RULES (per jurisdictie) ─────────────────────────────
+// De ENIGE plek waar een belastingtarief mag ontstaan. Gekeyed op country_code,
+// of op profiles.tax_region wanneer één landcode meerdere stelsels bevat: BQ
+// dekt Bonaire, Saba én Sint Eustatius, met verschillende ABB-tarieven.
+//
+// Wat je moet weten om dit te lezen: alleen NL/BE hebben een echte BTW met
+// aftrek van voorbelasting. ABB (BES), BBO/BAVP/BAZV (Aruba) en OB (Curaçao)
+// zijn CUMULATIEVE omzetbelastingen — elke schakel betaalt over de eigen omzet,
+// er is geen aftrekketen. Twee gevolgen die je hieronder terugziet:
+//
+//   • BES-eilanden: goederen worden belast bij INVOER of bij de lokale
+//     producent. Een salon die ingekochte shampoo doorverkoopt is geen
+//     producent en brengt daar dus GEEN ABB over in rekening
+//     (productsTaxable: false). Behandelingen zijn wél belast.
+//
+//   • Aruba: het BEDRAG aan BBO/BAVP/BAZV mag sinds 1-1-2019 niet apart op de
+//     factuur staan (showTaxLine: false). Het omzetrapport toont het wél —
+//     dat is een intern document voor de eigenaar en de boekhouder.
+//
+// Prijzen zijn overal belasting-INCLUSIEF. Op de eilanden is dat niet alleen
+// gewoonte maar voorschrift: er mag nooit een percentage bovenop de prijs die
+// de klant in de zaak ziet staan. Tel hier dus nooit iets bij op — reken terug.
+const TAX_RULES = {
+  NL:        { label: "BTW",           idLabel: "BTW-id",      serviceRate: 21,   productsTaxable: true,  showTaxLine: true },
+  BE:        { label: "BTW",           idLabel: "BTW-nr.",     serviceRate: 21,   productsTaxable: true,  showTaxLine: true },
+  "BQ-BON":  { label: "ABB",           idLabel: "CRIB",        serviceRate: 6,    productsTaxable: false, showTaxLine: true,  island: "Bonaire" },
+  "BQ-SAB":  { label: "ABB",           idLabel: "CRIB",        serviceRate: 4,    productsTaxable: false, showTaxLine: true,  island: "Saba" },
+  "BQ-EUX":  { label: "ABB",           idLabel: "CRIB",        serviceRate: 4,    productsTaxable: false, showTaxLine: true,  island: "Sint Eustatius" },
+  // 7% = BBO 2,5% + BAVP 1,5% + BAZV 3%, samengevoegd sinds 1 januari 2023.
+  AW:        { label: "BBO/BAVP/BAZV", idLabel: "Fiscaal nr.", serviceRate: 7,    productsTaxable: true,  showTaxLine: false },
+  // Het algemene OB-tarief is 6%, maar er bestaan ook 0/7/9% en het is niet
+  // vastgesteld waar salondiensten onder vallen. Vellu vult daarom niets in en
+  // vraagt de eigenaar het bij zijn boekhouder op te halen.
+  CW:        { label: "OB",            idLabel: "Fiscaal nr.", serviceRate: null, productsTaxable: true,  showTaxLine: true,  rateUnknown: true, suggestedRate: 6 },
 };
-const DEFAULT_TAX = { label: "BTW", idLabel: "BTW-id", defaultRate: 21 };
-function taxForCountry(countryCode) {
-  return TAX_BY_COUNTRY[countryCode] || DEFAULT_TAX;
+// Eilandkeuzes die de instellingen aanbieden zodra het land BQ is.
+const TAX_REGIONS_BY_COUNTRY = {
+  BQ: [
+    { value: "BQ-BON", label: "Bonaire" },
+    { value: "BQ-SAB", label: "Saba" },
+    { value: "BQ-EUX", label: "Sint Eustatius" },
+  ],
+};
+const DEFAULT_TAX_RULE = TAX_RULES.NL;
+// tax_region wint van country_code, zodat een salon op Saba niet stilletjes het
+// Bonaire-tarief krijgt. Zonder regio valt BQ terug op Bonaire (verreweg het
+// grootste eiland, en wat bestaande rijen zijn).
+function taxRuleFor(countryCode, taxRegion) {
+  if (taxRegion && TAX_RULES[taxRegion]) return TAX_RULES[taxRegion];
+  if (countryCode === "BQ") return TAX_RULES["BQ-BON"];
+  return TAX_RULES[countryCode] || DEFAULT_TAX_RULE;
+}
+// Backwards-compatible: geeft alleen het label/idLabel terug (signup-scherm,
+// StaffApp). Voor alles wat rekent: gebruik resolveTax.
+function taxForCountry(countryCode, taxRegion) {
+  const r = taxRuleFor(countryCode, taxRegion);
+  return { label: r.label, idLabel: r.idLabel, defaultRate: r.serviceRate ?? 0 };
+}
+
+// Alles wat een bon, factuur of rapport nodig heeft om belasting te tonen,
+// afgeleid uit één profielrij. Consumenten lezen NOOIT btw_rate rechtstreeks.
+// Tarieven komen er als PERCENTAGE uit (21, niet 0.21).
+function resolveTax(profile) {
+  const p = profile || {};
+  const rule = taxRuleFor(p.country_code, p.tax_region);
+  // Het instellingenveld zet "" bij wissen; parseFloat("") is NaN, en zonder
+  // deze guard wordt dat stilletjes 0% op een bon.
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+  const serviceRate = num(p.btw_rate) ?? rule.serviceRate ?? 0;
+  const productsTaxable = p.products_taxable === undefined || p.products_taxable === null
+    ? rule.productsTaxable
+    : !!p.products_taxable;
+  const productRate = productsTaxable ? (num(p.product_tax_rate) ?? serviceRate) : 0;
+  // Belastingplichtig? De expliciete kolom wint; een rij van vóór de migratie
+  // valt terug op "heeft een fiscaal nummer", precies het oude gedrag.
+  const registered = (p.tax_registered === undefined || p.tax_registered === null)
+    ? !!String(p.btw_id || "").trim()
+    : !!p.tax_registered;
+  const anyRate = serviceRate > 0 || productRate > 0;
+  return {
+    label: rule.label,
+    idLabel: rule.idLabel,
+    island: rule.island || null,
+    registered,
+    serviceRate,
+    productRate,
+    productsTaxable,
+    defaultServiceRate: rule.serviceRate,
+    suggestedRate: rule.suggestedRate ?? rule.serviceRate ?? null,
+    rateUnknown: !!rule.rateUnknown,
+    // Mag het BEDRAG op een document voor de KLANT staan? Op Aruba niet.
+    mayShowOnCustomerDoc: rule.showTaxLine !== false,
+    // Bon en factuur.
+    showTax: registered && anyRate && rule.showTaxLine !== false,
+    // Omzet-/productrapport: interne stukken, daar mag het altijd.
+    showTaxInternal: registered && anyRate,
+  };
 }
 
 // ─── PUBLIC-PAGE FONT STYLES ─────────────────────────────────
@@ -2217,6 +2300,7 @@ export {
   T,
   LANGUAGES, COUNTRIES,
   CURRENCIES, currencyForCountry, curSym, fmtMoney, taxForCountry, ownerLangFor,
+  TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,

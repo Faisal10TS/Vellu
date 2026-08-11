@@ -25,7 +25,10 @@ const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
 const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
 
 // Currency symbol per country (mirrors shared.jsx CURRENCIES). Unset = €.
-const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "NAf. ", GB: "£" };
+// CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
+// Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet terugzetten
+// naar "NAf." — dat geld bestaat niet meer.
+const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "Cg ", GB: "£" };
 const curFor = (code?: string | null) => CUR_SYM[code || ""] || "€";
 
 const corsHeaders = {
