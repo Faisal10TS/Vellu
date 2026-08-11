@@ -6,7 +6,11 @@ function cors(o){const a=o&&AO.includes(o)?o:"https://vellu.cc";return{"Access-C
 function esc(s){if(s===null||s===undefined)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#39;");}
 function plainText(s){if(s===null||s===undefined)return"";return String(s).replace(/[\r\n]+/g," ").slice(0,200);}
 function safeImgSrc(url){if(!url||typeof url!=="string")return null;try{const u=new URL(url);if(u.protocol!=="https:"&&u.protocol!=="http:")return null;return u.toString();}catch{return null;}}
-async function verifyUserToken(tok){if(!tok||!SU||!SK)return false;try{const r=await fetch(`${SU}/auth/v1/user`,{headers:{"Authorization":`Bearer ${tok}`,"apikey":SK}});if(!r.ok)return false;const u=await r.json();return !!u?.id;}catch{return false;}}
+async function verifyUserToken(tok){if(!tok||!SU||!SK)return null;try{const r=await fetch(`${SU}/auth/v1/user`,{headers:{"Authorization":`Bearer ${tok}`,"apikey":SK}});if(!r.ok)return null;const u=await r.json();return u?.id||null;}catch{return null;}}
+// Mag deze ingelogde gebruiker facturen versturen? Alleen relevant voor
+// MEDEWERKERS: de eigenaar staat niet in staff_members en mag altijd.
+// De eigenaar zet dit uit voor personeel in loondienst (Instellingen > Team).
+async function staffMayInvoice(uid){if(!uid||!SU||!SK)return true;try{const h={"apikey":SK,"Authorization":`Bearer ${SK}`};const r=await fetch(`${SU}/rest/v1/staff_members?user_id=eq.${uid}&select=owner_id&limit=1`,{headers:h});const rows=r.ok?await r.json():[];if(!rows?.length)return true;const own=rows[0].owner_id;if(own===uid)return true;const r2=await fetch(`${SU}/rest/v1/profiles?id=eq.${own}&select=staff_can_invoice`,{headers:h});const p=r2.ok?await r2.json():[];return p?.[0]?.staff_can_invoice!==false;}catch{return true;}}
 // Naive HTML→text for a multipart/alternative plain-text part. HTML-only
 // emails score higher on spam filters (SpamAssassin MIME_HTML_ONLY), so
 // always ship a text version too — it helps inbox placement.
@@ -18,12 +22,12 @@ const txt=(l,nl,en,es)=>l==="es"?(es||en):(l==="en"?en:nl);
 serve(async(req)=>{
 const origin=req.headers.get("origin");const headers=cors(origin);
 if(req.method==="OPTIONS")return new Response("ok",{headers});
-let authed=false;
+let authed=false;let callerId=null;
 const sec=req.headers.get("x-internal-secret");
 if(sec&&sec===SK){authed=true;}else{
 const a=req.headers.get("authorization")||"";
 const tok=a.startsWith("Bearer ")?a.slice(7):null;
-if(tok)authed=await verifyUserToken(tok);
+if(tok){callerId=await verifyUserToken(tok);authed=!!callerId;}
 }
 if(!authed)return new Response(JSON.stringify({error:"unauthorized"}),{status:401,headers:{...headers,"Content-Type":"application/json"}});
 const fmtD=(ds,l="nl")=>{try{const d=new Date(ds+"T12:00:00");if(l==="es"){const dy=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];const mo=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}if(l==="en"){const dy=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];const mo=["January","February","March","April","May","June","July","August","September","October","November","December"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}const dy=["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];const mo=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}catch{return esc(ds);}};
@@ -96,6 +100,7 @@ return `<tr><td ${cL}>${label}</td><td ${cR}><span style="color:#999;text-decora
 const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${txt(lang,"Past de nieuwe tijd je niet? Annuleren kan via:","Doesn't work for you? Cancel via:","¿No te viene bien el nuevo horario? Puedes cancelar aquí:")}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment","Cancelar cita")}</a></div>`:"";
 await send(plainText(b.client_email),plainText(txt(lang,`Wijziging afspraak bij ${b.salon_name}`,`Appointment updated at ${b.salon_name}`,`Cita modificada en ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is gewijzigd","Your appointment has been updated","Tu cita ha sido modificada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eS}</strong> heeft de details van je afspraak aangepast. Hieronder zie je de nieuwe gegevens:`,`<strong>${eS}</strong> updated the details of your appointment. The new details are below:`,`<strong>${eS}</strong> actualizó los detalles de tu cita. A continuación puedes ver los nuevos datos:`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${changedRow(txt(lang,"Datum","Date","Fecha"),oldDate,eD)}${changedRow(txt(lang,"Tijd","Time","Hora"),oldTime,eT)}${changedRow(txt(lang,"Totaal","Total","Total"),oldPrice,newPrice)}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Zien we je dan, ${eC}!`,`See you then, ${eC}!`,`¡Nos vemos entonces, ${eC}!`)}</p></div>`);}
 if(type==="invoice"){
+if(callerId&&!(await staffMayInvoice(callerId)))return new Response(JSON.stringify({error:"invoicing_not_allowed"}),{status:403,headers:{...headers,"Content-Type":"application/json"}});
 const bd=[];if(b.salon_address)bd.push(eAd);if(b.salon_kvk)bd.push(`KVK: ${eKv}`);if(b.salon_btw)bd.push(`${b.tax_id_label?esc(String(b.tax_id_label)):"BTW"}: ${eBt}`);if(b.salon_iban)bd.push(`IBAN: ${eIb}`);
 const bSec=bd.length>0?`<div style="background:#f0ede8;border-radius:10px;padding:16px;margin-bottom:24px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:8px;">${txt(lang,"Bedrijfsgegevens","Business details","Datos de la empresa")}</div><div style="font-size:13px;font-weight:500;margin-bottom:4px;">${eS}</div>${bd.map((d)=>`<div style="font-size:12px;color:#666;">${d}</div>`).join("")}</div>`:"";
 const gross=parseFloat(b.price||0);

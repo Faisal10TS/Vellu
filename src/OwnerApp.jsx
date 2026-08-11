@@ -3429,6 +3429,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // Staff visibility toggles — DB default true (= old behaviour).
           staff_view_revenue: data.staff_view_revenue !== false,
           staff_view_client_contact: data.staff_view_client_contact !== false,
+          staff_can_invoice: data.staff_can_invoice !== false,
+          staff_can_edit_services: data.staff_can_edit_services !== false,
           min_advance_hours: data.min_advance_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
@@ -10612,7 +10614,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                     {[
                       { key: "staff_view_revenue", label: lang === "nl" ? "Omzet & prijzen" : lang === "es" ? "Ingresos y precios" : "Revenue & prices", sub: lang === "nl" ? "Omzet-tegels, grafieken, prijzen op afspraken en omzetrapport" : lang === "es" ? "Ingresos, gráficos, precios en citas e informe" : "Revenue tiles, charts, prices on appointments and the revenue report" },
-                      { key: "staff_view_client_contact", label: lang === "nl" ? "Klantgegevens (e-mail, telefoon, notities)" : lang === "es" ? "Datos de clientes (correo, teléfono, notas)" : "Client details (email, phone, notes)", sub: lang === "nl" ? "Namen en de agenda blijven altijd zichtbaar" : lang === "es" ? "Los nombres y la agenda siguen visibles" : "Names and the agenda always stay visible" },
+                      { key: "staff_view_client_contact", label: lang === "nl" ? "Klantgegevens (e-mail, telefoon, notities)" : lang === "es" ? "Datos de clientes (correo, teléfono, notas)" : "Client details (email, phone, notes)", sub: lang === "nl" ? "Namen en de agenda blijven altijd zichtbaar — geldt ook voor hun e-mails" : lang === "es" ? "Los nombres y la agenda siguen visibles — también en sus correos" : "Names and the agenda always stay visible — applies to their emails too" },
+                      { key: "staff_can_invoice", label: lang === "nl" ? "Facturen versturen" : lang === "es" ? "Enviar facturas" : "Send invoices", sub: lang === "nl" ? "Uit = jij factureert alles zelf (voor personeel in loondienst)" : lang === "es" ? "Desactivado = tú facturas todo (para personal asalariado)" : "Off = you invoice everything yourself (for salaried staff)" },
+                      { key: "staff_can_edit_services", label: lang === "nl" ? "Diensten & prijzen bewerken" : lang === "es" ? "Editar servicios y precios" : "Edit services & prices", sub: lang === "nl" ? "Uit = alleen jij past de prijslijst aan" : lang === "es" ? "Desactivado = solo tú cambias la lista de precios" : "Off = only you change the price list" },
                     ].map(row => (
                       <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: `1px solid ${c.border}` }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -12555,6 +12559,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   staff_see_all: !!salonData.staff_see_all,
                   staff_view_revenue: salonData.staff_view_revenue !== false,
                   staff_view_client_contact: salonData.staff_view_client_contact !== false,
+                  staff_can_invoice: salonData.staff_can_invoice !== false,
+                  staff_can_edit_services: salonData.staff_can_edit_services !== false,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   reminder_hours: salonData.reminder_hours ?? 24,

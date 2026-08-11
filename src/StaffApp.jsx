@@ -33,6 +33,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // true = current behaviour, everything visible.
   const showMoney = salonProfile.staff_view_revenue !== false;
   const showContact = salonProfile.staff_view_client_contact !== false;
+  // Mag deze medewerker factureren / de prijslijst bewerken? Uit = de eigenaar
+  // doet dat zelf (personeel in loondienst). Server-side afgedwongen via RLS
+  // (catalogus) en send-emails (facturen); dit is de bijpassende UI.
+  const canInvoice = salonProfile.staff_can_invoice !== false;
+  const canEditServices = salonProfile.staff_can_edit_services !== false;
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const toast = useToast();
 
@@ -579,11 +584,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   );
   };
 
+  // Staat de medewerker op een scherm dat de eigenaar zojuist heeft
+  // afgeschermd? Val terug op een zichtbaar scherm i.p.v. een lege pagina.
+  useEffect(() => {
+    if (!canInvoice && view === "facturen") setView("dashboard");
+    if (!canInvoice && staffSettingsTab === "facturatie") setStaffSettingsTab("werktijden");
+    if (!canEditServices && staffSettingsTab === "diensten") setStaffSettingsTab("werktijden");
+  }, [canInvoice, canEditServices, view, staffSettingsTab]);
+
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
     ["klanten", "user", t.customers || (lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients")],
-    ["facturen", "facturen", t.invoices],
+    ...(canInvoice ? [["facturen", "facturen", t.invoices]] : []),
     ["instellingen", "instellingen", t.settings]
   ];
 
@@ -1650,7 +1663,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           })()}
 
           {/* FACTUREN */}
-          {view === "facturen" && (() => {
+          {view === "facturen" && canInvoice && (() => {
             const unsent = completedAppts.filter(a => !a.invoice_sent);
             const sent = completedAppts.filter(a => a.invoice_sent);
             const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
@@ -1872,8 +1885,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}`, maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {[
                     ["werktijden", "planning", lang === "nl" ? "Werktijden" : lang === "es" ? "Horario" : "Hours"],
-                    ["facturatie", "facturen", lang === "nl" ? "Facturatie" : lang === "es" ? "Facturación" : "Invoicing"],
-                    ["diensten", "diensten", lang === "nl" ? "Diensten" : lang === "es" ? "Servicios" : "Services"],
+                    ...(canInvoice ? [["facturatie", "facturen", lang === "nl" ? "Facturatie" : lang === "es" ? "Facturación" : "Invoicing"]] : []),
+                    ...(canEditServices ? [["diensten", "diensten", lang === "nl" ? "Diensten" : lang === "es" ? "Servicios" : "Services"]] : []),
                   ].map(([key, icon, label]) => (
                     <div key={key} onClick={() => setStaffSettingsTab(key)} style={{
                       padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: isMobile ? 10 : 11, fontWeight: 600,
@@ -1939,7 +1952,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               )}
 
               {/* FACTURATIE TAB */}
-              {staffSettingsTab === "facturatie" && (
+              {staffSettingsTab === "facturatie" && canInvoice && (
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
@@ -2011,7 +2024,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               )}
 
               {/* DIENSTEN TAB — collapsible cards like owner */}
-              {staffSettingsTab === "diensten" && (
+              {staffSettingsTab === "diensten" && canEditServices && (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.myServices}</div>
