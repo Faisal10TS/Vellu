@@ -14,6 +14,36 @@ import {
   getPageFont, ensurePageFontLoaded, curSym, ownerLangFor
 } from "./shared.jsx";
 
+// Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
+// boeken heeft ~180 dagchips; zonder deze balk moet een klant daar helemaal
+// doorheen vegen om bij februari te komen. Verschijnt alleen als het
+// boekingsvenster meer dan één maand beslaat — bij twee weken vooruit zou
+// hij alleen maar in de weg zitten.
+function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
+  if (!months || months.length < 2) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      {months.map(m => {
+        const on = m.key === activeKey;
+        return (
+          <button key={m.key} type="button" onClick={() => onPick(m.key)}
+            aria-current={on ? "true" : undefined}
+            style={{
+              flexShrink: 0, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+              fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+              background: on ? `${accent}18` : "transparent",
+              border: `1px solid ${on ? accent : c.border}`,
+              color: on ? accent : c.textLabel,
+              transition: "all 0.15s", whiteSpace: "nowrap",
+            }}>
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   const { colors: c } = useTheme();
   const [rating, setRating] = useState(0);
@@ -738,6 +768,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     bar.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
   }, [profileTab]);
   const days = getDays(windowDays);
+  // De maanden die in het venster vallen, voor de sprongbalk. Het jaartal komt
+  // er alleen bij als het venster over de jaargrens loopt — anders is
+  // "januari" dubbelzinnig.
+  const monthsInWindow = useMemo(() => {
+    const out = [];
+    for (const d of getDays(windowDays)) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!out.some(m => m.key === key)) out.push({ key, month: d.getMonth(), year: d.getFullYear() });
+    }
+    // Alleen de maanden ná de jaarwissel krijgen een jaartal. "aug sep okt nov
+    // dec jan '27 feb '27" leest een stuk rustiger dan zeven keer '26/'27.
+    const firstYear = out[0]?.year;
+    return out.map(m => ({ ...m, label: m.year === firstYear ? MON[m.month] : `${MON[m.month]} '${String(m.year).slice(2)}` }));
+  }, [windowDays, lang]);
+  // Welke maand de balk oplicht: wat de klant zelf aanklikte, anders de maand
+  // van de gekozen datum, anders de eerste maand van het venster.
+  const [monthView, setMonthView] = useState(null);
+  const dayStripRef = useRef(null);
+  const dateStripRef = useRef(null);
+  const activeMonthKey = monthView || (date ? String(date).slice(0, 7) : null) || monthsInWindow[0]?.key;
+  const jumpToMonth = (container, key) => {
+    setMonthView(key);
+    const el = container?.querySelector(`[data-month="${key}"]`);
+    // block:"nearest" — anders scrollt de hele pagina mee omhoog.
+    if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  };
   
   // Booking policy: NL is the default, EN is optional. Falls back to NL when
   // the salon hasn't provided an English translation, so we don't show empty
@@ -2922,9 +2978,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                 {/* Date picker — scrollable with arrows outside */}
                 {(() => {
-                  const scrollRef = { current: null };
+                  // Echte useRef in plaats van een { current: null } dat bij elke
+                  // render opnieuw wordt gemaakt. De pijlen kwamen daar nog mee
+                  // weg omdat ze in dezelfde render zitten, maar de maandsprong
+                  // wordt aangeroepen vanuit MonthJumpBar — een kindcomponent met
+                  // een eigen levensduur. Een stabiele ref is daar de enige
+                  // garantie dat de container er nog is als de klik binnenkomt.
+                  const scrollRef = dateStripRef;
                   const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" }); };
                   return (
+                    <>
+                    <MonthJumpBar months={monthsInWindow} activeKey={activeMonthKey}
+                      onPick={key => jumpToMonth(scrollRef.current, key)} c={c} accent={accent} />
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
                       <button onClick={() => scrollBy(-1)} style={{ width: 32, height: 32, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
@@ -2942,7 +3007,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           const isFull = !isClosed && dayAvailability[ds] === "full";
                           const isToday = ds === fmt(getToday());
                           return (
-                            <div key={i} role="button" tabIndex={isClosed ? -1 : 0}
+                            <div key={i} role="button" tabIndex={isClosed ? -1 : 0} data-month={ds.slice(0, 7)}
                               aria-label={`${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}${isClosed ? ` (${lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed"})` : isFull ? ` (${lang === "nl" ? "volgeboekt" : lang === "es" ? "todo reservado" : "fully booked"})` : ""}`}
                               aria-disabled={isClosed}
                               onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }}
@@ -2973,6 +3038,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
                       </button>
                     </div>
+                    </>
                   );
                 })()}
 
@@ -3689,7 +3755,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {/* Step 2 — Date & Time (mobile) */}
                   {step === 2 && <>
                     <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
-                    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
+                    <MonthJumpBar months={monthsInWindow} activeKey={activeMonthKey}
+                      onPick={key => jumpToMonth(dayStripRef.current, key)} c={c} accent={accent} />
+                    <div ref={dayStripRef} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                       {days.map((d, i) => {
                         const ds = fmt(d); 
                         const isSel = date === ds;
@@ -3700,7 +3768,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         // the customer can select it and join that day's waitlist.
                         const isFull = !isClosed && dayAvailability[ds] === "full";
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} data-month={ds.slice(0, 7)} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed") : isFull ? (lang === "nl" ? "vol" : lang === "es" ? "completo" : "full") : MON[d.getMonth()]}</span>
