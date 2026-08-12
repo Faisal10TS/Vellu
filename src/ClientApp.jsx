@@ -788,8 +788,45 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const dayStripRef = useRef(null);
   const dateStripRef = useRef(null);
   const activeMonthKey = monthView || (date ? String(date).slice(0, 7) : null) || monthsInWindow[0]?.key;
+  // Welke maand staat er links in beeld? De eerste dagchip die niet meer links
+  // buiten de strip valt; -8 px marge zodat een half afgesneden chip nog telt.
+  const monthFromStrip = (container) => {
+    if (!container) return null;
+    const left = container.getBoundingClientRect().left;
+    for (const chip of container.querySelectorAll("[data-month]")) {
+      if (chip.getBoundingClientRect().left - left >= -8) return chip.dataset.month;
+    }
+    return null;
+  };
+  // Tijdens een geprogrammeerde sprong even niet meelezen: de balk zou anders
+  // door alle tussenliggende maanden flikkeren op weg naar de bestemming.
+  const jumpingRef = useRef(false);
+  const jumpTimer = useRef(null);
+  const scanAt = useRef(0);
+  const scanTimer = useRef(null);
+  const scanStripMonth = (container) => {
+    const m = monthFromStrip(container);
+    if (m) setMonthView(prev => (prev === m ? prev : m));
+  };
+  // Throttle op ~100 ms met een naloop: de balk beweegt mee tijdens het vegen
+  // en corrigeert daarna nog één keer op de eindpositie.
+  const handleStripScroll = (e) => {
+    if (jumpingRef.current) return;
+    const container = e.currentTarget;
+    const now = Date.now();
+    if (now - scanAt.current > 100) { scanAt.current = now; scanStripMonth(container); }
+    clearTimeout(scanTimer.current);
+    scanTimer.current = setTimeout(() => scanStripMonth(container), 120);
+  };
+  useEffect(() => () => { clearTimeout(scanTimer.current); clearTimeout(jumpTimer.current); }, []);
   const jumpToMonth = (container, key) => {
     setMonthView(key);
+    // Vaste tijd i.p.v. wachten tot de doelmaand links staat: bij een sprong
+    // naar de laatste maand loopt de strip tegen zijn eind aan en wordt die
+    // chip nooit de linker — dan zou de synchronisatie voorgoed uit blijven.
+    jumpingRef.current = true;
+    clearTimeout(jumpTimer.current);
+    jumpTimer.current = setTimeout(() => { jumpingRef.current = false; }, 900);
     const el = container?.querySelector(`[data-month="${key}"]`);
     // block:"nearest" — anders scrollt de hele pagina mee omhoog.
     if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
@@ -2994,7 +3031,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <button onClick={() => scrollBy(-1)} style={{ width: 32, height: 32, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                       </button>
-                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4 }}>
+                      <div ref={el => scrollRef.current = el} onScroll={handleStripScroll} style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4 }}>
                         {days.map((d, i) => {
                           const ds = fmt(d);
                           const isSel = date === ds;
@@ -3757,7 +3794,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
                     <MonthJumpBar months={monthsInWindow} activeKey={activeMonthKey}
                       onPick={key => jumpToMonth(dayStripRef.current, key)} c={c} accent={accent} />
-                    <div ref={dayStripRef} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
+                    <div ref={dayStripRef} onScroll={handleStripScroll} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
                       {days.map((d, i) => {
                         const ds = fmt(d); 
                         const isSel = date === ds;
