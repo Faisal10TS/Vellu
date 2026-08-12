@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor
+  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify
 } from "./shared.jsx";
 
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
@@ -1966,7 +1966,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
-                      {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{svcDesc(s)}</div>}
+                      {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}><Linkify text={svcDesc(s)} color={accent} /></div>}
                       <div className="profile-service-meta">
                         <span className="profile-service-duration-pill">
                           <NavIcon name="clock" size={10} color={c.textSub} />
@@ -2065,7 +2065,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <div style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{prodNameOf(p)}</div>
                         {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
                           <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                            {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                            <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
                           </div>
                         )}
                         <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, marginTop: 6 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
@@ -2796,7 +2796,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             decides, so no clamp here (variants show their full
                             text too). Only the salon-page list stays clamped
                             as a teaser. */}
-                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.45 }}>{svcDesc(s)}</div>}
+                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accent} /></div>}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <NavIcon name="clock" size={10} color={c.textLabel} /> {svcDuration(s)}
@@ -2850,7 +2850,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13, color: c.text }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accent} /></div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2964,7 +2964,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accent : c.text }}>{prodNameOf(p)}</div>
                               {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
                                 <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                                  {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                                  <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
                                 </div>
                               )}
                             </div>
@@ -3635,7 +3635,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     client decides, so no clamp here (variants
                                     show their full text too). Only the
                                     salon-page list stays clamped as a teaser. */}
-                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.45 }}>{svcDesc(s)}</div>}
+                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accent} /></div>}
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
@@ -3663,7 +3663,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accent} /></div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3752,7 +3752,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{prodNameOf(p)}</div>
                                 {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
                                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                                    {lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)}
+                                    <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
                                   </div>
                                 )}
                               </div>

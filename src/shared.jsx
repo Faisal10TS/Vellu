@@ -2283,6 +2283,64 @@ function Header({ title, subtitle, right, onBack, accent }) {
 }
 
 
+// ─── LINKIFY ─────────────────────────────────────────────────
+// Omschrijvingen van diensten, varianten en producten zijn platte tekst die de
+// salon zelf typt — en daar plakken ze regelmatig een URL in: een nazorgpagina,
+// een prijslijst, hun voorwaarden. Zonder deze helper staat die URL er als dode
+// tekst en moet de klant hem overtypen (gevonden bij My Whims and More, die een
+// nazorg-link in haar dienstomschrijving wilde).
+//
+// Bewust GEEN dangerouslySetInnerHTML: we splitsen de tekst op de match en maken
+// alleen dat stukje een <a>, de rest blijft gewone tekst. Salon-invoer kan dus
+// nooit HTML injecteren.
+const LINK_RE = new RegExp(
+  // 1. expliciete links: https://… of www.…
+  "(?:https?:\\/\\/|www\\.)[^\\s<>]+" +
+  "|" +
+  // 2. kale domeinen met bekende TLD: mijnsalon.com/nazorg
+  "\\b[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)*\\.(?:com|net|org|info|biz|eu|nl|be|es|cc|app|io|co|shop|store|site|online|beauty|salon|de|fr|pt|us|ca|aw|cw|sr)(?:\\/[^\\s<>]*)?",
+  "gi"
+);
+
+// Sluitpunt van een zin ("… lees hier: vellu.cc/nazorg.") hoort niet bij de URL.
+// Een haakje sluiten we alleen af als het ook geopend werd binnen de match.
+function trimUrlTail(raw) {
+  while (raw.length > 0) {
+    const last = raw[raw.length - 1];
+    if (".,;:!?".includes(last)) { raw = raw.slice(0, -1); continue; }
+    if (last === ")" && (raw.match(/\(/g) || []).length < (raw.match(/\)/g) || []).length) {
+      raw = raw.slice(0, -1); continue;
+    }
+    break;
+  }
+  return raw;
+}
+
+function Linkify({ text, color }) {
+  if (!text) return null;
+  const str = String(text);
+  const re = new RegExp(LINK_RE.source, "gi");
+  const out = [];
+  let cursor = 0, m, i = 0;
+  while ((m = re.exec(str)) !== null) {
+    const url = trimUrlTail(m[0]);
+    if (!url) { re.lastIndex = m.index + m[0].length; continue; }
+    if (m.index > cursor) out.push(str.slice(cursor, m.index));
+    out.push(
+      <a key={`l${i++}`} href={/^https?:\/\//i.test(url) ? url : `https://${url}`}
+        target="_blank" rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        style={{ color: color || "inherit", textDecoration: "underline", textUnderlineOffset: 2, wordBreak: "break-word" }}>
+        {url}
+      </a>
+    );
+    cursor = m.index + url.length;
+    re.lastIndex = cursor;
+  }
+  if (cursor < str.length) out.push(str.slice(cursor));
+  return <>{out}</>;
+}
+
 // ─── EXPORTS ─────────────────────────────────────────────────
 export {
   THEMES, ThemeContext, ThemeProvider, useTheme,
@@ -2304,5 +2362,6 @@ export {
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
+  Linkify,
   supabase,
 };
