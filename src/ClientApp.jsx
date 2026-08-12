@@ -571,6 +571,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Booking window helpers (min/max advance)
   const minAdvanceHours = initialSalon.min_advance_hours || 0;
   const maxAdvanceDays = initialSalon.max_advance_days || 60;
+  // Het aantal dagen dat de datumstrip toont. Dit stond op Math.min(..., 90):
+  // een salon die "6 maanden" instelde zag de kalender stilzwijgend na 90 dagen
+  // ophouden, terwijl book-appointment de boeking wél had geaccepteerd. De
+  // instelling van de eigenaar is leidend; de bovengrens hieronder is alleen
+  // een noodrem tegen een onzinwaarde in de database.
+  const windowDays = Math.min(Math.max(1, maxAdvanceDays) + 1, 400);
   
   const isDayInBookingWindow = (dateStr) => {
     const now = getToday();
@@ -587,7 +593,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Find first available (non-closed) day within booking window
   const getFirstAvailableDate = () => {
     const now = getToday();
-    const maxDays = Math.min(maxAdvanceDays + 1, 90);
+    const maxDays = windowDays;
     for (let i = 0; i < maxDays; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
@@ -731,7 +737,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const scrollLeft = activeBtn.offsetLeft - bar.offsetWidth / 2 + activeBtn.offsetWidth / 2;
     bar.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
   }, [profileTab]);
-  const days = getDays(Math.min(maxAdvanceDays + 1, 90));
+  const days = getDays(windowDays);
   
   // Booking policy: NL is the default, EN is optional. Falls back to NL when
   // the salon hasn't provided an English translation, so we don't show empty
@@ -1073,7 +1079,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const loadRange = async () => {
       const from = fmt(getToday());
       const toD = new Date(getToday());
-      toD.setDate(toD.getDate() + Math.min(maxAdvanceDays + 1, 90));
+      toD.setDate(toD.getDate() + windowDays);
       const { data, error } = await supabase.rpc("get_booked_slots_range", {
         p_slug: initialSalon.id,
         p_from: from,
