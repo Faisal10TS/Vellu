@@ -653,6 +653,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Professional salons only — Starter salons simply have no products).
   const [productSel, setProductSel] = useState({});
   const [discountError, setDiscountError] = useState("");
+  // Een persoonlijke (verjaardags)code kunnen we niet zelf herkennen: die staat
+  // bewust niet in de publieke salon-payload. Controleren kost dus een RPC-rondje
+  // naar de server, en zolang dat loopt moet de knop uit staan — anders vuurt een
+  // ongeduldige dubbelklik twee keer dezelfde controle af.
+  const [discountChecking, setDiscountChecking] = useState(false);
+  // Alleen van belang als de salon géén publieke codes heeft: dan staat het
+  // invoerveld dichtgeklapt achter een linkje. Zie renderDiscountField().
+  const [discountFieldOpen, setDiscountFieldOpen] = useState(false);
   const [clientFound, setClientFound] = useState(false);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
@@ -928,21 +936,99 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     : initialSalon.services.filter(s => s.category_id === activeCategory);
 
   // Get active discount codes
+  // Let op: dit zijn uitsluitend de PUBLIEKE codes van de salon. Persoonlijke
+  // verjaardagscodes zitten sinds de fix van het lek bewust niet meer in deze
+  // payload (de codestring verklapte het e-mailadres van de klant en iedere
+  // bezoeker kon hem inwisselen). Een code die hier níét in staat is dus niet
+  // per definitie ongeldig — hij kan persoonlijk zijn. Zie checkPersonalCode().
   const activeCodes = (initialSalon.discount_codes || []).filter(dc => dc.active);
-  
+
+  // Teksten rond de kortingscode. Bewust hier en niet in het T-register in
+  // shared.jsx: dat bestand is in deze ronde van iemand anders. Zelfde
+  // nl/en/es-dekking als de rest van de pagina.
+  const dcT = {
+    haveCode: lang === "es" ? "¿Tienes un código de descuento?" : lang === "nl" ? "Heb je een kortingscode?" : "Have a discount code?",
+    checking: lang === "es" ? "Comprobando…" : lang === "nl" ? "Controleren…" : "Checking…",
+    needEmail: lang === "es"
+      ? "Introduce primero tu correo electrónico: un código personal está vinculado a tu dirección."
+      : lang === "nl"
+        ? "Vul eerst je e-mailadres in — een persoonlijke code is aan jouw adres gekoppeld."
+        : "Please enter your email address first — a personal code is tied to your address.",
+    checkFailed: lang === "es"
+      ? "Ahora mismo no hemos podido comprobar el código. Inténtalo de nuevo en un momento."
+      : lang === "nl"
+        ? "We konden de code even niet controleren. Probeer het zo opnieuw."
+        : "We couldn't check that code right now. Please try again in a moment.",
+    emailChanged: lang === "es"
+      ? "Has cambiado tu correo electrónico, así que hemos quitado el código personal. Vuelve a introducirlo."
+      : lang === "nl"
+        ? "Je e-mailadres is gewijzigd, dus de persoonlijke code is eraf gehaald. Voer hem opnieuw in."
+        : "Your email address changed, so the personal code was removed. Please enter it again.",
+  };
+
+  // Controleer een niet-publieke code bij de server. De RPC geeft alleen
+  // {code, amount, type} terug bij een exacte match op code én e-mailadres —
+  // nooit het adres zelf, nooit een lijst — en doet exact dezelfde toets als
+  // book-appointment, zodat de pagina en de server niet uiteen kunnen lopen.
+  const checkPersonalCode = async (code) => {
+    const email = form.email.trim();
+    // Het e-mailadres staat in dezelfde stap als dit veld, maar hoeft nog niet
+    // ingevuld te zijn. Zonder adres heeft de RPC geen enkele kans op een match:
+    // dan liever meteen uitleggen wat er ontbreekt dan "ongeldige code" roepen.
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setDiscountError(dcT.needEmail);
+      return;
+    }
+    setDiscountChecking(true);
+    try {
+      const { data, error } = await supabase.rpc("validate_birthday_discount", {
+        p_slug: initialSalon.slug,
+        p_code: code,
+        p_email: email,
+      });
+      // returns table(...) → altijd een array; leeg = geen match.
+      const hit = Array.isArray(data) ? data[0] : data;
+      if (error) {
+        // Een netwerk-/serverfout is iets anders dan een foute code. "Ongeldige
+        // code" zou de klant een code laten weggooien die gewoon klopt.
+        console.error("validate_birthday_discount error:", error);
+        setDiscountError(dcT.checkFailed);
+      } else if (hit) {
+        setAppliedDiscount({
+          code: hit.code,
+          // numeric komt soms als string over de wire; getPrice() rekent ermee.
+          amount: Number(hit.amount),
+          type: hit.type || "percent",
+          // Alleen geldig voor dít adres — zie de useEffect hieronder.
+          personalEmail: email.toLowerCase(),
+        });
+        setDiscountCode("");
+      } else {
+        setDiscountError(t.invalidCode);
+      }
+    } catch (e) {
+      console.error("validate_birthday_discount failed:", e);
+      setDiscountError(dcT.checkFailed);
+    } finally {
+      setDiscountChecking(false);
+    }
+  };
+
   // Apply discount code - called on input change for instant feedback
   const applyDiscountCode = (code = discountCode) => {
     setDiscountError("");
-    if (!code.trim()) return;
+    if (!code.trim() || discountChecking) return;
     const found = activeCodes.find(dc => dc.code.toUpperCase() === code.toUpperCase());
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");
     } else {
-      setDiscountError(t.invalidCode);
+      // Geen publieke code → kan een persoonlijke verjaardagscode zijn. Pas als
+      // ook de server hem niet kent volgt de "ongeldige code"-melding.
+      checkPersonalCode(code.trim().toUpperCase());
     }
   };
-  
+
   // Auto-apply discount when code matches
   const handleDiscountInput = (value) => {
     const upperVal = value.toUpperCase();
@@ -950,11 +1036,80 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setDiscountError("");
     // Auto-apply if exact match found — compare both sides uppercased to match the
     // behaviour of applyDiscountCode (owner may have stored mixed-case codes).
+    // Bewust ALLEEN voor publieke codes: een persoonlijke code controleren kost
+    // een serverrondje, en dat bij elke toetsaanslag afvuren is zowel traag als
+    // een gratis manier om codes te raden. Die gaat via de knop/Enter.
     const found = activeCodes.find(dc => (dc.code || "").toUpperCase() === upperVal);
     if (found) {
       setAppliedDiscount(found);
       setDiscountCode("");
     }
+  };
+
+  // Een persoonlijke code hoort bij precies één e-mailadres. Wie de code
+  // toepast en daarna zijn adres nog aanpast, zou anders pas bij het versturen
+  // stranden op discount_not_yours (403) — met de korting al in het getoonde
+  // totaal. Zodra het adres afwijkt van het adres waarmee de code is
+  // gevalideerd, halen we de korting er dus meteen weer af.
+  useEffect(() => {
+    if (!appliedDiscount?.personalEmail) return;
+    if (form.email.trim().toLowerCase() === appliedDiscount.personalEmail) return;
+    setAppliedDiscount(null);
+    setDiscountError(dcT.emailChanged);
+    setDiscountFieldOpen(true);
+    // dcT.emailChanged is een string die alleen met de taal meeverandert, dus
+    // hem in de deps zetten kost niets en houdt de lint schoon.
+  }, [form.email, appliedDiscount, dcT.emailChanged]);
+
+  // Eén implementatie van het kortingsveld voor de desktop- en de mobiele
+  // kolom; alleen de knop-padding verschilt. Bewust een gewone functie (geen
+  // component): als component zou React hem bij elke render opnieuw mounten en
+  // verliest het invoerveld zijn focus na één letter.
+  const renderDiscountField = (btnPadding) => {
+    if (appliedDiscount) return null;
+    // Heeft de salon geen enkele publieke code, dan is het veld voor bijna
+    // iedere bezoeker zinloos — maar niet voor de klant die net een
+    // verjaardagscode per mail kreeg. Het veld helemaal verbergen maakt die
+    // code onbruikbaar (dat was de bug), het altijd tonen zet bij elke andere
+    // salon een leeg vakje in de weg. Het enige signaal dat hier écht antwoord
+    // op zou geven — birthday_email_enabled — zit niet in de publieke payload
+    // (niet in de view public_salons, en App.jsx geeft alleen een vaste
+    // whitelist door), en beide bestanden zijn van iemand anders. Vandaar de
+    // tussenweg: dichtgeklapt achter een linkje, één klik en het staat er.
+    if (activeCodes.length === 0 && !discountFieldOpen) {
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            onClick={() => setDiscountFieldOpen(true)}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: c.textSub, textDecoration: "underline" }}
+          >
+            {dcT.haveCode}
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <SL>{t.enterDiscountCode}</SL>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input-field"
+            placeholder={t.discountCode}
+            value={discountCode}
+            onChange={e => handleDiscountInput(e.target.value)}
+            // Enter is voor een codeveld de natuurlijke bevestiging. Het veld
+            // staat buiten het <form>, dus dit verstuurt niets per ongeluk.
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyDiscountCode(); } }}
+            style={{ flex: 1, fontFamily: "monospace" }}
+          />
+          <button className="btn-ghost" style={{ padding: btnPadding }} disabled={discountChecking} onClick={() => applyDiscountCode()}>
+            {discountChecking ? dcT.checking : t.applyCode}
+          </button>
+        </div>
+        {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
+      </div>
+    );
   };
 
   // Provisional pricing while no variant is chosen yet: fall back to the
@@ -1687,11 +1842,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         too_soon: isNl ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.",
         too_far: isNl ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.",
         invalid_discount: isNl ? "Ongeldige kortingscode." : "Invalid discount code.",
+        // Een verjaardagscode is persoonlijk: book-appointment geeft 403
+        // discount_not_yours als de code bestaat maar bij een ander adres hoort
+        // (typefout in het e-mailadres, of de code van een huisgenoot geleend).
+        // Geen verwijt en geen hint over wiens adres het dan wél is — alleen de
+        // enige actie die werkt: boek met het adres waarop de mail binnenkwam.
+        discount_not_yours: lang === "es"
+          ? "Este código de descuento pertenece a otra dirección de correo. Reserva con la dirección a la que enviamos el código."
+          : isNl
+            ? "Deze kortingscode hoort bij een ander e-mailadres. Boek met het adres waarop je de code hebt ontvangen."
+            : "This discount code belongs to a different email address. Please book with the address the code was sent to.",
         rate_limited: isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
         invalid_email: isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
         phone_required: isNl ? "Telefoonnummer is verplicht voor deze salon." : "Phone number is required for this salon.",
         policy_not_agreed: isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
+        // De no-show-blokkade in book-appointment geeft 403 client_blocked. Zonder
+        // regel hier viel dat terug op de generieke "er ging iets mis", waarna de
+        // klant het eindeloos bleef proberen zonder te snappen waarom het niet lukt.
+        // Bewust geen woord over no-shows: dat is een gesprek tussen salon en klant,
+        // en de publieke boekingspagina hoort niemand te beschuldigen — we sturen
+        // alleen door naar de salon, die als enige kan deblokkeren.
+        client_blocked: lang === "es"
+          ? "Ahora mismo no puedes reservar online. Ponte en contacto con el salón para concertar tu cita."
+          : isNl
+            ? "Online boeken lukt op dit moment niet. Neem even contact op met de salon om je afspraak te maken."
+            : "Online booking isn't available for you right now. Please contact the salon to arrange your appointment.",
         salon_not_found: isNl ? "Salon niet gevonden." : "Salon not found.",
         invalid_service: isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
         invalid_variant: isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
@@ -3270,17 +3446,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   ))}
                 </div>
 
-                {/* Discount Code Input */}
-                {activeCodes.length > 0 && !appliedDiscount && (
-                  <div style={{ marginBottom: 20 }}>
-                    <SL>{t.enterDiscountCode}</SL>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
-                      <button className="btn-ghost" style={{ padding: "0 20px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
-                    </div>
-                    {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
-                  </div>
-                )}
+                {/* Discount Code Input — publieke én persoonlijke codes, zie renderDiscountField() */}
+                {renderDiscountField("0 20px")}
                 {appliedDiscount && (
                   <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
@@ -3952,17 +4119,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       ))}
                     </div>
 
-                    {/* Discount Code Input (mobile) */}
-                    {activeCodes.length > 0 && !appliedDiscount && (
-                      <div style={{ marginBottom: 20 }}>
-                        <SL>{t.enterDiscountCode}</SL>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <input className="input-field" placeholder={t.discountCode} value={discountCode} onChange={e => handleDiscountInput(e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
-                          <button className="btn-ghost" style={{ padding: "0 16px" }} onClick={() => applyDiscountCode()}>{t.applyCode}</button>
-                        </div>
-                        {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
-                      </div>
-                    )}
+                    {/* Discount Code Input (mobile) — zelfde veld, smallere knop */}
+                    {renderDiscountField("0 16px")}
                     {appliedDiscount && (
                       <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>

@@ -145,7 +145,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan, staff_view_revenue, staff_view_client_contact")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -154,6 +154,46 @@ serve(async (req) => {
   // booking policy to agree to. New salons have none, so the client UI shows
   // no checkbox — enforcing it unconditionally here would reject every booking.
   if (salon.booking_policy && !policy_agreed) return err(400, "policy_not_agreed", origin);
+
+  // ---------- 1b. No-show blokkade ----------
+  // Instellingen belooft: "Klanten die bij jouw salon dit aantal no-shows hebben
+  // worden automatisch geblokkeerd." Die belofte werd nergens waargemaakt — de
+  // drempel en de client_no_shows-tellers bestonden alleen in het dashboard, dus
+  // een geblokkeerde klant boekte gewoon opnieuw. We toetsen het hier, vóór alle
+  // zware validatie, zodat een geweigerde boeking ook geen slot bezet houdt.
+  // Drempel 0 (de default) betekent: functie uit, dan kijken we nergens naar —
+  // ook niet naar oude blocked-rijen, want de eigenaar heeft de blokkade juist
+  // uitgezet.
+  const noShowThreshold = parseInt(salon.auto_block_no_show_threshold) || 0;
+  if (noShowThreshold > 0) {
+    // De teller staat per salon op (owner_id, client_email); record_no_show
+    // schrijft het adres in kleine letters weg en `email` hierboven is al
+    // lowercase. We matchen tóch hoofdletterongevoelig voor oudere rijen, maar
+    // vergelijken daarna alsnog exact in JS: ilike ziet een '_' in een adres als
+    // jokerteken, en dat mag nooit iemand anders zijn no-shows aanrekenen.
+    const { data: noShowRows, error: nsErr } = await supabase
+      .from("client_no_shows")
+      .select("client_email, blocked")
+      .eq("owner_id", salon.id)
+      .ilike("client_email", email);
+    if (nsErr) return err(500, "db_error_no_shows", origin);
+    const row = (noShowRows || []).find(
+      (r: any) => String(r.client_email || "").trim().toLowerCase() === email,
+    );
+    // We leunen UITSLUITEND op blocked=true — het oordeel dat record_no_show zelf
+    // velde toen de eigenaar de no-show aanvinkte (die RPC zet blocked + blocked_at
+    // zodra no_show_count de drempel haalt). Zelf hier op de teller blokkeren lijkt
+    // logisch, maar maakt de klant onzichtbaar: de lijst "Geblokkeerd" in
+    // Instellingen toont alleen rijen met blocked=true, dus bij een rij met
+    // blocked=false zou de eigenaar wél de boeking geweigerd zien worden zonder dat
+    // er iemand geblokkeerd in beeld staat — en dus zonder Deblokkeer-knop. Concreet:
+    // TTNB Den Haag heeft drempel 3 en een klant op 2 no-shows (blocked=false);
+    // verlaagt de eigenaar de drempel naar 2, dan zat die klant klem en was de enige
+    // uitweg de drempel weer omhoog zetten. Verlaagt de eigenaar de drempel, dan
+    // blokkeert de eerstvolgende geregistreerde no-show die klant alsnog, en dan
+    // staat hij ook netjes in de lijst.
+    if (row?.blocked) return err(403, "client_blocked", origin);
+  }
 
   // ---------- 2. Validate services belong to this salon ----------
   const { data: services, error: svcErr } = await supabase
@@ -348,12 +388,55 @@ serve(async (req) => {
   }
 
   // ---------- 7. Apply discount (if any) ----------
+  // Twee bronnen, in deze volgorde:
+  //   a. profiles.discount_codes — de codes die de eigenaar zelf aanmaakt. Die
+  //      gelden voor iedereen en staan (alleen zij) ook in de publieke payload.
+  //   b. birthday_discount_codes — de persoonlijke verjaardagscodes. Die staan
+  //      bewust NIET in profiles: daar werden ze via de view public_salons aan
+  //      iedere anonieme bezoeker uitgeleverd, waardoor een code als
+  //      BDAY-ESTHER-15 door iedereen inwisselbaar was én het e-mailadres van
+  //      die klant verklapte. Deze functie draait met de service_role en leest
+  //      de tabel dus gewoon.
+  // Draagt de gevonden code een e-mailadres, dan is hij persoonlijk en moet het
+  // adres van de boeker exact matchen. Codes van de eigenaar hebben dat veld niet
+  // en blijven voor iedereen geldig.
   let appliedDiscount: any = null;
   if (discount_code) {
     const code = String(discount_code).trim().toUpperCase();
     const salonCodes = Array.isArray(salon.discount_codes) ? salon.discount_codes : [];
-    const match = salonCodes.find((c: any) => c.code?.toUpperCase() === code && c.active);
+    let match = salonCodes.find((c: any) => c.code?.toUpperCase() === code && c.active);
+    if (!match) {
+      // Geldigheid met een dag speling: de mail belooft "geldig deze maand" en
+      // onze salons lopen tot 4 uur achter op UTC. Zonder die marge krijgt een
+      // klant op Bonaire op de 31e om 20:01 lokale tijd te horen dat haar
+      // verjaardagscode verlopen is, terwijl het daar nog gewoon die maand is.
+      // De opruimpas in send-birthday-emails gooit de rij daarna alsnog weg.
+      const graceFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const { data: bday, error: bdErr } = await supabase
+        .from("birthday_discount_codes")
+        .select("code, client_email, discount_pct, expires_on")
+        .eq("owner_id", salon.id)
+        .eq("code", code)
+        .gte("expires_on", graceFrom)
+        .maybeSingle();
+      if (bdErr) return err(500, "db_error_discount", origin);
+      if (bday) {
+        match = {
+          code: bday.code,
+          amount: bday.discount_pct,
+          type: "percent",
+          active: true,
+          source: "birthday",
+          client_email: bday.client_email,
+        };
+      }
+    }
     if (!match) return err(400, "invalid_discount", origin);
+    // Persoonlijke code? Dan alleen voor de eigenaar van dat adres. `email` is
+    // hierboven al getrimd en lowercase gemaakt; de opgeslagen kant idem, maar we
+    // normaliseren nog een keer voor oudere/handmatig ingevoerde waarden.
+    const boundTo = String(match.client_email || "").trim().toLowerCase();
+    if (boundTo && boundTo !== email) return err(403, "discount_not_yours", origin);
     const amt = parseFloat(match.amount) || 0;
     if (match.type === "percent") {
       totalPrice = Math.max(0, totalPrice * (1 - amt / 100));

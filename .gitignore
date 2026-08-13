@@ -32,3 +32,6 @@ supabase.exe
 
 # Local backups
 *.bak
+
+# Supabase CLI-lokale staat (project-ref, sessiecache) — hoort niet in de repo
+supabase/.temp/

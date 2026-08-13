@@ -55,3 +55,34 @@ enabled = true
 # auth header, so the gateway must not require a JWT.
 verify_jwt = false
 entrypoint = "./functions/payment-qr/index.ts"
+
+# De drie hieronder stonden hier NIET in, terwijl ze alle drie al sinds hun eerste
+# versie op verify_jwt=false draaien. Zonder regel in dit bestand valt de CLI
+# terug op de standaard (true) en zet een deploy ze stilzwijgend om — waarna de
+# gateway ze 401't vóórdat de functie ook maar draait. Dat is exact de storing uit
+# memory email_must_be_server_side, die maandenlang alle transactionele mail heeft
+# gekost. Daarom staan ze nu expliciet vastgelegd, mét de reden.
+
+[functions.book-appointment]
+enabled = true
+# De publieke boekingspagina roept dit aan als anonieme bezoeker. De functie doet
+# haar eigen controles (salon-slug, slot-validatie, kortingscode, no-show-blokkade)
+# en heeft geen ingelogde gebruiker nodig.
+verify_jwt = false
+entrypoint = "./functions/book-appointment/index.ts"
+
+[functions.send-birthday-emails]
+enabled = true
+# Cron-getriggerd via x-cron-secret (Vercel) of het interne service-secret. Er zit
+# geen Authorization-header op, dus verify_jwt=true betekent: nooit meer een
+# verjaardagsmail.
+verify_jwt = false
+entrypoint = "./functions/send-birthday-emails/index.ts"
+
+[functions.mollie-webhook]
+enabled = true
+# Mollie roept deze URL aan vanaf zijn eigen servers, zonder JWT. De functie
+# verifieert de betaling door hem bij Mollie zelf op te halen — dat is de
+# authenticatie. Gaat dit op true, dan komt er geen enkele betaling meer binnen.
+verify_jwt = false
+entrypoint = "./functions/mollie-webhook/index.ts"

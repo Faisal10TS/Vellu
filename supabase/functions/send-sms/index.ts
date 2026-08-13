@@ -125,11 +125,23 @@ function normalisePhone(raw: string | null | undefined, defaultCountry = "NL"): 
   return null;
 }
 
+// Taalkeuze voor één zin. Zelfde vorm als txt() in send-emails, zodat de SMS en
+// de e-mail over hetzelfde geval niet uit elkaar kunnen lopen. Spaans hoort er
+// echt bij: book-appointment slaat "es" op als de klant in het Spaans boekt, en
+// tot nu toe viel die klant hier stilzwijgend terug op Nederlands.
+function txt(lang: string, nl: string, en: string, es: string) {
+  return lang === "en" ? en : lang === "es" ? es : nl;
+}
+
 function fmtDate(ds: string, lang: string) {
   try {
     const d = new Date(ds + "T12:00:00");
     if (lang === "en") {
       const mo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${d.getDate()} ${mo[d.getMonth()]}`;
+    }
+    if (lang === "es") {
+      const mo = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
       return `${d.getDate()} ${mo[d.getMonth()]}`;
     }
     const mo = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
@@ -148,6 +160,9 @@ type Booking = {
   price?: number | string;
   salon_name?: string;
   lang?: string;
+  // Datum van vandaag in SALONTIJD, meegegeven door send-reminders. Bepaalt of de
+  // herinnering "vandaag", "morgen" of de datum zelf moet zeggen.
+  today?: string;
   owner_id?: string;
   old_date?: string | null;
   old_time?: string | null;
@@ -157,32 +172,66 @@ type Booking = {
 // Message templates. Kept under 160 chars where possible so we don't get
 // billed for a multi-part SMS. Names are truncated with an ellipsis when
 // the salon name is long enough to blow the budget.
+//
+// De herinnering zei altijd "morgen". Dat klopte zolang de cron alleen afspraken
+// van morgen oppakte, maar sinds send-reminders profiles.reminder_hours
+// respecteert (1, 2, 4, 12, 24 of 48 uur) gaat dezelfde SMS net zo goed over
+// vandaag of over overmorgen. Zie het appointment_reminder-blok hieronder.
 function buildMessage(type: string, b: Booking): string {
-  const lang = b.lang === "en" ? "en" : "nl";
+  const lang = b.lang === "en" ? "en" : b.lang === "es" ? "es" : "nl";
   const salon = String(b.salon_name || "").slice(0, 30);
   const service = String(b.service_name || "").slice(0, 40);
   const date = b.date ? fmtDate(String(b.date), lang) : "";
   const time = (String(b.time || "").slice(0, 5)) || "";
   const priceStr = b.price != null ? `€${parseFloat(String(b.price)).toFixed(0)}` : "";
   if (type === "booking_confirmation") {
-    return lang === "nl"
-      ? `Afspraak bevestigd bij ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`
-      : `Booking confirmed at ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`;
+    return txt(lang,
+      `Afspraak bevestigd bij ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`,
+      `Booking confirmed at ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`,
+      `Cita confirmada en ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`);
   }
   if (type === "appointment_reminder") {
-    return lang === "nl"
-      ? `Herinnering: morgen ${time} bij ${salon}. ${service}. Tot morgen!`
-      : `Reminder: tomorrow ${time} at ${salon}. ${service}. See you then!`;
+    // Hier stond "morgen" hardgecodeerd, maar de salon kiest zelf hoeveel uur van
+    // tevoren de herinnering vertrekt (profiles.reminder_hours): bij 1, 2, 4 of 12
+    // uur gaat het over een afspraak van VANDAAG en bij 48 uur over overmorgen.
+    // Zelfde aanpak als de e-mail (send-emails, appointment_reminder): het verschil
+    // in hele dagen tussen b.date en b.today. b.today is de datum in SALONTIJD die
+    // send-reminders meestuurt — onze eigen klok is UTC en zou een salon op Bonaire
+    // of in Nederland rond middernacht een dag mis laten zitten. Ontbreekt b.today
+    // (een andere aanroeper), dan is UTC de terugval.
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(String(b.today || ""))
+      ? String(b.today)
+      : new Date().toISOString().split("T")[0];
+    const dayDiff = (() => {
+      const t0 = Date.parse(today + "T00:00:00Z");
+      const d0 = Date.parse(String(b.date || "") + "T00:00:00Z");
+      return (isNaN(t0) || isNaN(d0)) ? null : Math.round((d0 - t0) / 86400000);
+    })();
+    // Verder weg dan morgen (of een onleesbare datum): de datum zelf. In een SMS
+    // is "15 aug" net zo kort als "overmorgen" en het kan niet misgelezen worden.
+    const when = dayDiff === 0
+      ? txt(lang, "vandaag", "today", "hoy")
+      : dayDiff === 1
+      ? txt(lang, "morgen", "tomorrow", "mañana")
+      : date;
+    // Zonder datum én zonder dagverschil geen lege plek in de zin.
+    const w = when ? `${when} ` : "";
+    return txt(lang,
+      `Herinnering: ${w}${time} bij ${salon}. ${service}. Tot dan!`,
+      `Reminder: ${w}${time} at ${salon}. ${service}. See you then!`,
+      `Recordatorio: ${w}${time} en ${salon}. ${service}. ¡Hasta pronto!`);
   }
   if (type === "appointment_updated") {
-    return lang === "nl"
-      ? `Je afspraak bij ${salon} is gewijzigd: ${date} ${time}. Check je e-mail voor details.`
-      : `Your appointment at ${salon} was updated: ${date} ${time}. Check your email for details.`;
+    return txt(lang,
+      `Je afspraak bij ${salon} is gewijzigd: ${date} ${time}. Check je e-mail voor details.`,
+      `Your appointment at ${salon} was updated: ${date} ${time}. Check your email for details.`,
+      `Tu cita en ${salon} ha cambiado: ${date} ${time}. Revisa tu correo para los detalles.`);
   }
   if (type === "booking_cancelled") {
-    return lang === "nl"
-      ? `Je afspraak bij ${salon} op ${date} ${time} is geannuleerd.`
-      : `Your appointment at ${salon} on ${date} ${time} has been cancelled.`;
+    return txt(lang,
+      `Je afspraak bij ${salon} op ${date} ${time} is geannuleerd.`,
+      `Your appointment at ${salon} on ${date} ${time} has been cancelled.`,
+      `Tu cita en ${salon} el ${date} ${time} ha sido cancelada.`);
   }
   return "";
 }
