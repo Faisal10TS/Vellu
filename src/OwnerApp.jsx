@@ -218,6 +218,8 @@ function QRCodeModal({ url, salonName, lang, c, accent, onClose }) {
         <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
           {lang === "nl"
             ? "Klanten scannen deze code met hun telefoon om direct bij jouw boekingspagina te komen. Print op een flyer, raamsticker of visitekaartje."
+            : lang === "es"
+            ? "Tus clientes escanean este código con el móvil y llegan directamente a tu página de reservas. Imprímelo en un folleto, una pegatina para el escaparate o una tarjeta de visita."
             : "Customers scan this code with their phone to jump straight to your booking page. Print it on flyers, a window sticker, or business cards."}
         </div>
 
@@ -264,6 +266,8 @@ function QRCodeModal({ url, salonName, lang, c, accent, onClose }) {
         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 14, textAlign: "center" }}>
           {lang === "nl"
             ? "Tip: gebruik SVG voor de drukker, PNG voor social media of Instagram stories."
+            : lang === "es"
+            ? "Consejo: usa SVG para la imprenta y PNG para redes sociales o historias de Instagram."
             : "Tip: use SVG for print shops, PNG for social or Instagram stories."}
         </div>
       </div>
@@ -429,6 +433,8 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
         <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
           {lang === "nl"
             ? "De klant ontvangt automatisch een e-mail met de nieuwe datum. Als Google Agenda gekoppeld is, wordt het event ook verplaatst."
+            : lang === "es"
+            ? "El cliente recibe automáticamente un correo con la nueva fecha. Si tienes Google Calendar conectado, el evento también se mueve."
             : "The client will receive an automatic email with the new date. If Google Calendar is connected, the event will be moved too."}
         </div>
 
@@ -474,6 +480,8 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   const share = async () => {
     const text = lang === "nl"
       ? `Hey! Ik gebruik Vellu voor mijn online boekingen — geen commissie, alleen een vast maandbedrag. Meld je aan via mijn link en we krijgen allebei 2 weken gratis: ${referralUrl}`
+      : lang === "es"
+      ? `¡Hola! Uso Vellu para mis reservas online — sin comisiones, solo una cuota mensual fija. Regístrate con mi enlace y ambos conseguimos 2 semanas gratis: ${referralUrl}`
       : `Hey! I'm using Vellu for my online bookings — no commission, just a flat monthly fee. Sign up via my link and we both get 2 weeks free: ${referralUrl}`;
     if (navigator.share) {
       try {
@@ -492,6 +500,8 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
           ? "Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei 2 weken gratis."
+          : lang === "es"
+          ? "Comparte tu enlace con otro salón. Si se registran, ambos conseguimos 2 semanas gratis."
           : "Share your link with another salon. If they sign up, you both get 2 weeks free."}
       </div>
 
@@ -574,10 +584,10 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
   // filter each option applies. Copy stays generic so it works across
   // salon types.
   const SEGMENTS = [
-    { key: "all", nl: "Alle klanten", en: "All clients", desc_nl: "iedereen die ooit een afspraak had", desc_en: "everyone who ever booked" },
-    { key: "loyal", nl: "Trouwe klanten", en: "Loyal clients", desc_nl: "5+ voltooide afspraken", desc_en: "5+ completed visits" },
-    { key: "new", nl: "Nieuwe klanten", en: "New clients", desc_nl: "eerste bezoek in de laatste 30 dagen", desc_en: "first visit in the last 30 days" },
-    { key: "dormant", nl: "Sluipende klanten", en: "Dormant clients", desc_nl: "meer dan 60 dagen niet meer geweest", desc_en: "haven't visited in 60+ days" },
+    { key: "all", nl: "Alle klanten", en: "All clients", es: "Todos los clientes", desc_nl: "iedereen die ooit een afspraak had", desc_en: "everyone who ever booked", desc_es: "todos los que alguna vez reservaron" },
+    { key: "loyal", nl: "Trouwe klanten", en: "Loyal clients", es: "Clientes fieles", desc_nl: "5+ voltooide afspraken", desc_en: "5+ completed visits", desc_es: "5 o más visitas completadas" },
+    { key: "new", nl: "Nieuwe klanten", en: "New clients", es: "Clientes nuevos", desc_nl: "eerste bezoek in de laatste 30 dagen", desc_en: "first visit in the last 30 days", desc_es: "primera visita en los últimos 30 días" },
+    { key: "dormant", nl: "Slapende klanten", en: "Dormant clients", es: "Clientes inactivos", desc_nl: "meer dan 60 dagen niet meer geweest", desc_en: "haven't visited in 60+ days", desc_es: "sin visitar desde hace más de 60 días" },
   ];
 
   // Recipient count now depends on the selected segment, computed server-side
@@ -628,6 +638,8 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
           ? "Stuur een e-mail naar al je klanten — bijvoorbeeld voor een vakantiesluiting, aanbieding of nieuwtje. Klanten krijgen elk een aparte e-mail met jouw salonnaam."
+          : lang === "es"
+          ? "Envía un correo a todos tus clientes — por ejemplo para un cierre por vacaciones, una promoción o una novedad. Cada cliente recibe su propio correo con el nombre de tu salón."
           : "Send an email to all your clients — for a holiday closure, promo, or update. Each client gets their own email with your salon name."}
       </div>
 
@@ -649,7 +661,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
                 fontFamily: "'Jost', sans-serif",
               }}
             >
-              {lang === "nl" ? s.nl : s.en}
+              {lang === "nl" ? s.nl : lang === "es" ? s.es : s.en}
             </button>
           );
         })}
@@ -657,7 +669,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
       <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 12 }}>
         {(() => {
           const active = SEGMENTS.find(s => s.key === segment);
-          return active ? (lang === "nl" ? active.desc_nl : active.desc_en) : "";
+          return active ? (lang === "nl" ? active.desc_nl : lang === "es" ? active.desc_es : active.desc_en) : "";
         })()}
       </div>
 
@@ -668,7 +680,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
 
       <label style={lbl}>{lang === "nl" ? "Bericht" : lang === "es" ? "Mensaje" : "Message"}</label>
       <textarea className="input-field" value={message} onChange={e => setMessage(e.target.value)} maxLength={5000} rows={6}
-        placeholder={lang === "nl" ? "Beste klant,\n\nWe willen je laten weten dat..." : "Dear client,\n\nWe wanted to let you know that..."}
+        placeholder={lang === "nl" ? "Beste klant,\n\nWe willen je laten weten dat..." : lang === "es" ? "Hola,\n\nQueremos contarte que..." : "Dear client,\n\nWe wanted to let you know that..."}
         style={{ width: "100%", fontSize: 13, padding: "10px 12px", marginBottom: 10, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
 
       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>
@@ -687,6 +699,8 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
           <div style={{ fontSize: 12, color: c.text, marginBottom: 10, lineHeight: 1.5 }}>
             {lang === "nl"
               ? `Versturen naar ${count} klant${count === 1 ? "" : "en"}? Dit kan niet ongedaan gemaakt worden.`
+              : lang === "es"
+              ? `¿Enviar a ${count} cliente${count === 1 ? "" : "s"}? Esto no se puede deshacer.`
               : `Send to ${count} client${count === 1 ? "" : "s"}? This cannot be undone.`}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -837,7 +851,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
         <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
           <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
           <NavIcon name="upload" size={13} color="currentColor" />
-          {busy ? (lang === "nl" ? "Bezig\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
+          {busy ? (lang === "nl" ? "Bezig\u2026" : lang === "es" ? "Procesando\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
         </label>
         <button className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, color: c.textMuted }} onClick={template}>
           {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
@@ -881,6 +895,8 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, country
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
           ? "Download een CSV met al je klanten: contactgegevens, bezoekstatistieken, favoriete behandeling en medewerker. Handig voor nieuwsbrieven, boekhouding of GDPR-verzoeken."
+          : lang === "es"
+          ? "Descarga un CSV con todos tus clientes: datos de contacto, estadísticas de visitas, servicio y profesional favoritos. Útil para boletines, contabilidad o solicitudes de RGPD."
           : "Download a CSV of every client: contact info, visit stats, favorite service and staff. Useful for newsletters, bookkeeping, or GDPR requests."}
       </div>
       <button
@@ -941,6 +957,8 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       const toDate = new Date(customTo);
       const label = lang === "nl"
         ? `${fromDate.toLocaleDateString("nl-NL")} — ${toDate.toLocaleDateString("nl-NL")}`
+        : lang === "es"
+        ? `${fromDate.toLocaleDateString("es-ES")} — ${toDate.toLocaleDateString("es-ES")}`
         : `${fromDate.toLocaleDateString("en-US")} — ${toDate.toLocaleDateString("en-US")}`;
       return { from: customFrom, to: customTo, label };
     }
@@ -1002,6 +1020,8 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
           <div style={{ fontSize: 11, color: c.textLabel }}>
             {lang === "nl"
               ? "Download een professioneel rapport voor je boekhouder of belastingaangifte."
+              : lang === "es"
+              ? "Descarga un informe profesional para tu contable o tu declaración de impuestos."
               : "Download a professional report for your accountant or tax filing."}
           </div>
         </div>
@@ -1405,7 +1425,7 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
           <input className="input-field" placeholder={`${cur} ${lang === "nl" ? "Prijs *" : lang === "es" ? "Precio *" : "Price *"}`} type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
-          <input className="input-field" placeholder="Duur (min)" type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
+          <input className="input-field" placeholder={lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"} type="number" value={form.duration} onChange={e => setForm(f => ({...f, duration: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px" }} />
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub, cursor: "pointer", padding: "2px" }}>
           <input type="checkbox" checked={!!form.per_unit} onChange={e => setForm(f => ({...f, per_unit: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
@@ -1697,7 +1717,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
           toast.show(lang === "nl" ? "Proefperiode al gebruikt" : lang === "es" ? "Prueba ya utilizada" : "Trial already used", "error");
           setProfileBilling((p) => ({ ...(p || {}), trial_used: true }));
         } else {
-          toast.show(lang === "nl" ? `Probleem: ${code}` : `Error: ${code}`, "error");
+          toast.show(lang === "nl" ? `Probleem: ${code}` : lang === "es" ? `Problema: ${code}` : `Error: ${code}`, "error");
         }
         return;
       }
@@ -1727,6 +1747,8 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         toast.show(
           lang === "nl"
             ? `Betaling kon niet starten: ${code}`
+            : lang === "es"
+            ? `No se pudo iniciar el pago: ${code}`
             : `Could not start payment: ${code}`,
           "error"
         );
@@ -1775,6 +1797,8 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
           <div style={{ fontSize: 14, color: c.textSub, maxWidth: 420 }}>
             {lang === "nl"
               ? "Je abonnement wordt geactiveerd. Een momentje…"
+              : lang === "es"
+              ? "Estamos activando tu suscripción. Un momento…"
               : "Your subscription is being activated. One moment…"}
           </div>
           <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -1900,9 +1924,13 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
             {canTrial
               ? (lang === "nl"
                   ? "Geen verplichtingen. Annuleer wanneer je wilt tijdens of na de proefperiode."
+                  : lang === "es"
+                  ? "Sin compromiso. Cancela cuando quieras, durante o después de la prueba."
                   : "No commitment. Cancel anytime during or after the trial.")
               : (lang === "nl"
                   ? "Veilig betalen via iDEAL, creditcard, Apple Pay, Google Pay of SEPA — powered by Mollie."
+                  : lang === "es"
+                  ? "Pago seguro con iDEAL, tarjeta, Apple Pay, Google Pay o SEPA — con la tecnología de Mollie."
                   : "Secure payment via iDEAL, card, Apple Pay, Google Pay or SEPA — powered by Mollie.")}
           </div>
         </div>
@@ -2389,6 +2417,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     const confirmMsg = hasHistory
       ? (lang === "nl"
           ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst.`
+          : lang === "es"
+          ? `¿Eliminar el cliente? Sus ${editing.appts.length} cita(s) siguen en tu agenda y en el historial; el cliente solo desaparece de esta lista.`
           : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list.`)
       : (lang === "nl" ? "Klant definitief verwijderen?" : lang === "es" ? "¿Eliminar este cliente de forma permanente?" : "Permanently delete this client?");
     if (!window.confirm(confirmMsg)) return;
@@ -2535,7 +2565,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   // owner sees WHO and WHAT was requested without opening anything else.
   const waitlistLabels = useMemo(() => {
     const staffById = new Map((staffList || []).map(s => [s.id, s.name]));
-    const svcById = new Map((serviceList || []).map(s => [s.id, (lang === "nl" ? s.name_nl : s.name_en) || s.name_nl || s.name_en || s.name || ""]));
+    const svcById = new Map((serviceList || []).map(s => [s.id, (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en) : s.name_en) || s.name_nl || s.name_en || s.name || ""]));
     return {
       staffName: (id) => (id ? staffById.get(id) || null : null),
       serviceNames: (ids) => (Array.isArray(ids) ? ids.map(i => svcById.get(i)).filter(Boolean) : [])
@@ -2894,7 +2924,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div><label style={lbl}>{lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}</label><input className="input-field" value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : lang === "es" ? "Nombre completo" : "Full name"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
-              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
             </div>
             ); })()}
@@ -2916,6 +2946,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14 }}>
               {lang === "nl"
                 ? `${importPreview.rows.length} klanten gevonden in ${importPreview.fileName}`
+                : lang === "es"
+                ? `${importPreview.rows.length} clientes encontrados en ${importPreview.fileName}`
                 : `${importPreview.rows.length} clients found in ${importPreview.fileName}`}
               {importPreview.skipped > 0 && (lang === "nl" ? ` · ${importPreview.skipped} regels overgeslagen (geen naam/email)` : lang === "es" ? ` · ${importPreview.skipped} filas omitidas (sin nombre/correo)` : ` · ${importPreview.skipped} rows skipped (no name/email)`)}
             </div>
@@ -2947,6 +2979,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
               {lang === "nl"
                 ? "Klanten met een e-mail die al in je lijst staat worden overgeslagen (geen dubbele entries)."
+                : lang === "es"
+                ? "Los clientes con un correo que ya está en tu lista se omiten (sin duplicados)."
                 : "Clients with an email already in your list are skipped (no duplicates)."}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -2971,6 +3005,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
                 ? <>Alle afspraken van <strong>{mergeSource.name}</strong> worden verplaatst naar de gekozen klant. Notities en telefoonnummer worden overgenomen als de andere klant die nog niet heeft.</>
+                : lang === "es"
+                ? <>Todas las citas de <strong>{mergeSource.name}</strong> se trasladan al cliente que elijas. Las notas y el teléfono se copian si el otro cliente aún no los tiene.</>
                 : <>All appointments of <strong>{mergeSource.name}</strong> will move to the picked client. Notes and phone are carried over if the target lacks them.</>}
             </div>
             <input className="input-field" placeholder={lang === "nl" ? "Zoek klant…" : lang === "es" ? "Buscar cliente…" : "Search client…"} value={mergeSearch} onChange={e => setMergeSearch(e.target.value)} style={{ width: "100%", marginBottom: 12 }} />
@@ -2991,6 +3027,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                     onClick={() => {
                       if (!window.confirm(lang === "nl"
                         ? `${mergeSource.name} samenvoegen met ${cl.name}? Dit kan niet worden teruggedraaid.`
+                        : lang === "es"
+                        ? `¿Combinar ${mergeSource.name} con ${cl.name}? Esto no se puede deshacer.`
                         : `Merge ${mergeSource.name} into ${cl.name}? This can't be undone.`)) return;
                       mergeClientInto(mergeSource, cl);
                     }}
@@ -3023,6 +3061,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
                 ? "Klanten die hetzelfde telefoonnummer delen. Kies welke record je wilt behouden — de ander wordt daarin samengevoegd."
+                : lang === "es"
+                ? "Clientes que comparten el mismo número de teléfono. Elige cuál quieres conservar — el otro se combina con ese."
                 : "Clients sharing the same phone number. Pick which record to keep — the other gets merged in."}
             </div>
             {dupePairs.length === 0 ? (
@@ -3050,6 +3090,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                         onClick={() => {
                           if (!window.confirm(lang === "nl"
                             ? `${p.source.name} samenvoegen met ${p.survivor.name}?`
+                            : lang === "es"
+                            ? `¿Combinar ${p.source.name} con ${p.survivor.name}?`
                             : `Merge ${p.source.name} into ${p.survivor.name}?`)) return;
                           mergeClientInto(p.source, p.survivor);
                           setShowDupes(false);
@@ -3060,6 +3102,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                         onClick={() => {
                           if (!window.confirm(lang === "nl"
                             ? `${p.survivor.name} samenvoegen met ${p.source.name}?`
+                            : lang === "es"
+                            ? `¿Combinar ${p.survivor.name} con ${p.source.name}?`
                             : `Merge ${p.survivor.name} into ${p.source.name}?`)) return;
                           mergeClientInto(p.survivor, p.source);
                           setShowDupes(false);
@@ -3095,6 +3139,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
                 ? "Klanten die zich hebben aangemeld toen er geen tijd vrij was. Neem contact op en markeer als 'benaderd'."
+                : lang === "es"
+                ? "Clientes que se apuntaron cuando no había horas libres. Contacta con ellos y márcalos como «contactado»."
                 : "Clients who signed up when no slots were free. Reach out and mark them as 'contacted'."}
             </div>
             {waitlist.length === 0 ? (
@@ -3129,6 +3175,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }}>›</span>
                           {lang === "nl"
                             ? `${g.entries.length} voorkeursdata${open ? "" : ` — vanaf ${fmtD(g.firstDate)}`}`
+                            : lang === "es"
+                            ? `${g.entries.length} fechas preferidas${open ? "" : ` — desde ${fmtD(g.firstDate)}`}`
                             : `${g.entries.length} preferred dates${open ? "" : ` — from ${fmtD(g.firstDate)}`}`}
                         </div>
                       ) : null}
@@ -3211,6 +3259,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                             onClick={() => (multi ? markWaitlistGroupNotified(g.waitingIds) : markWaitlistNotified(g.waitingIds[0]))}>
                             {lang === "nl"
                               ? (multi ? "Markeer alles benaderd" : "Markeer benaderd")
+                              : lang === "es"
+                              ? (multi ? "Marcar todo como contactado" : "Marcar como contactado")
                               : (multi ? "Mark all contacted" : "Mark contacted")}
                           </button>
                         )}
@@ -3222,7 +3272,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                             if (!window.confirm(msg)) return;
                             multi ? deleteWaitlistGroup(g.ids) : deleteWaitlistEntry(g.ids[0]);
                           }}>
-                          {lang === "nl" ? (multi ? "Verwijder alles" : "Verwijder") : (multi ? "Delete all" : "Delete")}
+                          {lang === "nl" ? (multi ? "Verwijder alles" : "Verwijder") : lang === "es" ? (multi ? "Eliminar todo" : "Eliminar") : (multi ? "Delete all" : "Delete")}
                         </button>
                       </div>
                     </div>
@@ -3254,7 +3304,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div><label style={lbl}>{lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}</label><input className="input-field" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : lang === "es" ? "Nombre completo" : "Full name"} style={{ width: "100%" }} autoFocus /></div>
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
-              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Verjaardag (optioneel)" : lang === "es" ? "Cumpleaños (opcional)" : "Birthday (optional)"}</label><input className="input-field" type="date" value={editForm.birthday || ""} onChange={(e) => setEditForm((f) => ({ ...f, birthday: e.target.value }))} style={{ width: "100%" }} /></div>
             </div>
@@ -3930,15 +3980,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const errMsg = (() => {
       if (!/^[a-z0-9-]+$/.test(slugDraft)) return lang === "nl"
         ? "Alleen kleine letters, cijfers en streepjes"
+        : lang === "es"
+        ? "Solo letras minúsculas, números y guiones"
         : "Lowercase letters, numbers, and hyphens only";
       if (slugDraft.length < 3) return lang === "nl" ? "Minimaal 3 tekens" : lang === "es" ? "Al menos 3 caracteres" : "At least 3 characters";
       if (slugDraft.length > 40) return lang === "nl" ? "Maximaal 40 tekens" : lang === "es" ? "Como máximo 40 caracteres" : "At most 40 characters";
       if (slugDraft.startsWith("-") || slugDraft.endsWith("-")) return lang === "nl"
         ? "Kan niet beginnen of eindigen met streepje"
+        : lang === "es"
+        ? "No puede empezar ni terminar con un guion"
         : "Cannot start or end with a hyphen";
       if (slugDraft.includes("--")) return lang === "nl" ? "Geen dubbele streepjes" : lang === "es" ? "Sin guiones dobles" : "No double hyphens";
       if (RESERVED_SLUGS.has(slugDraft)) return lang === "nl"
         ? "Deze naam is gereserveerd door Vellu"
+        : lang === "es"
+        ? "Este nombre está reservado por Vellu"
         : "This name is reserved by Vellu";
       return null;
     })();
@@ -4020,6 +4076,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         toast.show(
           lang === "nl"
             ? `Wisselen mislukt: ${code}`
+            : lang === "es"
+            ? `No se pudo cambiar de plan: ${code}`
             : `Plan change failed: ${code}`,
           "error",
         );
@@ -4032,9 +4090,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         charged > 0
           ? (lang === "nl"
               ? `Upgrade gelukt — €${charged.toFixed(2)} voor de rest van deze periode wordt eenmalig afgeschreven, daarna €35/maand.`
+              : lang === "es"
+              ? `Mejora completada — se cobrará una sola vez €${charged.toFixed(2)} por lo que queda de este periodo, y después €35 al mes.`
               : `Upgraded — a one-off €${charged.toFixed(2)} for the rest of this period will be charged, then €35/month.`)
           : (lang === "nl"
               ? "Abonnement gewijzigd. Nieuwe prijs gaat in op de volgende renewal."
+              : lang === "es"
+              ? "Plan cambiado. El nuevo precio se aplica en la próxima renovación."
               : "Plan changed. New price applies from the next renewal."),
       );
     } catch (e) {
@@ -4179,6 +4241,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           if (row.blocked) {
             toast.show(lang === "nl"
               ? `${appt.client_name} is geblokkeerd (${row.no_show_count} no-shows)`
+              : lang === "es"
+              ? `${appt.client_name} está bloqueado (${row.no_show_count} ausencias)`
               : `${appt.client_name} is blocked (${row.no_show_count} no-shows)`, "error");
           }
         }
@@ -4208,10 +4272,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const isCompleted = a.status === "completed";
     const baseMsg = lang === "nl"
       ? "Afspraak definitief verwijderen?"
+      : lang === "es"
+      ? "¿Eliminar esta cita de forma permanente?"
       : "Permanently delete this appointment?";
     const extra = isCompleted
       ? (lang === "nl"
           ? " De afspraak telt dan niet meer mee voor je omzet of klanthistorie."
+          : lang === "es"
+          ? " La cita dejará de contar para tus ingresos y para el historial del cliente."
           : " It will no longer count toward your revenue or client history.")
       : "";
     if (!(await showConfirm(baseMsg + extra))) return;
@@ -4434,7 +4502,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       validRows.some(r => !r.original || (r.extra_ids || []).length > 0)
     );
     if (serviceChanged) {
-      const svcLabelOf = (svc) => lang === "nl" ? (svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
+      const svcLabelOf = (svc) => lang === "nl" ? (svc?.name_nl || svc?.name || "") : lang === "es" ? (svc?.name_es || svc?.name_en || svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
       const staffNameOf = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
       let runningOffset = 0;
       const parts = validRows.map(r => {
@@ -5084,7 +5152,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return Object.entries(groups).sort(([a], [b]) => (a || "zzz").localeCompare(b || "zzz"));
   };
   const exportOrderListCsv = () => {
-    const rows = [[lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier", lang === "nl" ? "Product" : "Product", lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock", lang === "nl" ? "Minimum" : "Minimum", lang === "nl" ? "Bestellen" : lang === "es" ? "Pedir" : "To order"]];
+    const rows = [[lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier", lang === "nl" ? "Product" : lang === "es" ? "Producto" : "Product", lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock", lang === "nl" ? "Minimum" : lang === "es" ? "Mínimo" : "Minimum", lang === "nl" ? "Bestellen" : lang === "es" ? "Pedir" : "To order"]];
     for (const [sup, items] of orderListGroups()) for (const it of items) rows.push([sup || "—", prodName(it) || it.name_nl || "", it.stock, it.min_stock, it.shortage]);
     downloadCsv(rows, "vellu-bestellijst.csv");
   };
@@ -5397,6 +5465,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const rotateCalendarToken = async () => {
     if (!await showConfirm(lang === "nl"
       ? "Nieuwe link maken? De oude agenda-link stopt dan met werken op alle apparaten."
+      : lang === "es"
+      ? "¿Crear un enlace nuevo? El enlace de agenda anterior dejará de funcionar en todos los dispositivos."
       : "Create a new link? The old calendar link will stop working on all devices.")) return;
     setCalFeedBusy(true);
     try {
@@ -5640,6 +5710,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? `Welkom bij Vellu, ${salonData.name || ""}` : lang === "es" ? `Bienvenido a Vellu, ${salonData.name || ""}` : `Welcome to Vellu, ${salonData.name || ""}`,
       body: lang === "nl"
         ? "In één minuut laten we zien waar alles staat. Je kunt op elk moment overslaan — de rondleiding staat later gewoon weer bij Instellingen → Overig."
+        : lang === "es"
+        ? "En un minuto te enseñamos dónde está todo. Puedes saltártelo cuando quieras — el recorrido siempre vuelve a estar en Ajustes → Otros."
         : "In one minute we'll show you where everything lives. Skip whenever you like — you can restart the tour any time under Settings → Other."
     },
     {
@@ -5652,6 +5724,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Je boekingslink" : lang === "es" ? "Tu enlace de reserva" : "Your booking link",
       body: lang === "nl"
         ? `Dit is jouw pagina: vellu.cc/${salonData.id}. Zet 'm in je Instagram-bio of stuur 'm via WhatsApp — klanten boeken daar zelf, ook 's nachts. Er is ook een QR-code om af te drukken.`
+        : lang === "es"
+        ? `Esta es tu página: vellu.cc/${salonData.id}. Ponla en tu bio de Instagram o mándala por WhatsApp — tus clientes reservan solos, también de noche. También hay un código QR para imprimir.`
         : `This is your page: vellu.cc/${salonData.id}. Put it in your Instagram bio or send it over WhatsApp — clients book themselves, day or night. There's a printable QR code too.`
     },
     {
@@ -5661,6 +5735,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Dashboard" : lang === "es" ? "Panel" : "Dashboard",
       body: lang === "nl"
         ? "Je startscherm: de afspraken van vandaag, wat je deze week en maand verdient, en hoeveel klanten er terugkomen."
+        : lang === "es"
+        ? "Tu pantalla de inicio: las citas de hoy, lo que ganas esta semana y este mes, y cuántos clientes vuelven."
         : "Your home screen: today's appointments, what you're earning this week and month, and how many clients come back."
     },
     {
@@ -5670,6 +5746,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Agenda" : "Agenda",
       body: lang === "nl"
         ? "Al je afspraken per dag, week of maand. Zelf een afspraak inplannen, verzetten, afronden, of een dag blokkeren als je vrij bent. Tik op een afspraak voor alle details."
+        : lang === "es"
+        ? "Todas tus citas por día, semana o mes. Puedes crear una cita, reprogramarla, cerrarla o bloquear un día libre. Toca una cita para ver todos los detalles."
         : "All your appointments by day, week or month. Book one yourself, reschedule, complete it, or block a day off. Tap an appointment for the full details."
     },
     {
@@ -5679,6 +5757,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients",
       body: lang === "nl"
         ? "Iedereen die ooit bij je geboekt heeft, met hun historie en je eigen notities — zoals welke kleur ze de vorige keer had."
+        : lang === "es"
+        ? "Todos los que alguna vez han reservado contigo, con su historial y tus propias notas — como el color que llevó la última vez."
         : "Everyone who ever booked with you, with their history and your own notes — like which colour they had last time."
     },
     {
@@ -5688,6 +5768,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Analytics" : lang === "es" ? "Estadísticas" : "Analytics",
       body: lang === "nl"
         ? "Je omzet over tijd, je populairste behandelingen en je drukste dagen. Werk je met een team, dan kun je per medewerker filteren."
+        : lang === "es"
+        ? "Tus ingresos a lo largo del tiempo, tus tratamientos más populares y tus días con más trabajo. ¿Trabajas con un equipo? Puedes filtrar por profesional."
         : "Your revenue over time, your most popular treatments and your busiest days. Working with a team? Filter it per staff member."
     },
     {
@@ -5697,6 +5779,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Facturen" : lang === "es" ? "Facturas" : "Invoices",
       body: lang === "nl"
         ? "Elke afgeronde behandeling met btw erbij. Stuur de factuur direct naar je klant, of download een omzetrapport als PDF — voor het hele team of per medewerker."
+        : lang === "es"
+        ? "Cada tratamiento cerrado con sus impuestos incluidos. Envía la factura directamente a tu cliente o descarga un informe de ingresos en PDF — de todo el equipo o por profesional."
         : "Every completed treatment with VAT included. Email the invoice straight to your client, or download a revenue report as PDF — for the whole team or per staff member."
     },
     {
@@ -5706,6 +5790,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Instellingen" : lang === "es" ? "Ajustes" : "Settings",
       body: lang === "nl"
         ? "Hier stel je je salon in. De belangrijkste plek in de app — zeker in het begin."
+        : lang === "es"
+        ? "Aquí configuras tu salón. El sitio más importante de la app, sobre todo al principio."
         : "This is where you set your salon up. The most important place in the app, especially at the start."
     },
     {
@@ -5715,6 +5801,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Alles onder Instellingen" : lang === "es" ? "Todo en Ajustes" : "Everything under Settings",
       body: lang === "nl"
         ? "Salon: je naam, logo en kleuren. Diensten: behandelingen, prijzen en extra's. Team: je medewerkers. Planning: openingstijden en vrije dagen. Abonnement: je plan. Overig: btw, e-mail en deze rondleiding."
+        : lang === "es"
+        ? "Salón: tu nombre, logo y colores. Servicios: tratamientos, precios y extras. Equipo: tus profesionales. Horario: horas de apertura y días libres. Facturación: tu plan. Otros: impuestos, correo y este recorrido."
         : "Salon: your name, logo and colours. Services: treatments, prices and extras. Team: your staff. Schedule: opening hours and days off. Billing: your plan. Other: VAT, email and this tour."
     },
     {
@@ -5724,6 +5812,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       title: lang === "nl" ? "Dat was 'm!" : lang === "es" ? "¡Eso es todo!" : "That's it!",
       body: lang === "nl"
         ? "Zet als eerste je behandelingen en openingstijden klaar, deel daarna je link. Vanaf dat moment lopen boekingen, bevestigingsmails en herinneringen vanzelf."
+        : lang === "es"
+        ? "Empieza por añadir tus tratamientos y tus horas de apertura, y después comparte tu enlace. A partir de ahí las reservas, los correos de confirmación y los recordatorios funcionan solos."
         : "Start by adding your treatments and opening hours, then share your link. From then on bookings, confirmation emails and reminders run by themselves."
     }
   ];
@@ -5800,6 +5890,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
               {lang === "nl"
                 ? "Klanten kunnen dan geen afspraak boeken in dit tijdvak of op deze dag."
+                : lang === "es"
+                ? "Tus clientes no podrán reservar en ese intervalo ni ese día."
                 : "Clients won't be able to book during this window or on this day."}
             </div>
             {/* Mode toggle hidden while editing a time-block row — switching to
@@ -5807,8 +5899,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {!blockEditId && (
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
               {[
-                { key: "time", nl: "Tijdvak", en: "Time window" },
-                { key: "day", nl: "Hele dag", en: "Whole day" },
+                { key: "time", nl: "Tijdvak", en: "Time window", es: "Intervalo" },
+                { key: "day", nl: "Hele dag", en: "Whole day", es: "Todo el día" },
               ].map(opt => {
                 const active = blockForm.mode === opt.key;
                 return (
@@ -5822,7 +5914,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       border: `1px solid ${active ? `${c.danger}4d` : c.inputBorder}`,
                       fontFamily: "'Jost', sans-serif",
                     }}
-                  >{lang === "nl" ? opt.nl : opt.en}</button>
+                  >{lang === "nl" ? opt.nl : lang === "es" ? opt.es : opt.en}</button>
                 );
               })}
             </div>
@@ -5900,6 +5992,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
               {lang === "nl"
                 ? "Kies namens welk profiel je deze factuur verstuurt. Elk profiel heeft zijn eigen nummering."
+                : lang === "es"
+                ? "Elige con qué perfil envías esta factura. Cada perfil tiene su propia numeración."
                 : "Pick which profile is sending this invoice. Each has its own numbering."}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
@@ -6004,7 +6098,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   }
                 }}
                 style={{ flex: 1, fontSize: 12 }} />
-              <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
+              <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : lang === "es" ? "Escanear con la cámara" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
               {(salonData.products || []).filter(p => p.active).filter(p => {
@@ -6123,7 +6217,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               )}
 
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14 }}>
-                {lines.length === 0 && Math.abs(rest) < 0.01 && <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Geen regels" : "No lines"}</div>}
+                {lines.length === 0 && Math.abs(rest) < 0.01 && <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Geen regels" : lang === "es" ? "Sin líneas" : "No lines"}</div>}
                 {Math.abs(rest) >= 0.01 && (
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, padding: "5px 0", borderBottom: lines.length ? `1px solid ${c.border}` : "none" }}>
                     <span style={{ minWidth: 0 }}>{String(sale.service_name || "").split(" + ")[0]}</span>
@@ -6166,7 +6260,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </button>
                 <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: (!sale.client_email || !!processingApptId) ? 0.45 : 1 }}
                   disabled={!sale.client_email || !!processingApptId}
-                  title={!sale.client_email ? (lang === "nl" ? "Geen e-mailadres bij deze verkoop" : "No email on this sale") : ""}
+                  title={!sale.client_email ? (lang === "nl" ? "Geen e-mailadres bij deze verkoop" : lang === "es" ? "Esta venta no tiene correo electrónico" : "No email on this sale") : ""}
                   onClick={() => sendInvoice(sale.id)}>
                   <NavIcon name="mail" size={12} color="currentColor" /> {sale.invoice_sent ? (lang === "nl" ? "Factuur opnieuw" : lang === "es" ? "Reenviar factura" : "Resend invoice") : (lang === "nl" ? "Factuur mailen" : lang === "es" ? "Enviar factura" : "Email invoice")}
                 </button>
@@ -6213,12 +6307,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
                 <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
                   {[v.buyer_name, v.buyer_email, new Date(v.created_at).toLocaleDateString("nl-NL")].filter(Boolean).join(" · ")}
-                  {!v.active && ` · ${lang === "nl" ? "gedeactiveerd" : "deactivated"}`}
-                  {v.active && v.remaining <= 0 && ` · ${lang === "nl" ? "volledig gebruikt" : "fully used"}`}
+                  {!v.active && ` · ${lang === "nl" ? "gedeactiveerd" : lang === "es" ? "desactivado" : "deactivated"}`}
+                  {v.active && v.remaining <= 0 && ` · ${lang === "nl" ? "volledig gebruikt" : lang === "es" ? "usado por completo" : "fully used"}`}
                 </div>
                 {v.active && v.remaining > 0 && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <input className="input-field" type="number" min="0" placeholder={`${cur} ${lang === "nl" ? "bedrag" : "amount"}`} value={voucherRedeem[v.id] || ""} onChange={e => setVoucherRedeem(s => ({ ...s, [v.id]: e.target.value }))} style={{ width: 110, fontSize: 11, padding: "8px 10px" }} />
+                    <input className="input-field" type="number" min="0" placeholder={`${cur} ${lang === "nl" ? "bedrag" : lang === "es" ? "importe" : "amount"}`} value={voucherRedeem[v.id] || ""} onChange={e => setVoucherRedeem(s => ({ ...s, [v.id]: e.target.value }))} style={{ width: 110, fontSize: 11, padding: "8px 10px" }} />
                     <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: accent, borderColor: `${accent}44` }} onClick={async () => {
                       const amt = parseFloat(voucherRedeem[v.id]);
                       if (!Number.isFinite(amt) || amt <= 0) return;
@@ -6576,6 +6670,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
                 ? "Let op: dit is een directe override. Beschikbaarheid van staff wordt niet automatisch gecontroleerd. Voor een normale verplaatsing met slot-check gebruik je 'Verplaats'."
+                : lang === "es"
+                ? "Ojo: esto es un cambio directo. No se comprueba la disponibilidad del equipo. Para mover una cita con control de huecos usa «Reprogramar»."
                 : "Note: this is a direct override. Staff availability is not checked. Use 'Reschedule' for a slot-validated move."}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -6859,7 +6955,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const weekLabels = [];
                 const dayInitialsNL = ["Z", "M", "D", "W", "D", "V", "Z"];
                 const dayInitialsEN = ["S", "M", "T", "W", "T", "F", "S"];
-                const dayInitials = lang === "nl" ? dayInitialsNL : dayInitialsEN;
+                const dayInitialsES = ["D", "L", "M", "X", "J", "V", "S"];
+                const dayInitials = lang === "nl" ? dayInitialsNL : lang === "es" ? dayInitialsES : dayInitialsEN;
                 for (let i = 6; i >= 0; i--) {
                   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
                   weekDaily.push(revByDay[fmt(d)] || 0);
@@ -7310,7 +7407,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         }
                       }}
                       style={{ flex: 1, fontSize: 12 }} />
-                    <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
+                    <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : lang === "es" ? "Escanear con la cámara" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                   </div>
                   {(salonData.products || []).filter(p => p.active).length === 0 ? (
                     <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
@@ -7332,7 +7429,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}><NavIcon name="bag" size={18} color={c.textMuted} /></div>}
                             <div style={{ fontSize: 11, fontWeight: 500, color: c.text, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{prodName(p)}</div>
                             <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
-                            {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : "sold out") : `${lang === "nl" ? "voorraad" : "stock"}: ${p.stock}`}</div>}
+                            {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : lang === "es" ? "agotado" : "sold out") : `${lang === "nl" ? "voorraad" : lang === "es" ? "existencias" : "stock"}: ${p.stock}`}</div>}
                           </div>
                         );
                       })}
@@ -7447,7 +7544,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <button className="btn-ghost" style={{ flex: 2, padding: "11px 12px", fontSize: 11, color: accent, borderColor: `${accent}55`, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "print")}>
                                 <NavIcon name="printer" size={13} color="currentColor" /> {lang === "nl" ? "Bon printen" : lang === "es" ? "Imprimir recibo" : "Print receipt"}
                               </button>
-                              <button className="btn-ghost" style={{ flex: 1, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "save")} title={lang === "nl" ? "Bon downloaden als PDF" : "Download receipt as PDF"}>
+                              <button className="btn-ghost" style={{ flex: 1, padding: "11px 12px", fontSize: 11, opacity: receiptBusy ? 0.5 : 1 }} disabled={receiptBusy} onClick={() => downloadReceipt(sale, "save")} title={lang === "nl" ? "Bon downloaden als PDF" : lang === "es" ? "Descargar el recibo en PDF" : "Download receipt as PDF"}>
                                 <NavIcon name="download" size={12} color="currentColor" /> PDF
                               </button>
                             </div>
@@ -7503,7 +7600,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 </div>
                               </div>
                               <span style={{ fontSize: 12, color: c.success, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{"−"}{cur}{redeemPreview.toFixed(2)}</span>
-                              <button type="button" aria-label={lang === "nl" ? "Kadobon loskoppelen" : "Remove gift card"} onClick={() => setRedeemVoucher(null)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>{"×"}</button>
+                              <button type="button" aria-label={lang === "nl" ? "Kadobon loskoppelen" : lang === "es" ? "Quitar la tarjeta regalo" : "Remove gift card"} onClick={() => setRedeemVoucher(null)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>{"×"}</button>
                             </div>
                           ) : (
                             <div style={{ display: "flex", gap: 6 }}>
@@ -7548,7 +7645,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           ))}
                         </div>
                         {walkinPay === "request" && !walkinEmail.trim() && (
-                          <div style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : "Add an email — the payment request travels in the invoice email."}</div>
+                          <div style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : lang === "es" ? "Introduce un correo electrónico — la solicitud de pago viaja en el correo de la factura." : "Add an email — the payment request travels in the invoice email."}</div>
                         )}
                         {/* Vellu verwerkt zelf geen kaartbetalingen: de klant
                             pint op de eigen betaalautomaat van de salon en hier
@@ -7589,7 +7686,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const todayDate = getToday();
             const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
             const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-            const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
+            const MON_FULL_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const MON_FULL = lang === "nl" ? MON_FULL_NL : lang === "es" ? MON_FULL_ES : MON_FULL_EN;
             const MON_SHORT = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
 
             // Compute the current period's appointments for the summary bar
@@ -8000,11 +8098,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
                                     {lang === "nl"
                                       ? (unavailableName ? `${unavailableName} werkt niet op deze dag` : "Niet beschikbaar op deze dag")
+                                      : lang === "es"
+                                      ? (unavailableName ? `${unavailableName} no trabaja este día` : "No disponible este día")
                                       : (unavailableName ? `${unavailableName} doesn't work on this day` : "Unavailable on this day")}
                                   </div>
                                   <div style={{ fontSize: 11, color: c.textMuted, maxWidth: 320, lineHeight: 1.4 }}>
                                     {lang === "nl"
                                       ? "Volgens de ingestelde werkuren. Pas ze aan in Team of Salon-instellingen als dit klopt niet."
+                                      : lang === "es"
+                                      ? "Según el horario de trabajo configurado. Cámbialo en Equipo o en los ajustes del salón si no es correcto."
                                       : "Based on the current working hours. Change them in Team or Salon settings if this is wrong."}
                                   </div>
                                 </>
@@ -8101,7 +8203,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const weekStart = new Date(base);
                 weekStart.setDate(base.getDate() - dayOfWeek);
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
-                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : lang === "es" ? ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
                 return (
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
                     {weekDays.map((d, i) => {
@@ -8248,7 +8350,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const nextYear = month === 11 ? year + 1 : year;
                   cells.push({ day: d, month: nextMonth, year: nextYear, muted: true });
                 }
-                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+                const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : lang === "es" ? ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
                 const rows = cells.length / 7;
                 return (
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
@@ -8558,11 +8660,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 13, fontWeight: 600, color: c.text, textAlign: "center" }}>
                             {lang === "nl"
                               ? (unavailableName ? `${unavailableName} werkt niet op deze dag` : "Niet beschikbaar op deze dag")
+                              : lang === "es"
+                              ? (unavailableName ? `${unavailableName} no trabaja este día` : "No disponible este día")
                               : (unavailableName ? `${unavailableName} doesn't work on this day` : "Unavailable on this day")}
                           </div>
                           <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 340, lineHeight: 1.4 }}>
                             {lang === "nl"
                               ? "Volgens de ingestelde werkuren. Pas ze aan in Team of Salon-instellingen als dit niet klopt."
+                              : lang === "es"
+                              ? "Según el horario de trabajo configurado. Cámbialo en Equipo o en los ajustes del salón si no es correcto."
                               : "Based on the current working hours. Change them in Team or Salon settings if this is wrong."}
                           </div>
                         </>
@@ -8937,7 +9043,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 });
                 const dayInitialsNL_an = ["Z", "M", "D", "W", "D", "V", "Z"];
                 const dayInitialsEN_an = ["S", "M", "T", "W", "T", "F", "S"];
-                const dayInitials_an = lang === "nl" ? dayInitialsNL_an : dayInitialsEN_an;
+                const dayInitialsES_an = ["D", "L", "M", "X", "J", "V", "S"];
+                const dayInitials_an = lang === "nl" ? dayInitialsNL_an : lang === "es" ? dayInitialsES_an : dayInitialsEN_an;
                 const weekDaily = [];
                 const weekLabels = [];
                 for (let i = 6; i >= 0; i--) {
@@ -9399,7 +9506,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.busiestDays}</SL>
                 {(() => {
-                  const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+                  const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : lang === "es" ? ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
                   const dayCounts = [0,0,0,0,0,0,0];
                   apptsNoSales.forEach(a => {
                     // Parse local-date from YYYY-MM-DD so getDay() reflects the salon's local day,
@@ -9570,6 +9677,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 16 }}>
                       {lang === "nl"
                         ? "Je krijgt direct toegang tot alle Professional functies. Het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven; vanaf de volgende afschrijving is het €35/maand in plaats van €19/maand."
+                        : lang === "es"
+                        ? "Tienes acceso inmediato a todas las funciones de Professional. La diferencia de precio por lo que queda del periodo actual se cobra una sola vez; a partir del siguiente cobro son €35 al mes en lugar de €19 al mes."
                         : "You get instant access to all Professional features. The price difference for the rest of your current period is charged once; from the next renewal it's €35/month instead of €19/month."}
                     </div>
                     {salonData.plan_expires_at && (
@@ -9614,6 +9723,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
                     {lang === "nl"
                       ? "Bepaalt je valuta en belasting. Verhuisd of bij het aanmelden het verkeerde land gekozen? Pas het hier aan."
+                      : lang === "es"
+                      ? "Determina tu moneda y tus impuestos. ¿Te has mudado o elegiste el país equivocado al registrarte? Cámbialo aquí."
                       : "Sets your currency and tax. Moved, or picked the wrong country at signup? Change it here."}
                   </div>
                   <select className="input-field" key={regionSelectKey} value={salonData.country_code || "NL"} style={{ width: "100%" }}
@@ -9640,6 +9751,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         : (lang === "nl" ? `standaard ${regel.serviceRate}%` : lang === "es" ? `por defecto ${regel.serviceRate}%` : `default ${regel.serviceRate}%`);
                       const msg = lang === "nl"
                         ? `Regio wijzigen naar ${nc?.name}? Je valuta wordt "${sym}" en je belasting ${tx.label} (${tariefTekst}). Bestaande bedragen worden voortaan in ${sym} getoond — ze worden niet omgerekend. Klik daarna op Opslaan om het te bewaren.`
+                        : lang === "es"
+                        ? `¿Cambiar la región a ${nc?.name}? Tu moneda pasa a ser «${sym}» y tu impuesto ${tx.label} (${tariefTekst}). Los importes existentes se mostrarán a partir de ahora en ${sym} — no se convierten. Pulsa después en Guardar para conservarlo.`
                         : `Change region to ${nc?.name}? Your currency becomes "${sym}" and tax ${tx.label} (default ${tx.defaultRate}%). Existing amounts will be shown in ${sym} from now on — they are not converted. Click Save afterwards to keep it.`;
                       if (await showConfirm(msg)) {
                         update(d => {
@@ -9678,6 +9791,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
                     {lang === "nl"
                       ? "Dit is het webadres van jouw salon. Klanten boeken via deze link. Kies iets kort en herkenbaar."
+                      : lang === "es"
+                      ? "Esta es la dirección web de tu salón. Tus clientes reservan con este enlace. Elige algo corto y reconocible."
                       : "This is your salon's public web address. Customers book via this link. Keep it short and recognisable."}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 0, background: c.bg, border: `1px solid ${c.inputBorder}`, borderRadius: 14, overflow: "hidden" }}>
@@ -9722,6 +9837,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     }}>
                       {lang === "nl"
                         ? <>Waarschuwing: de oude link <code style={{ fontFamily: "monospace", color: c.text }}>vellu.cc/{salonData.id}</code> werkt niet meer. Update je bio-links, QR-codes en visitekaartjes.</>
+                        : lang === "es"
+                        ? <>Atención: el enlace anterior <code style={{ fontFamily: "monospace", color: c.text }}>vellu.cc/{salonData.id}</code> dejará de funcionar. Actualiza los enlaces de tu bio, los códigos QR y tus tarjetas de visita.</>
                         : <>Heads up: the old link <code style={{ fontFamily: "monospace", color: c.text }}>vellu.cc/{salonData.id}</code> will stop working. Update your bio links, QR codes, and business cards.</>}
                     </div>
                   )}
@@ -9854,6 +9971,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 8 }}>
                         {lang === "nl"
                           ? <>Typ de naam van een lettertype van <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>fonts.google.com</a>, bijv. Lobster of Raleway.</>
+                          : lang === "es"
+                          ? <>Escribe el nombre de cualquier tipografía de <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>fonts.google.com</a>, p. ej. Lobster o Raleway.</>
                           : <>Type the name of any typeface on <a href="https://fonts.google.com" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>fonts.google.com</a>, e.g. Lobster or Raleway.</>}
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
@@ -9991,6 +10110,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textMuted, padding: "4px 2px 10px", lineHeight: 1.5 }}>
                     {lang === "nl"
                       ? "Voeg extra locaties toe als je op meerdere plekken werkt — klanten kunnen dan kiezen bij het boeken."
+                      : lang === "es"
+                      ? "Añade más ubicaciones si trabajas en varios sitios — así tus clientes pueden elegir al reservar."
                       : "Add extra locations if you work from multiple venues — clients can then choose at booking time."}
                   </div>
                 ) : (
@@ -10346,9 +10467,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {isSepa
                     ? (lang === "nl"
                       ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met het exacte factuurbedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Je klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle SEPA-banken, gewoon vanuit hun eigen bank-app. Klanten die in de salon betalen krijgen dit blok niet."
+                      : lang === "es"
+                      ? "Si un cliente elige «Solicitud de pago después» al reservar, el correo de la factura incluye un bloque de pago con el importe exacto. El código QR (basado en tu IBAN de arriba) rellena automáticamente el importe y el concepto en la app del banco del cliente — siempre el importe correcto, aunque tus precios varíen. Tus clientes no tienen que tener el mismo banco que tú: funciona con todos los bancos SEPA, desde su propia app. Los clientes que pagan en el salón no reciben este bloque."
                       : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with the exact invoice amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Your clients don't need to bank where you bank: it works with every SEPA bank, straight from their own banking app. Clients who pay in the salon never get this block.")
                     : (lang === "nl"
                       ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met je bankgegevens (rekeninghouder + rekeningnummer) en het exacte factuurbedrag in jouw valuta, plus een betaalkenmerk. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet. Klanten die in de salon betalen krijgen dit blok niet."
+                      : lang === "es"
+                      ? "Si un cliente elige «Solicitud de pago después» al reservar, el correo de la factura incluye un bloque de pago con tus datos bancarios (titular y número de cuenta), el importe exacto en tu moneda y un concepto de pago. El QR de pago automático solo funciona con bancos SEPA/euro, así que fuera de la eurozona no lo mostramos. Los clientes que pagan en el salón no reciben este bloque."
                       : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with your bank details (account holder + account number) and the exact invoice amount in your currency, plus a payment reference. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone. Clients who pay in the salon never get this block.")}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -10359,7 +10484,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : lang === "es" ? "Enlace de pago (opcional)" : "Payment link (optional)"}</div>
-                    <input className="input-field" placeholder="https://bunq.me/jouwnaam" value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
+                    <input className="input-field" placeholder={lang === "nl" ? "https://bunq.me/jouwnaam" : lang === "es" ? "https://paypal.me/tunombre" : "https://paypal.me/yourname"} value={salonData.payment_link || ""} onChange={e => update(d => { d.payment_link = e.target.value; return d; })} style={{ width: "100%" }} />
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Je persoonlijke bunq.me- of PayPal.Me-link, zónder bedrag — het factuurbedrag wordt er automatisch achter gezet. Alleen een QR is ook prima: laat dit dan leeg." : lang === "es" ? "Tu enlace personal de bunq.me o PayPal.Me, sin importe — el importe de la factura se añade automáticamente. Solo con QR también está bien: simplemente déjalo vacío." : "Your personal bunq.me or PayPal.Me link, without an amount — the invoice amount is appended automatically. QR-only is fine too: just leave this empty."}</div>
                   </div>
                 </div>
@@ -10395,6 +10520,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Handig als jullie met z'n tweeën één login delen en elk een eigen KVK/BTW/IBAN gebruiken. Bij het versturen van een factuur kies je welk profiel je wil gebruiken."
+                    : lang === "es"
+                    ? "Práctico si comparten un mismo acceso y cada persona usa sus propios datos fiscales y su propia cuenta bancaria. Al enviar una factura eliges con qué perfil la mandas."
                     : "Useful if two of you share one login and each want your own VAT/IBAN details. When sending an invoice, you'll pick which profile to use."}
                 </div>
                 {(salonData.invoice_profiles || []).map((p, idx) => (
@@ -10533,7 +10660,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? (cat.name_nl || cat.name_en) : (cat.name_en || cat.name_nl)}</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? (cat.name_nl || cat.name_en) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl)}</div>
                           </div>
                           <div style={{ display: "flex", gap: 4 }}>
                             <button onClick={() => { setEditingCategoryId(cat.id); setEditCategoryForm({ name_nl: cat.name_nl, name_en: cat.name_en || "" }); }}
@@ -10544,7 +10671,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <button onClick={async () => {
                               const used = (salonData.services || []).some(sv => sv.category_id === cat.id);
                               const msg = used
-                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : lang === "es" ? `La categoría "${cat.name_nl}" está en uso. Los servicios quedarán sin agrupar. ¿Continuar?` : `Category "${cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
+                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : lang === "es" ? `La categoría "${cat.name_es || cat.name_en || cat.name_nl}" está en uso. Los servicios quedarán sin agrupar. ¿Continuar?` : `Category "${cat.name_en || cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
                                 : (lang === "nl" ? "Categorie verwijderen?" : lang === "es" ? "¿Eliminar categoría?" : "Delete category?");
                               if (!(await showConfirm(msg))) return;
                               const { error } = await supabase.from("service_categories").delete().eq("id", cat.id);
@@ -10698,7 +10825,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const orderedCats = (salonData.categories || []).filter(cat => buckets.has(cat.id));
                   const groups = orderedCats.map(cat => ({
                     key: cat.id,
-                    label: lang === "nl" ? (cat.name_nl || cat.name_en) : (cat.name_en || cat.name_nl),
+                    label: lang === "nl" ? (cat.name_nl || cat.name_en) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl),
                     services: buckets.get(cat.id),
                   }));
                   if (uncat.length > 0) {
@@ -11341,7 +11468,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flex: 1, minWidth: 0 }}>{lang === "nl" ? "Product" : lang === "es" ? "Producto" : "Product"}</div>
                         <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Compra" : "Cost"}</div>
                         <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>
-                        <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>
+                        <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</div>
                         <div style={{ width: 32, flexShrink: 0 }} />
                         <div style={{ width: 64, flexShrink: 0 }} />
                       </div>
@@ -11356,12 +11483,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ marginBottom: 8 }}>
                             <AutoTranslateField nlValue={editProductForm.name_nl} enValue={editProductForm.name_en}
                               setNl={v => setEditProductForm(f => ({...f, name_nl: v}))} setEn={v => setEditProductForm(f => ({...f, name_en: v}))}
-                              lang={lang} accent={accent} label={lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : "e.g. Cuticle oil"} />
+                              lang={lang} accent={accent} label={lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : lang === "es" ? "p. ej. Aceite de cutículas" : "e.g. Cuticle oil"} />
                           </div>
                           <div style={{ marginBottom: 8 }}>
                             <AutoTranslateField nlValue={editProductForm.description_nl} enValue={editProductForm.description_en}
                               setNl={v => setEditProductForm(f => ({...f, description_nl: v}))} setEn={v => setEditProductForm(f => ({...f, description_en: v}))}
-                              lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
+                              lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : lang === "es" ? "Descripción breve" : "Short description"} textarea rows={2} />
                           </div>
                           <div style={{ marginBottom: 10 }}>
                             <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 5, display: "block" }}>
@@ -11397,15 +11524,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                             <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Inkoopprijs (${cur})` : lang === "es" ? `Precio compra (${cur})` : `Purchase price (${cur})`}</label>
-                              <input className="input-field" type="number" value={editProductForm.purchase_price} onChange={ev => setEditProductForm(f => ({...f, purchase_price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                              <input className="input-field" type="number" value={editProductForm.purchase_price} onChange={ev => setEditProductForm(f => ({...f, purchase_price: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : lang === "es" ? "opcional" : "optional"} />
                             </div>
                             <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</label>
-                              <input className="input-field" type="number" value={editProductForm.stock} onChange={ev => setEditProductForm(f => ({...f, stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : "empty = not tracked"} />
+                              <input className="input-field" type="number" value={editProductForm.stock} onChange={ev => setEditProductForm(f => ({...f, stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : lang === "es" ? "vacío = no se controla" : "empty = not tracked"} />
                             </div>
                             <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
-                              <input className="input-field" type="number" value={editProductForm.min_stock} onChange={ev => setEditProductForm(f => ({...f, min_stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                              <input className="input-field" type="number" value={editProductForm.min_stock} onChange={ev => setEditProductForm(f => ({...f, min_stock: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : lang === "es" ? "opcional" : "optional"} />
                             </div>
                             <div>
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
@@ -11415,7 +11542,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input className="input-field" inputMode="numeric" value={editProductForm.barcode} onChange={ev => setEditProductForm(f => ({...f, barcode: ev.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
-                                <button type="button" className="btn-ghost" onClick={() => setScanTarget("edit")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
+                                <button type="button" className="btn-ghost" onClick={() => setScanTarget("edit")} title={lang === "nl" ? "Scan met camera" : lang === "es" ? "Escanear con la cámara" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                               </div>
                             </div>
                           </div>
@@ -11496,12 +11623,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                       <div style={{ marginBottom: 8 }}>
                         <AutoTranslateField nlValue={newProduct.name_nl} enValue={newProduct.name_en}
                           setNl={v => setNewProduct(f => ({...f, name_nl: v}))} setEn={v => setNewProduct(f => ({...f, name_en: v}))}
-                          lang={lang} accent={accent} label={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : "e.g. Cuticle oil"} />
+                          lang={lang} accent={accent} label={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"} placeholder={lang === "nl" ? "bijv. Cuticle oil" : lang === "es" ? "p. ej. Aceite de cutículas" : "e.g. Cuticle oil"} />
                       </div>
                       <div style={{ marginBottom: 8 }}>
                         <AutoTranslateField nlValue={newProduct.description_nl} enValue={newProduct.description_en}
                           setNl={v => setNewProduct(f => ({...f, description_nl: v}))} setEn={v => setNewProduct(f => ({...f, description_en: v}))}
-                          lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : "Short description"} textarea rows={2} />
+                          lang={lang} accent={accent} label={lang === "nl" ? "Beschrijving (optioneel)" : lang === "es" ? "Descripción (opcional)" : "Description (optional)"} placeholder={lang === "nl" ? "Korte beschrijving" : lang === "es" ? "Descripción breve" : "Short description"} textarea rows={2} />
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                         <div>
@@ -11510,15 +11637,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                         </div>
                         <div>
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? `Inkoopprijs (${cur})` : lang === "es" ? `Precio compra (${cur})` : `Purchase price (${cur})`}</label>
-                          <input className="input-field" type="number" value={newProduct.purchase_price} onChange={e => setNewProduct(f => ({...f, purchase_price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                          <input className="input-field" type="number" value={newProduct.purchase_price} onChange={e => setNewProduct(f => ({...f, purchase_price: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : lang === "es" ? "opcional" : "optional"} />
                         </div>
                         <div>
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</label>
-                          <input className="input-field" type="number" value={newProduct.stock} onChange={e => setNewProduct(f => ({...f, stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : "empty = not tracked"} />
+                          <input className="input-field" type="number" value={newProduct.stock} onChange={e => setNewProduct(f => ({...f, stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "leeg = niet bijhouden" : lang === "es" ? "vacío = no se controla" : "empty = not tracked"} />
                         </div>
                         <div>
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Min. voorraad" : lang === "es" ? "Existencias mín." : "Min. stock"}</label>
-                          <input className="input-field" type="number" value={newProduct.min_stock} onChange={e => setNewProduct(f => ({...f, min_stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : "optional"} />
+                          <input className="input-field" type="number" value={newProduct.min_stock} onChange={e => setNewProduct(f => ({...f, min_stock: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", width: "100%" }} placeholder={lang === "nl" ? "optioneel" : lang === "es" ? "opcional" : "optional"} />
                         </div>
                         <div>
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Leverancier" : lang === "es" ? "Proveedor" : "Supplier"}</label>
@@ -11528,7 +11655,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           <label style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }}>{lang === "nl" ? "Barcode (EAN)" : lang === "es" ? "Código de barras" : "Barcode (EAN)"}</label>
                           <div style={{ display: "flex", gap: 6 }}>
                             <input className="input-field" inputMode="numeric" value={newProduct.barcode} onChange={e => setNewProduct(f => ({...f, barcode: e.target.value}))} style={{ fontSize: 12, padding: "9px 11px", flex: 1, minWidth: 0 }} placeholder={lang === "nl" ? "scan of typ" : lang === "es" ? "escanea o escribe" : "scan or type"} />
-                            <button type="button" className="btn-ghost" onClick={() => setScanTarget("new")} title={lang === "nl" ? "Scan met camera" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
+                            <button type="button" className="btn-ghost" onClick={() => setScanTarget("new")} title={lang === "nl" ? "Scan met camera" : lang === "es" ? "Escanear con la cámara" : "Scan with camera"} style={{ padding: "0 12px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
                           </div>
                         </div>
                       </div>
@@ -11612,9 +11739,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                       {accountTypeInfo === "joint"
                         ? (lang === "nl"
                             ? <>Eén salon-account voor iedereen. Je logt met dezelfde login in op de vellu.cc/owner-pagina en beheert alles vanuit dit dashboard. Handig als je in je eentje werkt of als het team altijd samen op één laptop / iPad zit.<br /><br /><strong>Kies dit als:</strong> je solo bent, of medewerkers werken alleen aan de kassa en hoeven geen eigen agenda / factuurgegevens te beheren.</>
+                            : lang === "es"
+                            ? <>Una sola cuenta de salón para todo el equipo. Entras con el mismo acceso en vellu.cc/owner y lo gestionas todo desde este panel. Práctico si trabajas por tu cuenta o si el equipo siempre comparte un mismo portátil o iPad.<br /><br /><strong>Elige esto si:</strong> trabajas sola, o tu equipo solo atiende la caja y no necesita agenda propia ni datos de facturación propios.</>
                             : <>One salon account for everyone. You log in on vellu.cc/owner and manage everything from this dashboard. Handy if you work solo or the team always shares one device.<br /><br /><strong>Pick this when:</strong> you're solo, or your team only works at the front desk and doesn't need a personal agenda or invoice profile.</>)
                         : (lang === "nl"
                             ? <>Elke medewerker krijgt een eigen login op vellu.cc/staff. Ze zien alleen hun eigen afspraken, klanten en facturen. Ze kunnen hun eigen werktijden aanpassen, tijdvakken blokkeren en persoonlijke factuurgegevens (KVK, BTW, IBAN) invullen zodat facturen van hen persoonlijk uitgaan.<br /><br /><strong>Kies dit als:</strong> je met meerdere zelfstandige stylisten werkt, of iedereen een eigen agenda + factuurstroom wil.</>
+                            : lang === "es"
+                            ? <>Cada persona del equipo tiene su propio acceso en vellu.cc/staff. Solo ve sus propias citas, clientes y facturas. Puede ajustar su horario, bloquear franjas y rellenar sus propios datos de facturación para que las facturas salgan a su nombre.<br /><br /><strong>Elige esto si:</strong> trabajas con varios profesionales autónomos o cada persona quiere su propia agenda y su propia facturación.</>
                             : <>Every staff member gets their own login at vellu.cc/staff. They only see their own appointments, clients and invoices. They can edit their own working hours, block time and add personal invoice details (VAT/IBAN) so invoices go out in their name.<br /><br /><strong>Pick this when:</strong> you work with independent stylists or everyone needs their own agenda and invoicing flow.</>)}
                     </div>
                   </div>
@@ -11630,6 +11761,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                       <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
                         {lang === "nl"
                           ? "Klanten zien dan een badge naast je naam in het team-overzicht."
+                          : lang === "es"
+                          ? "Tus clientes verán una insignia junto a tu nombre en la lista del equipo."
                           : "Clients will see a badge next to your name in the team list."}
                       </div>
                     </div>
@@ -11654,6 +11787,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                       <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
                         {lang === "nl"
                           ? "Medewerkers zien de hele salon-agenda met een filter per persoon. Ze kunnen alleen hun eigen afspraken beheren. Let op: klantgegevens (incl. allergieën) worden dan zichtbaar voor het hele team."
+                          : lang === "es"
+                          ? "El equipo ve la agenda completa del salón con un filtro por persona. Cada persona solo puede gestionar sus propias citas. Ojo: los datos de los clientes (incluidas las alergias) pasan a ser visibles para todo el equipo."
                           : "Team members see the whole salon agenda with a per-person filter. They can only manage their own appointments. Note: client details (incl. allergies) become visible to the whole team."}
                       </div>
                     </div>
@@ -11725,7 +11860,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           editingStaff === m.id ? (
                             <label style={{ width: 52, height: 52, borderRadius: "50%", border: `1.5px dashed ${accent}44`, background: `${accent}06`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 2 }}>
                               <NavIcon name="camera" size={16} color={`${accent}88`} />
-                              <span style={{ fontSize: 9, color: `${accent}66` }}>FOTO</span>
+                              <span style={{ fontSize: 9, color: `${accent}66` }}>{lang === "nl" ? "FOTO" : lang === "es" ? "FOTO" : "PHOTO"}</span>
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                                 const file = e.target.files[0];
                                 if (!file) return;
@@ -11779,7 +11914,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 8 }}>
                             {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
                               const svc = salonData.services.find(s => s.id === sid);
-                              return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{svc.name_nl || svc.name}</span> : null;
+                              return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
                             }) : (
                               <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : lang === "es" ? "Todos los servicios" : "All services"}</span>
                             )}
@@ -12164,7 +12299,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                         color: (salonData.reminder_hours ?? 24) === hrs ? accent : c.textSub,
                         fontSize: 12, fontWeight: 500
                       }}
-                    >{hrs === 0 ? t.reminderNone : `${hrs}u ${t.reminderBefore}`}</div>
+                    >{hrs === 0 ? t.reminderNone : `${hrs}${lang === "nl" ? "u" : "h"} ${t.reminderBefore}`}</div>
                   ))}
                 </div>
               </div>
@@ -12267,9 +12402,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>
                         ))}
                       </select>
+                      {/* staffCoversWindow (ClientApp) filtert uitzonderingen PER medewerker:
+                          alleen wie zelf een uitzondering heeft krijgt die tijden opgelegd.
+                          Een collega zonder eigen uitzondering valt terug op haar weekrooster
+                          en blijft die dag dus gewoon boekbaar — de oude tekst ("alleen deze
+                          medewerker is dan boekbaar") beloofde het tegenovergestelde. */}
                       <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
                         {newException.staff_id
-                          ? (lang === "nl" ? "Alleen deze medewerker is dan boekbaar op deze dag, ook als ze normaal vrij zijn." : lang === "es" ? "Ese día solo este empleado está disponible para reservas, aunque normalmente librara." : "Only this staff member is bookable that day, even if they'd normally be off.")
+                          ? (lang === "nl" ? "Geldt alleen voor deze medewerker: op die dag vervangen deze tijden haar weekrooster, ook als ze normaal vrij is. Collega's zonder eigen uitzondering blijven hun gewone weekrooster volgen." : lang === "es" ? "Solo afecta a esta persona: ese día estas horas sustituyen su horario semanal, aunque ese día normalmente no trabaje. Los demás sin su propia excepción siguen con su horario de siempre." : "Applies to this staff member only: that day these hours replace her weekly schedule, even if she'd normally be off. Colleagues without their own exception keep following their usual weekly schedule.")
                           : (lang === "nl" ? "De hele salon is die dag open met deze tijden." : lang === "es" ? "Ese día todo el salón abre con este horario." : "The whole salon opens with these hours that day.")}
                       </div>
                     </div>
@@ -12519,6 +12659,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Abonneer je op je Vellu-agenda vanaf je iPhone, Android of Outlook. Nieuwe en gewijzigde afspraken verschijnen automatisch in je eigen agenda-app — geen Google nodig."
+                    : lang === "es"
+                    ? "Suscríbete a tu agenda de Vellu desde tu iPhone, tu Android o Outlook. Las citas nuevas y las modificadas aparecen solas en tu propia app de calendario — sin necesidad de Google."
                     : "Subscribe to your Vellu agenda from your iPhone, Android or Outlook. New and changed appointments appear automatically in your own calendar app — no Google needed."}
                 </div>
 
@@ -12576,29 +12718,39 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "iPhone / iPad" : "iPhone / iPad"}</div>
                           {lang === "nl"
                             ? "Tik hierboven op \"Openen in Apple / iPhone agenda\" en bevestig met Abonneren. Klaar. (Handmatig kan ook: Instellingen → Agenda → Accounts → Account toevoegen → Anders → Agenda-abonnement toevoegen, en plak de gekopieerde link.)"
+                            : lang === "es"
+                            ? "Pulsa arriba en «Abrir en Calendario de Apple / iPhone» y confirma con Suscribirse. Listo. (También manualmente: Ajustes → Calendario → Cuentas → Añadir cuenta → Otra → Añadir calendario suscrito, y pega el enlace copiado.)"
                             : "Tap \"Open in Apple / iPhone Calendar\" above and confirm with Subscribe. Done. (Or manually: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, and paste the copied link.)"}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Mac (Agenda-app)" : lang === "es" ? "Mac (app Calendario)" : "Mac (Calendar app)"}</div>
                           {lang === "nl"
                             ? "Agenda openen → menu Archief → Nieuw agenda-abonnement → plak de gekopieerde link → Abonneer."
+                            : lang === "es"
+                            ? "Abre Calendario → menú Archivo → Nueva suscripción de calendario → pega el enlace copiado → Suscribirse."
                             : "Open Calendar → File menu → New Calendar Subscription → paste the copied link → Subscribe."}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Android" : "Android"}</div>
                           {lang === "nl"
                             ? "Android's eigen agenda leest alleen Google-agenda's. Ga op een computer naar calendar.google.com → naast \"Andere agenda's\" op + → Via URL → plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
+                            : lang === "es"
+                            ? "El calendario de Android solo lee calendarios de Google. Desde un ordenador entra en calendar.google.com → junto a «Otros calendarios» pulsa + → Desde una URL → pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
                             : "Android's calendar reads Google calendars only. On a computer go to calendar.google.com → next to \"Other calendars\" click + → From URL → paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Outlook" : "Outlook"}</div>
                           {lang === "nl"
                             ? "Outlook op het web → Agenda → Agenda toevoegen → Abonneren via internet → plak de gekopieerde link → Importeren."
+                            : lang === "es"
+                            ? "Outlook en la web → Calendario → Añadir calendario → Suscribirse desde la web → pega el enlace copiado → Importar."
                             : "Outlook on the web → Calendar → Add calendar → Subscribe from web → paste the copied link → Import."}
                         </div>
                         <div style={{ padding: "8px 10px", background: c.inputBg, borderRadius: 10, color: c.textMuted, fontSize: 10 }}>
                           {lang === "nl"
                             ? "Let op: dit is alleen-lezen — je agenda-app kan geen afspraken wijzigen. Afspraken worden meestal elk uur ververst. Deel deze link niet; iedereen met de link kan je agenda zien."
+                            : lang === "es"
+                            ? "Ojo: esto es solo lectura — tu app de calendario no puede modificar citas. Suele actualizarse cada hora. No compartas este enlace; cualquiera que lo tenga puede ver tu agenda."
                             : "Note: this is read-only — your calendar app can't change appointments. It usually refreshes hourly. Don't share this link; anyone with it can see your agenda."}
                         </div>
                         <button className="btn-ghost" style={{ width: "100%", fontSize: 10, marginTop: 10, color: c.danger, borderColor: `${c.danger}33` }}
@@ -12621,11 +12773,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>
                   {lang === "nl"
                     ? "Klanten die bij jouw salon dit aantal no-shows hebben worden automatisch geblokkeerd. Toont een waarschuwingsbadge vanaf 2 no-shows."
+                    : lang === "es"
+                    ? "Los clientes que acumulen este número de ausencias en tu salón se bloquean automáticamente. A partir de 2 ausencias aparece un aviso."
                     : "Clients with this many no-shows at your salon are automatically blocked. A warning badge appears from 2 no-shows."}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {[
-                    { v: 0, l: lang === "nl" ? "Uit" : lang === "es" ? "Libre" : "Off" },
+                    { v: 0, l: lang === "nl" ? "Uit" : lang === "es" ? "Desactivado" : "Off" },
                     { v: 2, l: "2×" },
                     { v: 3, l: "3×" },
                     { v: 4, l: "4×" },
@@ -12723,7 +12877,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                     const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: { immediate: !!immediate } });
                     if (error || !data?.success) {
                       const code = data?.error || error?.message || "unknown";
-                      toast.show(lang === "nl" ? `Probleem: ${code}` : `Error: ${code}`, "error");
+                      toast.show(lang === "nl" ? `Probleem: ${code}` : lang === "es" ? `Problema: ${code}` : `Error: ${code}`, "error");
                       setCancelBusy(false);
                       return;
                     }
@@ -12959,6 +13113,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                       <div style={{ marginTop: 14, padding: 12, background: `${c.warning}11`, border: `1px solid ${c.warning}33`, borderRadius: 12, fontSize: 12, color: c.text }}>
                         {lang === "nl"
                           ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken en je gegevens blijven altijd bewaard. Opnieuw abonneren kan op elk moment — ook met een andere bankrekening.`
+                          : lang === "es"
+                          ? `Tu suscripción termina el ${fmtDate(expires)}. Hasta entonces todo sigue funcionando y tus datos se conservan siempre. Puedes volver a suscribirte cuando quieras — también con otra cuenta bancaria.`
                           : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then and your data is always kept. You can resubscribe at any time — with a different bank account too.`}
                       </div>
                     )}
@@ -12976,6 +13132,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                         <div style={{ fontSize: 13, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
                           {lang === "nl"
                             ? `Je toegang blijft actief tot ${fmtDate(expires)}. Je wordt niet meer afgeschreven. Je kunt opnieuw beginnen wanneer je wilt.`
+                            : lang === "es"
+                            ? `Tu acceso sigue activo hasta el ${fmtDate(expires)}. No se te volverá a cobrar. Puedes empezar de nuevo cuando quieras.`
                             : `Your access stays active until ${fmtDate(expires)}. You won't be charged again. You can resubscribe anytime.`}
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
@@ -12985,7 +13143,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           </button>
                           <button className="btn-primary" style={{ flex: 1, background: c.danger, color: "#fff" }} disabled={cancelBusy}
                                   onClick={() => handleCancel(false)}>
-                            {cancelBusy ? (lang === "nl" ? "Bezig…" : "…") : (lang === "nl" ? "Opzeggen" : lang === "es" ? "Cancelar" : "Cancel")}
+                            {cancelBusy ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Un momento…" : "…") : (lang === "nl" ? "Opzeggen" : lang === "es" ? "Cancelar" : "Cancel")}
                           </button>
                         </div>
                       </div>
@@ -13037,6 +13195,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                   <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "12px 0", lineHeight: 1.5 }}>
                     {lang === "nl"
                       ? "Vellu is een product van Mirah Ventures · KVK 42045867 · Amersfoort"
+                      : lang === "es"
+                      ? "Vellu es un producto de Mirah Ventures · Registro mercantil 42045867 · Amersfoort"
                       : "Vellu is a product of Mirah Ventures · Chamber of Commerce 42045867 · Amersfoort"}
                   </div>
                 </>);
@@ -13055,6 +13215,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Een korte rondleiding door de app: waar je agenda, klanten, facturen en instellingen staan. Duurt ongeveer een minuut."
+                    : lang === "es"
+                    ? "Un recorrido breve por la app: dónde están tu agenda, tus clientes, tus facturas y tus ajustes. Dura más o menos un minuto."
                     : "A short tour of the app: where to find your agenda, clients, invoices and settings. Takes about a minute."}
                 </div>
                 <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={startTour}>
@@ -13073,6 +13235,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
                     ? "Wijzig je inlog-e-mail of wachtwoord. Je huidige wachtwoord is altijd nodig ter bevestiging."
+                    : lang === "es"
+                    ? "Cambia tu correo de acceso o tu contraseña. Siempre te pedimos tu contraseña actual para confirmarlo."
                     : "Change your login email or password. Your current password is required for either change."}
                 </div>
 
@@ -13090,7 +13254,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                     {lang === "nl" ? "Nieuw e-mailadres" : lang === "es" ? "Nuevo correo" : "New email"}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <input className="input-field" type="email" placeholder={lang === "nl" ? "nieuw@voorbeeld.nl" : "new@example.com"} autoComplete="off"
+                    <input className="input-field" type="email" placeholder={lang === "nl" ? "nieuw@voorbeeld.nl" : lang === "es" ? "nuevo@ejemplo.com" : "new@example.com"} autoComplete="off"
                       value={accountForm.newEmail}
                       onChange={e => setAccountForm(f => ({ ...f, newEmail: e.target.value }))}
                       style={{ width: "100%" }} />
@@ -13145,6 +13309,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                     <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>
                       {lang === "nl"
                         ? "We sturen een bevestigingslink naar het nieuwe adres. Je login blijft op het oude adres staan tot je de link opent."
+                        : lang === "es"
+                        ? "Enviaremos un enlace de confirmación a la nueva dirección. Tu acceso sigue con la dirección anterior hasta que abras el enlace."
                         : "We'll email a confirmation link to the new address. Your login stays on the old email until you open the link."}
                     </div>
                   </div>
@@ -13205,6 +13371,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                     <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5 }}>
                       {lang === "nl"
                         ? "Wachtwoord vergeten? Log uit en gebruik de \"Wachtwoord vergeten\"-knop op het inlogscherm."
+                        : lang === "es"
+                        ? "¿Has olvidado tu contraseña? Cierra sesión y usa el botón «¿Olvidaste tu contraseña?» en la pantalla de acceso."
                         : "Forgot your password? Log out and use the \"Forgot password\" link on the sign-in screen."}
                     </div>
                   </div>
@@ -13260,6 +13428,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                     <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.4 }}>
                       {lang === "nl"
                         ? "Klanten kunnen zich aanmelden als er geen tijd vrij is. Bij een annulering krijgt de eerste wachtende automatisch een mail."
+                        : lang === "es"
+                        ? "Tus clientes pueden apuntarse cuando no queda ninguna hora libre. Si alguien cancela, quien esté primero en la lista recibe un correo automáticamente."
                         : "Clients can sign up when nothing is free. When an appointment is cancelled the first waiting client is emailed automatically."}
                     </div>
                   </div>
@@ -13435,6 +13605,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                 <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
                   {lang === "nl"
                     ? "Stuur automatisch een verjaardagswens met kortingscode naar klanten waarvan je de geboortedatum weet. Vul geboortedatum in via 'Bewerk klant' of importeer via CSV met een kolom 'birthday' (jjjj-mm-dd)."
+                    : lang === "es"
+                    ? "Envía automáticamente una felicitación de cumpleaños con un código de descuento a los clientes cuya fecha de nacimiento conoces. Añade la fecha en «Editar cliente» o impórtala por CSV con una columna 'birthday' (aaaa-mm-dd)."
                     : "Automatically send a birthday wish + discount code to clients whose birthday you know. Add birthdays via 'Edit customer' or CSV import with a 'birthday' column (yyyy-mm-dd)."}
                 </div>
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", cursor: "pointer" }}>
@@ -13486,6 +13658,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                         const prefix = (salonData.birthday_email_code_prefix || "BDAY");
                         return lang === "nl"
                           ? `Voorbeeldcode: ${prefix}-ANNA-${pct} · Vergeet niet 'Opslaan' om je instelling te bewaren.`
+                          : lang === "es"
+                          ? `Código de ejemplo: ${prefix}-ANNA-${pct} · No olvides pulsar «Guardar» para conservar el ajuste.`
                           : `Example code: ${prefix}-ANNA-${pct} · Don't forget to hit 'Save' to keep this setting.`;
                       })()}
                     </div>
@@ -13740,7 +13914,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                           onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "", extra_ids: [], variant_qty: 1, extra_qtys: {} } : r) }))}
                           style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{parseFloat(s.price).toFixed(2)}</option>)}
+                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)} — {cur}{parseFloat(s.price).toFixed(2)}</option>)}
                         </select>
                         {hasVariants && (<>
                           <select className="input-field" value={row.variant_id || ""}
@@ -13929,7 +14103,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voo
                         are not affected by this toggle. */}
                     <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer", fontSize: 12, color: c.textSub, userSelect: "none" }}>
                       <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
-                      {lang === "nl" ? "Stuur bevestiging naar de klant (e-mail" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : "Send confirmation to the client (email" + (salonData.plan === "professional" ? " + SMS" : "") + ")"}
+                      {lang === "nl" ? "Stuur bevestiging naar de klant (e-mail" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : lang === "es" ? "Enviar confirmación al cliente (correo" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : "Send confirmation to the client (email" + (salonData.plan === "professional" ? " + SMS" : "") + ")"}
                     </label>
                   </div>
                 </div>
