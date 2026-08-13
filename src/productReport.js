@@ -341,7 +341,14 @@ export function generateProductReportPDF({
   });
 
   const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
-  const filename = `${fnSalon}-${T("productverkoop", "product-sales", "venta-productos")}-${range.from || "report"}.pdf`;
+  // Naam naar de PERIODE, niet naar de begindatum: een jaarrapport heette
+  // anders "...-2026-01-01.pdf" en botste met het dagrapport van diezelfde
+  // 1 januari. Nu wordt het 2026 / 2026-08 / 2026-08-12.
+  const span = range.from === range.to ? s(range.from)
+    : s(range.from).slice(0, 4) === s(range.to).slice(0, 4) && s(range.from).endsWith("-01-01") ? s(range.from).slice(0, 4)
+    : s(range.from).slice(0, 7) === s(range.to).slice(0, 7) ? s(range.from).slice(0, 7)
+    : `${s(range.from)}_${s(range.to)}`;
+  const filename = `${fnSalon}-${T("productverkoop", "product-sales", "venta-productos")}-${span || "report"}.pdf`;
   doc.save(filename);
 
   return { filename, totalRevenue, totalQty, transactions: lines.length };

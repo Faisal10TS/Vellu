@@ -77,10 +77,31 @@ async function logEvent(ownerId: string | null, p: MolliePayment, eventType: str
   throw error;
 }
 
-async function createInvoice(ownerId: string, eventId: string | null, p: MolliePayment, plan: string, interval: "monthly" | "yearly", periodStart: Date, periodEnd: Date) {
+// \u2500\u2500 BTW op Vellu's EIGEN abonnementsfactuur \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// Let op: dit gaat NIET over de belasting die een salon aan haar klanten
+// rekent (dat is src/taxEngine.js), maar over wat Vellu aan de salon factureert.
+//
+// Vellu is in Nederland gevestigd en levert een langs elektronische weg
+// verrichte dienst. Voor een afnemer in Nederland is dat 21%. De Caribische
+// delen van het Koninkrijk vallen BUITEN het EU-BTW-gebied \u2014 ook Bonaire,
+// Saba en Sint Eustatius, die staatsrechtelijk w\u00e9l Nederland zijn. Dat
+// onderscheid is precies waar het misgaat, en het stond hier hardgecodeerd op
+// 21% voor iedereen.
+const NL_VAT = 0.21;
+// Buiten het EU-BTW-gebied: geen Nederlandse BTW op de factuur.
+const OUTSIDE_EU_VAT = ["BQ", "AW", "CW", "SX"];
+function vatRateForCustomer(countryCode: string | null | undefined): number {
+  const cc = String(countryCode || "NL").toUpperCase();
+  if (OUTSIDE_EU_VAT.includes(cc)) return 0;
+  return NL_VAT;
+}
+
+async function createInvoice(ownerId: string, eventId: string | null, p: MolliePayment, plan: string, interval: "monthly" | "yearly", customerCountry: string | null, periodStart: Date, periodEnd: Date) {
   const total = parseFloat(p.amount.value);
-  const vatRate = 0.21;
-  const exclVat = +(total / (1 + vatRate)).toFixed(2);
+  // Het BEDRAG dat de klant betaalt verandert niet; alleen of er Nederlandse
+  // BTW in verwerkt zit. Bij 0% is het hele bedrag de vergoeding.
+  const vatRate = vatRateForCustomer(customerCountry);
+  const exclVat = vatRate > 0 ? +(total / (1 + vatRate)).toFixed(2) : total;
   const vatAmount = +(total - exclVat).toFixed(2);
   const { data: numRow, error: numErr } = await supabase.rpc("get_next_vellu_invoice_number");
   if (numErr) {
@@ -106,11 +127,15 @@ async function createInvoice(ownerId: string, eventId: string | null, p: MollieP
     })
     .select("id, invoice_number")
     .maybeSingle();
+  // De bedragen meegeven zodat de factuurmail ze niet nog een keer zelf
+  // uitrekent \u2014 dat stond op twee plekken los gekopieerd met /1.21 erin en
+  // dreef daardoor af zodra het tarief per land ging verschillen.
+  const amounts = { amount_excl_vat: exclVat, vat_amount: vatAmount, vat_rate: vatRate };
   if (invErr) {
     console.error("payment_invoices insert error:", invErr);
     return null;
   }
-  return inv;
+  return inv ? { ...(inv as Record<string, unknown>), ...amounts } : null;
 }
 
 serve(async (req) => {
@@ -160,7 +185,7 @@ serve(async (req) => {
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id")
     .eq("id", ownerId)
     .maybeSingle();
   if (!profile) {
@@ -213,12 +238,12 @@ serve(async (req) => {
         .eq("mollie_payment_id", payment.id)
         .eq("event_type", eventType)
         .maybeSingle();
-      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, periodStart, periodEnd);
+      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, (profile as Record<string, unknown>).country_code as string | null, periodStart, periodEnd);
       const invoiceFields = invoiceRow ? {
         invoice_number: (invoiceRow as { invoice_number: string }).invoice_number,
-        amount_excl_vat: +(parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_amount: +(parseFloat(payment.amount.value) - parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_rate: 0.21,
+        amount_excl_vat: (invoiceRow as { amount_excl_vat: number }).amount_excl_vat,
+        vat_amount: (invoiceRow as { vat_amount: number }).vat_amount,
+        vat_rate: (invoiceRow as { vat_rate: number }).vat_rate,
         period_start: periodStart.toISOString(),
       } : {};
       const firstUpdates: Record<string, unknown> = {
@@ -285,12 +310,12 @@ serve(async (req) => {
         .eq("mollie_payment_id", payment.id)
         .eq("event_type", eventType)
         .maybeSingle();
-      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, periodStart, periodEnd);
+      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, (profile as Record<string, unknown>).country_code as string | null, periodStart, periodEnd);
       const invoiceFields = invoiceRow ? {
         invoice_number: (invoiceRow as { invoice_number: string }).invoice_number,
-        amount_excl_vat: +(parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_amount: +(parseFloat(payment.amount.value) - parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_rate: 0.21,
+        amount_excl_vat: (invoiceRow as { amount_excl_vat: number }).amount_excl_vat,
+        vat_amount: (invoiceRow as { vat_amount: number }).vat_amount,
+        vat_rate: (invoiceRow as { vat_rate: number }).vat_rate,
         period_start: periodStart.toISOString(),
       } : {};
       try {
@@ -333,12 +358,12 @@ serve(async (req) => {
         .eq("mollie_payment_id", payment.id)
         .eq("event_type", eventType)
         .maybeSingle();
-      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, periodStart, periodEnd);
+      const invoiceRow = await createInvoice(ownerId, evt?.id || null, payment, plan, interval, (profile as Record<string, unknown>).country_code as string | null, periodStart, periodEnd);
       const invoiceFields = invoiceRow ? {
         invoice_number: (invoiceRow as { invoice_number: string }).invoice_number,
-        amount_excl_vat: +(parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_amount: +(parseFloat(payment.amount.value) - parseFloat(payment.amount.value) / 1.21).toFixed(2),
-        vat_rate: 0.21,
+        amount_excl_vat: (invoiceRow as { amount_excl_vat: number }).amount_excl_vat,
+        vat_amount: (invoiceRow as { vat_amount: number }).vat_amount,
+        vat_rate: (invoiceRow as { vat_rate: number }).vat_rate,
         period_start: periodStart.toISOString(),
       } : {};
       // Referral credit is stored in DAYS (3 weeks = 21 per referral) and

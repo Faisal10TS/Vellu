@@ -4821,7 +4821,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setProductReportBusy(true);
     try {
       const today = fmt(getToday());
-      const from = scope === "month" ? today.slice(0, 8) + "01" : today;
+      // Jaar loopt van 1 januari t/m vandaag \u2014 niet de laatste 365 dagen.
+      // Een boekhouder wil het kalenderjaar, niet een schuivend venster.
+      const from = scope === "year" ? today.slice(0, 4) + "-01-01"
+        : scope === "month" ? today.slice(0, 8) + "01"
+        : today;
       const to = today;
       const rows = productSalesBetween(from, to);
       if (rows.length === 0) {
@@ -4829,7 +4833,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         return;
       }
       const mod = await import("./productReport.js");
-      const label = scope === "month"
+      const label = scope === "year"
+        ? today.slice(0, 4)
+        : scope === "month"
         ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
         : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
       mod.generateProductReportPDF({
@@ -7351,6 +7357,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </button>
                           <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("month")}>
                             <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"}
+                          </button>
+                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("year")}>
+                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"}
                           </button>
                         </div>
                       </div>
