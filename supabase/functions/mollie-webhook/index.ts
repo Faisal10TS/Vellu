@@ -88,11 +88,20 @@ async function logEvent(ownerId: string | null, p: MolliePayment, eventType: str
 // onderscheid is precies waar het misgaat, en het stond hier hardgecodeerd op
 // 21% voor iedereen.
 const NL_VAT = 0.21;
-// Buiten het EU-BTW-gebied: geen Nederlandse BTW op de factuur.
+// Buiten het EU-BTW-gebied. De BES-eilanden zijn staatsrechtelijk Nederland
+// maar EU-rechtelijk LGO (art. 355 lid 2 VWEU): de BTW-richtlijn geldt er niet.
+// Aruba, Curacao en Sint Maarten zijn zelfstandige landen met een eigen stelsel.
 const OUTSIDE_EU_VAT = ["BQ", "AW", "CW", "SX"];
-function vatRateForCustomer(countryCode: string | null | undefined): number {
+// NULL, niet 0. "0%" is een TARIEF en suggereert een in Nederland belaste
+// nultarief-prestatie; hier is de dienst helemaal niet in Nederland belastbaar
+// omdat de plaats van dienst bij de afnemer ligt (art. 6 lid 1 Wet OB voor een
+// ondernemer, art. 6h voor een elektronische dienst aan een particulier).
+// Zet daarom ook nooit een BTW-BEDRAG op zo'n factuur, ook geen 0,00: op grond
+// van art. 37 Wet OB wordt elke op een factuur vermelde omzetbelasting
+// verschuldigd, ook als ze niet verschuldigd was.
+function vatRateForCustomer(countryCode: string | null | undefined): number | null {
   const cc = String(countryCode || "NL").toUpperCase();
-  if (OUTSIDE_EU_VAT.includes(cc)) return 0;
+  if (OUTSIDE_EU_VAT.includes(cc)) return null;
   return NL_VAT;
 }
 
@@ -101,8 +110,10 @@ async function createInvoice(ownerId: string, eventId: string | null, p: MollieP
   // Het BEDRAG dat de klant betaalt verandert niet; alleen of er Nederlandse
   // BTW in verwerkt zit. Bij 0% is het hele bedrag de vergoeding.
   const vatRate = vatRateForCustomer(customerCountry);
-  const exclVat = vatRate > 0 ? +(total / (1 + vatRate)).toFixed(2) : total;
-  const vatAmount = +(total - exclVat).toFixed(2);
+  // Buiten het toepassingsgebied: het hele bedrag is de vergoeding en er is
+  // geen BTW-bedrag — niet 0,00 maar helemaal geen.
+  const exclVat = vatRate === null ? total : +(total / (1 + vatRate)).toFixed(2);
+  const vatAmount = vatRate === null ? null : +(total - exclVat).toFixed(2);
   const { data: numRow, error: numErr } = await supabase.rpc("get_next_vellu_invoice_number");
   if (numErr) {
     console.error("get_next_vellu_invoice_number error:", numErr);
