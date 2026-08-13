@@ -12517,36 +12517,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 )}
               </div>
 
-              {/* Google Reviews (Place ID) — when set, the 24h follow-up email
-                  to clients adds a "Leave a review on Google" CTA that opens
-                  the write-review dialog for this business. Helps the salon's
-                  Google SEO. If empty, the follow-up only links to the
-                  Vellu-internal review form (unchanged behavior). */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{lang === "nl" ? "Google Reviews" : "Google Reviews"}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>
-                  {lang === "nl"
-                    ? "Plak hier je Google Place ID om klanten in de follow-up e-mail ook naar Google te laten reviewen. Nog geen Place ID? Zoek je salon op google.com/maps, klik op Delen → Link naar deze plaats kopiëren — de Place ID vind je via places-id.appspot.com of Google's Place ID Finder."
-                    : "Paste your Google Place ID here to let clients leave a Google review via the follow-up email. No Place ID yet? Find your salon on google.com/maps and use Google's Place ID Finder tool."}
-                </div>
-                <input
-                  className="input-field"
-                  placeholder="ChIJ..."
-                  value={salonData.google_place_id || ""}
-                  onChange={e => update(d => { d.google_place_id = e.target.value.trim(); return d; })}
-                  style={{ fontFamily: "monospace", fontSize: 12 }}
-                />
-                {salonData.google_place_id && (
-                  <div style={{ marginTop: 10, fontSize: 11 }}>
-                    <a
-                      href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(salonData.google_place_id)}`}
-                      target="_blank" rel="noreferrer"
-                      style={{ color: accent, textDecoration: "none", borderBottom: `1px solid ${accent}44` }}
-                    >{lang === "nl" ? "Test je review-link →" : lang === "es" ? "Prueba tu enlace de reseñas →" : "Test your review link →"}</a>
-                  </div>
-                )}
-              </div>
-
               {/* No-show auto-block threshold — when a client hits this many
                   no-shows at your salon, future bookings with their email are
                   refused by book-appointment. 0 disables. Scoped per salon so a
@@ -13209,43 +13179,67 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </div>
 
-              {/* Booking Window Section */}
+              {/* \u2500\u2500 Google Reviews \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+                  Stond eerst onder Planning, tussen werktijden en blokkades. Een
+                  review speelt na de afspraak en heeft niets met roosteren te
+                  maken; hier staat hij bij de rest van je bedrijfsinstellingen.
+
+                  Op deze plek stond het boekingsvenster een TWEEDE keer, met
+                  dezelfde velden als op Planning maar met andere opties (daar
+                  wel 6 uur, hier maar tot 90 dagen). Een salon die op Planning
+                  zes maanden koos en daarna hier opsloeg, werd stilzwijgend op
+                  60 dagen teruggezet. Die kopie is weg; Planning is de plek. */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.bookingWindow}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>{t.bookingWindowDesc}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, fontSize: 12, color: c.text }}>{t.minAdvance}</div>
-                    <select 
-                      value={salonData.min_advance_hours || 0} 
-                      onChange={e => update(d => { d.min_advance_hours = parseInt(e.target.value); return d; })}
-                      style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 10, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", minWidth: 120 }}
-                    >
-                      <option value={0} style={{ background: c.selectBg }}>-</option>
-                      <option value={1} style={{ background: c.selectBg }}>1 {t.hours}</option>
-                      <option value={2} style={{ background: c.selectBg }}>2 {t.hours}</option>
-                      <option value={4} style={{ background: c.selectBg }}>4 {t.hours}</option>
-                      <option value={6} style={{ background: c.selectBg }}>6 {t.hours}</option>
-                      <option value={12} style={{ background: c.selectBg }}>12 {t.hours}</option>
-                      <option value={24} style={{ background: c.selectBg }}>24 {t.hours}</option>
-                      <option value={48} style={{ background: c.selectBg }}>48 {t.hours}</option>
-                    </select>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, fontSize: 12, color: c.text }}>{t.maxAdvance}</div>
-                    <select 
-                      value={salonData.max_advance_days || 60} 
-                      onChange={e => update(d => { d.max_advance_days = parseInt(e.target.value); return d; })}
-                      style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 10, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "'Jost',sans-serif", minWidth: 120 }}
-                    >
-                      <option value={7} style={{ background: c.selectBg }}>7 {t.days}</option>
-                      <option value={14} style={{ background: c.selectBg }}>14 {t.days}</option>
-                      <option value={30} style={{ background: c.selectBg }}>30 {t.days}</option>
-                      <option value={60} style={{ background: c.selectBg }}>60 {t.days}</option>
-                      <option value={90} style={{ background: c.selectBg }}>90 {t.days}</option>
-                    </select>
-                  </div>
+                <SL>Google Reviews</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, lineHeight: 1.55 }}>
+                  {lang === "nl"
+                    ? "Vul je Google Place ID in, dan krijgt de klant in de mail van de dag na de afspraak ook een knop om je op Google te beoordelen. Zoek je salon op google.com/maps en haal de ID op via places-id.appspot.com of Google's Place ID Finder."
+                    : lang === "es"
+                    ? "Introduce tu Google Place ID y el correo del d\u00eda siguiente a la cita incluir\u00e1 un bot\u00f3n para dejar una rese\u00f1a en Google. Busca tu sal\u00f3n en google.com/maps y obt\u00e9n el ID en places-id.appspot.com o en el Place ID Finder de Google."
+                    : "Enter your Google Place ID and the email your client gets the day after their appointment will also carry a button to review you on Google. Find your salon on google.com/maps and get the ID via places-id.appspot.com or Google's Place ID Finder."}
                 </div>
+                <input
+                  className="input-field"
+                  placeholder="ChIJ..."
+                  value={salonData.google_place_id || ""}
+                  onChange={e => update(d => {
+                    // Een geplakte Maps-link is de meest voor de hand liggende
+                    // vergissing \u2014 TTNB had er letterlijk een staan. Zit er een
+                    // bruikbare ID in de tekst, haal die er dan uit; anders
+                    // bewaren we wat er getypt is en waarschuwen we hieronder.
+                    const raw = e.target.value.trim();
+                    const m = raw.match(/place_?id[=:]([A-Za-z0-9_-]{10,})/i) || raw.match(/\b(ChI[A-Za-z0-9_-]{10,})\b/);
+                    d.google_place_id = m ? m[1] : raw;
+                    return d;
+                  })}
+                  style={{ fontFamily: "monospace", fontSize: 12 }}
+                />
+                {(() => {
+                  const pid = String(salonData.google_place_id || "").trim();
+                  if (!pid) return null;
+                  // Een geldige Place ID bevat geen schuine strepen of spaties.
+                  const bruikbaar = /^[A-Za-z0-9_-]{15,}$/.test(pid);
+                  if (!bruikbaar) {
+                    return (
+                      <div style={{ marginTop: 10, fontSize: 11, color: c.danger, lineHeight: 1.55 }}>
+                        {lang === "nl"
+                          ? "Dit is een link, geen Place ID. De review-knop werkt hier niet mee \u2014 haal je Place ID op via de uitleg hierboven."
+                          : lang === "es"
+                          ? "Esto es un enlace, no un Place ID. El bot\u00f3n de rese\u00f1a no funcionar\u00e1 \u2014 obt\u00e9n tu Place ID con los pasos de arriba."
+                          : "That's a link, not a Place ID. The review button won't work with this \u2014 get your Place ID using the steps above."}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ marginTop: 10, fontSize: 11 }}>
+                      <a
+                        href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(pid)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ color: accent, textDecoration: "none", borderBottom: `1px solid ${accent}44` }}
+                      >{lang === "nl" ? "Test je review-link \u2192" : lang === "es" ? "Prueba tu enlace de rese\u00f1as \u2192" : "Test your review link \u2192"}</a>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Discount Codes Section — Professional-only */}

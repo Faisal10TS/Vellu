@@ -984,6 +984,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // client's product selection. Products count toward the price (and the
   // discount, mirroring the server) but never toward the duration.
   const prodNameOf = (p) => lang === "nl" ? (p.name_nl || p.name_en) : lang === "es" ? (p.name_es || p.name_en || p.name_nl) : (p.name_en || p.name_nl);
+  // De gekozen producten als lijst. De bevestigingsstap somde alleen de
+  // BEHANDELINGEN op terwijl getPrice() de producten wel meetelde: de klant zag
+  // een dienst van 58 en een totaal van 62 zonder te kunnen zien waar die 4
+  // vandaan kwam. In de bevestigingsmail stonden ze wel.
+  const chosenProducts = () => Object.entries(productSel)
+    .filter(([, q]) => q > 0)
+    .map(([pid, q]) => {
+      const p = (initialSalon.products || []).find(x => x.id === pid);
+      return p ? { p, qty: q } : null;
+    })
+    .filter(Boolean);
   const productsTotal = () => Object.entries(productSel).reduce((s, [pid, q]) => {
     const p = (initialSalon.products || []).find(x => x.id === pid);
     return s + (p ? (parseFloat(p.price) || 0) * q : 0);
@@ -3315,6 +3326,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     ))}
                   </div>
+                  {/* Producten \u2014 los meegenomen bij het boeken. Zonder deze
+                      regels telt het totaal niet op voor de klant. */}
+                  {chosenProducts().length > 0 && (
+                    <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.products || (lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products")} ({chosenProducts().reduce((n, x) => n + x.qty, 0)})</span>
+                      {chosenProducts().map(({ p, qty }) => (
+                        <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
+                          <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
@@ -3978,6 +4002,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                         ))}
                       </div>
+                      {/* Producten \u2014 los meegenomen bij het boeken. Zonder deze
+                          regels telt het totaal niet op voor de klant. */}
+                      {chosenProducts().length > 0 && (
+                        <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                          <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.products || (lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products")} ({chosenProducts().reduce((n, x) => n + x.qty, 0)})</span>
+                          {chosenProducts().map(({ p, qty }) => (
+                            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
+                              <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
