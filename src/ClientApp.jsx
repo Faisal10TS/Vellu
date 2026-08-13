@@ -1424,10 +1424,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         const [h, m] = tt.split(":").map(Number);
         if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
       }
-      if (minAdvanceHours > 0 && forDate === fmt(getToday())) {
-        const now = getToday();
-        const slotDate = new Date(forDate + "T" + tt + ":00");
-        if (slotDate.getTime() - now.getTime() < minAdvanceHours * 60 * 60 * 1000) return false;
+      // Minimale voorlooptijd geldt op ELKE dag, niet alleen vandaag. Hier stond
+      // eerst ook `forDate === fmt(getToday())`; daardoor zag een klant om 20:00
+      // 's avonds bij een salon met "minimaal 24 uur" morgenochtend 09:00 gewoon
+      // als vrij slot staan — 13 uur vooruit — en weigerde de server de boeking
+      // pas nadat hij al zijn gegevens had ingevuld. De grens is een absoluut
+      // tijdstip (nu + voorlooptijd) dat we tegen het STARTmoment van het slot
+      // leggen, niet tegen de datum.
+      if (minAdvanceHours > 0) {
+        const earliestStart = new Date(getToday().getTime() + minAdvanceHours * 60 * 60 * 1000);
+        const slotStart = new Date(forDate + "T" + tt + ":00");
+        if (slotStart.getTime() < earliestStart.getTime()) return false;
       }
       return true;
     });

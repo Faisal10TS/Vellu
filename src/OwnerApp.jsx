@@ -781,9 +781,14 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
         const phone = pick(r, ["telefoon", "phone", "tel", "mobiel", "mobile", "telefoonnummer", "tel\u00e9fono"]);
         if ((email && seenMail.has(email)) || (!email && seenName.has(name.toLowerCase()))) { skipped++; continue; }
         if (email) seenMail.add(email); else seenName.add(name.toLowerCase());
+        // De hulptekst bij de verjaardagsmail belooft een kolom "birthday" in
+        // de import, maar die werd hier niet gelezen — iedereen die zijn
+        // klanten importeerde had daarna geen enkele verjaardag in het systeem.
+        const bd = pick(r, ["birthday", "verjaardag", "geboortedatum", "birth date", "date of birth", "cumpleaños"]);
         toInsert.push({
           owner_id: ownerId, name,
           email: email || null, phone: phone || null,
+          birthday: parseBirthday(bd),
           notes: pick(r, ["notitie", "notities", "note", "notes", "opmerking", "nota"]) || null,
         });
       }
@@ -1487,7 +1492,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
 }
 
 // ─── STAFF ADDER ────────────────────────────────────────────
-function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
+function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -1504,8 +1509,14 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd }) {
       toast.show(lang === "nl" ? "Ongeldig e-mailadres" : lang === "es" ? "Dirección de correo no válida" : "Invalid email address", "error");
       return;
     }
+    // Zonder working_hours is een nieuwe medewerker bij een teamaccount NUL
+    // dagen boekbaar: de boekingspagina telt alleen medewerkers die voor die
+    // dag eigen uren hebben en sluit de dag anders. Je voegde iemand toe en je
+    // agenda ging dicht. Standaard krijgt hij daarom de openingstijden van de
+    // salon; die kan de eigenaar daarna per dag aanpassen.
     const { data, error } = await supabase.from("staff_members").insert({
-      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null, email: email || null
+      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null, email: email || null,
+      working_hours: salonHours || null
     }).select().single();
     if (error || !data) {
       toast.show(lang === "nl" ? "Medewerker toevoegen mislukt" : lang === "es" ? "Error al añadir personal" : "Failed to add staff", "error");
@@ -2131,6 +2142,23 @@ function parseCSV(text) {
 
 // Map a parsed CSV (rows[0] = header) onto { name, email, phone, notes } records,
 // recognising both NL and EN column names. Skips rows with no usable name.
+// Geboortedatum uit een geimporteerde CSV. Stond binnen csvRowsToClients,
+// waardoor de klanten-import in Instellingen hem niet kon gebruiken en de
+// kolom "birthday" daar stilzwijgend werd genegeerd — terwijl de hulptekst
+// bij de verjaardagsmail belooft dat je die kunt importeren.
+const parseBirthday = (raw) => {
+  if (!raw) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // dd-mm-jjjj of dd/mm/jjjj — Europese volgorde, want de salons zitten in
+  // NL/BE en de Cariben.
+  const eu = /^(\d{2})[-\/](\d{2})[-\/](\d{4})$/.exec(t);
+  if (eu) return `${eu[3]}-${eu[2]}-${eu[1]}`;
+  return null;
+};
+
 function csvRowsToClients(rows) {
   if (rows.length < 2) return { records: [], skipped: 0 };
   const header = rows[0].map(h => h.trim().toLowerCase());
@@ -2148,18 +2176,6 @@ function csvRowsToClients(rows) {
 
   // Accepts yyyy-mm-dd, dd-mm-yyyy, dd/mm/yyyy — normalises to yyyy-mm-dd
   // and returns null when the input doesn't look like a real date.
-  const parseBirthday = (raw) => {
-    if (!raw) return null;
-    const t = String(raw).trim();
-    if (!t) return null;
-    // ISO yyyy-mm-dd
-    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
-    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-    // dd-mm-yyyy or dd/mm/yyyy
-    const eu = /^(\d{2})[-\/](\d{2})[-\/](\d{4})$/.exec(t);
-    if (eu) return `${eu[3]}-${eu[2]}-${eu[1]}`;
-    return null;
-  };
 
   const records = [];
   let skipped = 0;
@@ -3329,6 +3345,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
   const [productPhotoUploading, setProductPhotoUploading] = useState(null);
   const [productSearch, setProductSearch] = useState("");
+  // Verhoogd wanneer een regiowissel wordt geannuleerd, zodat de <select>
+  // opnieuw mount en weer het werkelijke land toont.
+  const [regionSelectKey, setRegionSelectKey] = useState(0);
   const [showOrderList, setShowOrderList] = useState(false);
   const [stockImporting, setStockImporting] = useState(false);
   // Barcode-scanner: welk doel de gescande code krijgt — "kassa" telt het
@@ -3946,6 +3965,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   const saveSlug = async () => {
     if (slugStatus.state !== "available") return;
+    // Deze actie herlaadt de pagina (zie hieronder), waardoor alles wat nog niet
+    // via de grote Opslaan-knop is bewaard verdwijnt: salonnaam, regio,
+    // belastinginstellingen, kleur, een net geüploade logo. Dat gebeurde
+    // zonder enige waarschuwing.
+    const bevestig = lang === "nl"
+      ? "Je salon-link bijwerken herlaadt je dashboard. Wijzigingen die je nog niet hebt opgeslagen gaan daarbij verloren — sla die eerst op. Doorgaan?"
+      : lang === "es"
+      ? "Actualizar el enlace recarga tu panel. Los cambios que aún no hayas guardado se perderán — guárdalos primero. ¿Continuar?"
+      : "Updating your salon link reloads your dashboard. Any changes you haven't saved yet will be lost — save them first. Continue?";
+    if (!(await showConfirm(bevestig))) return;
     setSlugSaving(true);
     try {
       const { error } = await supabase
@@ -3980,7 +4009,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setChangingPlan(true);
     try {
       const { data, error } = await supabase.functions.invoke("change-plan", {
-        body: { plan: newPlan, billing_interval: salonData.billing_interval || "monthly" },
+        // salonData.billing_interval bestaat niet — het interval leeft op de
+        // billing-payload (bp). Er ging dus ALTIJD "monthly" mee, en change-plan
+        // verwerkt dat als een intervalwissel: een jaarabonnee werd bij een
+        // upgrade stilzwijgend op maandbetaling gezet.
+        body: { plan: newPlan, billing_interval: billingProfile?.billing_interval || "monthly" },
       });
       if (error || !data?.success) {
         const code = data?.error || error?.message || "unknown";
@@ -5981,7 +6014,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const qty = productSaleSel[p.id] || 0;
                 return (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
-                    {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color="c.textMuted" /></div>}
+                    {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color={c.textMuted} /></div>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>
@@ -7296,7 +7329,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {qty > 0 && <div style={{ position: "absolute", top: 6, right: 6, minWidth: 20, height: 20, borderRadius: 10, background: accent, color: c.btnOnDark, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{qty}</div>}
                             {p.photo_url
                               ? <img src={p.photo_url} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", marginBottom: 6 }} />
-                              : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}><NavIcon name="bag" size={18} color="c.textMuted" /></div>}
+                              : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}><NavIcon name="bag" size={18} color={c.textMuted} /></div>}
                             <div style={{ fontSize: 11, fontWeight: 500, color: c.text, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{prodName(p)}</div>
                             <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
                             {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : "sold out") : `${lang === "nl" ? "voorraad" : "stock"}: ${p.stock}`}</div>}
@@ -9583,22 +9616,49 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ? "Bepaalt je valuta en belasting. Verhuisd of bij het aanmelden het verkeerde land gekozen? Pas het hier aan."
                       : "Sets your currency and tax. Moved, or picked the wrong country at signup? Change it here."}
                   </div>
-                  <select className="input-field" value={salonData.country_code || "NL"} style={{ width: "100%" }}
+                  <select className="input-field" key={regionSelectKey} value={salonData.country_code || "NL"} style={{ width: "100%" }}
                     onChange={async (e) => {
                       const newCode = e.target.value;
                       const oldCode = salonData.country_code || "NL";
                       if (newCode === oldCode) return;
                       const nc = COUNTRIES.find(x => x.code === newCode);
                       const m = currencyForCountry(newCode);
-                      const tx = taxForCountry(newCode);
+                      // Zonder tax_region mee te nemen krijg je de regel van het
+                      // NIEUWE land maar het eiland van het OUDE: taxRuleFor laat
+                      // tax_region namelijk winnen. Bonaire → Nederland hield zo
+                      // ABB, CRIB en onbelaste producten op echte facturen staan.
+                      const nieuweRegio = newCode === "BQ" ? "BQ-BON" : null;
+                      const regel = taxRuleFor(newCode, nieuweRegio);
+                      const tx = taxForCountry(newCode, nieuweRegio);
                       const sym = m.symbol.trim();
+                      // Curaçao heeft geen vastgesteld tarief voor salondiensten
+                      // (6% is algemeen, maar 9% raakt ook consumptieve diensten).
+                      // Beloof er dan geen percentage: het veld blijft leeg en de
+                      // eigenaar vult in wat zijn boekhouder opgeeft.
+                      const tariefTekst = regel.serviceRate == null
+                        ? (lang === "nl" ? "je vult het tarief zelf in" : lang === "es" ? "tú introduces el tipo" : "you enter the rate yourself")
+                        : (lang === "nl" ? `standaard ${regel.serviceRate}%` : lang === "es" ? `por defecto ${regel.serviceRate}%` : `default ${regel.serviceRate}%`);
                       const msg = lang === "nl"
-                        ? `Regio wijzigen naar ${nc?.name}? Je valuta wordt "${sym}" en je belasting ${tx.label} (standaard ${tx.defaultRate}%). Bestaande bedragen worden voortaan in ${sym} getoond — ze worden niet omgerekend. Klik daarna op Opslaan om het te bewaren.`
+                        ? `Regio wijzigen naar ${nc?.name}? Je valuta wordt "${sym}" en je belasting ${tx.label} (${tariefTekst}). Bestaande bedragen worden voortaan in ${sym} getoond — ze worden niet omgerekend. Klik daarna op Opslaan om het te bewaren.`
                         : `Change region to ${nc?.name}? Your currency becomes "${sym}" and tax ${tx.label} (default ${tx.defaultRate}%). Existing amounts will be shown in ${sym} from now on — they are not converted. Click Save afterwards to keep it.`;
                       if (await showConfirm(msg)) {
-                        update(d => { d.country_code = newCode; d.btw_rate = tx.defaultRate; return d; });
+                        update(d => {
+                          d.country_code = newCode;
+                          d.tax_region = nieuweRegio;
+                          // Onbekend tarief → leeg laten, niet 0: 0% is een tarief en
+                          // suggereert dat er niets verschuldigd is.
+                          d.btw_rate = regel.serviceRate == null ? "" : regel.serviceRate;
+                          d.product_tax_rate = null;
+                          d.products_taxable = null; // volgt weer de landregel
+                          return d;
+                        });
                       } else {
-                        update(d => ({ ...d })); // revert the controlled select to the old value
+                        // Een spread verandert country_code niet, dus React ziet
+                        // dezelfde value en laat het <select>-element staan op wat de
+                        // gebruiker net koos — de dropdown zei dan Bonaire terwijl
+                        // eronder "Valuta: € · Belasting: BTW" stond. Een nieuwe key
+                        // dwingt een verse mount met de oude waarde.
+                        setRegionSelectKey(k => k + 1);
                       }
                     }}>
                     {COUNTRIES.filter(x => x.launched).map(x => (
@@ -9845,10 +9905,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           if (!file) return;
                           const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
                           const { error } = await supabase.storage.from("business-images").upload(fileName, file);
-                          if (!error) {
-                            const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                            update(d => { d.logo_url = publicUrl; return d; });
-                          }
+                          // Zonder else-tak verdween een mislukte upload geruisloos:
+                          // geen toast, geen console-regel, en de eigenaar zag
+                          // gewoon zijn oude logo staan zonder te weten waarom.
+                          if (error) { console.error("logo upload:", error); toast.show(t.somethingWrong, "error"); return; }
+                          const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                          update(d => { d.logo_url = publicUrl; return d; });
                         }} />
                       </label>
                     )}
@@ -10074,12 +10136,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{tax.idLabel === "BTW-id" ? t.btwId : tax.idLabel}</div>
                       <input className="input-field" placeholder={tax.idLabel === "BTW-id" ? "NL123456789B01" : ""} value={salonData.btw_id || ""}
                         onChange={e => update(d => {
+                          const leegVoorInvoer = String(d.btw_id || "");
                           d.btw_id = e.target.value;
                           // Vult iemand een fiscaal nummer in, dan is de kans
                           // groot dat hij ook belastingplichtig is. Zet de
                           // schakelaar hieronder alvast aan \u2014 hij kan hem zelf
                           // weer uitzetten, en dat blijft dan staan.
-                          if (e.target.value.trim() && !d.tax_registered) d.tax_registered = true;
+                          // Alleen bij de EERSTE invoer: van leeg naar gevuld. Dit
+                          // stond op elke wijziging, dus wie bewust uitzette (KOR) en
+                          // daarna een typefout in zijn nummer corrigeerde, stond
+                          // ineens weer belastingplichtig.
+                          if (!leegVoorInvoer.trim() && e.target.value.trim() && !d.tax_registered) d.tax_registered = true;
                           return d;
                         })} style={{ width: "100%" }} />
                       <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{tax.idLabel === "BTW-id"
@@ -10337,7 +10404,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`}
                       </div>
                       <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}33`, display: "inline-flex", alignItems: "center", gap: 5 }}
-                        onClick={() => update(d => { d.invoice_profiles = (d.invoice_profiles || []).filter((_, i) => i !== idx); return d; })}>
+                        onClick={async () => {
+                          const zeker = await showConfirm(lang === "nl" ? "Dit factuurprofiel verwijderen? De factuurnummering van dit profiel gaat verloren."
+                            : lang === "es" ? "¿Eliminar este perfil de facturación? Se pierde su numeración de facturas."
+                            : "Delete this invoice profile? Its invoice numbering will be lost.");
+                          if (!zeker) return;
+                          update(d => { d.invoice_profiles = (d.invoice_profiles || []).filter((_, i) => i !== idx); return d; });
+                        }}>
                         <NavIcon name="xmark" size={11} color="currentColor" /> {lang === "nl" ? "Verwijder" : lang === "es" ? "Eliminar" : "Delete"}
                       </button>
                     </div>
@@ -10356,7 +10429,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <input className="input-field" placeholder="12345678" value={p.kvk_number || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, kvk_number: e.target.value} : x); return d; })} style={{ width: "100%" }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.btwId}</div>
+                          {/* Het hoofdprofiel gebruikt al het juiste label per land;
+                              hier stond het hardgecodeerd op BTW-id, zodat een
+                              Bonairiaanse salon om een "BTW-id" werd gevraagd
+                              in plaats van om haar CRIB. */}
+                          <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{tax.idLabel === "BTW-id" ? t.btwId : tax.idLabel}</div>
                           <input className="input-field" placeholder="NL123456789B01" value={p.btw_id || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, btw_id: e.target.value} : x); return d; })} style={{ width: "100%" }} />
                         </div>
                       </div>
@@ -10859,7 +10936,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editVariantForm, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-                                                await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, per_unit: !!editVariantForm.per_unit }).eq("id", v.id);
+                                                // Zonder de fout te lezen sloot de editor ook als het opslaan
+                                                // mislukte, met de nieuwe prijs vrolijk in beeld. De extra's
+                                                // hiernaast deden dit al wel goed.
+                                                const { error: vErr } = await supabase.from("service_variants").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: parseInt(filled.duration), description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null, per_unit: !!editVariantForm.per_unit }).eq("id", v.id);
+                                                if (vErr) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: svc.variants.map(vr => vr.id === v.id ? {...vr, ...filled, price: parseFloat(filled.price), duration: parseInt(filled.duration), per_unit: !!editVariantForm.per_unit} : vr)} : svc); return d; });
                                                 setEditingVariant(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
@@ -10881,7 +10962,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 <NavIcon name="edit" size={11} color="currentColor" /> {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
                                               </button>
                                               <button aria-label={lang === "nl" ? "Verwijder variant" : lang === "es" ? "Eliminar variante" : "Delete variant"} onClick={async () => {
-                                                const { error } = await supabase.from("service_variants").delete().eq("id", v.id);
+                  const zeker = await showConfirm(lang === "nl" ? "Deze variant verwijderen?" : lang === "es" ? "¿Eliminar esta variante?" : "Delete this variant?");
+                              if (!zeker) return;
+                              const { error } = await supabase.from("service_variants").delete().eq("id", v.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, variants: (svc.variants||[]).filter(x => x.id !== v.id)} : svc); return d; });
                                               }} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -10975,7 +11058,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 <NavIcon name="edit" size={11} color="currentColor" />
                                               </button>
                                               <button onClick={async () => {
-                                                const { error } = await supabase.from("service_extras").delete().eq("id", e.id);
+                  const zeker = await showConfirm(lang === "nl" ? "Deze extra verwijderen?" : lang === "es" ? "¿Eliminar este extra?" : "Delete this extra?");
+                              if (!zeker) return;
+                              const { error } = await supabase.from("service_extras").delete().eq("id", e.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: (svc.extras||[]).filter(x => x.id !== e.id)} : svc); return d; });
                                               }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -11014,7 +11099,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                       {(p.focal_x != null && (p.focal_x !== 50 || p.focal_y !== 50)) && (
                                         <div style={{ position: "absolute", left: `${(p.focal_x ?? 50) * 0.72}px`, top: `${(p.focal_y ?? 50) * 0.72}px`, width: 6, height: 6, borderRadius: "50%", background: accent, border: "1px solid #fff", transform: "translate(-50%,-50%)", pointerEvents: "none" }} />
                                       )}
-                                      <button onClick={(e) => { e.stopPropagation(); deletePhoto(s.id, p.id, p.url || p); }}
+                                      <button onClick={async (e) => {
+                          e.stopPropagation();
+                          // Deze gooit het bestand ook definitief uit storage — er is
+                          // geen weg terug, dus hier hoort een vraag bij.
+                          const zeker = await showConfirm(lang === "nl" ? "Deze foto definitief verwijderen?" : lang === "es" ? "¿Eliminar esta foto definitivamente?" : "Delete this photo permanently?");
+                          if (zeker) deletePhoto(s.id, p.id, p.url || p);
+                        }}
                                         style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                                       </button>
@@ -11347,7 +11438,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ) : (
                         <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
                           <label style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", cursor: "pointer", position: "relative" }} title={lang === "nl" ? "Foto uploaden" : lang === "es" ? "Subir foto" : "Upload photo"}>
-                            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 13, display: "inline-flex" }}>{productPhotoUploading === p.id ? "…" : <NavIcon name="bag" size={15} color="c.textMuted" />}</span>}
+                            {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 13, display: "inline-flex" }}>{productPhotoUploading === p.id ? "…" : <NavIcon name="bag" size={15} color={c.textMuted} />}</span>}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={ev => uploadProductPhoto(p.id, ev.target.files[0], ev)} />
                           </label>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -11374,7 +11465,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             const { error } = await supabase.from("products").update({ active: next }).eq("id", p.id);
                             if (error) { toast.show(t.somethingWrong, "error"); return; }
                             update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, active: next } : x); return d; });
-                          }} title={lang === "nl" ? "Zichtbaar voor klanten aan/uit" : "Visible to clients on/off"}
+                          }} title={lang === "nl" ? "Actief — zichtbaar voor klanten én in je kassa"
+                            : lang === "es" ? "Activo — visible para clientes y en tu caja"
+                            : "Active — visible to clients and in your till"}
                             style={{ width: 32, height: 18, borderRadius: 9, background: p.active ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                             <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: p.active ? 16 : 2, transition: "left 0.2s" }} />
                           </div>
@@ -11384,6 +11477,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <NavIcon name="edit" size={11} color="currentColor" />
                             </button>
                             <button onClick={async () => {
+const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je voorraad en verkoopgeschiedenis blijven staan." : lang === "es" ? "¿Eliminar este producto? Tu stock e historial de ventas se conservan." : "Delete this product? Your stock and sales history stay.");
+                              if (!zeker) return;
                               const { error } = await supabase.from("products").delete().eq("id", p.id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               update(d => { d.products = (d.products || []).filter(x => x.id !== p.id); return d; });
@@ -11840,7 +11935,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {isStarter && (salonData.staff || []).length >= 3 ? (
                   <UpgradeCard feature={lang === "nl" ? "Meer dan 3 medewerkers" : lang === "es" ? "Más de 3 empleados" : "More than 3 staff members"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
                 ) : (
-                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} onAdd={(member) => {
+                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} salonHours={salonData.business_hours} onAdd={(member) => {
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
                 }} />
                 )}
@@ -12924,7 +13019,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ textAlign: "right", flex: "0 0 auto" }}>
                               <div style={{ fontWeight: 600, color: c.text }}>{fmtEUR(inv.total_eur)}</div>
                               <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
-                                {lang === "nl" ? "incl. btw" : lang === "es" ? "IVA incl." : "incl. VAT"}
+                                {/* Bonaire/Aruba/Curaçao krijgen geen Nederlandse btw
+                                    (buiten het EU-btw-gebied). "incl. btw" onder een
+                                    factuur zonder btw is dan pertinent onjuist. */}
+                                {(parseFloat(inv.vat_amount) || 0) > 0
+                                  ? (lang === "nl" ? "incl. btw" : lang === "es" ? "IVA incl." : "incl. VAT")
+                                  : (lang === "nl" ? "geen btw" : lang === "es" ? "sin IVA" : "no VAT")}
                               </div>
                             </div>
                           </div>
@@ -13475,6 +13575,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         {view === "instellingen" && (
           <div style={{ position: "fixed", bottom: isMobile ? "calc(80px + env(safe-area-inset-bottom, 0px))" : 24, left: isMobile ? 0 : 260, right: 0, display: "flex", justifyContent: "center", zIndex: 99, pointerEvents: "none" }}>
             <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", pointerEvents: "auto", boxShadow: `0 4px 20px ${accent}44, 0 8px 32px rgba(0,0,0,0.5)` }} onClick={async () => {
+                // De salonnaam staat op de publieke boekingspagina, in elke
+                // e-mail en op elke factuur. Leeg opslaan kon gewoon, en dan
+                // stond er nergens meer een naam.
+                if (!String(salonData.name || "").trim()) {
+                  toast.show(lang === "nl" ? "Vul een salonnaam in" : lang === "es" ? "Introduce el nombre del salón" : "Enter a salon name", "error");
+                  setSettingsTab("salon");
+                  return;
+                }
                 // Auto-translate booking policy if only one language is filled.
                 const filledPolicy = await autoFillTranslations(
                   { booking_policy: salonData.booking_policy || "", booking_policy_en: salonData.booking_policy_en || "" },
