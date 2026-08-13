@@ -5584,7 +5584,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     ["agenda", "agenda", t.agenda],
     // Kassa: volwaardig verkooppunt (producten + kadobonnen) voor
     // Professional — Starter ziet de tab ook, maar krijgt een upsell.
-    ...(salonData.plan === "professional" ? [["kassa", "kassa", lang === "es" ? "Caja" : "Kassa"]] : []),
+    // "Kassa" is Nederlands en bleef in de Engelse UI staan. "Sales" boven
+    // "Register"/"Till": die laatste twee zijn voor een tweedetaalspreker
+    // dubbelzinnig (aanmelden / tot), en "Checkout" staat al op de knop
+    // ernaast. Dit label is ook de paginatitel (zie navItems.find verderop).
+    ...(salonData.plan === "professional" ? [["kassa", "kassa", lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"]] : []),
     ["klanten", "team", lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"],
     ["analytics", "analytics", t.analytics],
     ["facturen", "facturen", t.invoices],
@@ -7250,7 +7254,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={lang === "nl" ? "Verkoop producten en kadobonnen" : lang === "es" ? "Vende productos y tarjetas regalo" : "Sell products and gift cards"}>Kassa</PTitle>}
               {salonData.plan !== "professional" ? (
-                <UpgradeCard feature="Kassa" lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+                <UpgradeCard feature={lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"} lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
               ) : (
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.4fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* Links: zoeken/scannen + product-grid */}
