@@ -5873,10 +5873,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       before: () => { setView("instellingen"); setSettingsTab("diensten"); },
       title: lang === "nl" ? "Alles onder Instellingen" : lang === "es" ? "Todo en Ajustes" : "Everything under Settings",
       body: lang === "nl"
-        ? "Salon: je naam, logo en kleuren. Diensten: behandelingen, prijzen en extra's. Team: je medewerkers. Planning: openingstijden en vrije dagen. Abonnement: je plan. Overig: btw, e-mail en deze rondleiding."
+        ? "Salon: je profiel, stijl en factuurgegevens. Diensten & producten: behandelingen en prijzen. Team: je medewerkers. Planning & boekingen: uren, boekingsregels en herinneringen. Klanten & marketing: reviews, verjaardag en nieuwsbrief. Abonnement & account: je Vellu-abonnement en inloggegevens."
         : lang === "es"
-        ? "Salón: tu nombre, logo y colores. Servicios: tratamientos, precios y extras. Equipo: tus profesionales. Horario: horas de apertura y días libres. Facturación: tu plan. Otros: impuestos, correo y este recorrido."
-        : "Salon: your name, logo and colours. Services: treatments, prices and extras. Team: your staff. Schedule: opening hours and days off. Billing: your plan. Other: VAT, email and this tour."
+        ? "Salón: tu perfil, estilo y datos de facturación. Servicios y productos: tratamientos y precios. Equipo: tus profesionales. Horario y reservas: horas, reglas de reserva y recordatorios. Clientes y marketing: reseñas, cumpleaños y boletín. Suscripción y cuenta: tu plan de Vellu y tus datos de acceso."
+        : "Salon: your profile, style and invoice details. Services & products: treatments and prices. Team: your staff. Schedule & bookings: hours, booking rules and reminders. Clients & marketing: reviews, birthdays and newsletter. Subscription & account: your Vellu plan and login details."
     },
     {
       key: "done",
@@ -9756,9 +9756,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 // dus een langer label breekt het mobiele layout niet.
                 ["diensten", "diensten", lang === "nl" ? "Diensten & producten" : lang === "es" ? "Servicios y productos" : "Services & products"],
                 ["team", "team", lang === "nl" ? "Team" : lang === "es" ? "Equipo" : "Team"],
-                ["planning", "planning", lang === "nl" ? "Planning" : lang === "es" ? "Horario" : "Schedule"],
-                ["billing", "creditcard", lang === "nl" ? "Abonnement" : lang === "es" ? "Facturación" : "Billing"],
-                ["facturatie", "overig", lang === "nl" ? "Overig" : lang === "es" ? "Otros" : "Other"],
+                ["planning", "planning", lang === "nl" ? "Planning & boekingen" : lang === "es" ? "Horario y reservas" : "Schedule & bookings"],
+                ["facturatie", "overig", lang === "nl" ? "Klanten & marketing" : lang === "es" ? "Clientes y marketing" : "Clients & marketing"],
+                ["billing", "creditcard", lang === "nl" ? "Abonnement & account" : lang === "es" ? "Suscripción y cuenta" : "Subscription & account"],
               ].map(([key, icon, label]) => (
                 <div key={key} onClick={() => setSettingsTab(key)} style={{
                   padding: "8px 16px", borderRadius: 12, cursor: "pointer", whiteSpace: "nowrap",
@@ -10389,7 +10389,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* Invoice details */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Adres & factuurgegevens" : lang === "es" ? "Dirección y datos de facturación" : "Address & invoice details"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div>
@@ -10641,27 +10641,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>{lang === "nl" ? "Je persoonlijke bunq.me- of PayPal.Me-link, zónder bedrag — het factuurbedrag wordt er automatisch achter gezet. Alleen een QR is ook prima: laat dit dan leeg." : lang === "es" ? "Tu enlace personal de bunq.me o PayPal.Me, sin importe — el importe de la factura se añade automáticamente. Solo con QR también está bien: simplemente déjalo vacío." : "Your personal bunq.me or PayPal.Me link, without an amount — the invoice amount is appended automatically. QR-only is fine too: just leave this empty."}</div>
                   </div>
                 </div>
-                {(salonData.invoice_profiles || []).length > 0 && (
-                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                    {(salonData.invoice_profiles || []).map((p, idx) => (
-                      <div key={p.id || idx} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 14 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>
-                          {p.label || (lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`)}
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                          <div>
-                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : lang === "es" ? "Nombre del titular de la cuenta" : "Account holder name"}</div>
-                            <input className="input-field" placeholder={p.label || ""} value={p.iban_holder || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, iban_holder: e.target.value} : x); return d; })} style={{ width: "100%" }} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : lang === "es" ? "Enlace de pago (opcional)" : "Payment link (optional)"}</div>
-                            <input className="input-field" placeholder={lang === "nl" ? "https://bunq.me/jouwnaam" : lang === "es" ? "https://paypal.me/tunombre" : "https://paypal.me/yourname"} value={p.payment_link || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, payment_link: e.target.value} : x); return d; })} style={{ width: "100%" }} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Extra invoice profiles — shared-account use case where two
@@ -10721,6 +10700,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.ibanNumber}</div>
                         <input className="input-field" placeholder="NL00 RABO 0000 0000 00" value={p.iban || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, iban: e.target.value} : x); return d; })} style={{ width: "100%", fontFamily: "monospace", letterSpacing: "0.04em" }} />
                       </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tenaamstelling rekening" : lang === "es" ? "Nombre del titular de la cuenta" : "Account holder name"}</div>
+                            <input className="input-field" placeholder={p.label || ""} value={p.iban_holder || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, iban_holder: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Betaallink (optioneel)" : lang === "es" ? "Enlace de pago (opcional)" : "Payment link (optional)"}</div>
+                            <input className="input-field" placeholder={lang === "nl" ? "https://bunq.me/jouwnaam" : lang === "es" ? "https://paypal.me/tunombre" : "https://paypal.me/yourname"} value={p.payment_link || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, payment_link: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                          </div>
+                        </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         <div>
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
@@ -12498,6 +12487,75 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 </div>
               </div>
 
+              {/* Booking Policy Section — separate NL/EN so the public profile
+                  shows the right text when the visitor toggles language. EN is
+                  optional; when empty the NL text is shown for both languages. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <SL>{t.bookingPolicy}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
+                <AutoTranslateField
+                  nlValue={salonData.booking_policy || ""}
+                  enValue={salonData.booking_policy_en || ""}
+                  setNl={v => update(d => { d.booking_policy = v; return d; })}
+                  setEn={v => update(d => { d.booking_policy_en = v; return d; })}
+                  lang={lang} accent={accent}
+                  textarea rows={6}
+                  placeholder={t.bookingPolicyPlaceholder}
+                />
+              </div>
+
+              {/* Phone Required Toggle */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel }}>{t.phoneRequiredDesc}</div>
+                  </div>
+                  <div
+                    onClick={() => update(d => { d.phone_required = !d.phone_required; return d; })}
+                    style={{
+                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                      background: salonData.phone_required ? accent : c.toggleInactive,
+                      position: "relative", transition: "background 0.2s"
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: 2, left: salonData.phone_required ? 18 : 2,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Waitlist Toggle */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Wachtlijst" : lang === "es" ? "Lista de espera" : "Waitlist"}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.4 }}>
+                      {lang === "nl"
+                        ? "Klanten kunnen zich aanmelden als er geen tijd vrij is. Bij een annulering krijgt de eerste wachtende automatisch een mail."
+                        : lang === "es"
+                        ? "Tus clientes pueden apuntarse cuando no queda ninguna hora libre. Si alguien cancela, quien esté primero en la lista recibe un correo automáticamente."
+                        : "Clients can sign up when nothing is free. When an appointment is cancelled the first waiting client is emailed automatically."}
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => update(d => { d.waitlist_enabled = !d.waitlist_enabled; return d; })}
+                    style={{
+                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+                      background: salonData.waitlist_enabled ? accent : c.toggleInactive,
+                      position: "relative", transition: "background 0.2s", flexShrink: 0
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: 2, left: salonData.waitlist_enabled ? 18 : 2,
+                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
+                    }} />
+                  </div>
+                </div>
+              </div>
+
               {/* Reminder timing */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.reminderTiming}</SL>
@@ -13443,39 +13501,17 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     )}
                   </div>
 
-                  {/* Legal footer — Vellu's own entity, NOT the salon's */}
-                  <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "12px 0", lineHeight: 1.5 }}>
-                    {lang === "nl"
-                      ? "Vellu is een product van Mirah Ventures · KVK 42045867 · Amersfoort"
-                      : lang === "es"
-                      ? "Vellu es un producto de Mirah Ventures · Registro mercantil 42045867 · Amersfoort"
-                      : "Vellu is a product of Mirah Ventures · Chamber of Commerce 42045867 · Amersfoort"}
-                  </div>
-                </>);
-              })()}
-              </>}
-
-              {/* ═══ FACTURATIE TAB ═══ */}
-              {settingsTab === "facturatie" && <>
-
-              {/* ── GUIDED TOUR — replay ──────────────────────────────
-                  New accounts get this automatically right after the setup
-                  wizard; here so anyone can watch it again later, and so a
-                  second staff-owner on a shared salon can see it too. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
-                <SL>{lang === "nl" ? "Rondleiding" : lang === "es" ? "Visita guiada" : "Guided tour"}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
-                  {lang === "nl"
-                    ? "Een korte rondleiding door de app: waar je agenda, klanten, facturen en instellingen staan. Duurt ongeveer een minuut."
-                    : lang === "es"
-                    ? "Un recorrido breve por la app: dónde están tu agenda, tus clientes, tus facturas y tus ajustes. Dura más o menos un minuto."
-                    : "A short tour of the app: where to find your agenda, clients, invoices and settings. Takes about a minute."}
-                </div>
-                <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={startTour}>
-                  <NavIcon name="check" size={14} color={accent} />
-                  {lang === "nl" ? "Start de rondleiding" : lang === "es" ? "Iniciar la visita" : "Start the tour"}
-                </button>
-              </div>
+              {/* Referral program — each owner has a unique 8-char code. When
+                  a new salon signs up via /owner?ref=CODE, both sides get
+                  1 free month credited (redeemed on billing via iDEAL when
+                  that ships). For now we just track and display. */}
+              <ReferralBlock
+                salonData={salonData}
+                lang={lang}
+                c={c}
+                accent={accent}
+                toast={toast}
+              />
 
               {/* ── ACCOUNT — change email / password ─────────────────
                   Both changes re-authenticate with the current password
@@ -13631,75 +13667,56 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 </div>
               </div>
 
-
-              {/* Booking Policy Section — separate NL/EN so the public profile
-                  shows the right text when the visitor toggles language. EN is
-                  optional; when empty the NL text is shown for both languages. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <SL>{t.bookingPolicy}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
-                <AutoTranslateField
-                  nlValue={salonData.booking_policy || ""}
-                  enValue={salonData.booking_policy_en || ""}
-                  setNl={v => update(d => { d.booking_policy = v; return d; })}
-                  setEn={v => update(d => { d.booking_policy_en = v; return d; })}
-                  lang={lang} accent={accent}
-                  textarea rows={6}
-                  placeholder={t.bookingPolicyPlaceholder}
-                />
-              </div>
-
-              {/* Phone Required Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
-                    <div style={{ fontSize: 11, color: c.textLabel }}>{t.phoneRequiredDesc}</div>
+                  {/* Legal footer — Vellu's own entity, NOT the salon's */}
+                  <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "12px 0", lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "Vellu is een product van Mirah Ventures · KVK 42045867 · Amersfoort"
+                      : lang === "es"
+                      ? "Vellu es un producto de Mirah Ventures · Registro mercantil 42045867 · Amersfoort"
+                      : "Vellu is a product of Mirah Ventures · Chamber of Commerce 42045867 · Amersfoort"}
                   </div>
-                  <div
-                    onClick={() => update(d => { d.phone_required = !d.phone_required; return d; })}
-                    style={{
-                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
-                      background: salonData.phone_required ? accent : c.toggleInactive,
-                      position: "relative", transition: "background 0.2s"
-                    }}
-                  >
-                    <div style={{
-                      position: "absolute", top: 2, left: salonData.phone_required ? 18 : 2,
-                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
-                    }} />
-                  </div>
+
+              {/* ── GUIDED TOUR — replay ──────────────────────────────
+                  New accounts get this automatically right after the setup
+                  wizard; here so anyone can watch it again later, and so a
+                  second staff-owner on a shared salon can see it too. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <SL>{lang === "nl" ? "Rondleiding" : lang === "es" ? "Visita guiada" : "Guided tour"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Een korte rondleiding door de app: waar je agenda, klanten, facturen en instellingen staan. Duurt ongeveer een minuut."
+                    : lang === "es"
+                    ? "Un recorrido breve por la app: dónde están tu agenda, tus clientes, tus facturas y tus ajustes. Dura más o menos un minuto."
+                    : "A short tour of the app: where to find your agenda, clients, invoices and settings. Takes about a minute."}
                 </div>
+                <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={startTour}>
+                  <NavIcon name="check" size={14} color={accent} />
+                  {lang === "nl" ? "Start de rondleiding" : lang === "es" ? "Iniciar la visita" : "Start the tour"}
+                </button>
               </div>
 
-              {/* Waitlist Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Wachtlijst" : lang === "es" ? "Lista de espera" : "Waitlist"}</div>
-                    <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.4 }}>
-                      {lang === "nl"
-                        ? "Klanten kunnen zich aanmelden als er geen tijd vrij is. Bij een annulering krijgt de eerste wachtende automatisch een mail."
-                        : lang === "es"
-                        ? "Tus clientes pueden apuntarse cuando no queda ninguna hora libre. Si alguien cancela, quien esté primero en la lista recibe un correo automáticamente."
-                        : "Clients can sign up when nothing is free. When an appointment is cancelled the first waiting client is emailed automatically."}
-                    </div>
-                  </div>
-                  <div
-                    onClick={() => update(d => { d.waitlist_enabled = !d.waitlist_enabled; return d; })}
-                    style={{
-                      width: 36, height: 20, borderRadius: 10, cursor: "pointer",
-                      background: salonData.waitlist_enabled ? accent : c.toggleInactive,
-                      position: "relative", transition: "background 0.2s", flexShrink: 0
-                    }}
+              {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
+              {isMobile && (
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{t.account || (lang === "nl" ? "Account" : lang === "es" ? "Cuenta" : "Account")}</div>
+                  <button
+                    className="btn-ghost"
+                    style={{ width: "100%", padding: "12px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", color: c.textLabel }}
+                    onClick={onLogout}
                   >
-                    <div style={{
-                      position: "absolute", top: 2, left: salonData.waitlist_enabled ? 18 : 2,
-                      width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s"
-                    }} />
-                  </div>
+                    <NavIcon name="logout" size={14} color={c.textLabel} />
+                    {t.logout}
+                  </button>
                 </div>
-              </div>
+              )}
+                </>);
+              })()}
+              </>}
+
+              {/* ═══ FACTURATIE TAB ═══ */}
+              {settingsTab === "facturatie" && <>
+
+
 
               {/* \u2500\u2500 Google Reviews \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
                   Stond eerst onder Planning, tussen werktijden en blokkades. Een
@@ -13970,32 +13987,6 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 toast={toast}
               />
 
-              {/* Referral program — each owner has a unique 8-char code. When
-                  a new salon signs up via /owner?ref=CODE, both sides get
-                  1 free month credited (redeemed on billing via iDEAL when
-                  that ships). For now we just track and display. */}
-              <ReferralBlock
-                salonData={salonData}
-                lang={lang}
-                c={c}
-                accent={accent}
-                toast={toast}
-              />
-
-              {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
-              {isMobile && (
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{t.account || (lang === "nl" ? "Account" : lang === "es" ? "Cuenta" : "Account")}</div>
-                  <button
-                    className="btn-ghost"
-                    style={{ width: "100%", padding: "12px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", color: c.textLabel }}
-                    onClick={onLogout}
-                  >
-                    <NavIcon name="logout" size={14} color={c.textLabel} />
-                    {t.logout}
-                  </button>
-                </div>
-              )}
               </>}
 
             </div>
