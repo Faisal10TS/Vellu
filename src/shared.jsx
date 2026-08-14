@@ -66,6 +66,12 @@ function ThemeProvider({ children }) {
     const bg = THEMES[theme].bg;
     document.documentElement.style.background = bg;
     document.body.style.background = bg;
+    // Zonder color-scheme tekent de browser native onderdelen (het uitklaplijstje
+    // van een <select>, de kalender van een datumveld, scrollbalken) altijd in
+    // LICHTE stijl, terwijl de app de tekst al donker-thema-licht kleurt. Op de
+    // kassa gaf dat witte medewerkersnamen op een wit dropdown-lijstje —
+    // onleesbaar. Met color-scheme volgt de browser het thema van de app.
+    document.documentElement.style.colorScheme = theme;
     const root = document.getElementById("root");
     if (root) root.style.background = bg;
     // Keep Safari's URL-bar tint in sync with the current theme so the URL bar area
