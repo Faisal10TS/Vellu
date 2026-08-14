@@ -87,6 +87,14 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/mollie-webhook/index.ts"
 
+[functions.support-chat]
+enabled = true
+# Dual-mode helpchat: de PUBLIEKE modus (landingspagina) draait zonder inlog en
+# dus zonder JWT; de functie regelt zelf de daglimiet en de owner-verificatie.
+# Op true zou de gateway de publieke chat 401'en. Live zo sinds v1 (nu v9).
+verify_jwt = false
+entrypoint = "./functions/support-chat/index.ts"
+
 [functions.cancel-appointment]
 enabled = true
 # De anonieme annuleerpagina (vellu.cc/cancel/TOKEN) roept dit aan; het token

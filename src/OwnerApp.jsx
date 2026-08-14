@@ -3459,6 +3459,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Na het afrekenen: een bevestiging met bedrag, betaalwijze en knoppen voor
   // bon/factuur. Zonder dat weet je alleen DAT er iets geregistreerd is.
   const [lastSale, setLastSale] = useState(null);
+  // Dubbelklik-vangnet aan de kassa: twee keer op Afrekenen tikken mag niet
+  // twee verkopen boeken. De vlag blokkeert de knop én de functie zelf.
+  const [kassaCheckoutBusy, setKassaCheckoutBusy] = useState(false);
+  // Kassalijst-dag: standaard vandaag, maar de salon kan terugbladeren om een
+  // oude (bv. dubbel geboekte) verkoop terug te vinden en te verwijderen.
+  const [kassaDay, setKassaDay] = useState(() => fmt(getToday()));
+  // Het dashboard laadt alleen de laatste ~90 dagen afspraken in salonData.
+  // Voor oudere dagen halen we de verkopen van die ene dag apart op; ze blijven
+  // in deze losse state en gaan NIET in salonData (anders dubbel bij herladen).
+  const [kassaDayExtra, setKassaDayExtra] = useState(null); // { day, rows } | null
+  const [kassaDayLoading, setKassaDayLoading] = useState(false);
+  useEffect(() => {
+    // Ondergrens van wat zeker in salonData zit: het venster is bij het laden
+    // op (laadmoment − 90 dagen) gezet; "nu − 90 dagen" ligt daar nooit vóór,
+    // dus alles vanaf die datum is gegarandeerd al aanwezig.
+    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    if (!salonData?.owner_id || !kassaDay || kassaDay >= loadedFrom) { setKassaDayExtra(null); return; }
+    let alive = true;
+    setKassaDayLoading(true);
+    supabase.from("appointments").select("*").eq("owner_id", salonData.owner_id).eq("date", kassaDay)
+      .then(({ data }) => {
+        if (!alive) return;
+        setKassaDayExtra({ day: kassaDay, rows: data || [] });
+        setKassaDayLoading(false);
+      });
+    return () => { alive = false; };
+  }, [kassaDay, salonData?.owner_id]);
   // Auto-print leeft per APPARAAT (localStorage), niet in het salonprofiel: de
   // kassa-computer aan de balie heeft de bonprinter, de telefoon van de
   // eigenaar niet. Als profiel-vlag zou elke ingelogde telefoon mee gaan printen.
@@ -4832,6 +4859,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         }
       }
       update(d => { d.appointments = d.appointments.filter(a => a.id !== sale.id); return d; });
+      // Ook uit de apart opgehaalde kassalijst-dag (buiten het 90-dagen-venster)
+      // halen, anders blijft de verwijderde verkoop daar in beeld staan.
+      setKassaDayExtra(prev => prev ? { ...prev, rows: prev.rows.filter(a => a.id !== sale.id) } : prev);
       setSaleDetail(null); setSaleDeleteArm(false);
       if (lastSale && lastSale.id === sale.id) setLastSale(null);
       toast.show(lang === "nl" ? "Verkoop verwijderd — voorraad teruggeboekt" : lang === "es" ? "Venta eliminada — stock restaurado" : "Sale deleted — stock restored");
@@ -4846,6 +4876,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // meetelt in omzet/analytics en factureerbaar is. Gedeeld door de
   // Kassa-tab én de (oude) walk-in modal. ──
   const completeWalkinSale = async () => {
+    // Vangnet tegen dubbel afrekenen: tijdens de inserts (kadobon + verkoop)
+    // zit er netwerk-wachttijd waarin een tweede tik anders een tweede,
+    // identieke verkoop zou boeken. De vlag gaat in finally altijd weer vrij,
+    // ook als een insert faalt of vroegtijdig returnt.
+    if (kassaCheckoutBusy) return;
+    setKassaCheckoutBusy(true);
+    try { await completeWalkinSaleInner(); } finally { setKassaCheckoutBusy(false); }
+  };
+  const completeWalkinSaleInner = async () => {
     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
     const voucherAmt = parseFloat(kassaVoucher) || 0;
     if (!sel.length && !(voucherAmt > 0)) { setProductSaleFor(null); return; }
@@ -6221,8 +6260,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               ) : null;
             })()}
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn-primary" style={{ flex: 1, padding: "12px 16px", fontSize: 12 }} disabled={!Object.values(productSaleSel).some(q => q > 0) || (productSaleFor === "walkin" && walkinPay === "request" && !walkinEmail.trim())} onClick={addProductsToAppt}>
-                {productSaleFor === "walkin"
+              <button className="btn-primary" style={{ flex: 1, padding: "12px 16px", fontSize: 12, opacity: kassaCheckoutBusy ? 0.6 : 1 }} disabled={!Object.values(productSaleSel).some(q => q > 0) || (productSaleFor === "walkin" && walkinPay === "request" && !walkinEmail.trim()) || kassaCheckoutBusy} onClick={addProductsToAppt}>
+                {kassaCheckoutBusy
+                  ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
+                  : productSaleFor === "walkin"
                   ? (lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out")
                   : (lang === "nl" ? "Toevoegen aan afspraak" : lang === "es" ? "Añadir a la cita" : "Add to appointment")}
               </button>
@@ -7529,28 +7570,84 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       setVouchers(data || []);
                     }}>{lang === "nl" ? "Kadobonnen beheren" : lang === "es" ? "Gestionar tarjetas" : "Manage gift cards"}</button>
                   </div>
-                  {/* Verkopen van vandaag: dagoverzicht + PDF-rapport. Dit is
-                      waar een verkoop landt — NIET in de agenda. */}
+                  {/* Verkopen per dag: dagoverzicht + PDF-rapport. Dit is waar
+                      een verkoop landt — NIET in de agenda. Standaard vandaag,
+                      maar bladerbaar naar eerdere dagen zodat een dubbel
+                      geboekte verkoop van gisteren ook terug te vinden (en te
+                      verwijderen) is. */}
                   {(() => {
                     const today = fmt(getToday());
-                    const rows = productSalesBetween(today, today)
+                    const day = kassaDay || today;
+                    const isToday = day === today;
+                    // Zelfde ondergrens als het fetch-effect hierboven: dagen
+                    // vóór het geladen 90-dagen-venster komen uit kassaDayExtra.
+                    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+                    const outOfRange = day < loadedFrom;
+                    const extraReady = !!(kassaDayExtra && kassaDayExtra.day === day);
+                    // Buiten het venster passen we hetzelfde filter toe als
+                    // productSalesBetween, zodat ook producten die bij een
+                    // afspraak zijn aangeslagen gewoon in de lijst staan.
+                    const rows = (outOfRange
+                      ? (extraReady ? kassaDayExtra.rows : []).filter(a =>
+                          a.status !== "cancelled" && a.status !== "no_show" &&
+                          Array.isArray(a.products) && a.products.length > 0)
+                      : productSalesBetween(day, day))
                       .sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+                    const dayLoading = outOfRange && (kassaDayLoading || !extraReady);
                     const dayTotal = rows.reduce((sum, a) => sum + (Array.isArray(a.products) ? a.products.reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0) : 0), 0);
                     const payLabel = (pm) => pm === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
                       : pm === "pin" ? (lang === "es" ? "Tarjeta" : "Pin")
                       : pm === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request")
                       : (lang === "nl" ? "In de salon" : lang === "es" ? "En el salón" : "In salon");
+                    // Een dag bladeren; vooruit klemt op vandaag (geen toekomst).
+                    const shiftDay = (delta) => {
+                      const d = parseDate(day);
+                      d.setDate(d.getDate() + delta);
+                      const next = fmt(d);
+                      setKassaDay(next > today ? today : next);
+                    };
+                    const dObj = parseDate(day);
+                    // Korte datum met de bestaande maandafkortingen; jaartal
+                    // alleen als het niet het lopende jaar is.
+                    const dayLabel = `${dObj.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[dObj.getMonth()]}${dObj.getFullYear() !== getToday().getFullYear() ? ` ${dObj.getFullYear()}` : ""}`;
                     return (
                       <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>
-                            {lang === "nl" ? "Vandaag verkocht" : lang === "es" ? "Vendido hoy" : "Sold today"}
-                          </span>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>
+                              {isToday
+                                ? (lang === "nl" ? "Vandaag verkocht" : lang === "es" ? "Vendido hoy" : "Sold today")
+                                : (lang === "nl" ? `${dayLabel} verkocht` : lang === "es" ? `Vendido ${dayLabel}` : `Sold ${dayLabel}`)}
+                            </span>
+                            <button type="button" className="btn-ghost" onClick={() => shiftDay(-1)}
+                              aria-label={lang === "nl" ? "Vorige dag" : lang === "es" ? "Día anterior" : "Previous day"}
+                              style={{ padding: "2px 8px", fontSize: 13, lineHeight: 1.2 }}>‹</button>
+                            {/* Datumveld: direct naar een willekeurige (oude) dag
+                                springen, nooit voorbij vandaag. */}
+                            <input className="input-field" type="date" value={day} max={today}
+                              onChange={e => { const v = e.target.value; if (v) setKassaDay(v > today ? today : v); }}
+                              aria-label={lang === "nl" ? "Kies een dag" : lang === "es" ? "Elige un día" : "Pick a day"}
+                              style={{ padding: "2px 6px", fontSize: 10, width: "auto" }} />
+                            <button type="button" className="btn-ghost" onClick={() => shiftDay(1)} disabled={isToday}
+                              aria-label={lang === "nl" ? "Volgende dag" : lang === "es" ? "Día siguiente" : "Next day"}
+                              style={{ padding: "2px 8px", fontSize: 13, lineHeight: 1.2, opacity: isToday ? 0.35 : 1, cursor: isToday ? "default" : "pointer" }}>›</button>
+                            {!isToday && (
+                              <button type="button" className="btn-ghost" onClick={() => setKassaDay(today)} style={{ padding: "3px 10px", fontSize: 9 }}>
+                                {lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today"}
+                              </button>
+                            )}
+                          </div>
                           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{dayTotal.toFixed(2)}</span>
                         </div>
-                        {rows.length === 0 ? (
+                        {dayLoading ? (
                           <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px" }}>
-                            {lang === "nl" ? "Nog niets verkocht vandaag." : lang === "es" ? "Aún no hay ventas hoy." : "Nothing sold yet today."}
+                            {lang === "nl" ? "Laden…" : lang === "es" ? "Cargando…" : "Loading…"}
+                          </div>
+                        ) : rows.length === 0 ? (
+                          <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px" }}>
+                            {isToday
+                              ? (lang === "nl" ? "Nog niets verkocht vandaag." : lang === "es" ? "Aún no hay ventas hoy." : "Nothing sold yet today.")
+                              : (lang === "nl" ? "Niets verkocht op deze dag." : lang === "es" ? "No se vendió nada ese día." : "Nothing sold on this day.")}
                           </div>
                         ) : rows.map(a => {
                           const amt = (a.products || []).reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0);
@@ -7745,10 +7842,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                  : "Cash taken — Vellu records it for your cash-up.")}
                           </div>
                         )}
-                        <button className="btn-primary" style={{ width: "100%", padding: "13px 16px", fontSize: 12 }}
-                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId}
+                        <button className="btn-primary" style={{ width: "100%", padding: "13px 16px", fontSize: 12, opacity: kassaCheckoutBusy ? 0.6 : 1 }}
+                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId || kassaCheckoutBusy}
                           onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
-                          {lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${cur}${tot.toFixed(2)}` : ""}
+                          {kassaCheckoutBusy
+                            ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
+                            : <>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${cur}${tot.toFixed(2)}` : ""}</>}
                         </button>
                         {/* Een browser kan niet rechtstreeks met een printer koppelen;
                             de brug is het printvenster. De eerste print vraagt éénmalig
