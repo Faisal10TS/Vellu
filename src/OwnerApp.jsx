@@ -3465,6 +3465,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try { localStorage.setItem("vellu_kassa_autoprint", next ? "1" : "0"); } catch { /* privémodus: dan alleen deze sessie */ }
     return next;
   });
+  const [kioskHelpOpen, setKioskHelpOpen] = useState(false);
   const [saleDetail, setSaleDetail] = useState(null);
   const [saleDeleteArm, setSaleDeleteArm] = useState(false);
   const [receiptBusy, setReceiptBusy] = useState(false);
@@ -7757,6 +7758,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {lang === "nl" ? "Kies bij de eerste print je bonprinter in het printvenster — je browser onthoudt die keuze daarna. Deze instelling geldt alleen op dit apparaat."
                               : lang === "es" ? "En la primera impresión elige tu impresora de recibos en la ventana de impresión — el navegador la recordará. Este ajuste solo aplica a este dispositivo."
                               : "On the first print, pick your receipt printer in the print dialog — your browser remembers it. This setting applies to this device only."}
+                            {/* Nul kliks kan een browser alleen via de kiosk-printing-
+                                opstartvlag van Chrome/Edge: dan slaat hij het print-
+                                venster over en gaat alles naar de standaardprinter.
+                                Dat is een instelling op de kassa-computer zelf, dus de
+                                uitleg hoort hier bij de apparaat-gebonden schakelaar. */}
+                            <div onClick={() => setKioskHelpOpen(o => !o)}
+                              style={{ color: accent, cursor: "pointer", marginTop: 5, userSelect: "none" }}>
+                              {lang === "nl" ? (kioskHelpOpen ? "▾ Bon direct uit de printer, zonder venster" : "▸ Bon direct uit de printer, zonder venster?")
+                                : lang === "es" ? (kioskHelpOpen ? "▾ Recibo directo a la impresora, sin ventana" : "▸ ¿Recibo directo a la impresora, sin ventana?")
+                                : (kioskHelpOpen ? "▾ Receipt straight to the printer, no dialog" : "▸ Receipt straight to the printer, no dialog?")}
+                            </div>
+                            {kioskHelpOpen && (
+                              <ol style={{ margin: "6px 0 0", paddingLeft: 16, display: "flex", flexDirection: "column", gap: 3 }}>
+                                <li>{lang === "nl" ? "Stel je bonprinter in als standaardprinter (Windows: Instellingen → Bluetooth en apparaten → Printers)."
+                                  : lang === "es" ? "Configura tu impresora de recibos como predeterminada (Windows: Configuración → Bluetooth y dispositivos → Impresoras)."
+                                  : "Set your receipt printer as the default printer (Windows: Settings → Bluetooth & devices → Printers)."}</li>
+                                <li>{lang === "nl" ? <>Maak een snelkoppeling van Chrome en zet in het veld Doel, ná de aanhalingstekens, een spatie en <span style={{ fontFamily: "monospace" }}>--kiosk-printing</span>.</>
+                                  : lang === "es" ? <>Crea un acceso directo de Chrome y añade en el campo Destino, tras las comillas, un espacio y <span style={{ fontFamily: "monospace" }}>--kiosk-printing</span>.</>
+                                  : <>Create a Chrome shortcut and add a space plus <span style={{ fontFamily: "monospace" }}>--kiosk-printing</span> after the quotes in the Target field.</>}</li>
+                                <li>{lang === "nl" ? "Open de kassa voortaan via die snelkoppeling: elke bon rolt er dan direct uit, zonder venster."
+                                  : lang === "es" ? "Abre la caja desde ese acceso directo: cada recibo saldrá directo de la impresora, sin ventana."
+                                  : "Open the till via that shortcut from then on: every receipt comes straight out, no dialog."}</li>
+                              </ol>
+                            )}
                           </div>
                         )}
                       </div>
