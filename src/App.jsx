@@ -386,6 +386,10 @@ function CancelRoute({ lang }) {
   const [status, setStatus] = useState("loading");
   const [appointment, setAppointment] = useState(null);
   const [reason, setReason] = useState("");
+  // Binnen de annuleringstermijn van de salon: uren + telefoonnummer voor de
+  // "bel de salon"-uitleg, gevuld door het check-antwoord of door een 403 op
+  // het annuleren zelf (pagina stond al open toen de grens verstreek).
+  const [lateInfo, setLateInfo] = useState(null);
 
   useEffect(() => {
     const checkToken = async () => {
@@ -400,6 +404,12 @@ function CancelRoute({ lang }) {
       }
       if (data.status === "already_cancelled") { setStatus("cancelled"); return; }
       if (data.status === "expired") { setStatus("expired"); return; }
+      if (data.status === "too_late") {
+        setLateInfo({ hours: data.deadline_hours, phone: data.salon_phone || "", salon: data.salon_name || "" });
+        if (data.appointment) setAppointment({ ...data.appointment, country_code: data.country_code || "NL" });
+        setStatus("too_late");
+        return;
+      }
       if (data.status === "valid" && data.appointment) {
         setAppointment({ ...data.appointment, country_code: data.country_code || "NL" });
         setStatus("confirm");
@@ -415,8 +425,21 @@ function CancelRoute({ lang }) {
       const { data, error } = await supabase.functions.invoke("cancel-appointment", {
         body: { action: "cancel", token, reason: reason || null },
       });
-      if (error || !data || data.status !== "cancelled") {
-        throw new Error(data?.error || error?.message || "cancel_failed");
+      if (error) {
+        // Race met de termijn: de pagina stond al open vóór de grens, de klik
+        // kwam erna. De server weigert dan met 403 too_late_to_cancel — toon
+        // dezelfde uitleg als wanneer de pagina meteen te laat was geopend.
+        let body = null;
+        try { body = await error.context?.json?.(); } catch { /* geen json-body */ }
+        if (body?.error === "too_late_to_cancel") {
+          setLateInfo({ hours: body.deadline_hours, phone: body.salon_phone || "", salon: body.salon_name || "" });
+          setStatus("too_late");
+          return;
+        }
+        throw new Error(body?.error || error.message || "cancel_failed");
+      }
+      if (!data || data.status !== "cancelled") {
+        throw new Error(data?.error || "cancel_failed");
       }
 
       const a = data.appointment;
@@ -515,6 +538,36 @@ function CancelRoute({ lang }) {
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>{t.cancelBeforeTime}</p>
             <button className="btn-ghost" onClick={() => navigate("/")}>
+              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+            </button>
+          </div>
+        )}
+
+        {status === "too_late" && (
+          <div className="fade-up">
+            <div style={{ fontSize: 48, marginBottom: 20 }}>⏰</div>
+            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
+              {lang === "nl" ? "Online annuleren kan niet meer" : lang === "es" ? "Ya no se puede cancelar en línea" : "Online cancellation has closed"}
+            </h1>
+            <p style={{ color: c.textSub, marginBottom: 12 }}>
+              {lang === "nl"
+                ? `${lateInfo?.salon || "Deze salon"} hanteert een annuleringstermijn van ${lateInfo?.hours || ""} uur. Neem contact op met de salon om je afspraak te verplaatsen of te annuleren.`
+                : lang === "es"
+                ? `${lateInfo?.salon || "Este salón"} aplica un plazo de cancelación de ${lateInfo?.hours || ""} horas. Ponte en contacto con el salón para cambiar o cancelar tu cita.`
+                : `${lateInfo?.salon || "This salon"} has a ${lateInfo?.hours || ""}-hour cancellation policy. Please contact the salon to move or cancel your appointment.`}
+            </p>
+            {appointment && (
+              <p style={{ color: c.textLabel, fontSize: 12, marginBottom: 24 }}>
+                {appointment.service_name} — {appointment.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
+              </p>
+            )}
+            {lateInfo?.phone && (
+              <a className="btn-primary" href={`tel:${String(lateInfo.phone).replace(/[^+\d]/g, "")}`}
+                style={{ display: "block", width: "100%", textDecoration: "none", textAlign: "center", boxSizing: "border-box", marginBottom: 10 }}>
+                {lang === "nl" ? `Bel ${lateInfo.salon || "de salon"}` : lang === "es" ? `Llamar a ${lateInfo.salon || "el salón"}` : `Call ${lateInfo.salon || "the salon"}`}
+              </a>
+            )}
+            <button className="btn-ghost" style={{ width: "100%" }} onClick={() => navigate("/")}>
               {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
             </button>
           </div>

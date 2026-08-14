@@ -3386,7 +3386,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       booking_policy: "", booking_policy_en: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       btw_rate: 21,
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
-      min_advance_hours: 0, max_advance_days: 60,
+      min_advance_hours: 0, max_advance_days: 60, cancel_deadline_hours: 0,
       reminder_hours: 24,
       rebook_nudge_days: 28,
       google_calendar_connected: false,
@@ -3711,6 +3711,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           staff_can_invoice: data.staff_can_invoice !== false,
           staff_can_edit_services: data.staff_can_edit_services !== false,
           min_advance_hours: data.min_advance_hours || 0,
+          cancel_deadline_hours: data.cancel_deadline_hours || 0,
           max_advance_days: data.max_advance_days || 60,
           reminder_hours: data.reminder_hours ?? 24,
           rebook_nudge_days: data.rebook_nudge_days ?? 28,
@@ -12451,6 +12452,34 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : lang === "es" ? "Sin mínimo" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u van tevoren` : lang === "es" ? `Mín. ${hrs}h de antelación` : `Min. ${hrs}h ahead`)}</div>
                   ))}
                 </div>
+                {/* Annuleringstermijn (verzoek van salon Rioghna): tot dit aantal
+                    uren voor aanvang werkt de annuleerlink uit de bevestigings-
+                    mail; daarna toont die link het telefoonnummer van de salon.
+                    Afgedwongen in cancel-appointment, dus ook een oude link in
+                    een oude mail houdt zich eraan. */}
+                <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
+                  {lang === "nl" ? "Tot hoe kort van tevoren kan een klant online annuleren?" : lang === "es" ? "¿Hasta cuántas horas antes puede cancelar un cliente en línea?" : "How close to the appointment can a client still cancel online?"}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[0, 12, 24, 48, 72].map(hrs => (
+                    <div key={hrs} onClick={() => update(d => { d.cancel_deadline_hours = hrs; return d; })}
+                      style={{
+                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        background: (salonData.cancel_deadline_hours || 0) === hrs ? `${accent}18` : c.inputBg,
+                        border: `1px solid ${(salonData.cancel_deadline_hours || 0) === hrs ? accent : c.inputBorder}`,
+                        color: (salonData.cancel_deadline_hours || 0) === hrs ? accent : c.textSub,
+                        fontSize: 12, fontWeight: 500
+                      }}
+                    >{hrs === 0 ? (lang === "nl" ? "Altijd" : lang === "es" ? "Siempre" : "Always") : (lang === "nl" ? `Tot ${hrs}u van tevoren` : lang === "es" ? `Hasta ${hrs}h antes` : `Up to ${hrs}h before`)}</div>
+                  ))}
+                </div>
+                {(salonData.cancel_deadline_hours || 0) > 0 && (
+                  <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.5, marginTop: 8 }}>
+                    {lang === "nl" ? `Binnen ${salonData.cancel_deadline_hours} uur voor de afspraak werkt de annuleerlink niet meer; de klant ziet dan je telefoonnummer om contact op te nemen. Jij kunt in je agenda altijd alles annuleren.`
+                      : lang === "es" ? `Dentro de las ${salonData.cancel_deadline_hours} horas previas a la cita, el enlace de cancelación deja de funcionar; el cliente verá tu número de teléfono para contactarte. Tú siempre puedes cancelar todo desde tu agenda.`
+                      : `Within ${salonData.cancel_deadline_hours} hours of the appointment the cancellation link stops working; the client sees your phone number to get in touch. You can always cancel anything from your calendar.`}
+                  </div>
+                )}
                 <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
                   {lang === "nl" ? "Hoe ver vooruit kunnen klanten boeken?" : lang === "es" ? "¿Con cuánta antelación pueden reservar los clientes?" : "How far ahead can clients book?"}
                 </div>
@@ -14096,6 +14125,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   staff_can_edit_services: salonData.staff_can_edit_services !== false,
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
+                  cancel_deadline_hours: salonData.cancel_deadline_hours || 0,
                   reminder_hours: salonData.reminder_hours ?? 24,
                   rebook_nudge_days: salonData.rebook_nudge_days ?? 28,
                   google_place_id: salonData.google_place_id || null,

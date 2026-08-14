@@ -86,3 +86,12 @@ enabled = true
 # authenticatie. Gaat dit op true, dan komt er geen enkele betaling meer binnen.
 verify_jwt = false
 entrypoint = "./functions/mollie-webhook/index.ts"
+
+[functions.cancel-appointment]
+enabled = true
+# De anonieme annuleerpagina (vellu.cc/cancel/TOKEN) roept dit aan; het token
+# in de URL ís de authenticatie (plus rate limit per IP). Draait sinds v1 op
+# verify_jwt=false — stond alleen nooit in dit bestand, waardoor een CLI-deploy
+# hem stilzwijgend op true zou zetten.
+verify_jwt = false
+entrypoint = "./functions/cancel-appointment/index.ts"

@@ -58,6 +58,41 @@ function rateLimit(ip: string): boolean {
   return true;
 }
 
+// ── Salontijd → UTC, voor de annuleringstermijn ─────────────────────────────
+// Zelfde helpers als in send-reminders: de grens "48 uur voor aanvang" moet in
+// de tijdzone van de SALON liggen — een afspraak "morgen 10:00" op Bonaire is
+// een ander UTC-moment dan in Den Haag. Via Intl en niet met een vaste
+// offset-tabel, want Amsterdam wisselt tussen +1 en +2 en die grens ligt elk
+// jaar ergens anders.
+const TZ_BY_COUNTRY: Record<string, string> = {
+  NL: "Europe/Amsterdam",
+  BE: "Europe/Brussels",
+  GB: "Europe/London",
+  AW: "America/Curacao",
+  CW: "America/Curacao",
+  BQ: "America/Curacao",
+};
+const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+
+function tzOffsetMs(at: Date, tz: string) {
+  try {
+    const p: Record<string, string> = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(at)) p[part.type] = part.value;
+    const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return asUtc - at.getTime();
+  } catch { return 0; } // onbekende zone: liever de oude UTC-aanname dan crashen
+}
+
+function localToUtc(dateStr: string, timeStr: string, tz: string) {
+  const naive = new Date(`${dateStr}T${timeStr}:00Z`);
+  if (isNaN(naive.getTime())) return null;
+  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+}
+
 // Notify the first waiting waitlist entry for this owner+date. Best-effort:
 // runs after the cancel succeeded, and swallows its own errors so a failure
 // here never makes the cancel appear to fail to the client.
@@ -237,13 +272,21 @@ serve(async (req) => {
   const appt = tokenRow.appointments;
   if (!appt) return json(404, { error: "appointment_not_found" }, origin);
 
-  // For the check path (anonymous cancel page) resolve the salon's currency
-  // from the owner's country_code so the amount renders in the right symbol
-  // ($ for Bonaire, etc.) instead of a hardcoded euro.
+  // Profiel altijd ophalen (was: alleen op het check-pad, voor het valutasymbool).
+  // De annuleringstermijn moet op BEIDE paden gelden: wie de pagina al open had
+  // staan vóór de grens, mag hem niet alsnog passeren met de knop.
   let cc = "NL";
-  if (action === "check" && appt.owner_id) {
-    const { data: o } = await supabase.from("profiles").select("country_code").eq("id", appt.owner_id).maybeSingle();
+  let deadlineHours = 0;
+  let salonPhone: string | null = null;
+  let salonNaam = "";
+  if (appt.owner_id) {
+    const { data: o } = await supabase.from("profiles")
+      .select("country_code, cancel_deadline_hours, salon_phone, business_name")
+      .eq("id", appt.owner_id).maybeSingle();
     cc = o?.country_code || "NL";
+    deadlineHours = parseInt(String(o?.cancel_deadline_hours ?? 0)) || 0;
+    salonPhone = o?.salon_phone || null;
+    salonNaam = o?.business_name || "";
   }
 
   if (tokenRow.used === true || appt.status === "cancelled") {
@@ -258,6 +301,25 @@ serve(async (req) => {
       return json(200, { status: "expired", appointment: sanitize(appt), country_code: cc }, origin);
     }
     return json(410, { error: "expired" }, origin);
+  }
+
+  // Annuleringstermijn van de salon (0 = altijd annuleerbaar, het oude gedrag).
+  // Binnen de termijn kan de klant alleen nog telefonisch annuleren; daarom gaan
+  // telefoonnummer en salonnaam mee terug, zodat de pagina een belknop kan
+  // tonen in plaats van een kale weigering. Ontbreekt datum of tijd op de
+  // afspraak, dan blokkeren we bewust NIET: liever een annulering te veel dan
+  // een klant die een geldige annulering nergens kwijt kan.
+  if (deadlineHours > 0 && appt.date && appt.time) {
+    const startUtc = localToUtc(String(appt.date), String(appt.time), tzFor(cc));
+    if (startUtc && Date.now() > startUtc.getTime() - deadlineHours * 3_600_000) {
+      if (action === "check") {
+        return json(200, {
+          status: "too_late", appointment: sanitize(appt), country_code: cc,
+          deadline_hours: deadlineHours, salon_phone: salonPhone, salon_name: salonNaam,
+        }, origin);
+      }
+      return json(403, { error: "too_late_to_cancel", deadline_hours: deadlineHours, salon_phone: salonPhone, salon_name: salonNaam }, origin);
+    }
   }
 
   if (action === "check") {
