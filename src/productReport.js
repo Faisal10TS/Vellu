@@ -513,9 +513,11 @@ export function generateReceiptPDF({
 
   const filename = `bon-${s(sale.date)}-${shortId || "vellu"}.pdf`;
   if (output === "print") {
-    // autoPrint() zet een OpenAction in de PDF: zodra een viewer 'm laadt
-    // springt het printvenster open. Via een onzichtbare iframe blijft de kassa
-    // gewoon in beeld — geen tabblad dat de balie-medewerker moet wegklikken.
+    // Verouderd printpad, alleen nog als vangnet aanroepbaar. In de kassa is
+    // dit vervangen door printReceipt() hieronder: het PDF-pad hangt af van
+    // Chrome's ingebouwde PDF-viewer, en die staat op kassa-computers geregeld
+    // uit ("PDF's downloaden i.p.v. openen") — dan downloadt dit stilletjes in
+    // plaats van te printen, precies de klacht van TTNB aan de balie.
     doc.autoPrint();
     const url = doc.output("bloburl");
     try {
@@ -534,4 +536,138 @@ export function generateReceiptPDF({
     doc.save(filename);
   }
   return { filename, total: grandTotal, redeemed, lines: items.length };
+}
+
+// ─── Bon printen als HTML ───────────────────────────────────────────────────
+// Zelfde bon als generateReceiptPDF, maar als HTML in een verborgen iframe met
+// contentWindow.print(). Waarom een tweede pad: het PDF-pad (autoPrint in een
+// iframe) leunt op Chrome's ingebouwde PDF-viewer. Staat die uit — het vinkje
+// "PDF's downloaden in plaats van automatisch openen", zo gezet op een
+// kassa-computer — dan wordt de bon stilletjes gedownload en verschijnt er
+// nooit een printvenster. HTML printen kan een browser altijd, zonder enige
+// instelling. De rekenlogica (taxForSale) is exact dezelfde als bij de PDF.
+
+const escHtml = (v) => s(v)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+export function receiptHTML({
+  salon, sale, lang = "nl",
+  currencySymbol = "€", moneyLocale = "nl-NL",
+  taxIdLabel = "BTW-id", taxCfg = null, receiptNumber = null,
+}) {
+  const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
+  const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const payLabel = (pm) => (PAY_LABEL[lang] || PAY_LABEL.nl)[pm] || (PAY_LABEL[lang] || PAY_LABEL.nl)["on-arrival"];
+
+  const tax = taxForSale(sale, taxCfg || {});
+  const taxLabel = tax.label || "BTW";
+  const items = tax.lines.map((l) => ({
+    qty: parseInt(l.qty) || 1,
+    name: s(l.name) || T("Behandeling", "Treatment", "Tratamiento"),
+    amount: Number(l.gross) || 0,
+  }));
+  const gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
+  const redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  const grandTotal = tax.grandTotal;
+  // Blijft leeg op Aruba: het belastingbedrag mag daar niet op een klantdocument.
+  const rateRows = tax.showTax ? tax.byRate : [];
+
+  const head = [s(salon.address), s(salon.city), s(salon.phone)].filter(Boolean);
+  const ids = [];
+  if (salon.kvk_number) ids.push(`KVK ${s(salon.kvk_number)}`);
+  if (tax.showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
+
+  const shortId = String(sale.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
+  const docNo = receiptNumber != null ? String(receiptNumber).padStart(5, "0")
+    : (sale.receipt_number != null ? String(sale.receipt_number).padStart(5, "0") : shortId);
+
+  const row = (links, rechts, cls = "") =>
+    `<div class="r ${cls}"><span>${links}</span><span>${rechts}</span></div>`;
+
+  let b = "";
+  b += `<div class="c naam">${escHtml(salon.business_name || salon.name || "Vellu")}</div>`;
+  for (const h of head) b += `<div class="c sub">${escHtml(h)}</div>`;
+  if (ids.length) b += `<div class="c sub klein">${escHtml(ids.join("   "))}</div>`;
+  b += `<hr>`;
+  b += row(`${escHtml(fmtDate(sale.date, lang))}&nbsp;&nbsp;${escHtml(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${escHtml(docNo)}`, "sub");
+  if (sale.client_name) b += `<div class="sub">${escHtml(sale.client_name)}</div>`;
+  b += `<hr>`;
+  for (const it of items) {
+    const naam = `${it.qty > 1 ? it.qty + " x " : ""}${escHtml(it.name)}`;
+    const bedrag = it.amount < 0 ? `-${money(Math.abs(it.amount))}` : money(it.amount);
+    b += row(naam, bedrag, it.amount < 0 ? "groen" : "");
+  }
+  b += `<hr>`;
+  if (redeemed > 0) {
+    b += row(T("Subtotaal", "Subtotal", "Subtotal"), money(gross), "sub");
+    b += row(T("Kadobon", "Gift card", "Tarjeta regalo"), `-${money(redeemed)}`, "groen");
+  }
+  b += row(T("TOTAAL", "TOTAL", "TOTAL"), money(grandTotal), "totaal");
+  if (rateRows.length === 1) {
+    b += row(`${T("Incl.", "Incl.", "Inc.")} ${fmtPct(rateRows[0].rate)}% ${escHtml(taxLabel)}`, money(rateRows[0].tax), "sub klein");
+  } else if (rateRows.length > 1) {
+    b += `<div class="sub klein">${T("Waarvan", "Of which", "Del cual")} ${escHtml(taxLabel)}:</div>`;
+    for (const r of rateRows) {
+      b += row(`&nbsp;&nbsp;${fmtPct(r.rate)}% ${T("over", "on", "sobre")} ${money(r.gross)}`, money(r.tax), "sub klein");
+    }
+  }
+  b += `<hr>`;
+  b += row(T("Betaald met", "Paid with", "Pagado con"), escHtml(payLabel(sale.payment_method)));
+  if (sale.payment_method === "online") b += `<div class="sub klein oranje">${T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago")}</div>`;
+  if (sale.staff_name) b += row(T("Verkocht door", "Sold by", "Vendido por"), escHtml(String(sale.staff_name).split(",")[0].trim()), "sub");
+  b += `<hr>`;
+  b += `<div class="c sub">${T("Bedankt en tot ziens!", "Thank you, see you soon!", "¡Gracias, hasta pronto!")}</div>`;
+  b += `<div class="c accent klein">vellu.cc${salon.slug ? "/" + escHtml(salon.slug) : ""}</div>`;
+
+  // 80mm bonrol; body iets smaller voor printermarges. Bewust simpele CSS:
+  // bonprinters zijn zwart-wit en een thermische kop houdt niet van grijstinten
+  // op kleine letters, dus alleen zwart en één grijstint.
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Bon ${escHtml(docNo)}</title><style>
+@page { size: 80mm auto; margin: 4mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 70mm; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #1a1714; }
+.c { text-align: center; }
+.naam { font-size: 12pt; font-weight: 700; margin-bottom: 4px; }
+.sub { color: #555; font-size: 8pt; }
+.klein { font-size: 7.5pt; }
+.groen { color: #2e6b47; }
+.oranje { color: #8a6a2a; }
+.accent { color: #8a744e; margin-top: 2px; }
+.totaal { font-size: 11pt; font-weight: 700; margin: 3px 0; }
+.r { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
+.r span:first-child { overflow-wrap: anywhere; }
+.r span:last-child { white-space: nowrap; }
+hr { border: 0; border-top: 1px solid #999; margin: 5px 0; }
+</style></head><body>${b}</body></html>`;
+}
+
+export function printReceipt(opts) {
+  const html = receiptHTML(opts);
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    // Niet display:none: sommige browsers slaan het printen van een onzichtbare
+    // frame dan over. 0x0 met opacity werkt overal.
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
+    frame.srcdoc = html;
+    frame.onload = () => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch {
+        // print() geweigerd in de frame? Dan een tabblad dat zichzelf print.
+        const w = window.open("", "_blank");
+        if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
+      }
+      // Opruimen ná het printvenster; het venster blokkeert het script niet in
+      // Chrome, dus ruim pas laat op zodat de printdata zeker binnen is.
+      setTimeout(() => { try { frame.remove(); } catch { /* al weg */ } }, 120000);
+    };
+    document.body.appendChild(frame);
+  } catch {
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
+  }
+  return { total: opts && opts.sale ? Number(opts.sale.service_price) || 0 : 0 };
 }

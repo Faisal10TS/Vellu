@@ -4779,17 +4779,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setReceiptBusy(true);
     try {
       const mod = await import("./productReport.js");
-      mod.generateReceiptPDF({
+      // Printen gaat via HTML (printReceipt), niet via de PDF: het PDF-pad
+      // leunt op Chrome's ingebouwde PDF-viewer en die staat op kassa-computers
+      // geregeld uit — dan downloadt de bon stilletjes in plaats van te printen.
+      // HTML printen werkt altijd. De PDF blijft voor downloaden/mailen.
+      const opts = {
         salon: salonData,
         sale,
-        output: mode,
         lang,
         currencySymbol: cur,
         moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
         taxIdLabel: tax.idLabel,
         taxCfg,
         receiptNumber: sale.receipt_number ?? null,
-      });
+      };
+      if (mode === "print") mod.printReceipt(opts);
+      else mod.generateReceiptPDF({ ...opts, output: mode });
     } catch (e) {
       console.error("receipt error:", e);
       toast.show(t.somethingWrong, "error");
