@@ -3454,6 +3454,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Na het afrekenen: een bevestiging met bedrag, betaalwijze en knoppen voor
   // bon/factuur. Zonder dat weet je alleen DAT er iets geregistreerd is.
   const [lastSale, setLastSale] = useState(null);
+  // Auto-print leeft per APPARAAT (localStorage), niet in het salonprofiel: de
+  // kassa-computer aan de balie heeft de bonprinter, de telefoon van de
+  // eigenaar niet. Als profiel-vlag zou elke ingelogde telefoon mee gaan printen.
+  const [kassaAutoPrint, setKassaAutoPrint] = useState(() => {
+    try { return localStorage.getItem("vellu_kassa_autoprint") === "1"; } catch { return false; }
+  });
+  const toggleKassaAutoPrint = () => setKassaAutoPrint(v => {
+    const next = !v;
+    try { localStorage.setItem("vellu_kassa_autoprint", next ? "1" : "0"); } catch { /* privémodus: dan alleen deze sessie */ }
+    return next;
+  });
   const [saleDetail, setSaleDetail] = useState(null);
   const [saleDeleteArm, setSaleDeleteArm] = useState(false);
   const [receiptBusy, setReceiptBusy] = useState(false);
@@ -4919,6 +4930,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode("");
       // Bevestiging in beeld houden: bedrag, betaalwijze en knoppen voor de bon.
       setLastSale(data);
+      // Met auto-print aan rolt de bon direct uit de printer terwijl de
+      // bevestiging in beeld komt — afrekenen is dan één handeling aan de balie.
+      if (kassaAutoPrint) downloadReceipt(data, "print");
       if (voucherCode) toast.show(lang === "nl" ? `Kadobon ${voucherCode} aangemaakt (${cur}${voucherAmt.toFixed(2)})` : lang === "es" ? `Tarjeta ${voucherCode} creada` : `Gift card ${voucherCode} created`);
       // Kassa: met een e-mailadres gaat de factuur/bon er direct achteraan —
       // afrekenen en factureren is dan één handeling, zoals bij Sara.
@@ -7724,6 +7738,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
                           {lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${cur}${tot.toFixed(2)}` : ""}
                         </button>
+                        {/* Een browser kan niet rechtstreeks met een printer koppelen;
+                            de brug is het printvenster. De eerste print vraagt éénmalig
+                            welke printer, daarna onthoudt de browser die keuze — met
+                            deze schakelaar aan is afrekenen dus meteen printen. */}
+                        <div onClick={toggleKassaAutoPrint} role="switch" aria-checked={kassaAutoPrint} tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleKassaAutoPrint(); } }}
+                          style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, cursor: "pointer", userSelect: "none" }}>
+                          <div style={{ width: 30, height: 17, borderRadius: 999, background: kassaAutoPrint ? accent : c.inputBorder, position: "relative", transition: "background 0.15s", flexShrink: 0 }}>
+                            <div style={{ position: "absolute", top: 2, left: kassaAutoPrint ? 15 : 2, width: 13, height: 13, borderRadius: "50%", background: "#fff", transition: "left 0.15s" }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: kassaAutoPrint ? c.text : c.textMuted }}>
+                            {lang === "nl" ? "Bon automatisch printen na afrekenen" : lang === "es" ? "Imprimir el recibo automáticamente al cobrar" : "Print receipt automatically after checkout"}
+                          </span>
+                        </div>
+                        {kassaAutoPrint && (
+                          <div style={{ fontSize: 9.5, color: c.textMuted, lineHeight: 1.45, marginTop: 6 }}>
+                            {lang === "nl" ? "Kies bij de eerste print je bonprinter in het printvenster — je browser onthoudt die keuze daarna. Deze instelling geldt alleen op dit apparaat."
+                              : lang === "es" ? "En la primera impresión elige tu impresora de recibos en la ventana de impresión — el navegador la recordará. Este ajuste solo aplica a este dispositivo."
+                              : "On the first print, pick your receipt printer in the print dialog — your browser remembers it. This setting applies to this device only."}
+                          </div>
+                        )}
                       </div>
                     </>);
                   })()}
