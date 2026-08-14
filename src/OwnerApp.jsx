@@ -467,9 +467,19 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   const creditOpen = salonData.referral_credit_days || 0;
   const creditRedeemed = salonData.referral_credit_days_redeemed || 0;
 
+  // Kopiëren geeft niet de kale link maar een kant-en-klaar berichtje mét de
+  // link erin: een persoonlijke aanbeveling deelt makkelijker en de eigenaar
+  // hoeft zelf niets te typen. Zelfde tekst voor Kopieer en Delen, zodat het
+  // bericht overal identiek aankomt.
+  const promoText = lang === "nl"
+    ? `Hey! Ik gebruik Vellu voor mijn salonafspraken en het doet precies wat ik wil — klanten boeken zelf online en krijgen vanzelf een herinnering, dus ik hoef niemand meer achterna te zitten. Geen commissie, gewoon een vast bedrag per maand. Probeer het 2 weken gratis via mijn link: ${referralUrl}`
+    : lang === "es"
+    ? `¡Hola! Uso Vellu para las citas de mi salón y hace justo lo que necesito — los clientes reservan online por su cuenta y reciben un recordatorio automático, así que ya no tengo que perseguir a nadie. Sin comisiones, solo una cuota fija al mes. Pruébalo 2 semanas gratis con mi enlace: ${referralUrl}`
+    : `Hey! I'm using Vellu for my salon appointments and it does exactly what I need — clients book online by themselves and get automatic reminders, so I never have to chase anyone. No commission, just a fixed monthly price. Try it 2 weeks for free with my link: ${referralUrl}`;
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(referralUrl);
+      await navigator.clipboard.writeText(promoText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -478,15 +488,10 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   };
 
   const share = async () => {
-    const text = lang === "nl"
-      ? `Hey! Ik gebruik Vellu voor mijn online boekingen — geen commissie, alleen een vast maandbedrag. Meld je aan via mijn link en we krijgen allebei 2 weken gratis: ${referralUrl}`
-      : lang === "es"
-      ? `¡Hola! Uso Vellu para mis reservas online — sin comisiones, solo una cuota mensual fija. Regístrate con mi enlace y ambos conseguimos 2 semanas gratis: ${referralUrl}`
-      : `Hey! I'm using Vellu for my online bookings — no commission, just a flat monthly fee. Sign up via my link and we both get 2 weeks free: ${referralUrl}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Vellu", text, url: referralUrl });
-      } catch {}
+        await navigator.share({ title: "Vellu", text: promoText, url: referralUrl });
+      } catch { /* gebruiker brak het deelvenster af */ }
     } else {
       await copy();
     }
@@ -546,7 +551,7 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn-ghost" style={{ flex: 1, fontSize: 11 }} onClick={copy} disabled={!code}>
-          {copied ? (lang === "nl" ? "✓ Gekopieerd" : lang === "es" ? "✓ Copiado" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}
+          {copied ? (lang === "nl" ? "✓ Gekopieerd" : lang === "es" ? "✓ Copiado" : "✓ Copied") : (lang === "nl" ? "Kopieer bericht" : lang === "es" ? "Copiar mensaje" : "Copy message")}
         </button>
         <button className="btn-primary" style={{ flex: 1, fontSize: 11 }} onClick={share} disabled={!code}>
           {lang === "nl" ? "Delen" : lang === "es" ? "Compartir" : "Share"}
