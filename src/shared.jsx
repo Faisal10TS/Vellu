@@ -149,8 +149,11 @@ function ToastContainer({ toasts }) {
 
 // ─── CONFIRM MODAL ───────────────────────────────────────────
 function useConfirm() {
-  const [state, setState] = useState(null); // { message, resolve }
-  const confirm = (message) => new Promise((resolve) => setState({ message, resolve }));
+  const [state, setState] = useState(null); // { message, resolve, tone?, confirmText? }
+  // Tweede argument is optioneel en backward-compatibel: zonder opts blijft het
+  // gedrag exact zoals vroeger (rode knop met t.delete). tone "primary" is voor
+  // niet-destructieve vragen (regiowissel e.d.) zodat er geen "Verwijderen" staat.
+  const confirm = (message, opts = {}) => new Promise((resolve) => setState({ message, resolve, tone: opts.tone || "danger", confirmText: opts.confirmText }));
   const handleYes = () => { state?.resolve(true); setState(null); };
   const handleNo = () => { state?.resolve(false); setState(null); };
   return { confirmState: state, confirm, handleYes, handleNo };
@@ -162,6 +165,12 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
   const t = T[lang];
   useFocusTrap(trapRef, !!state);
   if (!state) return null;
+  // Standaard (en bij oude aanroepen zonder opts) blijft dit de rode verwijder-knop;
+  // "primary" krijgt een neutrale themaknop omdat "Verwijderen" daar misleidend is.
+  const isDanger = (state.tone || "danger") === "danger";
+  const confirmLabel = state.confirmText || (isDanger
+    ? t.delete
+    : (lang === "nl" ? "Doorgaan" : lang === "es" ? "Continuar" : "Continue"));
   return (
     <div role="dialog" aria-modal="true" aria-label={t.confirmation} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onNo} onKeyDown={e => e.key === "Escape" && onNo()}>
       <div ref={trapRef} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "scaleIn 0.2s ease" }} onClick={e => e.stopPropagation()}>
@@ -170,8 +179,8 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
           <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
             {t.cancel}
           </button>
-          <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#f87171", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
-            {t.delete}
+          <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: isDanger ? "#f87171" : c.text, color: isDanger ? "#fff" : c.bg, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -614,12 +623,12 @@ function resolveTax(profile) {
 // `preview` is the sample glyphs shown in the owner's picker.
 // Keep the keys in sync with profiles.page_font (see the add_page_font migration).
 const PAGE_FONTS = {
-  classic:     { label_nl: "Klassiek",       label_en: "Classic",     family: "'Cormorant Garamond', serif",  google: "Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300", preview: "Aa" },
-  modern:      { label_nl: "Modern",         label_en: "Modern",      family: "'Poppins', sans-serif",        google: "Poppins:wght@400;500;600",                            preview: "Aa" },
-  elegant:     { label_nl: "Elegant",        label_en: "Elegant",     family: "'Playfair Display', serif",    google: "Playfair+Display:wght@400;500;600",                   preview: "Aa" },
-  bold:        { label_nl: "Bold",           label_en: "Bold",        family: "'Archivo Black', sans-serif",  google: "Archivo+Black",                                       preview: "Aa" },
-  playful:     { label_nl: "Speels",         label_en: "Playful",     family: "'Fredoka', sans-serif",        google: "Fredoka:wght@400;500;600",                            preview: "Aa" },
-  handwriting: { label_nl: "Handgeschreven", label_en: "Handwriting", family: "'Dancing Script', cursive",    google: "Dancing+Script:wght@500;600;700",                     preview: "Aa" },
+  classic:     { label_nl: "Klassiek",    label_en: "Classic",     label_es: "Clásico",   family: "'Cormorant Garamond', serif",  google: "Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300", preview: "Aa" },
+  modern:      { label_nl: "Modern",      label_en: "Modern",      label_es: "Moderno",        family: "'Poppins', sans-serif",        google: "Poppins:wght@400;500;600",                            preview: "Aa" },
+  elegant:     { label_nl: "Elegant",     label_en: "Elegant",     label_es: "Elegante",       family: "'Playfair Display', serif",    google: "Playfair+Display:wght@400;500;600",                   preview: "Aa" },
+  bold:        { label_nl: "Bold",        label_en: "Bold",        label_es: "Bold",           family: "'Archivo Black', sans-serif",  google: "Archivo+Black",                                       preview: "Aa" },
+  playful:     { label_nl: "Speels",      label_en: "Playful",     label_es: "Juguetón",  family: "'Fredoka', sans-serif",        google: "Fredoka:wght@400;500;600",                            preview: "Aa" },
+  handwriting: { label_nl: "Handschrift", label_en: "Handwriting", label_es: "Manuscrito",     family: "'Dancing Script', cursive",    google: "Dancing+Script:wght@500;600;700",                     preview: "Aa" },
 };
 // Resolve a stored key to a font config, always falling back to classic so a
 // bad/empty value can never leave the page with no display font.
@@ -630,7 +639,7 @@ const getPageFont = (key) => {
   if (typeof key === "string" && key.startsWith("custom:")) {
     const name = key.slice(7).trim().replace(/["'<>;{}()\\]/g, "").slice(0, 60);
     if (name) return {
-      label_nl: name, label_en: name,
+      label_nl: name, label_en: name, label_es: name,
       family: `'${name}', sans-serif`,
       google: encodeURIComponent(name).replace(/%20/g, "+"),
       preview: "Aa", custom: true,

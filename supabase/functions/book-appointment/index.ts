@@ -838,6 +838,9 @@ serve(async (req) => {
             price: totalPrice,
             salon_name: salon.business_name,
             owner_id: salon.id,
+            // Zelfde symbool als de e-mails hierboven, zodat de bevestigings-SMS
+            // van een Bonaire-salon niet alsnog € zegt waar de mail $ toont.
+            currency: emailBase.currency,
             lang: emailLang,
           },
         }),

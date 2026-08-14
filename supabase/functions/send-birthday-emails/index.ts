@@ -67,6 +67,23 @@ function safeImg(url: unknown): string | null {
   catch { return null; }
 }
 
+// Zelfde eenregelige taalkiezer als txt() in send-emails: nl is de terugval,
+// zodat een onbekende of lege taal nooit een halve mail oplevert.
+function txt(lang: string, nl: string, en: string, es: string) {
+  return lang === "en" ? en : lang === "es" ? es : nl;
+}
+
+// Taal per ontvanger. clients en manual_clients hebben geen lang-kolom
+// (gecheckt in information_schema op 2026-08-13), dus er valt per klant niets
+// te kiezen: het salon-land bepaalt de taal, zoals bij de owner-mails in
+// send-reminders/send-followups. NL/BE/AW/CW/BQ is de vaste DUTCH_COUNTRIES-
+// lijst; SX (Sint Maarten, ook Nederlands-Caribisch) doet hier mee. Krijgt de
+// klant ooit een eigen taalveld, dan hoort dat hier vóór het salon-land te gaan.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
+function langFor(countryCode: unknown): string {
+  return DUTCH_COUNTRIES.has(String(countryCode || "NL").toUpperCase()) ? "nl" : "en";
+}
+
 // Geen Math.random(): hier hangt een korting aan, dus dezelfde crypto-bron als
 // de annuleertokens in book-appointment.
 const SUFFIX_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // zonder I/O/0/1
@@ -93,7 +110,9 @@ function makeCode(prefix: string, pct: number): string {
   return `${p}-${pct}-${randomSuffix(5)}`;
 }
 
-function renderHtml({ salonName, logo, accent, firstName, code, pct, slug }: {
+// De opbouw (logo, accentkleur, code-blok) is vast; alleen de teksten wisselen
+// per taal, in dezelfde nl/en/es-drieslag als de mails in send-emails.
+function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang }: {
   salonName: string;
   logo: string | null;
   accent: string;
@@ -101,26 +120,33 @@ function renderHtml({ salonName, logo, accent, firstName, code, pct, slug }: {
   code: string;
   pct: number;
   slug: string;
+  lang: string;
 }) {
   const header = logo
     ? `<div style="text-align:center;margin-bottom:28px;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="max-height:56px;max-width:200px;" /></div>`
     : `<div style="text-align:center;margin-bottom:28px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;color:#1a1a1a;">${esc(salonName)}</h1></div>`;
   const link = slug ? `https://vellu.cc/${esc(slug)}` : "";
+  const heading = firstName
+    ? txt(lang, `Gefeliciteerd, ${firstName}!`, `Happy birthday, ${firstName}!`, `¡Feliz cumpleaños, ${firstName}!`)
+    : txt(lang, "Gefeliciteerd!", "Happy birthday!", "¡Feliz cumpleaños!");
   return `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;padding:40px 24px;color:#1a1a1a;background:#ffffff;">
     ${header}
     <div style="width:40px;height:1px;background:${esc(accent)};margin:0 auto 28px;"></div>
-    <h1 style="font-size:26px;font-weight:600;margin:0 0 14px;text-align:center;color:#1a1a1a;">🎉 ${esc(firstName ? `Gefeliciteerd, ${firstName}!` : "Gefeliciteerd!")}</h1>
+    <h1 style="font-size:26px;font-weight:600;margin:0 0 14px;text-align:center;color:#1a1a1a;">🎉 ${esc(heading)}</h1>
     <p style="font-size:15px;line-height:1.7;color:#333;margin:0 0 24px;text-align:center;">
-      Van iedereen bij <strong>${esc(salonName)}</strong> — een fijne verjaardag toegewenst. Als kadootje ${pct}% korting op je volgende afspraak.
+      ${txt(lang,
+        `Van iedereen bij <strong>${esc(salonName)}</strong> — een fijne verjaardag toegewenst. Als kadootje ${pct}% korting op je volgende afspraak.`,
+        `From everyone at <strong>${esc(salonName)}</strong> — wishing you a wonderful birthday. As a little gift, enjoy ${pct}% off your next appointment.`,
+        `De parte de todos en <strong>${esc(salonName)}</strong> — te deseamos un feliz cumpleaños. Como regalo, ${pct}% de descuento en tu próxima cita.`)}
     </p>
     <div style="background:#f9f7f4;border-radius:14px;padding:22px;text-align:center;margin-bottom:24px;">
-      <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:6px;">Jouw code</div>
+      <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:6px;">${txt(lang, "Jouw code", "Your code", "Tu código")}</div>
       <div style="font-family:'Courier New',monospace;font-size:22px;font-weight:700;letter-spacing:0.12em;color:${esc(accent)};">${esc(code)}</div>
-      <div style="font-size:12px;color:#666;margin-top:8px;">${pct}% korting · geldig deze maand</div>
+      <div style="font-size:12px;color:#666;margin-top:8px;">${txt(lang, `${pct}% korting · geldig deze maand`, `${pct}% off · valid this month`, `${pct}% de descuento · válido este mes`)}</div>
     </div>
-    ${link ? `<div style="text-align:center;margin-bottom:24px;"><a href="${link}" style="display:inline-block;background:${esc(accent)};color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:100px;font-size:13px;font-weight:600;letter-spacing:0.06em;">Boek nu</a></div>` : ""}
+    ${link ? `<div style="text-align:center;margin-bottom:24px;"><a href="${link}" style="display:inline-block;background:${esc(accent)};color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:100px;font-size:13px;font-weight:600;letter-spacing:0.06em;">${txt(lang, "Boek nu", "Book now", "Reservar ahora")}</a></div>` : ""}
     <p style="font-size:12px;color:#999;text-align:center;line-height:1.5;margin:0;">
-      🎂 Nog een fijne dag, van ons allemaal!
+      🎂 ${txt(lang, "Nog een fijne dag, van ons allemaal!", "Have a lovely day, from all of us!", "¡Que tengas un día precioso, de parte de todos!")}
     </p>
   </div>`;
 }
@@ -306,7 +332,7 @@ serve(async (req) => {
   // te vermijden (zie reserveCode) — we schrijven die kolom niet meer.
   const { data: salons, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_discount_pct, birthday_email_code_prefix, subscription_status, discount_codes")
+    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_discount_pct, birthday_email_code_prefix, subscription_status, discount_codes, country_code")
     .eq("birthday_email_enabled", true)
     .not("birthday_email_discount_pct", "is", null);
   if (salonErr) {
@@ -332,6 +358,9 @@ serve(async (req) => {
     const logo = safeImg(salon.logo_url);
     const replyTo = String(salon.salon_email || salon.email || "") || undefined;
     const slug = String(salon.slug || "");
+    // Zie langFor: zonder taalkolom op de klant geldt het salon-land voor
+    // iedere jarige van deze salon.
+    const lang = langFor(salon.country_code);
 
     // Collect all birthday-matching client contacts this salon has ever seen.
     // Manual clients live under manual_clients; appointment-derived contacts
@@ -412,8 +441,11 @@ serve(async (req) => {
       const reserved = await reserveCode(salon.id, t.email, prefix, pct, expiresOn, ownerCodeNames);
       if (!reserved) { totalErrors++; continue; }
       const code = reserved.code;
-      const html = renderHtml({ salonName, logo, accent, firstName, code, pct, slug });
-      const subject = `🎉 Gefeliciteerd van ${salonName}`;
+      const html = renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang });
+      const subject = txt(lang,
+        `🎉 Gefeliciteerd van ${salonName}`,
+        `🎉 Happy birthday from ${salonName}`,
+        `🎉 Feliz cumpleaños de parte de ${salonName}`);
       try {
         await sendEmail(t.email, subject, html, salonName, replyTo);
         // Insert log row — the UNIQUE constraint guarantees we only ever

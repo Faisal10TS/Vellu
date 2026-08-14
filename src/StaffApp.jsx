@@ -354,6 +354,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const staffDeletePhoto = async (serviceId, photoId, photoUrl) => {
+    // Bevestiging vóór de database-actie: verwijderen is definitief (storage-bestand gaat ook weg).
+    if (!await showConfirm(lang === "nl" ? "Deze foto verwijderen?" : lang === "es" ? "¿Eliminar esta foto?" : "Delete this photo?")) return;
     const { error } = await supabase.from("service_photos").delete().eq("id", photoId).eq("owner_id", salonProfile.id);
     if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
     const urlParts = photoUrl.split("/service-photos/");
@@ -2202,7 +2204,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
-                                        <button onClick={async () => { const { error } = await supabase.from("service_variants").delete().eq("id", v.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
+                                        <button onClick={async () => { if (!await showConfirm(lang === "nl" ? "Deze variant verwijderen?" : lang === "es" ? "¿Eliminar esta variante?" : "Delete this variant?")) return; const { error } = await supabase.from("service_variants").delete().eq("id", v.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.filter(vr => vr.id !== v.id)} : sv)); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="xmark" size={11} color="currentColor" />
                                         </button>
@@ -2251,7 +2253,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="edit" size={11} color="currentColor" />
                                         </button>
-                                        <button onClick={async () => { const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
+                                        <button onClick={async () => { if (!await showConfirm(lang === "nl" ? "Deze extra verwijderen?" : lang === "es" ? "¿Eliminar este extra?" : "Delete this extra?")) return; const { error } = await supabase.from("service_extras").delete().eq("id", e.id).eq("service_id", s.id); if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; } setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, extras: sv.extras.filter(ex => ex.id !== e.id)} : sv)); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                           <NavIcon name="xmark" size={11} color="currentColor" />
                                         </button>

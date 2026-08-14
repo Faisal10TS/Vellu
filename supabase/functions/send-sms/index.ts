@@ -159,6 +159,9 @@ type Booking = {
   time?: string;
   price?: number | string;
   salon_name?: string;
+  // Valutasymbool ("$", "Afl. ", …), meegegeven door de aanroeper op basis van
+  // het salon-land — zelfde patroon als send-emails. Afwezig = € (oude callers).
+  currency?: string;
   lang?: string;
   // Datum van vandaag in SALONTIJD, meegegeven door send-reminders. Bepaalt of de
   // herinnering "vandaag", "morgen" of de datum zelf moet zeggen.
@@ -183,7 +186,12 @@ function buildMessage(type: string, b: Booking): string {
   const service = String(b.service_name || "").slice(0, 40);
   const date = b.date ? fmtDate(String(b.date), lang) : "";
   const time = (String(b.time || "").slice(0, 5)) || "";
-  const priceStr = b.price != null ? `€${parseFloat(String(b.price)).toFixed(0)}` : "";
+  // Het euroteken stond hier hardgecodeerd, maar een Bonaire-salon rekent in
+  // dollars. De aanroeper (book-appointment) leidt het symbool af uit het
+  // salon-land en stuurt het mee, exact zoals bij send-emails; ontbreekt het
+  // veld (een oudere aanroeper), dan blijft € de terugval.
+  const cur = (typeof b.currency === "string" && b.currency.trim()) ? b.currency.trim() : "€";
+  const priceStr = b.price != null ? `${cur}${parseFloat(String(b.price)).toFixed(0)}` : "";
   if (type === "booking_confirmation") {
     return txt(lang,
       `Afspraak bevestigd bij ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`,

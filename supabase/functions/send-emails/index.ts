@@ -186,8 +186,14 @@ const rDf=(()=>{const t0=Date.parse(rTd+"T00:00:00Z"),d0=Date.parse(String(b.dat
 // Twee varianten van dezelfde aanduiding: het onderwerp is platte tekst (nD),
 // de body HTML (eD). Het Spaans zet de tijdsaanduiding vooraan in de zin
 // ("Mañana tienes una cita"), dus daar is ook een hoofdletterversie nodig.
-const rWs=rDf===0?txt(lang,"vandaag","today","hoy"):rDf===1?txt(lang,"morgen","tomorrow","mañana"):txt(lang,`op ${nD}`,`on ${nD}`,`el ${nD}`);
-const rW=rDf===0?txt(lang,"vandaag","today","hoy"):rDf===1?txt(lang,"morgen","tomorrow","mañana"):txt(lang,`op ${eD}`,`on ${eD}`,`el ${eD}`);
+// fmtD levert de weekdag met hoofdletter ("Maandag 17 augustus 2026"). Dat is
+// goed waar de datum een regel opent (de Datum-tabelrij) en in het Engels ook
+// midden in de zin ("on Monday"), maar in het Nederlands en Spaans hoort hij
+// midzin klein: "Je hebt op maandag … een afspraak". Alleen hier verlagen, niet
+// in fmtD zelf — eD in de tabelrij hieronder moet zijn hoofdletter houden.
+const lcW=(s)=>s.charAt(0).toLowerCase()+s.slice(1);
+const rWs=rDf===0?txt(lang,"vandaag","today","hoy"):rDf===1?txt(lang,"morgen","tomorrow","mañana"):txt(lang,`op ${lcW(nD)}`,`on ${nD}`,`el ${lcW(nD)}`);
+const rW=rDf===0?txt(lang,"vandaag","today","hoy"):rDf===1?txt(lang,"morgen","tomorrow","mañana"):txt(lang,`op ${lcW(eD)}`,`on ${eD}`,`el ${lcW(eD)}`);
 const rWc=rW.charAt(0).toUpperCase()+rW.slice(1);
 await send(plainText(b.client_email),plainText(txt(lang,`Herinnering: Afspraak ${rWs} bij ${b.salon_name}`,`Reminder: Appointment ${rWs} at ${b.salon_name}`,`Recordatorio: Cita ${rWs} en ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Niet vergeten!","Don't forget!","¡No lo olvides!")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`Je hebt ${rW} een afspraak bij <strong>${eS}</strong>`,`You have an appointment ${rW} at <strong>${eS}</strong>`,`${rWc} tienes una cita en <strong>${eS}</strong>`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Datum","Date","Fecha"),eD)}${row(txt(lang,"Tijd","Time","Hora"),eT)}${totRow(txt(lang,"Totaal","Total","Total"),fP(b.price))}</table></div><p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`We zien je ${rW}, ${eC}!`,`See you ${rW}, ${eC}!`,`¡Nos vemos ${rW}, ${eC}!`)}</p>${b.salon_slug?`<p style="text-align:center;margin-top:20px;"><a href="https://vellu.cc/${eSl}" style="color:${AC};text-decoration:none;font-size:12px;">vellu.cc/${eSl}</a></p>`:""}</div>`);}
 if(type==="waitlist_spot_open"){
