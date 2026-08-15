@@ -10299,14 +10299,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.textSub, marginBottom: 8 }}>{t.coverDesc}</div>
                   {salonData.cover_image_url ? (
                     <div style={{ position: "relative" }}>
-                      <div style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative" }}>
-                        <img src={salonData.cover_image_url} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block" }} />
+                      {/* Positioneren door de foto zelf te verslepen (was een losse
+                          schuifbalk — die relatie snapte niemand). Pointer-events
+                          dekken muis én touch; touchAction none voorkomt dat de
+                          pagina meescrollt terwijl je op mobiel sleept. De foto
+                          volgt de vinger: omlaag slepen toont meer van de bovenkant,
+                          dus de focal beweegt tegengesteld aan de sleep. */}
+                      <div
+                        style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative", cursor: "grab", touchAction: "none" }}
+                        onPointerDown={(e) => {
+                          const el = e.currentTarget;
+                          // Capture houdt de sleep vast als de aanwijzer buiten het
+                          // kader schiet; sommige browsers weigeren hem voor
+                          // niet-standaard pointers — dan werkt slepen binnen het
+                          // kader nog steeds, dus stil doorgaan.
+                          try { el.setPointerCapture(e.pointerId); } catch { /* geen capture */ }
+                          el.style.cursor = "grabbing";
+                          const startY = e.clientY;
+                          const startFocal = salonData.cover_focal_y ?? 50;
+                          const hoogte = el.getBoundingClientRect().height || 120;
+                          const move = (ev) => {
+                            const delta = ((ev.clientY - startY) / hoogte) * 100;
+                            update(d => { d.cover_focal_y = Math.max(0, Math.min(100, Math.round(startFocal - delta))); return d; });
+                          };
+                          const stop = () => {
+                            el.style.cursor = "grab";
+                            el.removeEventListener("pointermove", move);
+                            el.removeEventListener("pointerup", stop);
+                            el.removeEventListener("pointercancel", stop);
+                          };
+                          el.addEventListener("pointermove", move);
+                          el.addEventListener("pointerup", stop);
+                          el.addEventListener("pointercancel", stop);
+                        }}
+                      >
+                        <img src={salonData.cover_image_url} draggable={false} onDragStart={(e) => e.preventDefault()}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block", userSelect: "none", pointerEvents: "none" }} />
                       </div>
-                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{lang === "nl" ? "Positie" : lang === "es" ? "Posición" : "Position"}</span>
-                        <input type="range" min="0" max="100" value={salonData.cover_focal_y ?? 50}
-                          onChange={e => update(d => { d.cover_focal_y = parseInt(e.target.value); return d; })}
-                          style={{ flex: 1, accentColor: accent, height: 4 }} />
+                      <div style={{ marginTop: 8, fontSize: 10, color: c.textLabel }}>
+                        {lang === "nl" ? "Sleep de foto omhoog of omlaag om de uitsnede te kiezen." : lang === "es" ? "Arrastra la foto hacia arriba o abajo para elegir el encuadre." : "Drag the photo up or down to choose the crop."}
                       </div>
                       <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; return d; })}
                         style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
