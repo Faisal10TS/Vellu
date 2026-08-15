@@ -3723,6 +3723,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           logo_url: data.logo_url || "",
           cover_image_url: data.cover_image_url || "",
           cover_focal_y: data.cover_focal_y ?? 50,
+          cover_focal_x: data.cover_focal_x ?? 50,
+          cover_zoom: Number(data.cover_zoom) || 1,
           page_font: data.page_font || "classic",
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
@@ -10300,11 +10302,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {salonData.cover_image_url ? (
                     <div style={{ position: "relative" }}>
                       {/* Positioneren door de foto zelf te verslepen (was een losse
-                          schuifbalk — die relatie snapte niemand). Pointer-events
-                          dekken muis én touch; touchAction none voorkomt dat de
-                          pagina meescrollt terwijl je op mobiel sleept. De foto
-                          volgt de vinger: omlaag slepen toont meer van de bovenkant,
-                          dus de focal beweegt tegengesteld aan de sleep. */}
+                          schuifbalk — die relatie snapte niemand), met zoom via de
+                          − / + knoppen eronder. Pointer-events dekken muis én touch;
+                          touchAction none voorkomt dat de pagina meescrollt terwijl
+                          je op mobiel sleept. De foto volgt de vinger (omlaag slepen
+                          toont meer van de bovenkant), en hoe verder ingezoomd, hoe
+                          fijner de sleep — vandaar de deling door de zoomfactor. */}
                       <div
                         style={{ width: "100%", height: 120, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.inputBorder}`, position: "relative", cursor: "grab", touchAction: "none" }}
                         onPointerDown={(e) => {
@@ -10315,12 +10318,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // kader nog steeds, dus stil doorgaan.
                           try { el.setPointerCapture(e.pointerId); } catch { /* geen capture */ }
                           el.style.cursor = "grabbing";
-                          const startY = e.clientY;
-                          const startFocal = salonData.cover_focal_y ?? 50;
-                          const hoogte = el.getBoundingClientRect().height || 120;
+                          const startX = e.clientX, startY = e.clientY;
+                          const fx = salonData.cover_focal_x ?? 50, fy = salonData.cover_focal_y ?? 50;
+                          const zoom = Number(salonData.cover_zoom) || 1;
+                          const rect = el.getBoundingClientRect();
                           const move = (ev) => {
-                            const delta = ((ev.clientY - startY) / hoogte) * 100;
-                            update(d => { d.cover_focal_y = Math.max(0, Math.min(100, Math.round(startFocal - delta))); return d; });
+                            const dx = ((ev.clientX - startX) / (rect.width || 1)) * 100 / zoom;
+                            const dy = ((ev.clientY - startY) / (rect.height || 120)) * 100 / zoom;
+                            update(d => {
+                              d.cover_focal_x = Math.max(0, Math.min(100, Math.round(fx - dx)));
+                              d.cover_focal_y = Math.max(0, Math.min(100, Math.round(fy - dy)));
+                              return d;
+                            });
                           };
                           const stop = () => {
                             el.style.cursor = "grab";
@@ -10334,12 +10343,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         }}
                       >
                         <img src={salonData.cover_image_url} draggable={false} onDragStart={(e) => e.preventDefault()}
-                          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${salonData.cover_focal_y ?? 50}%`, display: "block", userSelect: "none", pointerEvents: "none" }} />
+                          style={{ width: "100%", height: "100%", objectFit: "cover",
+                            objectPosition: `${salonData.cover_focal_x ?? 50}% ${salonData.cover_focal_y ?? 50}%`,
+                            transform: `scale(${Number(salonData.cover_zoom) || 1})`,
+                            transformOrigin: `${salonData.cover_focal_x ?? 50}% ${salonData.cover_focal_y ?? 50}%`,
+                            display: "block", userSelect: "none", pointerEvents: "none" }} />
                       </div>
-                      <div style={{ marginTop: 8, fontSize: 10, color: c.textLabel }}>
-                        {lang === "nl" ? "Sleep de foto omhoog of omlaag om de uitsnede te kiezen." : lang === "es" ? "Arrastra la foto hacia arriba o abajo para elegir el encuadre." : "Drag the photo up or down to choose the crop."}
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 10, color: c.textLabel }}>
+                          {lang === "nl" ? "Sleep de foto om de uitsnede te kiezen" : lang === "es" ? "Arrastra la foto para elegir el encuadre" : "Drag the photo to choose the crop"}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+                          {(() => {
+                            const z = Number(salonData.cover_zoom) || 1;
+                            // Stap berekenen ÍN de update, niet uit de render-waarde:
+                            // twee snelle tikken op + telden anders maar één stap op.
+                            const zet = (stap) => update(d => { d.cover_zoom = Math.round(Math.max(1, Math.min(3, (Number(d.cover_zoom) || 1) + stap)) * 100) / 100; return d; });
+                            const knop = { width: 26, height: 26, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
+                            return (<>
+                              <button onClick={() => zet(-0.15)} disabled={z <= 1} style={{ ...knop, opacity: z <= 1 ? 0.4 : 1 }} aria-label="Zoom uit">−</button>
+                              <span style={{ fontSize: 10, color: c.textSub, minWidth: 32, textAlign: "center" }}>{z.toFixed(2).replace(/\.?0+$/, "")}×</span>
+                              <button onClick={() => zet(0.15)} disabled={z >= 3} style={{ ...knop, opacity: z >= 3 ? 0.4 : 1 }} aria-label="Zoom in">+</button>
+                              {(z !== 1 || (salonData.cover_focal_x ?? 50) !== 50) && (
+                                <button onClick={() => update(d => { d.cover_zoom = 1; d.cover_focal_x = 50; d.cover_focal_y = 50; return d; })}
+                                  style={{ ...knop, width: "auto", padding: "0 8px", fontSize: 10 }}>
+                                  {lang === "nl" ? "Herstel" : lang === "es" ? "Restablecer" : "Reset"}
+                                </button>
+                              )}
+                            </>);
+                          })()}
+                        </div>
                       </div>
-                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; return d; })}
+                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; d.cover_focal_x = 50; d.cover_zoom = 1; return d; })}
                         style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </button>
@@ -14243,6 +14278,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   logo_url: salonData.logo_url || null,
                   cover_image_url: salonData.cover_image_url || null,
                   cover_focal_y: salonData.cover_focal_y ?? 50,
+                  cover_focal_x: salonData.cover_focal_x ?? 50,
+                  cover_zoom: Number(salonData.cover_zoom) || 1,
                   page_font: salonData.page_font || "classic",
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},

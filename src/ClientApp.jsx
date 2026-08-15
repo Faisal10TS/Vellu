@@ -2071,7 +2071,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {/* ═══ HERO BANNER ═══ */}
         <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
           {initialSalon.cover_image_url && (
-            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`} style={{ objectPosition: `center ${initialSalon.cover_focal_y ?? 50}%` }} />
+            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`}
+              style={{ objectPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+                transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
+                transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
           <div className="profile-hero-gradient" />
           <div className="profile-hero-content">
@@ -2793,14 +2796,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             }}>
               {/* Cover Image */}
               {initialSalon.cover_image_url && (
-                <div style={{ 
-                  width: "100%", 
-                  height: 120, 
-                  backgroundImage: `url(${initialSalon.cover_image_url})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: `center ${initialSalon.cover_focal_y ?? 50}%`,
-                  flexShrink: 0
-                }} />
+                /* Zoom werkt via transform op een binnenlaag; de buitenlaag knipt
+                   af, anders groeit het gescalede beeld het kader uit. */
+                <div style={{ width: "100%", height: 120, flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    backgroundImage: `url(${initialSalon.cover_image_url})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+                    transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
+                    transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+                  }} />
+                </div>
               )}
               
               <div style={{ padding: "24px 30px", flex: 1, overflow: "auto" }}>
@@ -3674,14 +3681,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
             {/* Mobile Cover Image */}
             {initialSalon.cover_image_url && (
-              <div style={{ 
-                width: "100%", 
-                height: 140, 
-                backgroundImage: `url(${initialSalon.cover_image_url})`,
-                backgroundSize: "cover",
-                backgroundPosition: `center ${initialSalon.cover_focal_y ?? 50}%`,
-                position: "relative"
-              }}>
+              /* Achtergrond op een eigen binnenlaag: de zoom-transform mag de
+                 terugknop (latere sibling, tekent er dus overheen) niet meeschalen
+                 en het gescalede beeld moet binnen het kader blijven. */
+              <div style={{ width: "100%", height: 140, position: "relative", overflow: "hidden" }}>
+                <div style={{
+                  position: "absolute", inset: 0,
+                  backgroundImage: `url(${initialSalon.cover_image_url})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+                  transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
+                  transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+                }} />
                 {/* Back button on cover. top respects the iOS safe area so it
                     isn't tucked under the status bar/notch in the installed PWA
                     (where it became untappable). */}

@@ -299,6 +299,8 @@ function SalonRoute({ lang, setLang }) {
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",
         cover_focal_y: data.cover_focal_y ?? 50,
+        cover_focal_x: data.cover_focal_x ?? 50,
+        cover_zoom: Number(data.cover_zoom) || 1,
         discount_codes: (data.discount_codes || []).filter(d => d.active),
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,
