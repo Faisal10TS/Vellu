@@ -32,6 +32,7 @@ const salonBON = { country_code: "BQ", tax_region: "BQ-BON", tax_registered: tru
 const salonSAB = { country_code: "BQ", tax_region: "BQ-SAB", tax_registered: true, btw_rate: 4, products_taxable: false };
 const salonAW = { country_code: "AW", tax_registered: true, btw_rate: 7, products_taxable: true };
 const salonCW = { country_code: "CW", tax_registered: false, btw_rate: null, products_taxable: true };
+const salonSX = { country_code: "SX", tax_registered: true, btw_rate: 5, products_taxable: true };
 const salonOud = { country_code: "NL", btw_id: "NL123B01", btw_rate: 21 }; // rij van vóór de migratie
 
 console.log("\n== resolveTax ==");
@@ -47,6 +48,15 @@ check("AW mag NIET op klantdocument", resolveTax(salonAW).showTax, false);
 check("AW mag WEL intern", resolveTax(salonAW).showTaxInternal, true);
 check("CW tarief onbekend", resolveTax(salonCW).rateUnknown, true);
 check("CW zonder tarief -> 0", resolveTax(salonCW).serviceRate, 0);
+// Sint Maarten: ToT 5%, drukt op de ondernemer — zelfde weergaveregel als
+// Aruba: niet op de klantbon, wel in de interne rapporten.
+check("SX label", resolveTax(salonSX).label, "ToT");
+check("SX tarief 5", resolveTax(salonSX).serviceRate, 5);
+check("SX producten belast", resolveTax(salonSX).productRate, 5);
+check("SX NIET op klantdocument", resolveTax(salonSX).showTax, false);
+check("SX WEL intern", resolveTax(salonSX).showTaxInternal, true);
+check("valuta SX is Cg", currencyForCountry("SX").symbol.trim(), "Cg");
+check("valuta SX code", currencyForCountry("SX").code, "XCG");
 check("oude rij valt terug op btw_id", resolveTax(salonOud).registered, true);
 check("leeg tariefveld wordt niet stiekem 0", resolveTax({ ...salonNL, btw_rate: "" }).serviceRate, 21);
 check("valuta CW is Cg", currencyForCountry("CW").symbol.trim(), "Cg");

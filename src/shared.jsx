@@ -483,6 +483,7 @@ const COUNTRIES = [
   // below) so prices show in the local currency.
   { code: "AW", name: "Aruba",                   defaultLang: "nl", currency: "AWG", launched: true },
   { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "XCG", launched: true },
+  { code: "SX", name: "Sint Maarten",            defaultLang: "nl", currency: "XCG", launched: true },
   { code: "BQ", name: "Bonaire, Saba, Sint Eustatius", defaultLang: "nl", currency: "USD", launched: true },
   { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", launched: false },
   { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", launched: false },
@@ -565,6 +566,11 @@ const TAX_RULES = {
   "BQ-EUX":  { label: "ABB",           idLabel: "CRIB",        serviceRate: 4,    productsTaxable: false, showTaxLine: true,  island: "Sint Eustatius" },
   // 7% = BBO 2,5% + BAVP 1,5% + BAZV 3%, samengevoegd sinds 1 januari 2023.
   AW:        { label: "BBO/BAVP/BAZV", idLabel: "Fiscaal nr.", serviceRate: 7,    productsTaxable: true,  showTaxLine: false },
+  // ToT (turnover tax) 5%. Drukt op de omzet van de ondernemer; prijzen zijn
+  // inclusief en het bedrag staat gebruikelijk NIET op de klantbon — zelfde
+  // weergaveregel als Aruba (wel zichtbaar in interne rapporten). Tarief bij
+  // de eerste echte Sint-Maartense salon door de accountant laten bevestigen.
+  SX:        { label: "ToT",           idLabel: "CRIB",        serviceRate: 5,    productsTaxable: true,  showTaxLine: false },
   // Het algemene OB-tarief is 6%, maar er bestaan ook 0/7/9% en het is niet
   // vastgesteld waar salondiensten onder vallen. Vellu vult daarom niets in en
   // vraagt de eigenaar het bij zijn boekhouder op te halen.

@@ -23,7 +23,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // Salons in these countries get Dutch-language emails, everyone else English.
 // Keep in sync with COUNTRIES (defaultLang: "nl") in SRC/shared.jsx — Aruba,
 // Curacao and Bonaire are Dutch-language markets too.
-const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 
 function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";
@@ -71,6 +71,7 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   AW: "America/Curacao",
   CW: "America/Curacao",
   BQ: "America/Curacao",
+  SX: "America/Curacao",
 };
 const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
 

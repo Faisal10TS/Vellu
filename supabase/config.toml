@@ -95,6 +95,20 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/support-chat/index.ts"
 
+[functions.send-followups]
+enabled = true
+# Cron-getriggerd via pg_cron zonder Authorization-header; op true stopt de
+# review-mail geruisloos. Live verify_jwt=false (nu v17).
+verify_jwt = false
+entrypoint = "./functions/send-followups/index.ts"
+
+[functions.waitlist-notify]
+enabled = true
+# Server-side aangeroepen (wachtlijst-plek vrij) met x-internal-secret, geen
+# JWT. Live verify_jwt=false (nu v6).
+verify_jwt = false
+entrypoint = "./functions/waitlist-notify/index.ts"
+
 [functions.cancel-appointment]
 enabled = true
 # De anonieme annuleerpagina (vellu.cc/cancel/TOKEN) roept dit aan; het token

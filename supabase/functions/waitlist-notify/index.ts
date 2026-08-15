@@ -31,7 +31,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // Dutch-language markets — keep in sync with COUNTRIES (defaultLang "nl") in
 // SRC/shared.jsx and the other edge functions. Salon-facing email language.
-const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 
 function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";

@@ -786,7 +786,7 @@ serve(async (req) => {
     // CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
     // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet
     // terugzetten naar "NAf." — dat geld bestaat niet meer.
-    currency: ({ BQ: "$", AW: "Afl. ", CW: "Cg ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
+    currency: ({ BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
   let emailsSent = false;
@@ -812,7 +812,7 @@ serve(async (req) => {
       jobs.push(sendMail("booking_notification", {
         owner_email: ownerEmail,
         staff_emails: staffEmails,
-        owner_lang: ["NL", "BE", "AW", "CW", "BQ"].includes(salon.country_code || "NL") ? "nl" : "en",
+        owner_lang: ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en",
         staff_view_revenue: salon.staff_view_revenue,
         staff_view_client_contact: salon.staff_view_client_contact,
       }));

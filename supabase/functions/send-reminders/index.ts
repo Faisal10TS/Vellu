@@ -54,14 +54,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // Salons in these countries get Dutch-language emails, everyone else English.
 // Keep in sync with COUNTRIES (defaultLang: "nl") in SRC/shared.jsx — Aruba,
 // Curacao and Bonaire are Dutch-language markets too. Unset country = Dutch.
-const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ"]);
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
 
 // Currency symbol per country (mirrors shared.jsx CURRENCIES). Unset = €.
 // CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
 // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet terugzetten
 // naar "NAf." — dat geld bestaat niet meer.
-const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "Cg ", GB: "£" };
+const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" };
 const curFor = (code?: string | null) => CUR_SYM[code || ""] || "€";
 
 // Tijdzone per land, zelfde soort tabel als DUTCH_COUNTRIES en CUR_SYM hierboven.
@@ -78,6 +78,7 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   AW: "America/Curacao",
   CW: "America/Curacao",
   BQ: "America/Curacao",
+  SX: "America/Curacao",
 };
 const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
 

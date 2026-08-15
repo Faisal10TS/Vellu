@@ -56,7 +56,7 @@ const shiftDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() +
 
 // De klant leest de mail in de taal waarin hij geboekt heeft; valt die weg, dan
 // de taal van het land van de salon (zelfde regel als de rest van de mails).
-const DUTCH_COUNTRIES = ["NL", "BE", "AW", "CW", "BQ"];
+const DUTCH_COUNTRIES = ["NL", "BE", "AW", "CW", "BQ", "SX"];
 const langFor = (apptLang: string | null, country: string | null) => {
   const l = String(apptLang || "").toLowerCase();
   if (l === "nl" || l === "en" || l === "es") return l;
