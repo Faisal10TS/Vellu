@@ -1152,7 +1152,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           <LangToggle lang={lang} setLang={setLang} />
         </div>
 
-        <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10 }} className="fade-up">
+        {/* Ruimte boven de kroon: op korte telefoonschermen schoof het logo
+            anders onder de absoluut geplaatste thema/taal-knoppen. */}
+        <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10, paddingTop: "calc(72px + env(safe-area-inset-top, 0px))", paddingBottom: 24 }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 36 }}>
             <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{t.ownerLogin}</div>

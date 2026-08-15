@@ -75,6 +75,26 @@ function OwnerEntryPage({ lang, setLang }) {
   const [staffUser, setStaffUser] = useState(null); // { staffMember, salonData }
   const [loading, setLoading] = useState(true);
 
+  // Wachtwoord-herstel. De reset-mail landt hier met een hash: bij een geldig
+  // token #access_token=…&type=recovery, bij een verlopen of al gebruikt token
+  // #error_code=otp_expired. Beide werden genegeerd: supabase-js maakte bij een
+  // geldig token stil een sessie aan (ingelogd zonder ooit een nieuw wachtwoord
+  // te vragen) en bij een verlopen token zag de gebruiker gewoon het inlogscherm
+  // — zonder wachtwoord, zonder uitleg. Let op: het token is eenmalig, en
+  // Gmail's linkscanner opent de link soms vóór de gebruiker; dan telt de echte
+  // klik als "al gebruikt". Daarom verdient juist dat pad een nette uitleg.
+  // De hash synchroon bij de eerste render lezen, vóór supabase-js hem opruimt.
+  const [recovery, setRecovery] = useState(() => {
+    try { return new URLSearchParams((window.location.hash || "").replace(/^#/, "")).get("type") === "recovery"; }
+    catch { return false; }
+  });
+  const [recoveryError, setRecoveryError] = useState(() => {
+    try {
+      const h = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+      return h.get("error_code") || h.get("error") ? (h.get("error_description") || h.get("error_code") || "error") : "";
+    } catch { return ""; }
+  });
+
   // Check for existing session on mount (and on auth state changes so password-reset
   // callbacks / magic links don't race the initial mount).
   useEffect(() => {
@@ -120,7 +140,12 @@ function OwnerEntryPage({ lang, setLang }) {
       }
     };
     hydrate();
-    const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { hydrate(); });
+    const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => {
+      // Vangnet naast de hash-check hierboven: supabase-js meldt het herstel
+      // ook als event, mocht de hash al opgeruimd zijn vóór onze eerste render.
+      if (_event === "PASSWORD_RECOVERY") setRecovery(true);
+      hydrate();
+    });
     return () => { cancelled = true; clearTimeout(watchdog); authSub?.subscription?.unsubscribe?.(); };
   }, []);
 
@@ -146,6 +171,21 @@ function OwnerEntryPage({ lang, setLang }) {
     </div>
   );
 
+  // Herstel-modus gaat vóór alles, óók vóór een actieve sessie: het hele punt
+  // is dat de gebruiker eerst een nieuw wachtwoord kiest voordat hij verder mag.
+  if (recovery || recoveryError) {
+    return (
+      <SetPasswordScreen
+        lang={lang} c={c}
+        expired={!!recoveryError}
+        onDone={() => {
+          try { window.history.replaceState(null, "", window.location.pathname); } catch { /* hash blijft dan staan */ }
+          setRecovery(false); setRecoveryError("");
+        }}
+      />
+    );
+  }
+
   // Staff member — redirect to /staff
   if (staffUser) return <Navigate to="/staff" replace />;
 
@@ -163,6 +203,112 @@ function OwnerEntryPage({ lang, setLang }) {
   }
 
   return <OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} />;
+}
+
+// ─── NIEUW WACHTWOORD INSTELLEN (herstel-link uit de mail) ──────────────────
+// Twee gezichten: het formulier (geldig herstel-token, sessie staat al klaar)
+// en de verlopen-uitleg mét een veld om direct een verse link aan te vragen —
+// want "log maar opnieuw in" is precies wat iemand zonder wachtwoord niet kan.
+function SetPasswordScreen({ lang, c, expired, onDone }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [klaar, setKlaar] = useState(false);
+  const [toonExpired, setToonExpired] = useState(expired);
+  const [mail, setMail] = useState("");
+  const [mailVerstuurd, setMailVerstuurd] = useState(false);
+  const T3 = (nl, es, en) => (lang === "nl" ? nl : lang === "es" ? es : en);
+
+  const opslaan = async () => {
+    setErr("");
+    if (pw.length < 6) { setErr(T3("Minimaal 6 tekens.", "Mínimo 6 caracteres.", "At least 6 characters.")); return; }
+    if (pw !== pw2) { setErr(T3("De wachtwoorden komen niet overeen.", "Las contraseñas no coinciden.", "The passwords don't match.")); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) {
+      // "Auth session missing" = het token was al verbruikt (vaak door de
+      // linkscanner van de mailbox) — dan is de verlopen-uitleg het eerlijke
+      // antwoord, niet een kale foutcode.
+      if (/session/i.test(error.message || "")) { setToonExpired(true); return; }
+      setErr(error.message);
+      return;
+    }
+    setKlaar(true);
+    setTimeout(onDone, 1600);
+  };
+
+  const nieuweLink = async () => {
+    setErr("");
+    if (!/.+@.+\..+/.test(mail)) { setErr(T3("Vul je e-mailadres in.", "Introduce tu correo.", "Enter your email address.")); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(mail.trim(), { redirectTo: `${window.location.origin}/owner` });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMailVerstuurd(true);
+  };
+
+  const veld = { width: "100%", marginBottom: 12 };
+  return (
+    <Layout accent={ACCENT}>
+      <div style={{ minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 400 }} className="fade-up">
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300 }}>
+              {toonExpired
+                ? T3("Link verlopen", "Enlace caducado", "Link expired")
+                : T3("Nieuw wachtwoord instellen", "Establecer nueva contraseña", "Set a new password")}
+            </div>
+          </div>
+          <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: 28 }}>
+            {toonExpired ? (
+              mailVerstuurd ? (
+                <div style={{ fontSize: 14, lineHeight: 1.6, textAlign: "center", color: c.textSub }}>
+                  {T3("Check je mail — er staat een verse herstellink voor je klaar. Open hem het liefst direct op dit apparaat.",
+                      "Revisa tu correo: te espera un enlace nuevo. Ábrelo directamente en este dispositivo.",
+                      "Check your inbox — a fresh reset link is waiting. Open it on this device if you can.")}
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.6, color: c.textSub, marginBottom: 16 }}>
+                    {T3("Deze herstellink is verlopen of al gebruikt. Dat kan buiten jou om gebeuren: sommige mailprogramma's openen links alvast uit voorzorg, en de link werkt maar één keer. Vraag hieronder een nieuwe aan.",
+                        "Este enlace ha caducado o ya se ha usado. Puede pasar sin que hagas nada: algunos correos abren los enlaces por seguridad, y el enlace solo funciona una vez. Pide uno nuevo aquí.",
+                        "This reset link has expired or was already used. That can happen without you doing anything: some mail apps pre-open links as a safety check, and the link only works once. Request a fresh one below.")}
+                  </div>
+                  <input className="input-field" type="email" style={veld} placeholder={T3("Je e-mailadres", "Tu correo", "Your email address")}
+                    value={mail} onChange={e => setMail(e.target.value)} onKeyDown={e => e.key === "Enter" && nieuweLink()} />
+                  {err && <div style={{ color: "#f87171", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+                  <button className="btn-primary" style={{ width: "100%" }} disabled={busy} onClick={nieuweLink}>
+                    {busy ? "…" : T3("Stuur nieuwe herstellink", "Enviar enlace nuevo", "Send new reset link")}
+                  </button>
+                </>
+              )
+            ) : klaar ? (
+              <div style={{ fontSize: 14, textAlign: "center", color: c.textSub }}>
+                ✓ {T3("Wachtwoord opgeslagen — je wordt ingelogd…", "Contraseña guardada — iniciando sesión…", "Password saved — signing you in…")}
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13.5, lineHeight: 1.6, color: c.textSub, marginBottom: 16 }}>
+                  {T3("Kies een nieuw wachtwoord voor je Vellu-account.", "Elige una nueva contraseña para tu cuenta de Vellu.", "Choose a new password for your Vellu account.")}
+                </div>
+                <input className="input-field" type="password" autoComplete="new-password" style={veld} placeholder={T3("Nieuw wachtwoord", "Nueva contraseña", "New password")}
+                  value={pw} onChange={e => setPw(e.target.value)} />
+                <input className="input-field" type="password" autoComplete="new-password" style={veld} placeholder={T3("Herhaal wachtwoord", "Repite la contraseña", "Repeat password")}
+                  value={pw2} onChange={e => setPw2(e.target.value)} onKeyDown={e => e.key === "Enter" && opslaan()} />
+                {err && <div style={{ color: "#f87171", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+                <button className="btn-primary" style={{ width: "100%" }} disabled={busy} onClick={opslaan}>
+                  {busy ? "…" : T3("Opslaan en inloggen", "Guardar e iniciar sesión", "Save and sign in")}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
 }
 
 // ─── STAFF ENTRY PAGE (vellu.cc/staff) ──────────────────────
