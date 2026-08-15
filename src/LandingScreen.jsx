@@ -500,7 +500,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/dpa" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.dpa}</a>
             <a href="/contact" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>Contact</a>
-            <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Ontwikkeld door Mirah Ventures" : lang === "es" ? "Desarrollado por Mirah Ventures" : "Developed by Mirah Ventures"}</a>
+            {/* Geen aparte "Ontwikkeld door"-link: de imprint-regel hierboven
+                draagt de naam, de link naar mirahventures.com én de wettelijke
+                nummers al — twee keer dezelfde vermelding was alleen maar druk. */}
           </div>
         </footer>
 
