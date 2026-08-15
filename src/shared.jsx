@@ -72,6 +72,20 @@ function ThemeProvider({ children }) {
     // kassa gaf dat witte medewerkersnamen op een wit dropdown-lijstje —
     // onleesbaar. Met color-scheme volgt de browser het thema van de app.
     document.documentElement.style.colorScheme = theme;
+    // color-scheme alleen bleek niet genoeg: heeft een <select> eigen opmaak
+    // (en dat hebben ze hier allemaal), dan tekent Chrome op Windows het
+    // uitklaplijstje alsnog licht. De opties zelf expliciet kleuren honoreert
+    // hij wél. Eén injected stylesheet die met het thema meebeweegt; selectBg
+    // is bewust ondoorzichtig (de rgba-kaarttinten zouden op het witte lijstje
+    // wegvallen en het probleem juist terugbrengen).
+    let nativeStyle = document.getElementById("vellu-native-theme");
+    if (!nativeStyle) {
+      nativeStyle = document.createElement("style");
+      nativeStyle.id = "vellu-native-theme";
+      document.head.appendChild(nativeStyle);
+    }
+    nativeStyle.textContent = `select, input, textarea { color-scheme: ${theme}; }
+select option { background-color: ${THEMES[theme].selectBg}; color: ${THEMES[theme].text}; }`;
     const root = document.getElementById("root");
     if (root) root.style.background = bg;
     // Keep Safari's URL-bar tint in sync with the current theme so the URL bar area
