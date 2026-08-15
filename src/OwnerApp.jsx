@@ -571,6 +571,86 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   );
 }
 
+// ─── VERJAARDAGSCODES-OVERZICHT ──────────────────────────────
+// Klein uitklapblok in de verjaardagsmail-kaart. De cron maakt, stempelt en
+// ruimt de codes op (birthday_discount_codes is verder service-role-only);
+// de eigenaar mag via RLS alleen zijn EIGEN rijen lezen — vandaar puur een
+// overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
+// zodat het instellingen-scherm er geen extra query bij krijgt.
+function BirthdayCodesBlock({ lang, c, accent }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState(null); // null = nog nooit geladen
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const load = async () => {
+    setLoading(true); setFailed(false);
+    // Geen .eq("owner_id", ...) nodig: de RLS-policy geeft sowieso alleen
+    // eigen rijen terug. Sorteren op vervaldatum, nieuwste bovenaan.
+    const { data, error } = await supabase
+      .from("birthday_discount_codes")
+      .select("id, code, client_email, discount_pct, expires_on, used_at")
+      .order("expires_on", { ascending: false });
+    setLoading(false);
+    if (error) { console.error("birthday codes load:", error); setFailed(true); return; }
+    setRows(data || []);
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && rows === null && !loading) load();
+  };
+
+  const fmtD = (ds) => { try { return new Date(String(ds).length === 10 ? ds + "T12:00:00" : ds).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
+  // Verlopen bepalen we op lokale datum; de server hanteert een dag speling,
+  // maar voor een leesoverzicht is dat verschil niet belangrijk.
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+
+  // Let op: c.textMuted is een rgba()-string, dus daar kan geen hex-alpha
+  // achteraan geplakt worden — border/achtergrond staan er daarom expliciet bij.
+  const statusFor = (r) => {
+    if (r.used_at) return { label: lang === "nl" ? `Gebruikt op ${fmtD(r.used_at)}` : lang === "es" ? `Usado el ${fmtD(r.used_at)}` : `Used on ${fmtD(r.used_at)}`, color: c.textMuted, border: c.border, bg: "transparent" };
+    if (r.expires_on < today) return { label: lang === "nl" ? "Verlopen" : lang === "es" ? "Caducado" : "Expired", color: c.textMuted, border: c.border, bg: "transparent" };
+    return { label: lang === "nl" ? "Open" : lang === "es" ? "Abierto" : "Open", color: accent, border: `${accent}44`, bg: `${accent}12` };
+  };
+
+  return (
+    <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 10 }}>
+      <button type="button" onClick={toggle}
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", padding: 0, cursor: "pointer", color: c.textSub, fontSize: 11, fontWeight: 600, fontFamily: "'Jost',sans-serif" }}>
+        <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", fontSize: 9 }}>▶</span>
+        {lang === "nl" ? "Uitstaande codes" : lang === "es" ? "Códigos pendientes" : "Outstanding codes"}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          {loading && <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Laden…" : lang === "es" ? "Cargando…" : "Loading…"}</div>}
+          {failed && (
+            <div style={{ fontSize: 11, color: c.textMuted }}>
+              {lang === "nl" ? "Codes konden niet worden geladen." : lang === "es" ? "No se pudieron cargar los códigos." : "Could not load the codes."}
+            </div>
+          )}
+          {!loading && !failed && rows !== null && rows.length === 0 && (
+            <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Nog geen uitstaande codes." : lang === "es" ? "Aún no hay códigos pendientes." : "No outstanding codes yet."}</div>
+          )}
+          {!loading && !failed && (rows || []).map(r => {
+            const st = statusFor(r);
+            return (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "7px 10px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, marginBottom: 6 }}>
+                <span style={{ fontFamily: "'Courier New',monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: c.text }}>{r.code}</span>
+                <span style={{ fontSize: 10, color: c.textSub, flex: 1, minWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.client_email}</span>
+                <span style={{ fontSize: 10, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{parseFloat(r.discount_pct)}%</span>
+                <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "verloopt" : lang === "es" ? "caduca" : "expires"} {fmtD(r.expires_on)}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 100, color: st.color, border: `1px solid ${st.border}`, background: st.bg }}>{st.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Newsletter block — sits in Instellingen → Overig. Lets the owner compose
 // and send a one-off newsletter to every client who has booked at this salon.
 // Recipients are derived server-side by the send-newsletter edge function;
@@ -1700,6 +1780,10 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const busy = busyPlan !== null;
   const [profileBilling, setProfileBilling] = useState(null); // { trial_used, subscription_status }
   const [postCheckout, setPostCheckout] = useState(false);
+  // Eigen confirm-modal: PlanSelection staat los van OwnerApp en heeft dus geen
+  // toegang tot de showConfirm daar. Nodig omdat beide knoppen hieronder de
+  // pagina verlaten/herladen zonder dat de gebruiker daarop bedacht is.
+  const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
 
   // On mount: detect Mollie redirect, then load profile.trial_used / status
   useEffect(() => {
@@ -1745,6 +1829,14 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
   const handleStartTrial = async (planId) => {
     if (busy) return;
+    // De proef is eenmalig en activeren herlaadt direct de pagina — één
+    // misklik gebruikte dus stilletjes de enige gratis periode. Eerst vragen.
+    const bevestigTrial = lang === "nl"
+      ? "Dit activeert je eenmalige gratis proefperiode en herlaadt de pagina. Doorgaan?"
+      : lang === "es"
+      ? "Esto activa tu única prueba gratuita y recarga la página. ¿Continuar?"
+      : "This activates your one-time free trial and reloads the page. Continue?";
+    if (!(await showConfirm(bevestigTrial, { tone: "primary" }))) return;
     setBusyPlan(planId);
     let redirecting = false;
     try {
@@ -1777,6 +1869,15 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
   const handleSubscribe = async (planId) => {
     if (busy) return;
+    // Waarschuwen vóór de redirect naar Mollie: de gebruiker verlaat deze
+    // pagina. Bewust geen "je betaalt nu"-taal — er is nog niets afgeschreven,
+    // betalen gebeurt pas op de betaalpagina zelf.
+    const bevestigCheckout = lang === "nl"
+      ? "Dit opent de betaalpagina en verlaat deze pagina. Doorgaan?"
+      : lang === "es"
+      ? "Esto abre la página de pago y sale de esta página. ¿Continuar?"
+      : "This opens the payment page and leaves this page. Continue?";
+    if (!(await showConfirm(bevestigCheckout, { tone: "primary" }))) return;
     setBusyPlan(planId);
     let redirecting = false;
     try {
@@ -1860,6 +1961,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   return (
     <Layout>
       <ToastContainer toasts={toast.toasts} />
+      <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
       <div style={{
         background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column",
         alignItems: "center", padding: "0 24px 40px",
@@ -3550,7 +3652,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [clientMode, setClientMode] = useState("existing"); // "existing" or "new"
   // Exception/blocked days
   const [newException, setNewException] = useState({ date: "", open: "09:00", close: "17:30", staff_id: "" });
-  const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" });
+  // staff_id "" = hele salon; een id = blokkade voor alleen die medewerker
+  // (zelfde model als newException hierboven).
+  const [newBlocked, setNewBlocked] = useState({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30", staff_id: "" });
   const [showExceptionForm, setShowExceptionForm] = useState(false);
   const [showBlockedForm, setShowBlockedForm] = useState(false);
   // Edit targets. When set, the add-form doubles as an edit-form and its save
@@ -11901,6 +12005,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {/* Uit = ook uit de eigen kassa/scanner, niet alleen
                                 verborgen op de boekingspagina. */}
                             {!p.active && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Niet actief — ook niet in je kassa" : lang === "es" ? "No activo — tampoco en tu caja" : "Not active — also not in your till"}</div>}
+                            {/* Actief maar online verborgen: zonder dit regeltje
+                                leek zo'n product gewoon "aan" terwijl klanten het
+                                nergens konden bestellen. */}
+                            {p.active && p.visible_online === false && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Alleen aan de balie — niet op je boekingspagina" : lang === "es" ? "Solo en el mostrador — no en tu página de reservas" : "Counter only — not on your booking page"}</div>}
                           </div>
                           <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
                           <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
@@ -11916,6 +12024,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </>
                             )}
                           </div>
+                          {/* Online-zichtbaarheid: los van "actief". Actief=uit haalt
+                              het product overal weg (ook kassa); dit oogje laat het
+                              in de kassa staan maar houdt het van de boekingspagina —
+                              voor balieproducten. Schrijft direct naar de database,
+                              net als de actief-toggle hiernaast (visible_online
+                              heeft default true, dus bestaande producten blijven
+                              gewoon online staan). */}
+                          <button type="button" onClick={async () => {
+                            const next = p.visible_online === false;
+                            const { error } = await supabase.from("products").update({ visible_online: next }).eq("id", p.id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.products = d.products.map(x => x.id === p.id ? { ...x, visible_online: next } : x); return d; });
+                          }} title={p.visible_online !== false
+                            ? (lang === "nl" ? "Online zichtbaar — klanten kunnen dit bestellen"
+                              : lang === "es" ? "Visible online — los clientes pueden pedirlo"
+                              : "Visible online — clients can order this")
+                            : (lang === "nl" ? "Alleen aan de balie — niet op je boekingspagina"
+                              : lang === "es" ? "Solo en el mostrador — no en tu página de reservas"
+                              : "Counter only — not on your booking page")}
+                            style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${p.visible_online !== false ? `${accent}55` : c.inputBorder}`, background: "transparent", color: p.visible_online !== false ? accent : c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: p.visible_online !== false ? 1 : 0.55 }}>
+                            <NavIcon name="eye" size={13} color="currentColor" />
+                          </button>
                           <div onClick={async () => {
                             const next = !p.active;
                             const { error } = await supabase.from("products").update({ active: next }).eq("id", p.id);
@@ -12977,6 +13107,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             mode: isTime ? "time" : "day",
                             time_start: v.block_time_start || "09:00",
                             time_end: v.block_time_end || "17:30",
+                            staff_id: v.staff_id || "",
                           });
                           setShowBlockedForm(true);
                         }}>
@@ -13034,16 +13165,41 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </>)}
                   </div>
                   <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
+                  {/* "Voor wie?" — zelfde keuze als bij uitzonderingsdagen. Zonder
+                      deze select gold elke blokkade stilzwijgend voor de hele
+                      salon, terwijl het datamodel (staff_id/staff_name op de
+                      override, zie de scope-badge in de lijst) al per medewerker
+                      kon blokkeren — alleen bereikbaar via de agenda-modal. */}
+                  {(salonData.staff || []).length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 4 }}>{lang === "nl" ? "Voor wie?" : lang === "es" ? "¿Quién?" : "Who?"}</div>
+                      <select value={newBlocked.staff_id} onChange={e => setNewBlocked(f => ({...f, staff_id: e.target.value}))}
+                        style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "8px 10px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", width: "100%" }}>
+                        <option value="" style={{ background: c.selectBg }}>{lang === "nl" ? "Iedereen (hele salon)" : lang === "es" ? "Todos (todo el salón)" : "Everyone (whole salon)"}</option>
+                        {(salonData.staff || []).map(m => (
+                          <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                        {newBlocked.staff_id
+                          ? (lang === "nl" ? "Alleen deze medewerker is dan niet boekbaar. Collega's blijven gewoon boekbaar." : lang === "es" ? "Solo esta persona no estará disponible. El resto del equipo seguirá aceptando reservas." : "Only this staff member becomes unbookable. Colleagues stay bookable as usual.")
+                          : (lang === "nl" ? "De hele salon is dan niet boekbaar." : lang === "es" ? "Todo el salón quedará sin reservas en ese periodo." : "The whole salon becomes unbookable.")}
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
                       onClick={() => {
                         if (!newBlocked.from) return;
                         if (newBlocked.mode === "time" && newBlocked.time_end <= newBlocked.time_start) { toast.show(lang === "nl" ? "Eindtijd moet na starttijd liggen" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error"); return; }
                         const endDate = newBlocked.to || newBlocked.from;
-                        // Preserve the block's scope (per-staff) across an edit —
-                        // the form has no staff picker, so carry it from the row.
-                        const scope = editingBlocked?.staff_id
-                          ? { staff_id: editingBlocked.staff_id, staff_name: editingBlocked.staff_name || null }
+                        // Scope komt nu uit de "Voor wie?"-select (bij bewerken
+                        // vooringevuld vanuit de rij, dus niets gaat verloren).
+                        // staff_name schrijven we mee zodat de scope-badge de
+                        // naam kan tonen ook als de medewerker later weg is.
+                        const scopeStaff = (salonData.staff || []).find(sm => sm.id === newBlocked.staff_id);
+                        const scope = scopeStaff
+                          ? { staff_id: scopeStaff.id, staff_name: scopeStaff.name || null }
                           : {};
                         update(d => {
                           const o = {...(d.day_overrides || {})};
@@ -13072,16 +13228,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           d.day_overrides = o; return d;
                         });
                         toast.show(editingBlocked ? (lang === "nl" ? "Blokkade bijgewerkt" : lang === "es" ? "Bloqueo actualizado" : "Block updated") : (lang === "nl" ? "Blokkade toegevoegd" : lang === "es" ? "Bloqueo añadido" : "Block added"));
-                        setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30" });
+                        setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30", staff_id: "" });
                         setShowBlockedForm(false);
                         setEditingBlocked(null);
                       }}>{editingBlocked ? (lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save") : t.addBlocked}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
-                      onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(false); setEditingBlocked(null); }}>×</button>
+                      onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30", staff_id: "" }); setShowBlockedForm(false); setEditingBlocked(null); }}>×</button>
                   </div>
                 </>) : (
                   <button className="btn-ghost" style={{ width: "100%", marginTop: 8, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
-                    onClick={() => { setEditingBlocked(null); setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30" }); setShowBlockedForm(true); }}>{t.addBlocked}</button>
+                    onClick={() => { setEditingBlocked(null); setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30", staff_id: "" }); setShowBlockedForm(true); }}>{t.addBlocked}</button>
                 )}
               </div>
 
@@ -13570,7 +13726,19 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <button
                           className="btn-primary"
                           style={{ width: "auto" }}
-                          onClick={() => { window.location.href = "/owner"; }}
+                          onClick={async () => {
+                            // Harde navigatie naar de abonnementspagina gooit alles
+                            // weg wat nog niet via de grote Opslaan-knop is bewaard —
+                            // zelfde valkuil als bij de "Link bijwerken"-knop, dus
+                            // dezelfde neutrale bevestiging eerst.
+                            const msg = lang === "nl"
+                              ? "Dit opent de abonnementspagina en verlaat je instellingen. Nog niet opgeslagen wijzigingen gaan verloren. Doorgaan?"
+                              : lang === "es"
+                              ? "Esto abre la página de suscripción y sale de tus ajustes. Los cambios sin guardar se perderán. ¿Continuar?"
+                              : "This opens the subscription page and leaves your settings. Unsaved changes will be lost. Continue?";
+                            if (!(await showConfirm(msg, { tone: "primary" }))) return;
+                            window.location.href = "/owner";
+                          }}
                         >
                           {lang === "nl" ? "Opnieuw abonneren" : lang === "es" ? "Volver a suscribirse" : "Resubscribe"}
                         </button>
@@ -14117,6 +14285,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </div>
                   </div>
                 )}
+                {/* Overzicht van door de cron uitgedeelde codes — ook zichtbaar
+                    als de verjaardagsmail (tijdelijk) uitstaat: eerder
+                    verstuurde codes blijven immers inwisselbaar. */}
+                <BirthdayCodesBlock lang={lang} c={c} accent={accent} />
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
@@ -14287,10 +14459,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   show_owner_on_booking: !!salonData.show_owner_on_booking,
                   directory_visible: salonData.directory_visible !== false,
                   staff_see_all: !!salonData.staff_see_all,
-                  staff_view_revenue: salonData.staff_view_revenue !== false,
-                  staff_view_client_contact: salonData.staff_view_client_contact !== false,
-                  staff_can_invoice: salonData.staff_can_invoice !== false,
-                  staff_can_edit_services: salonData.staff_can_edit_services !== false,
+                  // De vier medewerker-rechten (staff_view_revenue,
+                  // staff_view_client_contact, staff_can_invoice,
+                  // staff_can_edit_services) staan hier bewust NIET in: elke
+                  // toggle schrijft ze al direct naar profiles ("Wijzigingen
+                  // gelden direct", zie de rechten-kaart bij Medewerkers). Ze
+                  // ook hier meesturen liet een oud tabblad dat later op
+                  // Opslaan drukte die directe wijzigingen terugdraaien.
                   min_advance_hours: salonData.min_advance_hours || 0,
                   max_advance_days: salonData.max_advance_days || 60,
                   cancel_deadline_hours: salonData.cancel_deadline_hours || 0,

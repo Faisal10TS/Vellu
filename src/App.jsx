@@ -389,7 +389,11 @@ function SalonRoute({ lang, setLang }) {
       // longer read the base table, so financial/private columns never reach
       // the wire. discount_codes arrives pre-filtered to active codes and
       // payment_configured is already a boolean.
-      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).single();
+      // products.visible_online: de eigenaar kan een product wel verkopen aan
+      // de kassa maar NIET online tonen. Het filter zit in de query zelf
+      // (PostgREST filtert de embedded rows) zodat verborgen producten nooit
+      // over de lijn gaan — RLS filtert al op active, dit filtert daarbovenop.
+      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load related data in parallel for faster page load
       const [

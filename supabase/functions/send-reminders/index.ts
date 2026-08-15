@@ -1,7 +1,8 @@
-// send-reminders — daily cron (pg_cron 10:00 UTC + Vercel /api/send-reminders
-// proxy at 09:00 UTC as backup): reminds clients about their upcoming
-// appointment (moment per salon instelbaar, zie v13) and sends each salon a
-// digest of tomorrow's agenda.
+// send-reminders — hourly cron (pg_cron '0 * * * *', elk uur op :00 UTC) plus
+// de Vercel /api/send-reminders-proxy die rond 09:07-09:47 UTC vuurt: reminds
+// clients about their upcoming appointment (moment per salon instelbaar, zie
+// v13) and sends each salon a digest of tomorrow's agenda (alleen in het
+// 09/10-UTC-venster, zie DIGEST_UTC_HOURS).
 //
 // v12: client emails now go through send-emails (appointment_reminder
 // template: salon branding, Reply-To, plain-text part) instead of bare Resend
@@ -18,7 +19,9 @@
 // instelling van 1 tot 48 uur samengaat met een cron die twee keer per dag draait.
 //
 // v14: vier problemen die pas zichtbaar werden toen v13 het venster verbreedde.
-//   1. De digest ging twee keer per dag uit. Zie digestAlreadySentToday().
+//   1. De digest ging twee keer per dag uit. Opgelost met een dagelijkse
+//      dedupe-check op cron_health (digestAlreadySentToday, inmiddels in v16
+//      vervangen door de per-eigenaar-claim in salon_digest_log).
 //   2. De digest verdween bij "geen herinnering", omdat de lijst met eigenaren
 //      werd gevuld ná de reminder_hours-check. Die instelling gaat over de mail
 //      aan de KLANT, niet over de agenda-mail aan de salon zelf; de digest wordt
@@ -42,6 +45,22 @@
 //      wél meebeweegt. Die gebruikt nu dezelfde booking.today-vergelijking.
 //   3. De digest-dedupe leunde op "er was vandaag een geslaagde run" en blokkeerde
 //      daardoor de digest na elke handmatige aanroep. Zie DIGEST_JOB_NAME.
+//
+// v16: de cron gaat van twee runs per dag naar ELK UUR, en de digest-dedupe
+// verhuist van één globale hartslag-rij naar salon_digest_log per eigenaar.
+//   1. reminder_hours 1/2/4/12 beloofden uur-precisie, maar met alleen de runs
+//      van 09:00/10:00 UTC kon een herinnering tot ~23 uur te vroeg vertrekken.
+//      RUN_TIMES_UTC_MIN is nu een uurlijst; zie de toelichting daar voor
+//      waarom de Vercel-run daar niet apart in hoeft.
+//   2. De hartslag-dedupe ('send-reminders-digest' in cron_health) was
+//      alles-of-niets per dag: na de eerste run die ≥1 digest verstuurde kreeg
+//      een salon wiens éérste afspraak-van-morgen pas daarna geboekt werd die
+//      dag helemaal niets meer. Nu claimt elke eigenaar zijn eigen rij in
+//      salon_digest_log (insert, on conflict do nothing) en wordt alleen bij
+//      een geslaagde claim verstuurd; de hartslag blijft puur als telemetrie.
+//   3. De digest blijft in het vertrouwde venster (UTC-uur 9 of 10) — zonder
+//      die grens zou de uurlijkse cron hem om 00:00 UTC versturen, midden in
+//      de nacht voor alle markten. Zie DIGEST_UTC_HOURS.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -122,25 +141,37 @@ function localDateStr(at: Date, tz: string) {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // De echte kloktijden waarop deze functie draait, in UTC-minuten na middernacht.
-// Er zijn er TWEE per dag, en dat is precies waar v13 op stukliep: die ging uit
-// van "één run per 24 uur".
-//   09:00 — Vercel-cron (vercel.json → /api/send-reminders). Vercel garandeert
-//           alleen het uur, niet de minuut: in cron_health staat deze run tussen
-//           09:07 en 09:47 UTC. Late uitschieters kosten niets, want de pg_cron
-//           van 10:00 ligt er als vangnet vlak achter (zie RUN_BACKSTOP).
-//   10:00 — pg_cron send-daily-reminders. Punctueel: elke dag 10:00:0x.
-// Draait de cron ooit vaker (bv. ieder uur), dan is deze lijst het enige dat
-// aangepast hoeft te worden — de rest van de logica rekent er vanzelf mee.
-const RUN_TIMES_UTC_MIN = [9 * 60, 10 * 60];
+// Sinds v16 draait de pg_cron send-daily-reminders ELK UUR ('0 * * * *'),
+// punctueel op :00:0x — vandaar de uurlijst [0, 60, …, 1380]. Het element 540
+// (09:00) is daarmee vanzelf terug: de Vercel-cron (vercel.json →
+// /api/send-reminders) bestaat namelijk nog steeds en Vercel garandeert alleen
+// het uur, niet de minuut — in cron_health staat die run tussen 09:07 en 09:47
+// UTC, dus TUSSEN de geplande runs van 09:00 en 10:00 in. Die Vercel-run hoeft
+// hier niet apart in de lijst: voor de planning is hij gewoon "een run van
+// 09:00 die iets te laat is". nextRun() kijkt vanuit dat moment vooruit naar
+// 10:00, dus hij beslist over precies dezelfde afspraken als een punctuele
+// 09:xx-run. Dubbel versturen kan niet — de query pakt alleen
+// reminder_sent=false en de vlag gaat direct na een geslaagde verzending om,
+// dus wat de Vercel-run verstuurt ziet de 10:00-run niet meer (en andersom).
+// En er valt ook niets tussen wal en schip: alles wat de Vercel-run
+// doorschuift, voldoet aan next.by < start en wordt dus gegarandeerd nog vóór
+// de starttijd door de punctuele run van 10:00 opgepakt.
+const RUN_TIMES_UTC_MIN = Array.from({ length: 24 }, (_, h) => h * 60);
 
-// Het moment waarop een dag zijn run gegarandeerd gehad heeft: de punctuele
-// pg_cron van 10:00, plus wat aanlooptijd. Alleen dít tijdstip is betrouwbaar
-// genoeg om een afspraak op te durven parkeren voor een latere run.
-const RUN_BACKSTOP_UTC_MIN = 10 * 60 + 10;
+// Marge waarna de eerstvolgende geplande run er gegarandeerd geweest is. De
+// uurlijkse pg_cron is punctueel (elke keer :00:0x), dus "eerstvolgende run +
+// 10 minuten" is een veilige harde grens. v15 had hiervoor nog een vast
+// 10:10-tijdstip nodig, omdat de enige andere run (Vercel 09:00) tot 09:47 kon
+// uitlopen en dus niet als vangnet mocht dienen; met een punctuele run per uur
+// is dat onderscheid vervallen.
+const RUN_BACKSTOP_MARGIN_MS = 10 * 60 * 1000;
 
-// Hoogste instelbare reminder_hours (48) + het grootste gat tussen twee runs
-// (10:00 → 09:00 de dag erna, dus krap een etmaal). Verder vooruit hoeft deze
-// run nooit te kijken, dus dat scheelt rijen ophalen.
+// Hoogste instelbare reminder_hours (48) + ruime marge. Het grootste gat
+// tussen twee runs is met de uurlijst nog maar één uur, dus dit MAG krapper —
+// maar de query filtert op de LOKALE datumkolom van de salon en die kan tot
+// een dag afwijken van onze UTC-klok. Een volle dag slack is goedkoop (het
+// scheelt hooguit wat opgehaalde rijen die verderop toch afvallen) en bewezen
+// correct, dus die laten we staan.
 const REMINDER_MAX_LOOKAHEAD_MS = 48 * 60 * 60 * 1000 + DAY_MS;
 
 // De eerstvolgende geplande run ná `now`, met twee tijdstempels die allebei
@@ -148,12 +179,19 @@ const REMINDER_MAX_LOOKAHEAD_MS = 48 * 60 * 60 * 1000 + DAY_MS;
 //   at — wanneer die run er volgens de planning is. Hiermee beantwoorden we
 //        "komt er nog een run vóór het gewenste moment?" — zo ja, dan ligt die
 //        run dichter bij het moment dan deze en is doorschuiven beter.
-//   by — wanneer die run er hoe dan ook geweest is, óók als de Vercel-run te
-//        laat komt of helemaal overslaat: de pg_cron van 10:00 (+ marge).
-//        Dit is de harde grens. Doorschuiven mag alleen als zelfs dát moment
-//        nog vóór de afspraak ligt; anders zou de klant nooit meer iets horen.
+//   by — wanneer die run er hoe dan ook geweest is: `at` plus
+//        RUN_BACKSTOP_MARGIN_MS, want de uurlijkse pg_cron is punctueel. Dit is
+//        de harde grens. Doorschuiven mag alleen als zelfs dát moment nog vóór
+//        de afspraak ligt; anders zou de klant nooit meer iets horen. Bij
+//        reminder_hours ≥ 1 en een uurlijst is die grens in de praktijk altijd
+//        gehaald (het gewenste moment ligt minstens een uur vóór de afspraak en
+//        de marge is maar 10 minuten), maar hij blijft staan als vangnet voor
+//        als de lijst ooit weer grover wordt.
 // Een run die op dit moment zelf bezig is telt niet mee (`at <= nu`), anders
-// zou de 10:00-run werk voor zichzelf parkeren en nooit iets versturen.
+// zou een punctuele run werk voor zichzelf parkeren en nooit iets versturen.
+// De Vercel-run (09:07-09:47) staat bewust NIET in de lijst: vanuit dat moment
+// gezien is de eerstvolgende geplande run gewoon die van 10:00, precies wat we
+// willen (zie de toelichting bij RUN_TIMES_UTC_MIN).
 function nextRun(now: Date) {
   const t = now.getTime();
   const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
@@ -161,14 +199,11 @@ function nextRun(now: Date) {
     for (const min of RUN_TIMES_UTC_MIN) {
       const at = midnight + day * DAY_MS + min * 60000;
       if (at <= t) continue;
-      // Ligt de geplande run vóór het vangnet van diezelfde dag, dan dekt dat
-      // vangnet hem af; ligt hij erna, dan schuift het vangnet een dag door.
-      const backstopDay = min <= RUN_BACKSTOP_UTC_MIN ? day : day + 1;
-      return { at, by: midnight + backstopDay * DAY_MS + RUN_BACKSTOP_UTC_MIN * 60000 };
+      return { at, by: at + RUN_BACKSTOP_MARGIN_MS };
     }
   }
-  // Onbereikbaar (morgen 09:00 ligt altijd in de toekomst), maar TypeScript wil
-  // een uitweg — val terug op het oude gedrag van "over een etmaal".
+  // Onbereikbaar (het eerste uur van morgen ligt altijd in de toekomst), maar
+  // TypeScript wil een uitweg — val terug op "over een etmaal".
   return { at: t + DAY_MS, by: t + DAY_MS };
 }
 
@@ -213,40 +248,27 @@ function fmtDate(dateStr: string, lang: string) {
   } catch { return dateStr; }
 }
 
-// Eigen hartslag-rij voor de digest. Deze functie draait twee keer per dag
-// (Vercel-cron 09:00 UTC + pg_cron 10:00 UTC) en de eigenaar hoort "Je afspraken
-// voor morgen" maar één keer te krijgen; de herinneringen zelf zijn per afspraak
-// al beveiligd met reminder_sent, de digest is dat niet.
-// v14 leunde daarvoor op "staat er vandaag al een geslaagde send-reminders-rij in
-// cron_health" — maar élke run schrijft zo'n rij, ook een run die nul digests
-// verstuurde. Een handmatige aanroep, een test of een watchdog die de functie
-// aantikt, telde daardoor als "de digest is al verstuurd" en de eigenaar kreeg
-// zijn agenda die dag helemaal niet meer. Daarom een aparte job_name die we
-// alléén wegschrijven als er echt digests de deur uit zijn gegaan: de vlag zegt
-// nu wat hij beweert. Bewust géén nieuwe tabel — cron_health hebben we al en
-// deze naam staat niet in de MONITORED-lijst van cron-watchdog, dus een dag
-// zonder digests levert geen vals alarm op.
+// De digest ("Je afspraken voor morgen") vertrekt alléén in runs waarvan het
+// UTC-uur 9 of 10 is. Dat is exact het venster waarin hij vóór v16 al verstuurd
+// werd (Vercel ±09:07-09:47 + pg_cron 10:00), dus voor de eigenaar verandert er
+// niets aan het tijdstip. Zonder deze grens zou de uurlijkse cron de digest in
+// de run van 00:00 UTC versturen — midden in de nacht voor Europa én 20:00 de
+// avond ervoor op de Cariben, en dat wil niemand in zijn inbox.
+const DIGEST_UTC_HOURS = new Set([9, 10]);
+
+// Hartslag-rij voor de digest in cron_health — sinds v16 puur TELEMETRIE, niet
+// langer de dedupe. De dedupe zelf leeft nu per eigenaar in salon_digest_log
+// (zie de digest-lus in serve): de oude ene-rij-per-dag-aanpak was
+// alles-of-niets, waardoor een salon wiens eerste afspraak-van-morgen pas ná de
+// eerste digest-run geboekt werd, die dag geen agenda-mail meer kreeg. We
+// schrijven deze rij nog wél bij ≥1 verstuurde digest, zodat in cron_health
+// zichtbaar blijft wanneer er digests uitgingen; de naam staat niet in de
+// MONITORED-lijst van cron-watchdog, dus een dag zonder digests geeft geen
+// vals alarm.
 const DIGEST_JOB_NAME = "send-reminders-digest";
 
-async function digestAlreadySentToday() {
-  const dayStart = new Date();
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const { data, error } = await supabase
-    .from("cron_health")
-    .select("id")
-    .eq("job_name", DIGEST_JOB_NAME)
-    .eq("status", "success")
-    .gte("ran_at", dayStart.toISOString())
-    .limit(1);
-  // Bij twijfel (query stuk) tóch sturen: een dubbele digest is vervelend, een
-  // digest die stilzwijgend nooit aankomt kost de salon een werkdag overzicht.
-  if (error) { console.error("digest dedupe check failed, sending anyway:", error.message); return false; }
-  return (data?.length || 0) > 0;
-}
-
-// Markeer de digest-ronde als gedaan. Alleen bij minstens één verstuurde digest:
-// ging er niets uit omdat er morgen niets in de agenda staat, dan mag een latere
-// run het gerust opnieuw proberen — er kan intussen geboekt zijn.
+// Telemetrie-rij wegschrijven, alleen bij minstens één verstuurde digest: een
+// ronde zonder digests (niets in de agenda's van morgen) hoeft geen rij.
 async function recordDigestSent(count: number) {
   if (count <= 0) return;
   try {
@@ -323,10 +345,11 @@ serve(async (req) => {
   const t0 = Date.now();
   try {
     const now = new Date();
-    // "Morgen" voor de digest mag in UTC: deze functie draait om 09:00/10:00 UTC
-    // en op dat uur staat elke salontijd die we bedienen (UTC-4 t/m UTC+2) op
-    // dezelfde kalenderdag als wij. Alleen de starttijd van een afspraak moet per
-    // salon omgerekend worden — daar gaat het om uren, niet om dagen.
+    // "Morgen" voor de digest mag in UTC: de digest gaat alleen uit in runs in
+    // het DIGEST_UTC_HOURS-venster (09/10 UTC) en op die uren staat elke
+    // salontijd die we bedienen (UTC-4 t/m UTC+2) op dezelfde kalenderdag als
+    // wij. Alleen de starttijd van een afspraak moet per salon omgerekend
+    // worden — daar gaat het om uren, niet om dagen.
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().split("T")[0];
@@ -440,9 +463,10 @@ serve(async (req) => {
       if (res.ok) {
         // Dubbele herinneringen zijn uitgesloten doordat de vlag meteen na een
         // geslaagde verzending gezet wordt en de query hierboven alleen
-        // reminder_sent=false pakt: de tweede run van vandaag (Vercel 09:00 +
-        // pg_cron 10:00) en elke latere run zien deze afspraak niet meer, ook al
-        // valt hij door het bredere venster nu op meerdere dagen binnen bereik.
+        // reminder_sent=false pakt: elke latere run — de uurlijkse pg_cron én
+        // de Vercel-run die er om ±09:07-09:47 tussendoor valt — ziet deze
+        // afspraak niet meer, ook al valt hij door het brede venster op
+        // meerdere momenten binnen bereik.
         await supabase.from("appointments").update({ reminder_sent: true }).eq("id", apt.id);
         sentCount++;
         if (apt.owner_id) remindedOwners.add(apt.owner_id);
@@ -468,9 +492,20 @@ serve(async (req) => {
     // steeds weten. Eén query voor alle salons tegelijk, daarna groeperen —
     // scheelt een query per eigenaar. Ook al-gemailde afspraken horen erbij:
     // het is een agenda, geen verzendlijst.
+    //
+    // Dedupe per EIGENAAR via salon_digest_log (pk owner_id + sent_on): elke
+    // run in het venster probeert per eigenaar een rij te claimen; alleen een
+    // geslaagde insert geeft het recht de mail te sturen. Zo krijgt een salon
+    // wiens eerste afspraak-van-morgen pas tussen twee runs in geboekt wordt,
+    // zijn digest alsnog in de volgende run — het oude ene-vlag-per-dag-model
+    // sloot die salon de rest van de dag buiten.
     let digests = 0;
-    const digestDone = await digestAlreadySentToday();
-    if (!digestDone) {
+    const inDigestWindow = DIGEST_UTC_HOURS.has(now.getUTCHours());
+    if (inDigestWindow) {
+      // Sleutel is de UTC-dag, consequent met tomorrowStr hierboven: binnen
+      // het 9/10-venster valt elke salontijd die we bedienen (UTC-4 t/m UTC+2)
+      // toch op dezelfde kalenderdag als UTC.
+      const todayUtcStr = now.toISOString().split("T")[0];
       const { data: dayAppts } = await supabase
         .from("appointments")
         .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code)")
@@ -486,6 +521,21 @@ serve(async (req) => {
         byOwner.set(a.owner_id, list);
       }
       for (const [ownerId, appts] of byOwner) {
+        // Claim eerst de rij; ignoreDuplicates + select() gedraagt zich als
+        // "insert … on conflict do nothing returning": bestond de rij al
+        // (eerdere run vandaag), dan komt er een lege lijst terug en zwijgen
+        // we. Bij een query-fout sturen we NIET — zonder claim kan elke
+        // volgende uurrun in het venster dezelfde mail nogmaals sturen.
+        const { data: claim, error: claimErr } = await supabase
+          .from("salon_digest_log")
+          .upsert(
+            { owner_id: ownerId, sent_on: todayUtcStr },
+            { onConflict: "owner_id,sent_on", ignoreDuplicates: true },
+          )
+          .select("owner_id");
+        if (claimErr) { console.error("digest claim failed:", ownerId, claimErr.message); continue; }
+        if (!claim || claim.length === 0) continue; // vandaag al gedaan
+
         const p = appts[0].profiles || {};
         const ok = await sendOwnerDigest({
           email: p.salon_email || p.email || "",
@@ -496,6 +546,15 @@ serve(async (req) => {
           appts,
         });
         if (ok) digests++;
+        else {
+          // Mail mislukt: geef de claim terug, anders is dit voor deze salon
+          // de laatste poging van vandaag en komt de agenda nooit meer aan.
+          await supabase
+            .from("salon_digest_log")
+            .delete()
+            .eq("owner_id", ownerId)
+            .eq("sent_on", todayUtcStr);
+        }
       }
       await recordDigestSent(digests);
     }
@@ -507,9 +566,10 @@ serve(async (req) => {
         reminders_sent: sentCount,
         reminders_off: skippedOff,
         owner_digests: digests,
-        // Zichtbaar in de logs waaróm er nul digests waren: niets te melden, of
-        // de eerste run van vandaag had ze al gestuurd.
-        digest_skipped_second_run: digestDone,
+        // Zichtbaar in de logs waaróm er nul digests waren: buiten het
+        // 09/10-UTC-venster proberen we het niet eens; binnen het venster
+        // betekent nul "niets te melden of alle eigenaren al geclaimd vandaag".
+        digest_window: inDigestWindow,
         date: tomorrowStr,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

@@ -1852,6 +1852,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           : isNl
             ? "Deze kortingscode hoort bij een ander e-mailadres. Boek met het adres waarop je de code hebt ontvangen."
             : "This discount code belongs to a different email address. Please book with the address the code was sent to.",
+        // Een verjaardagscode is eenmalig: book-appointment geeft
+        // discount_already_used als de code al aan een eerdere boeking hangt.
+        // De RPC (validate_birthday_discount) filtert gebruikte codes al weg,
+        // maar tussen valideren en versturen kan dezelfde code in een ander
+        // tabblad zijn verzilverd — die race landt hier. Vriendelijk en zonder
+        // verwijt: gewoon uitleggen dat de code voor één boeking geldt.
+        discount_already_used: lang === "es"
+          ? "Este código de descuento ya se ha utilizado. Un código de cumpleaños es válido para una sola reserva."
+          : isNl
+            ? "Deze kortingscode is al een keer gebruikt. Een verjaardagscode is voor één boeking."
+            : "This discount code has already been used. A birthday code is valid for one booking.",
         rate_limited: isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
         invalid_email: isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
@@ -1872,6 +1883,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         invalid_service: isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
         invalid_variant: isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
         invalid_extra: isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",
+        // book-appointment weigert met invalid_product als een besteld product
+        // intussen inactief of offline gehaald is (visible_online=false) —
+        // zonder deze regel kreeg de klant de generieke "er ging iets mis".
+        invalid_product: lang === "es"
+          ? "Este producto ya no está disponible en línea — recarga la página."
+          : isNl
+            ? "Dit product is niet meer online beschikbaar — ververs de pagina."
+            : "This product is no longer available online — please reload.",
         invalid_staff: isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
         staff_not_assigned: isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
         staff_required: isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",

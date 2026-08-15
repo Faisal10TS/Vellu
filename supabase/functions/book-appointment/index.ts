@@ -249,12 +249,18 @@ serve(async (req) => {
     // offers them, so receiving them here means a forged request.
     if (salon.plan !== "professional") return err(400, "products_not_available", origin);
     if (prodIds.length > 20) return err(400, "too_many_products", origin);
+    // visible_online=false betekent "alleen aan de kassa verkopen": de publieke
+    // boekingspagina toont zo'n product niet, dus als het hier toch binnenkomt
+    // is de request geknutseld — zelfde weigering als een onbekend/inactief
+    // product. De kassa raakt dit pad niet (die boekt via directe inserts in
+    // het dashboard, niet via deze functie) en blijft dus gewoon verkopen.
     const { data: prods, error: pErr } = await supabase
       .from("products")
       .select("id, owner_id, name_nl, name_en, name_es, price, active, stock")
       .in("id", prodIds)
       .eq("owner_id", salon.id)
-      .eq("active", true);
+      .eq("active", true)
+      .eq("visible_online", true);
     if (pErr) return err(500, "db_error_products", origin);
     if (!prods || prods.length !== prodIds.length) return err(400, "invalid_product", origin);
     for (const p of prods) productsById[p.id] = p;
@@ -414,12 +420,17 @@ serve(async (req) => {
       const graceFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const { data: bday, error: bdErr } = await supabase
         .from("birthday_discount_codes")
-        .select("code, client_email, discount_pct, expires_on")
+        .select("code, client_email, discount_pct, expires_on, used_at")
         .eq("owner_id", salon.id)
         .eq("code", code)
         .gte("expires_on", graceFrom)
         .maybeSingle();
       if (bdErr) return err(500, "db_error_discount", origin);
+      // Eenmalig cadeau: is de code al bij een eerdere boeking gestempeld
+      // (used_at gezet na de geslaagde insert, verderop), dan weigeren we hem
+      // hier expliciet — een aparte foutcode zodat de klant "al gebruikt" te
+      // zien krijgt in plaats van het misleidende "ongeldige code".
+      if (bday?.used_at) return err(403, "discount_already_used", origin);
       if (bday) {
         match = {
           code: bday.code,
@@ -483,15 +494,24 @@ serve(async (req) => {
   }
   const exceptionsForStaff = (sid: string) => exceptions.filter(e => !e.staff_id || e.staff_id === sid);
   if (override?.type === "blocked") {
-    if (override.block_time_start && override.block_time_end) {
-      // time-slot block
-      const blockStart = toMinutes(override.block_time_start);
-      const blockEnd = toMinutes(override.block_time_end);
-      const apptMinutes = toMinutes(time);
-      const apptEnd = apptMinutes + totalDuration;
-      if (apptMinutes < blockEnd && apptEnd > blockStart) return err(400, "slot_blocked", origin);
-    } else {
-      return err(400, "day_blocked", origin);
+    // Een blokkade met staff_id geldt alleen voor DIE medewerker (de "Voor
+    // wie?"-keuze in Instellingen). De boekingspagina biedt collega's op zo'n
+    // dag gewoon aan; zonder deze check weigerde de server die boekingen
+    // alsnog salon-breed. Geen medewerker gekozen ("geen voorkeur") telt als
+    // niet-geraakt: de pagina toont het slot dan alleen als een collega vrij
+    // is, precies zoals de uitzonderingen-tak hierboven dat al deed.
+    const blokkadeRaaktDezeBoeking = !override.staff_id || staffIdsFlat.includes(override.staff_id);
+    if (blokkadeRaaktDezeBoeking) {
+      if (override.block_time_start && override.block_time_end) {
+        // time-slot block
+        const blockStart = toMinutes(override.block_time_start);
+        const blockEnd = toMinutes(override.block_time_end);
+        const apptMinutes = toMinutes(time);
+        const apptEnd = apptMinutes + totalDuration;
+        if (apptMinutes < blockEnd && apptEnd > blockStart) return err(400, "slot_blocked", origin);
+      } else {
+        return err(400, "day_blocked", origin);
+      }
     }
   }
 
@@ -735,6 +755,29 @@ serve(async (req) => {
   }).select("id").single();
 
   if (aErr || !appt) return err(500, "appointment_create_failed", origin);
+
+  // Verjaardagscode stempelen — pas NA de geslaagde insert hierboven. Mislukt
+  // de boeking om een andere reden, dan is de code nooit aangeraakt en kan de
+  // klant het gewoon opnieuw proberen. Race van twee gelijktijdige boekingen
+  // met dezelfde code: het .is("used_at", null)-filter zorgt dat maar één van
+  // beide updates een rij raakt. Raakt onze update níéts (de parallelle
+  // boeking was ons voor), dan accepteren we dat stilzwijgend: de korting is
+  // dan in dit extreme randgeval twee keer gegeven, maar een 500 teruggeven
+  // voor een afspraak die al in de agenda staat (met mails onderweg) is
+  // erger — de klant zou opnieuw boeken en er een dubbele afspraak van maken.
+  if (appliedDiscount?.source === "birthday") {
+    const { data: stamped, error: stampErr } = await supabase
+      .from("birthday_discount_codes")
+      .update({ used_at: new Date().toISOString(), used_by_appointment: appt.id })
+      .eq("owner_id", salon.id)
+      .eq("code", appliedDiscount.code)
+      .is("used_at", null)
+      .select("code");
+    if (stampErr || !stamped || stamped.length === 0) {
+      // Alleen loggen: de boeking zelf is geslaagd en blijft geslaagd.
+      console.error("birthday code stamp skipped:", appliedDiscount.code, stampErr || "already stamped by a parallel booking");
+    }
+  }
 
   // Best-effort stock decrement — only for products that track stock
   // (stock != null). Never blocks the booking; floor at 0 (overselling a
