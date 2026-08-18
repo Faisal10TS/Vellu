@@ -50,26 +50,101 @@ function addMinutes(date: string, time: string, mins: number): { date: string; t
   return { date: `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`, time: `${p(dt.getHours())}:${p(dt.getMinutes())}` };
 }
 
-// Europe/Amsterdam == Europe/Brussels offsets (CET/CEST) — covers NL + BE.
-const VTIMEZONE = [
-  "BEGIN:VTIMEZONE",
-  "TZID:Europe/Amsterdam",
-  "BEGIN:DAYLIGHT",
-  "TZOFFSETFROM:+0100",
-  "TZOFFSETTO:+0200",
-  "TZNAME:CEST",
-  "DTSTART:19700329T020000",
-  "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
-  "END:DAYLIGHT",
-  "BEGIN:STANDARD",
-  "TZOFFSETFROM:+0200",
-  "TZOFFSETTO:+0100",
-  "TZNAME:CET",
-  "DTSTART:19701025T030000",
-  "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
-  "END:STANDARD",
-  "END:VTIMEZONE",
-];
+// Tijdzone per land — dezelfde tabel als in send-reminders, bewust letterlijk
+// overgenomen zodat beide functies nooit uiteen kunnen lopen.
+// appointments.date/.time staan zónder offset in de database: dat is de lokale
+// klok van de salon. Deze feed stempelde elke afspraak als Europe/Amsterdam,
+// waardoor een Bonaireaanse afspraak van 09:00 in de telefoonagenda om 03:00
+// verscheen. De ABC/BES-eilanden delen America/Curacao (UTC-4, geen zomertijd).
+// Onbekend land = Europe/Amsterdam, de thuismarkt.
+const TZ_BY_COUNTRY: Record<string, string> = {
+  NL: "Europe/Amsterdam",
+  BE: "Europe/Brussels",
+  GB: "Europe/London",
+  AW: "America/Curacao",
+  CW: "America/Curacao",
+  BQ: "America/Curacao",
+  SX: "America/Curacao",
+};
+const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+
+// Per tijdzone één VTIMEZONE-blok. Apple Agenda weigert de HELE feed als dit
+// blok niet klopt, dus liever een handvol handgeschreven, geverifieerde blokken
+// dan een generator die de regels probeert af te leiden.
+//   - Amsterdam/Brussel: CET/CEST, EU-regels (laatste zondag maart/oktober).
+//   - Londen: GMT/BST, dezelfde weken maar een uur lager.
+//   - Curacao: GEEN zomertijd. Alleen een STANDARD-component op -0400; een
+//     DAYLIGHT-component erbij zou de eilanden een niet-bestaande sprong geven.
+const VTIMEZONE_BY_TZ: Record<string, string[]> = {
+  "Europe/Amsterdam": [
+    "BEGIN:VTIMEZONE",
+    "TZID:Europe/Amsterdam",
+    "BEGIN:DAYLIGHT",
+    "TZOFFSETFROM:+0100",
+    "TZOFFSETTO:+0200",
+    "TZNAME:CEST",
+    "DTSTART:19700329T020000",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+    "END:DAYLIGHT",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:+0200",
+    "TZOFFSETTO:+0100",
+    "TZNAME:CET",
+    "DTSTART:19701025T030000",
+    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+  ],
+  "Europe/Brussels": [
+    "BEGIN:VTIMEZONE",
+    "TZID:Europe/Brussels",
+    "BEGIN:DAYLIGHT",
+    "TZOFFSETFROM:+0100",
+    "TZOFFSETTO:+0200",
+    "TZNAME:CEST",
+    "DTSTART:19700329T020000",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+    "END:DAYLIGHT",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:+0200",
+    "TZOFFSETTO:+0100",
+    "TZNAME:CET",
+    "DTSTART:19701025T030000",
+    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+  ],
+  "Europe/London": [
+    "BEGIN:VTIMEZONE",
+    "TZID:Europe/London",
+    "BEGIN:DAYLIGHT",
+    "TZOFFSETFROM:+0000",
+    "TZOFFSETTO:+0100",
+    "TZNAME:BST",
+    "DTSTART:19700329T010000",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+    "END:DAYLIGHT",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:+0100",
+    "TZOFFSETTO:+0000",
+    "TZNAME:GMT",
+    "DTSTART:19701025T020000",
+    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+  ],
+  "America/Curacao": [
+    "BEGIN:VTIMEZONE",
+    "TZID:America/Curacao",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:-0400",
+    "TZOFFSETTO:-0400",
+    "TZNAME:AST",
+    "DTSTART:19700101T000000",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+  ],
+};
 
 serve(async (req) => {
   const url = new URL(req.url);
@@ -78,7 +153,7 @@ serve(async (req) => {
 
   const { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name")
+    .select("id, business_name, country_code")
     .eq("calendar_feed_token", token)
     .maybeSingle();
   if (!salon) return new Response("Not found", { status: 404 });
@@ -103,6 +178,12 @@ serve(async (req) => {
     .not("is_sale", "is", true)
     .order("date", { ascending: true });
 
+  // De tijdzone van de salon bepaalt zowel de TZID op elk event als het
+  // VTIMEZONE-blok in de kop; die twee moeten per definitie hetzelfde zijn,
+  // anders valt de agenda-app terug op UTC.
+  const tz = tzFor(salon.country_code);
+  const vtimezone = VTIMEZONE_BY_TZ[tz] || VTIMEZONE_BY_TZ["Europe/Amsterdam"];
+
   const stamp = `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;
   const calName = `${salon.business_name || "Vellu"} — Vellu`;
 
@@ -114,10 +195,10 @@ serve(async (req) => {
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${esc(calName)}`,
     `NAME:${esc(calName)}`,
-    "X-WR-TIMEZONE:Europe/Amsterdam",
+    `X-WR-TIMEZONE:${tz}`,
     "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
     "X-PUBLISHED-TTL:PT1H",
-    ...VTIMEZONE,
+    ...vtimezone,
   ];
 
   for (const a of appts || []) {
@@ -138,8 +219,8 @@ serve(async (req) => {
       "BEGIN:VEVENT",
       fold(`UID:appt-${a.id}@vellu.cc`),
       `DTSTAMP:${stamp}`,
-      `DTSTART;TZID=Europe/Amsterdam:${dtLocal(a.date, a.time)}`,
-      `DTEND;TZID=Europe/Amsterdam:${dtLocal(end.date, end.time)}`,
+      `DTSTART;TZID=${tz}:${dtLocal(a.date, a.time)}`,
+      `DTEND;TZID=${tz}:${dtLocal(end.date, end.time)}`,
       fold(`SUMMARY:${esc(summary)}`),
       fold(`DESCRIPTION:${esc(descParts.join("\n"))}`),
       `STATUS:${a.status === "completed" ? "CONFIRMED" : "CONFIRMED"}`,

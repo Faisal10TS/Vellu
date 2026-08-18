@@ -87,6 +87,9 @@ export function generateProductReportPDF({
   // product niet, en in NL kan een salon 9% op diensten en 21% op producten
   // hanteren. Een enkel percentage over het totaal klopt dan nooit.
   const byRate = new Map();      // tarief -> grondslag in centen
+  // Kadobon-inwisseling apart bijhouden. Die verlaagt wel de omzet maar niet de
+  // grondslag, dus zonder eigen regel telt de tarieftabel niet op tot de omzet.
+  let voucherCents = 0;
   let totalRevenue = 0, totalQty = 0;
 
   for (const a of appointments) {
@@ -128,6 +131,7 @@ export function generateProductReportPDF({
         };
       }), cfg);
       for (const r of t.byRate) byRate.set(r.rate, (byRate.get(r.rate) || 0) + Math.round(r.gross * 100));
+      voucherCents += Math.round(t.paidByVoucher * 100);
     }
     totalRevenue += rowRevenue; totalQty += rowQty;
     lines.push({
@@ -147,9 +151,16 @@ export function generateProductReportPDF({
     const netC = Math.round(grossC / (1 + rate / 100));
     return { rate, gross: grossC / 100, net: netC / 100, tax: (grossC - netC) / 100 };
   });
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const taxableGross = rateRows.reduce((n, r) => n + r.gross, 0);
   const totalTax = rateRows.reduce((n, r) => n + r.tax, 0);
-  const totalNet = totalRevenue - totalTax;
+  const totalNet = round2(totalRevenue - totalTax);
+  const voucherPaid = round2(voucherCents / 100);
+  // Wat er naast de belaste grondslag in de omzet zit: op de BES-eilanden de
+  // doorverkochte producten. De kadobon moet er weer bij opgeteld worden, want
+  // die zit als min-post in de omzet maar niet in de grondslag — zonder die
+  // term werd dit negatief en viel de verklarende noot hieronder weg.
+  const untaxed = round2(totalRevenue - taxableGross + voucherPaid);
 
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -259,27 +270,43 @@ export function generateProductReportPDF({
   // een salon op de BES-eilanden staat hier vaak niets: doorverkochte producten
   // zijn daar onbelast. Dat is de juiste uitkomst, geen ontbrekend blok.
   if (showTax && rateRows.length) {
+    // Onbelaste omzet en ingewisselde kadobonnen krijgen een eigen regel, net
+    // als in revenueReport.js. Zonder die regels telde de tabel op tot de
+    // grondslag terwijl de tegel hierboven op de omzet sloeg: bij een bon met
+    // een kadobon stond er dan tweemaal een ander "excl."-bedrag.
+    const taxBody = rateRows.map((r) => [`${fmtPct(r.rate)}%`, money(r.gross), money(r.net), money(r.tax)]);
+    if (Math.abs(untaxed) >= 0.01) {
+      taxBody.push([T("Onbelast", "Untaxed", "Sin impuesto"), money(untaxed), money(untaxed), money(0)]);
+    }
+    if (voucherPaid >= 0.01) {
+      taxBody.push([
+        T("Ingewisselde kadobonnen", "Gift cards redeemed", "Tarjetas regalo canjeadas"),
+        `-${money(voucherPaid)}`, `-${money(voucherPaid)}`, money(0),
+      ]);
+    }
     autoTable(doc, {
       ...tableTheme,
       startY: doc.lastAutoTable.finalY + 22,
       head: [[T("Tarief", "Rate", "Tipo"), T("Grondslag", "Taxable amount", "Base imponible"), T("Excl.", "Excl.", "Sin"), taxLabel]],
-      body: rateRows.map((r) => [`${fmtPct(r.rate)}%`, money(r.gross), money(r.net), money(r.tax)]),
+      body: taxBody,
       columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
-      foot: rateRows.length > 1
-        ? [[T("Totaal", "Total", "Total"), money(taxableGross), money(taxableGross - totalTax), money(totalTax)]]
+      // De voet telt op tot de OMZET en het nettobedrag uit de tegel hierboven,
+      // niet tot de grondslag alleen — anders klopt de kolom niet met zijn eigen
+      // regels zodra er een onbelaste of kadobon-regel bij staat.
+      foot: taxBody.length > 1
+        ? [[T("Totaal", "Total", "Total"), money(round2(totalRevenue)), money(totalNet), money(totalTax)]]
         : undefined,
     });
-    // Onbelaste omzet expliciet benoemen, anders lijkt het rapport een fout te
+    // Waarom die onbelaste regel er staat, anders lijkt het rapport een fout te
     // maken: de omzet is hoger dan de grondslag.
-    const untaxed = Math.round((totalRevenue - taxableGross) * 100) / 100;
-    if (untaxed > 0.005) {
+    if (untaxed >= 0.01) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
       doc.text(
-        T(`Niet belast: ${money(untaxed)} — doorverkoop van producten is hier niet ${taxLabel}-plichtig.`,
-          `Untaxed: ${money(untaxed)} — reselling products is not subject to ${taxLabel} here.`,
-          `Sin impuesto: ${money(untaxed)} — la reventa de productos no est\u00e1 sujeta a ${taxLabel} aqu\u00ed.`),
+        T(`De regel "Onbelast" is doorverkoop van producten; die is hier niet ${taxLabel}-plichtig.`,
+          `The "Untaxed" row is resale of products, which is not subject to ${taxLabel} here.`,
+          `La fila "Sin impuesto" es reventa de productos, que no est\u00e1 sujeta a ${taxLabel} aqu\u00ed.`),
         margin, doc.lastAutoTable.finalY + 13,
       );
       doc.lastAutoTable.finalY += 13;

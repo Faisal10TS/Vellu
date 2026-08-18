@@ -403,7 +403,14 @@ function SalonRoute({ lang, setLang }) {
         { data: locData },
         { data: staffBlocksData }
       ] = await Promise.all([
-        supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
+        // public_reviews is een kolom-veilige VIEW over reviews. select("*") op
+        // de tabel zelf stuurde client_email en appointment_id mee naar iedere
+        // bezoeker, terwijl de pagina alleen de voornaam, sterren, tekst en
+        // datum toont. De view levert client_name al als voornaam; hier staan
+        // de kolommen nog eens expliciet zodat een latere kolom in de view niet
+        // stilzwijgend in de publieke payload belandt. owner_id hoeft niet in
+        // de select: PostgREST filtert er ook op zonder hem terug te geven.
+        supabase.from("public_reviews").select("id, client_name, rating, comment, created_at").eq("owner_id", data.id).order("created_at", { ascending: false }),
         // public_staff view: name/role/bio/avatar/hours only — freelancer
         // billing data and emails never reach the anon wire.
         supabase.from("public_staff").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position"),
@@ -525,8 +532,11 @@ function SalonRoute({ lang, setLang }) {
   );
 
   // Security: never trust an ?email= URL param for reviews — anyone can craft a URL to
-  // impersonate a victim. If we want pre-fill, it must come from a signed token later.
-  return <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} reviewEmail="" />;
+  // impersonate a victim. Die identiteit komt nu uit het token in ?review=…, dat
+  // ClientApp zelf uit de URL leest en aan submit_review geeft; de prop
+  // reviewEmail bestond daar niet meer en is daarom hier ook weg. reviewMode
+  // blijft alleen voor de oude ?review=true-links uit al verstuurde mails.
+  return <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} />;
 }
 
 // ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────

@@ -283,6 +283,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
+      // Alleen de status wordt gezet: het ophogen van de no-show-teller van de
+      // klant gebeurt server-side via een database-trigger op statuswissel naar
+      // no_show. Client-side meetellen zou dubbel tellen — en zou de teller
+      // missen zodra de status ergens anders (eigenaar, edge-functie) wijzigt.
       const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id);
       if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : lang === "es" ? "Error al marcar como no presentado" : "Error marking no-show", "error"); return; }
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
@@ -463,8 +467,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         });
       } else {
         const endDate = blockForm.to || blockForm.from;
-        let cur = new Date(blockForm.from);
-        const end = new Date(endDate);
+        // parseDate: de datumvelden leveren "YYYY-MM-DD" en new Date() maakt daar
+        // UTC-middernacht van, terwijl fmt() hieronder met LOKALE componenten
+        // terugschrijft. Ten westen van UTC (Bonaire, UTC-4) blokkeerde een
+        // medewerker daardoor de dag ervoor i.p.v. de gekozen dag.
+        let cur = parseDate(blockForm.from);
+        const end = parseDate(endDate);
         while (cur <= end) {
           rows.push({
             owner_id: salonProfile.id, staff_id: staffMember.id, date: fmt(cur),
@@ -590,7 +598,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
           {showContact && phoneDigits && (
-            <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg({ salonName: salonProfile.business_name, clientName: a.client_name, service: a.service_name, date: a.date, time: a.time, lang }))} target="_blank" rel="noopener noreferrer"
+            <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time }))} target="_blank" rel="noopener noreferrer"
               className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
               WhatsApp
@@ -1512,7 +1520,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               stay owner-only because clients are a salon-wide resource. */}
           {view === "klanten" && (() => {
             const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
-            const fmtDate = (ds) => { if (!ds) return ""; const d = new Date(ds); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
+            // parseDate i.p.v. new Date(ds): "YYYY-MM-DD" wordt door new Date als
+            // UTC-middernacht gelezen, waardoor een salon op Bonaire (UTC-4) bij
+            // elke klant de VORIGE dag als laatste bezoek zag staan.
+            const fmtDate = (ds) => { if (!ds) return ""; const d = parseDate(ds); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
             // Aggregate by lowercase email so a repeat client with different
             // display names still collapses to one row.
             const byEmail = new Map();
@@ -1702,7 +1713,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
             const formatDate = (ds) => {
               if (!ds) return "";
-              const d = new Date(ds);
+              // Zie fmtDate hierboven: date-only strings moeten lokaal geparsed
+              // worden, anders staat er op een factuurregel een dag te vroeg.
+              const d = parseDate(ds);
               const MON = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
               return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
             };
@@ -2411,7 +2424,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     // cancellation token only feeds this email's cancel button,
                     // so it's skipped along with it.
                     if (addApptForm.notify_client !== false) {
-                      // Null when the appointment is within 24h — button omitted.
+                      // Levert altijd een token, ook voor een afspraak van
+                      // morgen; alleen bij een mislukte insert is het null en
+                      // laat de mail de knop weg.
                       const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
                       await sendEmails("booking_confirmation", {
                         client_name: addApptForm.client_name, client_email: email,

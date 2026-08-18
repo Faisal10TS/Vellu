@@ -99,6 +99,20 @@ const T = {
   },
 } as const;
 
+// Zelfde bron en lengte als het annuleertoken in book-appointment: 32 bytes uit
+// crypto.getRandomValues, hex. Geen Math.random() — dit token is het enige
+// bewijs dat iemand écht bij deze salon is geweest.
+function generateToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Hoe lang een review-uitnodiging geldig blijft. Ruim, want mensen laten zo'n
+// mail weken staan; korter dan "voor altijd", want een slingerend token in een
+// oude mailbox hoort een keer te verlopen.
+const REVIEW_TOKEN_DAYS = 60;
+
 // Een kassaverkoop herkennen, ook als de is_sale-vlag ontbreekt (rijen van vóór
 // die kolom): geen dienst, geen duur, wel productregels.
 const isSaleRow = (a: any) =>
@@ -115,7 +129,7 @@ serve(async () => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, profiles(business_name, slug, accent_color, country_code, google_place_id)")
+      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, profiles(business_name, slug, accent_color, country_code, google_place_id)")
       .eq("followup_sent", false)
       .gte("date", fromStr)
       .lte("date", untilStr)
@@ -141,8 +155,41 @@ serve(async () => {
       const lang = langFor(appt.lang, p.country_code);
       const t = T[lang as keyof typeof T];
 
-      const reviewUrl = `https://vellu.cc/${slug}?review=true`;
+      // ?review=true kón nooit werken: de app geeft bewust een leeg e-mailadres
+      // door (een ?email=-parameter is te vervalsen) terwijl de RLS-regel op
+      // reviews een niet-leeg adres én een afgeronde afspraak eist. Elke insert
+      // liep dus stuk. Nu krijgt elke uitnodiging een eigen token; submit_review
+      // wisselt dat token in voor de identiteit die wij hier vastleggen.
+      let reviewUrl = "";
+      try {
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+        const { error: tokenError } = await supabase.from("review_tokens").insert({
+          token,
+          appointment_id: appt.id,
+          owner_id: appt.owner_id,
+          client_email: appt.client_email,
+          expires_at: expiresAt,
+        });
+        if (tokenError) throw tokenError;
+        reviewUrl = `https://vellu.cc/${slug}?review=${token}`;
+      } catch (tokenErr) {
+        // Bewuste keuze: de mail gaat wél de deur uit, zonder reviewknop. De
+        // rest (bedankje, Google-review, opnieuw boeken) heeft op zichzelf
+        // waarde, en followup_sent gaat daarna op true — dus de klant krijgt
+        // deze mail niet alsnog dubbel. Wel loggen, want structureel falen hier
+        // betekent stilzwijgend geen enkele eigen review meer.
+        console.error("Review token aanmaken mislukt (mail gaat zonder reviewknop):", appt.id, tokenErr);
+      }
       const rebookUrl = `https://vellu.cc/${slug}`;
+      // Zonder geldig token geen knop: een link die gegarandeerd op een foutmelding
+      // uitkomt is slechter dan geen link. De uitnodigende zin gaat dan mee weg.
+      const reviewBlock = reviewUrl
+        ? `<p style="font-size: 14px; color: #555; line-height: 1.6;">${t.ask}</p>
+                <div style="text-align: center; margin: 24px 0;">
+                  <a href="${reviewUrl}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">${t.cta}</a>
+                </div>`
+        : "";
       // Heeft de salon een Google-vestiging gekoppeld, dan komt daar een TWEEDE
       // knop bij. Niet in plaats van de eigen review: die komt op de
       // boekingspagina te staan en werkt ook voor salons zonder Google-profiel.
@@ -176,13 +223,7 @@ serve(async () => {
                   <div style="font-size: 13px; color: #888; margin-top: 4px;">${appt.date} ${t.at} ${appt.time || ""}</div>
                 </div>
 
-                <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.ask}</p>
-
-                <div style="text-align: center; margin: 24px 0;">
-                  <a href="${reviewUrl}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">
-                    ${t.cta}
-                  </a>
-                </div>
+                ${reviewBlock}
                 ${googleBlock}
                 <div style="text-align: center; margin: 16px 0;">
                   <a href="${rebookUrl}" style="display: inline-block; border: 1px solid ${accent}; color: ${accent}; padding: 12px 28px; border-radius: 100px; text-decoration: none; font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;">

@@ -44,7 +44,13 @@ function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
   );
 }
 
-function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
+// Een review kan alleen worden opgeslagen met de token uit de
+// uitnodigingsmail: die token is het enige bewijs dat deze bezoeker écht de
+// klant van een afgeronde afspraak is. De oude directe insert op `reviews`
+// kon per definitie nooit slagen (de policy eist een e-mailadres met een
+// afgeronde afspraak, en dat adres had de client hier niet), dus loopt alles
+// nu via de RPC submit_review, die het adres zelf uit de token haalt.
+function ReviewForm({ token, lang, t, accent }) {
   const { colors: c } = useTheme();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -53,20 +59,49 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState("");
 
+  // "?review=true" was de oude linkvorm zonder token — die mails staan nog in
+  // ieders inbox. Zo'n link kan niets meer opslaan, dus tonen we geen
+  // formulier dat toch zou falen maar één nette uitleg.
+  const staleLink = token === "true";
+  const canSubmit = !!token && !staleLink;
+
   const submit = async () => {
-    if (rating === 0 || submitting) return;
+    if (rating === 0 || submitting || !canSubmit) return;
     setSubmitting(true);
     setReviewError("");
     try {
-      const { error } = await supabase.from("reviews").insert({
-        owner_id: salon.owner_id,
-        client_name: clientName,
-        client_email: clientEmail,
-        rating,
-        comment: comment || null
+      const { error } = await supabase.rpc("submit_review", {
+        p_token: token,
+        p_rating: rating,
+        p_comment: comment.trim() || null,
       });
       if (error) {
-        setReviewError(t.reviewSaveFailed);
+        // De RPC weigert met een exception waarvan de tekst de code bevat
+        // (invalid_token / token_used / token_expired). Elke code krijgt zijn
+        // eigen uitleg, want "probeer opnieuw" is bij een verlopen of al
+        // gebruikte link precies het verkeerde advies.
+        const code = (error.message || "").toLowerCase();
+        if (code.includes("token_used")) {
+          setReviewError(lang === "nl"
+            ? "Je hebt via deze link al een review achtergelaten. Bedankt!"
+            : lang === "es"
+              ? "Ya has dejado una reseña con este enlace. ¡Gracias!"
+              : "You've already left a review with this link. Thank you!");
+        } else if (code.includes("token_expired")) {
+          setReviewError(lang === "nl"
+            ? "Deze reviewlink is verlopen. Vraag de salon gerust om een nieuwe uitnodiging."
+            : lang === "es"
+              ? "Este enlace para dejar una reseña ha caducado. Pide al salón una nueva invitación."
+              : "This review link has expired. Ask the salon for a new invitation.");
+        } else if (code.includes("invalid_token")) {
+          setReviewError(lang === "nl"
+            ? "Deze reviewlink werkt niet. Open de link uit je e-mail nog een keer."
+            : lang === "es"
+              ? "Este enlace de reseña no funciona. Abre de nuevo el enlace de tu correo."
+              : "This review link doesn't work. Please open the link from your email again.");
+        } else {
+          setReviewError(t.reviewSaveFailed);
+        }
       } else {
         setSubmitted(true);
       }
@@ -77,6 +112,26 @@ function ReviewForm({ salon, clientName, clientEmail, lang, t, accent }) {
       setSubmitting(false);
     }
   };
+
+  // Zonder bruikbare token geen sterren: dan is er niets om op te slaan en is
+  // eerlijk zijn over de uitnodigingsmail beter dan een dood formulier.
+  if (!canSubmit) {
+    return (
+      <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, textAlign: "center", fontSize: 12.5, color: c.textSub, lineHeight: 1.5 }}>
+        {staleLink
+          ? (lang === "nl"
+              ? "Deze reviewlink is verouderd en werkt niet meer. Je krijgt na je volgende bezoek een nieuwe uitnodiging per e-mail."
+              : lang === "es"
+                ? "Este enlace de reseña es antiguo y ya no funciona. Después de tu próxima visita recibirás una nueva invitación por correo."
+                : "This review link is out of date and no longer works. You'll get a new invitation by email after your next visit.")
+          : (lang === "nl"
+              ? "Reviews kunnen alleen via de uitnodiging per e-mail. Na je bezoek sturen we je die link automatisch toe."
+              : lang === "es"
+                ? "Las reseñas solo se pueden dejar desde la invitación por correo. Te enviaremos ese enlace automáticamente después de tu visita."
+                : "Reviews can only be left through the email invitation. We'll send you that link automatically after your visit.")}
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -234,7 +289,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
 }
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
-function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false, reviewEmail = "" }) {
+function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false }) {
   const { colors: c, theme } = useTheme();
   const accent = initialSalon.accent || ACCENT;
   const t = T[lang];
@@ -676,7 +731,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [rangeBooked, setRangeBooked] = useState({});
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
-  const [showReviewForm, setShowReviewForm] = useState(reviewMode);
+  // De uitnodigingsmail linkt naar /{slug}?review={TOKEN}. Die token lezen we
+  // hier zelf uit de URL in plaats van via een prop: de aanroeper kende alleen
+  // de oude vorm (?review=true) en zou een echte token dus niet doorgeven,
+  // waardoor het formulier bij de nieuwe links helemaal niet openging.
+  const reviewToken = typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("review") || "")
+    : "";
+  const [showReviewForm, setShowReviewForm] = useState(reviewMode || !!reviewToken);
   const [mode, setMode] = useState("profile"); // "profile" | "booking"
   const [profileTab, setProfileTab] = useState("services");
   const [profileCategory, setProfileCategory] = useState("all");
@@ -1373,9 +1435,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // this service. Previously "no preference" counted appointments of ALL
     // staff as conflicts — so a fully-free Lady slot showed as booked purely
     // because Esther (who can't even do the service) had a client then.
+    // De duur MOET exact zo worden berekend als in getAvailableTimes (zelfde
+    // helper itemExtrasDuration, niet een eigen rekenregel): daar telde de
+    // extra-duur wél mee en hier niet. Gevolg: de slotlijst bood een tijd aan
+    // die de dagstrip vrij noemde terwijl de afspraak met de extra's over een
+    // bestaande boeking heen liep — de server weigerde hem dan met
+    // slot_conflict, vlak voor de neus van de klant.
     const rows = selectedServices.length > 0
       ? selectedServices.map(item => ({
-          duration: (item.variant ? item.variant.duration : item.service.duration) || 30,
+          duration: ((item.variant ? item.variant.duration : item.service.duration) || 30) + itemExtrasDuration(item),
           eligible: item.staff
             ? [item.staff]
             : allStaff.filter(s => !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)),
@@ -1834,14 +1902,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       const code = (err?.message || "").toLowerCase().trim();
       const isNl = lang === "nl";
       const MAP = {
-        slot_conflict: isNl ? "Dit tijdslot is net geboekt — kies een ander." : "This slot was just taken — please pick another.",
-        closed: isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
-        outside_hours: isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
-        day_blocked: isNl ? "De salon is gesloten op deze dag." : "The salon is closed on this day.",
-        slot_blocked: isNl ? "Dit tijdslot is geblokkeerd." : "This time slot is blocked.",
-        too_soon: isNl ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.",
-        too_far: isNl ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.",
-        invalid_discount: isNl ? "Ongeldige kortingscode." : "Invalid discount code.",
+        slot_conflict: lang === "es" ? "Alguien acaba de reservar esta hora — elige otra." : isNl ? "Dit tijdslot is net geboekt — kies een ander." : "This slot was just taken — please pick another.",
+        closed: lang === "es" ? "El salón no está abierto a esta hora." : isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
+        outside_hours: lang === "es" ? "El salón no está abierto a esta hora." : isNl ? "De salon is niet open op dit tijdstip." : "The salon is not open at this time.",
+        day_blocked: lang === "es" ? "El salón está cerrado este día." : isNl ? "De salon is gesloten op deze dag." : "The salon is closed on this day.",
+        slot_blocked: lang === "es" ? "Esta hora está bloqueada." : isNl ? "Dit tijdslot is geblokkeerd." : "This time slot is blocked.",
+        too_soon: lang === "es" ? "Reservas con muy poca antelación — elige una hora más tarde." : isNl ? "Je boekt te snel — probeer een later tijdstip." : "You're booking too soon — try a later time.",
+        too_far: lang === "es" ? "Todavía no puedes reservar con tanta antelación." : isNl ? "Je kunt nog niet zo ver vooruit boeken." : "You can't book that far ahead yet.",
+        invalid_discount: lang === "es" ? "Código de descuento no válido." : isNl ? "Ongeldige kortingscode." : "Invalid discount code.",
         // Een verjaardagscode is persoonlijk: book-appointment geeft 403
         // discount_not_yours als de code bestaat maar bij een ander adres hoort
         // (typefout in het e-mailadres, of de code van een huisgenoot geleend).
@@ -1863,11 +1931,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           : isNl
             ? "Deze kortingscode is al een keer gebruikt. Een verjaardagscode is voor één boeking."
             : "This discount code has already been used. A birthday code is valid for one booking.",
-        rate_limited: isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
-        invalid_email: isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
-        missing_name: isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
-        phone_required: isNl ? "Telefoonnummer is verplicht voor deze salon." : "Phone number is required for this salon.",
-        policy_not_agreed: isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
+        rate_limited: lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
+        invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
+        missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
+        phone_required: lang === "es" ? "Este salón necesita tu número de teléfono." : isNl ? "Telefoonnummer is verplicht voor deze salon." : "Phone number is required for this salon.",
+        policy_not_agreed: lang === "es" ? "Tienes que aceptar las condiciones de reserva." : isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
         // De no-show-blokkade in book-appointment geeft 403 client_blocked. Zonder
         // regel hier viel dat terug op de generieke "er ging iets mis", waarna de
         // klant het eindeloos bleef proberen zonder te snappen waarom het niet lukt.
@@ -1879,10 +1947,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           : isNl
             ? "Online boeken lukt op dit moment niet. Neem even contact op met de salon om je afspraak te maken."
             : "Online booking isn't available for you right now. Please contact the salon to arrange your appointment.",
-        salon_not_found: isNl ? "Salon niet gevonden." : "Salon not found.",
-        invalid_service: isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
-        invalid_variant: isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
-        invalid_extra: isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",
+        salon_not_found: lang === "es" ? "Salón no encontrado." : isNl ? "Salon niet gevonden." : "Salon not found.",
+        invalid_service: lang === "es" ? "Este tratamiento ya no está disponible — recarga la página." : isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
+        invalid_variant: lang === "es" ? "Esta variante ya no está disponible — recarga la página." : isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
+        invalid_extra: lang === "es" ? "Este extra ya no está disponible — recarga la página." : isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",
         // book-appointment weigert met invalid_product als een besteld product
         // intussen inactief of offline gehaald is (visible_online=false) —
         // zonder deze regel kreeg de klant de generieke "er ging iets mis".
@@ -1891,12 +1959,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           : isNl
             ? "Dit product is niet meer online beschikbaar — ververs de pagina."
             : "This product is no longer available online — please reload.",
-        invalid_staff: isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
-        staff_not_assigned: isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
-        staff_required: isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
-        staff_day_blocked: isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
-        staff_time_blocked: isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
-        staff_not_available: isNl ? "Deze medewerker werkt niet op dit tijdstip." : "This stylist doesn't work at this time.",
+        invalid_staff: lang === "es" ? "Este estilista ya no está disponible — recarga la página." : isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
+        staff_not_assigned: lang === "es" ? "Este estilista no realiza este tratamiento." : isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
+        staff_required: lang === "es" ? "Elige un estilista para cada tratamiento." : isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
+        staff_day_blocked: lang === "es" ? "Este estilista no está disponible este día." : isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
+        staff_time_blocked: lang === "es" ? "Este estilista no está disponible en esta franja horaria." : isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
+        staff_not_available: lang === "es" ? "Este estilista no trabaja a esta hora." : isNl ? "Deze medewerker werkt niet op dit tijdstip." : "This stylist doesn't work at this time.",
       };
       const msg = MAP[code] || t.bookingError;
       setErrorToast(msg);
@@ -2700,7 +2768,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {t.howWasAppt}
                 </div>
               </div>
-              <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
+              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
                 {t.close}
               </button>
@@ -3630,8 +3698,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
 
-              {/* Write a review */}
-              <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+              {/* Geen reviewformulier direct na het boeken: het bezoek moet nog
+                  plaatsvinden en de token die de opslag toestaat bestaat pas bij
+                  de uitnodigingsmail achteraf. Een formulier dat gegarandeerd
+                  faalt is slechter dan deze mededeling. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, fontSize: 12.5, color: c.textSub, lineHeight: 1.5, textAlign: "center" }}>
+                {lang === "nl"
+                  ? "Na je bezoek sturen we je een e-mail met een link om een review achter te laten."
+                  : lang === "es"
+                    ? "Después de tu visita te enviaremos un correo con un enlace para dejar una reseña."
+                    : "After your visit we'll email you a link to leave a review."}
+              </div>
             </div>
           )}
 
@@ -4288,7 +4365,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
 
                                     
-                  <ReviewForm salon={initialSalon} clientName={`${form.firstName} ${form.lastName}`} clientEmail={form.email} lang={lang} t={t} accent={accent} />
+                  {/* Zelfde reden als op desktop: zonder token uit de
+                      uitnodigingsmail kan er niets worden opgeslagen. */}
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, fontSize: 12.5, color: c.textSub, lineHeight: 1.5, textAlign: "center" }}>
+                    {lang === "nl"
+                      ? "Na je bezoek sturen we je een e-mail met een link om een review achter te laten."
+                      : lang === "es"
+                        ? "Después de tu visita te enviaremos un correo con un enlace para dejar una reseña."
+                        : "After your visit we'll email you a link to leave a review."}
+                  </div>
                 </div>
               )}
             </div>
@@ -4346,7 +4431,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
                 <div style={{ fontSize: 12, color: c.textSub, marginTop: 4 }}>{initialSalon.name}</div>
               </div>
-              <ReviewForm salon={initialSalon} clientName="" clientEmail={reviewEmail} lang={lang} t={t} accent={accent} />
+              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
                 {t.close}
               </button>
@@ -4435,7 +4520,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <div style={{ fontSize: 10.5, color: c.textMuted, marginTop: 8, lineHeight: 1.4 }}>
                           {lang === "nl"
                             ? `We appen of mailen je zodra er een plek vrijkomt op ${waitlistDates.length === 1 ? "deze dag" : `een van deze ${waitlistDates.length} dagen`}.`
-                            : `We'll message you as soon as a spot opens on ${waitlistDates.length === 1 ? "this day" : `one of these ${waitlistDates.length} days`}.`}
+                            : lang === "es"
+                              ? `Te avisamos por WhatsApp o por correo en cuanto se libere un hueco ${waitlistDates.length === 1 ? "este día" : `en uno de estos ${waitlistDates.length} días`}.`
+                              : `We'll message you as soon as a spot opens on ${waitlistDates.length === 1 ? "this day" : `one of these ${waitlistDates.length} days`}.`}
                         </div>
                       </div>
                     );

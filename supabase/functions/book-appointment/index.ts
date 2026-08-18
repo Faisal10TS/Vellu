@@ -74,6 +74,44 @@ function toMinutes(hhmm: string): number {
   return h * 60 + (m || 0);
 }
 
+// ── Salontijd → UTC ─────────────────────────────────────────────────────────
+// Letterlijk dezelfde helpers als in cancel-appointment/send-reminders. Datum
+// en tijd van een afspraak staan in de tijdzone van de SALON; wie ze zonder
+// omrekening in een Date stopt, leest ze als UTC. Op Bonaire (UTC-4) schuift de
+// afspraak daardoor vier uur naar voren en werd elk zelfde-dag-slot binnen vier
+// uur geweigerd met too_soon, ook bij min_advance_hours = 0. Via Intl en niet
+// met een vaste offset-tabel, want Amsterdam wisselt tussen +1 en +2 en die
+// grens ligt elk jaar ergens anders.
+const TZ_BY_COUNTRY: Record<string, string> = {
+  NL: "Europe/Amsterdam",
+  BE: "Europe/Brussels",
+  GB: "Europe/London",
+  AW: "America/Curacao",
+  CW: "America/Curacao",
+  BQ: "America/Curacao",
+  SX: "America/Curacao",
+};
+const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+
+function tzOffsetMs(at: Date, tz: string) {
+  try {
+    const p: Record<string, string> = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(at)) p[part.type] = part.value;
+    const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return asUtc - at.getTime();
+  } catch { return 0; } // onbekende zone: liever de oude UTC-aanname dan crashen
+}
+
+function localToUtc(dateStr: string, timeStr: string, tz: string) {
+  const naive = new Date(`${dateStr}T${timeStr}:00Z`);
+  if (isNaN(naive.getTime())) return null;
+  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+}
+
 // Simple in-memory rate limiter per IP. Resets when function cold-starts but
 // adequate for abuse mitigation combined with Supabase's own request limits.
 const RATE_LIMIT: Map<string, { count: number; resetAt: number }> = new Map();
@@ -141,6 +179,12 @@ serve(async (req) => {
   const allergies = String(client.allergies || "").trim().slice(0, 500) || null;
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(400, "invalid_email", origin);
   if (!firstName || !lastName) return err(400, "missing_name", origin);
+  // Botval: het veld `website` staat op de boekingspagina buiten beeld en heeft
+  // autocomplete uit, dus een echte klant kan het niet invullen. Formulierbots
+  // vullen elk veld dat ze vinden. De client stuurde het al mee, maar de server
+  // keek er nooit naar — daardoor deed de val niets. Bewust een generieke fout
+  // zonder uitleg, zodat een bot niet leert welk veld hem verraadt.
+  if (String(client.website || "").trim()) return err(400, "invalid_request", origin);
 
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
@@ -462,15 +506,24 @@ serve(async (req) => {
 
   // ---------- 8. Validate date/time is in future + within advance window ----------
   const now = new Date();
-  const apptStart = new Date(`${date}T${time}:00`);
-  if (isNaN(apptStart.getTime())) return err(400, "invalid_datetime", origin);
+  // `date`/`time` zijn SALONTIJD, geen UTC. Werd het hier als UTC gelezen, dan
+  // lag de afspraak voor een Bonaire-salon (UTC-4) vier uur te vroeg en sneuvelde
+  // elk zelfde-dag-slot binnen vier uur op too_soon, zelfs met min_advance_hours
+  // op 0. Omrekenen via de tijdzone van het land van de salon lost dat op en
+  // houdt tegelijk rekening met de zomertijdwissel van de NL/BE-salons.
+  const salonTz = tzFor(salon.country_code);
+  const apptStart = localToUtc(date, time, salonTz);
+  if (!apptStart) return err(400, "invalid_datetime", origin);
   const minAdvanceMs = (salon.min_advance_hours || 0) * 60 * 60 * 1000;
   const maxAdvanceMs = (salon.max_advance_days || 60) * 24 * 60 * 60 * 1000;
   if (apptStart.getTime() < now.getTime() + minAdvanceMs) return err(400, "too_soon", origin);
   if (apptStart.getTime() > now.getTime() + maxAdvanceMs) return err(400, "too_far", origin);
 
   // ---------- 9. Validate business hours + day overrides ----------
-  const dayOfWeek = apptStart.getDay();
+  // De weekdag hoort bij de KALENDERDATUM die de klant koos, niet bij het
+  // omgerekende UTC-moment: een Bonairiaanse zondagavond-afspraak van 22:00 is
+  // in UTC al maandag, en dan zouden we de verkeerde openingstijden pakken.
+  const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
   const override = salon.day_overrides?.[date];
 
   // Exception days (extra availability), merged from BOTH sources:
@@ -664,16 +717,33 @@ serve(async (req) => {
     .not("status", "in", '("cancelled","no_show")');
   if (exErr) return err(500, "db_error_conflict_check", origin);
 
-  const primaryStaffId = Object.values(staff_ids_per_service || {}).find(Boolean) || null;
-  for (const existing of existingAppts || []) {
-    // Only conflict if same staff (or no staff assigned = global resource)
-    const sameStaff = (existing.staff_id || null) === (primaryStaffId || null);
-    if (!sameStaff && existing.staff_id && primaryStaffId) continue;
-    const exStart = toMinutes(existing.time);
-    const exEnd = exStart + parseInt(existing.service_duration || 60) + breakMin;
-    const newStart = apptStartMin;
-    const newEnd = apptEndMin + breakMin;
-    if (newStart < exEnd && newEnd > exStart) return err(409, "slot_conflict", origin);
+  // Per dienst toetsen, niet één keer voor de hele boeking. Een teamboeking
+  // (knippen bij Lady 10:00-11:00, kleuren bij Esther 11:00-12:00) werd hiervoor
+  // uitsluitend tegen de EERSTE stylist gelegd; alles wat bij Esther al in de
+  // agenda stond werd overgeslagen omdat haar staff_id niet die van Lady is, en
+  // zo kon je haar dubbelboeken. serviceBreakdown bevat per dienst al de stylist,
+  // de duur en de startverschuiving binnen de boeking, dus we toetsen elk
+  // deelvenster tegen precies de afspraken die dat venster kunnen bezetten:
+  // die van dezelfde stylist plus die zonder stylist (die bezetten de hele
+  // salon — één behandelstoel, "geen voorkeur", of een oude rij van vóór het
+  // teamtijdperk). Heeft de nieuwe dienst zelf geen stylist, dan botst hij met
+  // álles, precies zoals een solo-salon dat altijd al deed.
+  const bestaandeVensters = (existingAppts || []).map((e: any) => {
+    const start = toMinutes(e.time);
+    return {
+      staffId: e.staff_id || null,
+      start,
+      end: start + (parseInt(e.service_duration || 60) || 60) + breakMin,
+    };
+  });
+  for (const deel of serviceBreakdown) {
+    const deelStart = apptStartMin + deel.offset_min;
+    const deelEnd = deelStart + deel.duration + breakMin;
+    for (const bestaand of bestaandeVensters) {
+      // Alleen overslaan als BEIDE kanten een (verschillende) stylist hebben.
+      if (deel.staff_id && bestaand.staffId && bestaand.staffId !== deel.staff_id) continue;
+      if (deelStart < bestaand.end && deelEnd > bestaand.start) return err(409, "slot_conflict", origin);
+    }
   }
 
   // ---------- 11. Upsert client ----------
@@ -792,7 +862,14 @@ serve(async (req) => {
 
   // ---------- 14. Create cancellation token ----------
   const cancelToken = generateToken();
-  const expiresAt = new Date(apptStart.getTime() - 24 * 60 * 60 * 1000);
+  // Verloopt op het STARTMOMENT van de afspraak zelf (salontijd → UTC), niet
+  // 24 uur ervoor. Die vaste 24 uur was een tweede, onzichtbare annuleertermijn
+  // bovenop cancel_deadline_hours: cancel-appointment kijkt eerst naar
+  // expires_at en pas daarna naar de termijn van de salon, dus bij de drie
+  // salons die op 0 staan ("altijd annuleerbaar") kreeg de klant binnen een dag
+  // voor de afspraak toch "verlopen" te zien. De termijn hoort op één plek
+  // afgedwongen te worden, en cancel-appointment doet dat al goed.
+  const expiresAt = new Date(apptStart.getTime());
   await supabase.from("cancellation_tokens").insert({
     appointment_id: appt.id,
     token: cancelToken,

@@ -102,6 +102,17 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-followups/index.ts"
 
+[functions.calendar-feed]
+enabled = true
+# Apple Agenda en Google Agenda halen deze ICS-URL zelf op, zonder enige
+# Authorization-header; het feed-token in de URL ís de authenticatie. De functie
+# stond live al op verify_jwt=false (v5) maar had GEEN regel in dit bestand —
+# waardoor de CLI bij de eerstvolgende deploy op de standaard true zou
+# terugvallen en de gateway elke geabonneerde agenda zou 401'en. Precies de
+# storing uit memory edge_function_source_drift.
+verify_jwt = false
+entrypoint = "./functions/calendar-feed/index.ts"
+
 [functions.waitlist-notify]
 enabled = true
 # Server-side aangeroepen (wachtlijst-plek vrij) met x-internal-secret, geen

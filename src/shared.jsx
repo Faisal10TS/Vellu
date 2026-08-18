@@ -284,14 +284,32 @@ async function sendEmails(type, booking) {
 // client's confirmation email carries the same cancel button a self-booked
 // client gets (book-appointment creates these server-side; dashboard bookings
 // insert directly, allowed by the owner/staff RLS policy on the table).
-// Same shape as the edge function: 64-char hex token, valid until 24h before
-// the appointment. Returns the cancel URL, or null when the appointment is
-// already within 24h (a cancel link that lands on "too late" is worse than
-// none) or when the insert fails — callers just omit the button then.
+// Same shape as the edge function: 64-char hex token, dat verloopt op het
+// STARTMOMENT van de afspraak zelf.
+//
+// WAAROM niet meer 24 uur ervoor: die vaste marge was een tweede, onzichtbare
+// annuleertermijn bovenop de cancel_deadline_hours van de salon, en erger nog:
+// bij een afspraak binnen 24 uur lag de vervaldatum al in het verleden, dus gaf
+// deze functie null terug en kreeg de klant een bevestigingsmail ZONDER
+// annuleerknop. Juist bij een afspraak van morgen wil je die knop. De termijn
+// hoort op één plek te wonen — cancel-appointment toetst cancel_deadline_hours
+// al — dus geven we nu altijd een token uit, net als book-appointment.
+//
+// TIJDZONE: `${date}T${time}:00` zonder achtervoegsel wordt door de browser in
+// de LOKALE tijdzone gelezen. Dat is bewust: deze functie draait alleen in het
+// dashboard, waar de eigenaar/medewerker in de tijdzone van de eigen salon zit,
+// en de rest van de frontend rekent overal met diezelfde lokale tijd. De
+// serverkant (book-appointment) doet hetzelfde moment, maar dan expliciet via
+// localToUtc(date, time, salonTz) omdat een edge-functie in UTC draait en de
+// salon-tijdzone dus niet uit de omgeving kan afleiden.
+//
+// Retourneert de cancel-URL, of null als de datum/tijd onleesbaar is of de
+// insert faalt — dan is er domweg geen geldige link en laat de caller de knop
+// weg (een dode link is erger dan geen knop).
 async function createCancellationToken(appointmentId, date, time) {
   try {
-    const expiresAt = new Date(new Date(`${date}T${time}:00`).getTime() - 24 * 60 * 60 * 1000);
-    if (expiresAt <= new Date()) return null;
+    const expiresAt = new Date(`${date}T${time}:00`);
+    if (isNaN(expiresAt.getTime())) { console.error("cancellation token: ongeldige datum/tijd", date, time); return null; }
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -396,7 +414,12 @@ function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink
   return `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. The total is ${amount}.\n\n${payVia}\n\nSee you next time! ✨`;
 }
 
-function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName }) {
+// De default `= {}` is een vangnet: deze helper draait tijdens render van een
+// afspraakkaart, en een aanroep die het tweede argument vergeet liet het
+// destructureren op undefined klappen — een TypeError in render trekt via de
+// ErrorBoundary de HELE app naar "Er ging iets mis". Liever een bericht met
+// "undefined" erin dan een salon die niet meer bij haar agenda kan.
+function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName } = {}) {
   if (lang === "nl") {
     return `Hoi ${clientName}! 👋\n\nHerinnering: je hebt morgen een afspraak bij ${salonName}.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nTot morgen! ✨`;
   }
