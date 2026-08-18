@@ -115,8 +115,11 @@ entrypoint = "./functions/calendar-feed/index.ts"
 
 [functions.waitlist-notify]
 enabled = true
-# Server-side aangeroepen (wachtlijst-plek vrij) met x-internal-secret, geen
-# JWT. Live verify_jwt=false (nu v6).
+# Aangeroepen door de PUBLIEKE boekingspagina zodra een anonieme bezoeker zich
+# op de wachtlijst zet: bevestiging naar de klant, melding naar de salon. Dus
+# het AANMELD-pad — niet "er is een plek vrij"; dat laatste loopt via
+# notifyWaitlistSpot in src/OwnerApp.jsx. Een anonieme bezoeker heeft geen
+# sessie, dus verify_jwt moet false zijn.
 verify_jwt = false
 entrypoint = "./functions/waitlist-notify/index.ts"
 
@@ -128,3 +131,20 @@ enabled = true
 # hem stilzwijgend op true zou zetten.
 verify_jwt = false
 entrypoint = "./functions/cancel-appointment/index.ts"
+
+[functions.db-backup]
+enabled = true
+# Aangeroepen door pg_cron (03:00) met de service-role-sleutel, niet door een
+# gebruiker. Stond niet in dit bestand, waardoor een CLI-deploy hem op de
+# standaard verify_jwt=true zou zetten en de gateway de nachtelijke back-up zou
+# 401'en. Live draait hij op false (v9).
+verify_jwt = false
+entrypoint = "./functions/db-backup/index.ts"
+
+[functions.cron-watchdog]
+enabled = true
+# Idem: dagelijkse aanroep vanuit pg_cron, geen gebruikers-JWT. Dit is de
+# functie die alarm slaat als een cron stilvalt — juist die moet niet zelf
+# stilvallen door een ontbrekend blok hier. Live op false (v10).
+verify_jwt = false
+entrypoint = "./functions/cron-watchdog/index.ts"
