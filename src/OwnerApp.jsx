@@ -7692,7 +7692,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   let peakIdx = 0;
                   data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
                   const peakVal = data[peakIdx];
-                  const fmt = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
+                  // Twee decimalen, net als elk ander bedrag in de app: een
+                  // grafieklabel van "€192" naast een tegel van "€192,40" laat
+                  // de eigenaar twijfelen aan haar eigen cijfers.
+                  const fmt = (n) => (Number(n) || 0).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                   return (
                     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
                       {/* Faint baseline so the chart reads as a floor + bars,
@@ -9898,7 +9901,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   let peakIdx = 0;
                   data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
                   const peakVal = data[peakIdx];
-                  const fmtN = (n) => Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
+                  // Zie de toelichting bij de sparkline op het dashboard: ook
+                  // hier twee decimalen, zodat label en tegel gelijk lopen.
+                  const fmtN = (n) => (Number(n) || 0).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                   return (
                     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
                       <line x1={padL} y1={padT + innerH + 0.5} x2={padL + innerW} y2={padT + innerH + 0.5} stroke={c.border} strokeWidth="0.5" />
