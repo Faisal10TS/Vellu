@@ -1,0 +1,53 @@
+-- 2026-08-18 — Realtime aanzetten: de agenda werkte nooit live bij
+--
+-- WAT ER MIS WAS
+-- src/OwnerApp.jsx (regel 4063) en src/StaffApp.jsx (regel 253) abonneren zich
+-- allebei op postgres_changes voor de tabel appointments. Die abonnementen
+-- hebben nog nooit iets ontvangen: de publicatie supabase_realtime bevatte NUL
+-- tabellen (puballtables = false, 0 rijen in pg_publication_rel). Zonder
+-- publicatie stuurt Postgres de wijzigingen niet naar de replicatiestroom, dus
+-- de callbacks werden nooit aangeroepen — zonder foutmelding, want het
+-- abonnement zelf slaagt gewoon.
+--
+-- Gevolg voor de gebruiker: komt er een boeking binnen, dan verschijnt die niet
+-- vanzelf in de agenda. Zowel de eigenaar als de medewerker moest verversen.
+--
+-- WAAROM NU PAS
+-- Dit is bewust ná 20260818223115 (medewerker_grenzen_echt_afdwingen) gezet.
+-- Realtime levert bij postgres_changes alleen rijen die de abonnee volgens RLS
+-- mag zien. Was dit eerder aangezet, dan had een medewerker live de afspraken
+-- van collega's binnengekregen — precies het lek dat die migratie dichtte.
+--
+-- REPLICA IDENTITY blijft op default (primary key). Dat is genoeg voor wat de
+-- app doet: bij INSERT en UPDATE stuurt Postgres de volledige nieuwe rij mee
+-- (de app vervangt op id), en bij DELETE heeft de app alleen payload.old.id
+-- nodig om de rij uit de lijst te filteren. FULL zou de WAL onnodig groter
+-- maken zonder dat er iets mee gebeurt.
+
+alter publication supabase_realtime add table public.appointments;
+
+-- GEMETEN NA HET AANZETTEN
+-- 1. Publicatie bevat nu 1 tabel (appointments), met insert/update/delete.
+-- 2. Zodra de eerste client zich abonneerde verscheen het replicatieslot
+--    supabase_realtime_replication_slot_... (plugin wal2json, active = true,
+--    lezer aangesloten, 0 bytes achterstand). De leiding loopt dus echt; vóór
+--    deze migratie bestond dat slot niet.
+-- 3. RLS-controle: met een anonieme abonnee op dezelfde tabel is een afspraak
+--    van de demo-salon gewijzigd (status op zijn eigen waarde gezet, dus een
+--    WAL-record zonder inhoudelijke verandering). De anonieme abonnee ontving
+--    NUL gebeurtenissen. Realtime past de policies dus toe en stuurt geen rijen
+--    die de abonnee niet mag zien.
+-- Nog niet getoetst, want daar is een login voor nodig: dat een INGELOGDE
+-- medewerker zijn eigen wijzigingen wél binnenkrijgt.
+
+-- BEKENDE BEPERKING, bewust zo gelaten.
+-- StaffApp abonneert met filter `staff_id=eq.<eigen id>` zolang de schakelaar
+-- "Team ziet elkaars agenda" uit staat. Een afspraak zonder toegewezen
+-- medewerker ("Geen voorkeur") heeft staff_id = null en valt dus buiten dat
+-- filter: de medewerker ziet zo'n boeking wél na verversen, maar niet live.
+-- Breder abonneren (op owner_id) zou dat oplossen en zou dankzij de nieuwe
+-- RLS-grens ook veilig zijn — maar dan hangt de afscherming volledig aan
+-- Realtime's RLS-afhandeling in plaats van aan een filter die per definitie
+-- niets anders kan leveren dan de eigen rijen. Die zekerheid is meer waard dan
+-- het live doorkomen van een ongetoewezen boeking; pas dit pas aan nadat je met
+-- twee sessies naast elkaar hebt vastgesteld hoe Realtime hier met RLS omgaat.
