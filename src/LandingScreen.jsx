@@ -734,17 +734,48 @@ function StickyStartPill({ onClick, label }) {
   );
 }
 
+// Is er überhaupt iets om te onthullen? Twee bezoekers slaan de animatie over:
+// wie "beperk beweging" aan heeft staan, en wie een browser zonder
+// IntersectionObserver gebruikt. Beide antwoorden liggen al vast vóór de eerste
+// render — ze hangen niet van de DOM af — dus is dit een berekening, geen effect.
+// Zonder window draait er geen browser om iets aan te meten; dan blijft het
+// antwoord false en pakt de observer het in de echte browser alsnog op.
+// Staat los van de component zodat useState hem als lazy initializer kan krijgen.
+function revealsInstantly() {
+  if (typeof window === "undefined") return false;
+  if (typeof IntersectionObserver === "undefined") return true;
+  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
 // Scroll-reveal wrapper: children fade/slide in the first time they enter
 // the viewport. No-ops (instantly visible) when IntersectionObserver is
 // unavailable or the user prefers reduced motion.
 function Reveal({ children, delay = 0 }) {
   const ref = useRef(null);
-  const [vis, setVis] = useState(false);
+  // Beginwaarde uit revealsInstantly() in plaats van uit een effect. Wat de
+  // gebruiker hiervan merkte: wie "beperk beweging" aan had staan, kreeg de
+  // blokken tóch zien vervagen. De oude code rende eerst op opacity 0 en zette
+  // pas ná die render vis=true — en de transition van 0.65s staat er altijd op,
+  // dus die sprong van 0 naar 1 wérd de animatie die de bezoeker juist had
+  // uitgezet. Nu is de eerste verf al opacity 1: geen overgang, geen beweging.
+  // Voor wie animatie wél wil verandert er niets: die begint nog steeds op
+  // false en wordt pas door de observer onthuld. De extra render die dit
+  // uitspaart trof dus alleen de reduced-motion-bezoeker — de gewone bezoeker
+  // kreeg die nooit, want in de oude code stond die setVis in dezelfde tak.
+  const [vis, setVis] = useState(revealsInstantly);
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    if (reduced || typeof IntersectionObserver === "undefined") { setVis(true); return; }
+    // De deps blijven leeg, en dat is hier geen weggemoffelde melding: deze
+    // effect leest alleen ref (stabiel) en een functie op module-niveau, dus
+    // exhaustive-deps heeft niets te vragen. vis hoort er sowieso niet in — de
+    // effect leest hem niet, en als dependency zou hij een nieuwe observer op
+    // een al onthuld element zetten precies wanneer het werk klaar is.
+    // De herhaalde revealsInstantly() hieronder spaart alleen werk: wie alles
+    // al ziet, hoeft geen zeven observers aan de pagina te hebben hangen.
+    if (!el || revealsInstantly()) return;
+    // Deze setVis blijft staan en hoort hier: hij zit in de callback van een
+    // extern systeem (de observer), niet synchroon in de effect-body. Dat is
+    // precies waar effects voor bedoeld zijn — abonneren en reageren.
     const io = new IntersectionObserver(([e]) => {
       if (e.isIntersecting) { setVis(true); io.disconnect(); }
     }, { threshold: 0.1, rootMargin: "0px 0px -40px 0px" });

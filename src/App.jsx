@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
@@ -318,11 +318,32 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
   const [staffUser, setStaffUser] = useState(propStaffUser || null);
   const [loading, setLoading] = useState(!propStaffUser);
 
+  // Wat merkte de gebruiker hiervan? Niets — dit was alleen een waarschuwing.
+  // Toch niet blind de dependency erbij, want navigate is hier géén stabiele
+  // referentie: zonder data-router (wij draaien <BrowserRouter>) geeft
+  // useNavigate() de variant terug die op de pathname gememoïseerd is, dus de
+  // referentie wisselt zodra de URL wijzigt.
+  // Een échte lus wordt het niet, ook niet als je navigate wél toevoegt: dit
+  // scherm navigeert naar /owner en is dan al ontkoppeld, en de setStaffUser
+  // hieronder verandert de pathname niet, dus daar hertriggert niets van.
+  // Het probleem is minder luid en daarom makkelijker over het hoofd te zien:
+  // komt er ooit een subroute bij (/staff/agenda), dan wordt bij élke
+  // URL-wijziging de supabase-auth-subscription afgebroken en opnieuw
+  // aangemeld en start er een verse hydrate() — een database-ronde per klik,
+  // terwijl deze effect bedoeld is als eenmalige sessiecontrole.
+  // Een ref is dan de kleinste ingreep: de effect blijft eenmalig, de aanroep
+  // blijft de actuele navigate. useCallback kan niet, want navigate komt uit
+  // react-router en die definitie is niet van ons. En een eslint-disable zou
+  // óók de propStaffUser-melding hieronder doven — precies het deel dat wél
+  // een echte fout is en zichtbaar moet blijven.
+  const navigateRef = useRef(navigate);
+  useEffect(() => { navigateRef.current = navigate; });
+
   useEffect(() => {
     if (propStaffUser) return;
     let cancelled = false;
     // Same watchdog as the owner entry — never leave a bare spinner up.
-    const watchdog = setTimeout(() => { if (!cancelled) { setLoading(false); navigate("/owner", { replace: true }); } }, 12000);
+    const watchdog = setTimeout(() => { if (!cancelled) { setLoading(false); navigateRef.current("/owner", { replace: true }); } }, 12000);
     const hydrate = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -339,12 +360,25 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
       if (cancelled) return;
       clearTimeout(watchdog);
       setLoading(false);
-      navigate("/owner", { replace: true });
+      navigateRef.current("/owner", { replace: true });
     };
     hydrate();
     const { data: authSub } = supabase.auth.onAuthStateChange((_event, _session) => { if (!propStaffUser) hydrate(); });
     return () => { cancelled = true; clearTimeout(watchdog); authSub?.subscription?.unsubscribe?.(); };
-  }, []);
+    // propStaffUser hoort er wél in. Eerlijk: vandaag merkt niemand hier iets
+    // van, want geen enkele aanroeper geeft de prop mee — <Route path="/staff">
+    // rendert dit scherm kaal, dus propStaffUser is altijd undefined. Dit is de
+    // sluimerende variant van de fout, niet een klacht die binnenkomt. Zodra een
+    // ouder de medewerker-sessie wél doorgeeft, bevriest een lege array de keuze
+    // "de ouder regelt het" op de eerste render: logt de medewerker daarna uit
+    // (prop valt terug naar null), dan blijft dit scherm op de oude sessie staan
+    // en begint het nooit aan zijn eigen sessiecontrole. Toevoegen kan geen lus
+    // geven — de effect leest de prop alleen, schrijft hem niet, en zolang hij
+    // gevuld is doet de body niets. Eerlijk erbij: dit repareert alleen de
+    // sessiecontrole. Het lokale staffUser-veld wordt uit de eerste prop
+    // geïnitialiseerd en volgt latere prop-wijzigingen niet, dus wie de prop
+    // ooit wél gaat meegeven moet die initialisatie meenemen.
+  }, [propStaffUser]);
 
   const handleLogout = propOnLogout || (async () => {
     await supabase.auth.signOut();

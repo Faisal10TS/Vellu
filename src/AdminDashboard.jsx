@@ -7,7 +7,7 @@
 // Lazy-loaded from App.jsx so the ~10KB of admin-only code isn't in the
 // bundle a regular owner or customer downloads.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle } from "./shared.jsx";
@@ -68,6 +68,12 @@ export default function AdminDashboard({ onLogout }) {
   const [subs, setSubs] = useState([]);
   const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | cron
   const [search, setSearch] = useState("");
+  // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
+  // state en niet los in de JSX: met Date.now() midden in de render schoof de
+  // 14-dagengrens mee met elke willekeurige re-render — heen en weer klikken
+  // tussen de tabs volstond — zodat dezelfde onveranderde `subs` twee keer een
+  // andere lijst kon opleveren.
+  const [now, setNow] = useState(() => Date.now());
 
   // Gate on is_admin() + load everything in parallel on mount.
   useEffect(() => {
@@ -100,6 +106,43 @@ export default function AdminDashboard({ onLogout }) {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Het peilmoment één keer vastzetten bij het laden zou een dashboard dat de
+  // hele dag openstaat laten stilstaan: een trial die vanmiddag de
+  // 14-dagengrens binnenkomt verschijnt dan pas na F5 — precies de
+  // conversiekans die het blok hieronder moet opvangen. Vandaar een uurtik,
+  // ruim fijn genoeg voor een venster van veertien dagen. Geen renderlus: de
+  // dependency-array is leeg, dus setNow zet dit effect niet opnieuw op.
+  //
+  // Bewust géén her-fetch van de RPC's bij die tik. Gevolg: de lijst hieronder
+  // loopt na een paar uur openstaan vóór op de statkaart "N ending in 14 days",
+  // die uit admin_billing_overview komt en bij het laden bevroor. Dat verschil
+  // bestond al — de oude inline Date.now() dreef bij élke re-render weg — en is
+  // nu alleen voorspelbaar; zeven RPC's per uur per open dashboard wegen niet
+  // op tegen die ene eenheid. De relTime-labels elders op de pagina liften mee
+  // op deze re-render, maar reken daar niet op: op uurbasis blijft "12m ago"
+  // tot een uur staan.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 3_600_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Trials die binnen 14 dagen aflopen. Stond twee keer letterlijk in de JSX
+  // (één keer voor de `.length > 0`-check, één keer voor de rijen); met een
+  // peilmoment dat per aanroep verschilde konden die twee het in theorie
+  // oneens zijn — een kop zonder rijen eronder. Nu delen ze één berekening.
+  // De voorwaarde spiegelt bewust die van trials_ending_14d in
+  // admin_billing_overview (status trialing, trial_ends_at gezet en <= nu + 14
+  // dagen — óók als die datum al verstreken is), zodat kaart en lijst bij het
+  // laden hetzelfde zeggen. Verschuif je de grens hier, verschuif hem daar mee.
+  const endingTrials = useMemo(
+    () => subs.filter(s =>
+      s.classification === "trialing" &&
+      s.trial_ends_at &&
+      new Date(s.trial_ends_at).getTime() <= now + 14 * 864e5
+    ),
+    [subs, now],
+  );
 
   if (isAdmin === null) {
     return (
@@ -263,10 +306,10 @@ export default function AdminDashboard({ onLogout }) {
             </div>
 
             {/* Trials ending soon — the conversion window worth chasing */}
-            {subs.filter(s => s.classification === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() <= Date.now() + 14 * 864e5).length > 0 && (
+            {endingTrials.length > 0 && (
               <div style={{ background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: accent, marginBottom: 8 }}>Trials ending soon — conversion window</div>
-                {subs.filter(s => s.classification === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() <= Date.now() + 14 * 864e5).map(s => (
+                {endingTrials.map(s => (
                   <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", fontSize: 13 }}>
                     <span style={{ fontWeight: 500 }}>{s.business_name} <span style={{ color: c.textMuted, fontSize: 11, textTransform: "capitalize" }}>· {s.plan}</span></span>
                     <span style={{ color: c.textSub, fontSize: 12 }}>trial ends {fmtDate(s.trial_ends_at)}</span>

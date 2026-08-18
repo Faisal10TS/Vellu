@@ -4075,6 +4075,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+    // De gebruiker merkte hier niets van — dit was alleen een lint-melding.
+    // Bewust alleen owner_id in de dependency-array. Doorslaggevend: `update`
+    // wordt pas ruim honderd regels verderop met `const` gedeclareerd. React
+    // leest deze array al tijdens de render, dus zou hij daar staan, dan gooit
+    // JavaScript een TDZ-fout: wit dashboard, elke keer, voor elke salon.
+    // Ook zonder dat bezwaar zou toevoegen schaden. `update` en `toast` zijn
+    // per render nieuwe objecten, dus de effect zou bij ELKE render het
+    // websocket-kanaal sluiten en een nieuw openen. Een verse subscription
+    // haalt niets in wat tijdens het omschakelen langskwam, dus in dat gat
+    // missen we de INSERT van een binnenkomende boeking — echte gegevens, geen
+    // cosmetisch probleem. En omdat de callback zelf state zet, lokt elke
+    // binnenkomende wijziging meteen weer zo'n omschakeling uit.
+    // Verouderd meelezen kan niet: beide schrijven via de functionele vorm
+    // (setSalonData(d => …) / setToasts(prev => …)), zodat een eenmalig
+    // vastgelegde verwijzing nog steeds op de actuele state werkt. De enige
+    // waarde die hier écht meebeweegt is de taal van de toast-tekst, en die
+    // loopt daarom hierboven al via langRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salonData.owner_id]);
 
   const accent = salonData.accent;
@@ -4175,13 +4193,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return updated;
   });
 
-  // Handle Google Calendar OAuth redirect
+  // Terugkeer uit de Google-agenda-koppeling: die stuurt de eigenaar terug met
+  // ?google=connected in de URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("google") === "connected") {
-      update(d => { d.google_calendar_connected = true; return d; });
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    if (params.get("google") !== "connected") return;
+    // Eerst wachten tot de dashboardlading klaar is. Die zet salonData in één
+    // keer opnieuw op de databasewaarden — google_calendar_connected inbegrepen
+    // — dus een vlag die we ervóór zetten wordt een tel later weer overschreven.
+    // En omdat we de parameter hieronder uit de adresbalk halen, kreeg deze
+    // effect daarna geen tweede kans meer: de eigenaar zag dan na het koppelen
+    // alsnog de "Koppelen"-knop staan tot hij de pagina ververste. Dit is ook
+    // precies waarom `dataLoaded` de dependency is: het moet één keer draaien,
+    // en dan ná de lading.
+    if (!dataLoaded) return;
+    update(d => { d.google_calendar_connected = true; return d; });
+    // Parameter weg uit de adresbalk, anders "koppelt" elke refresh opnieuw.
+    window.history.replaceState({}, "", window.location.pathname);
+    // `update` staat er bewust niet bij: het is een wrapper die bij elke render
+    // opnieuw ontstaat, dus toevoegen laat dit blok bij iedere render langs de
+    // URL lopen terwijl er niets aan die URL kan veranderen. Verouderd lezen kan
+    // niet, want update() schrijft via setSalonData(d => …).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataLoaded]);
 
   // Load client list when add appointment modal opens
@@ -4256,6 +4289,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           .sort((a, b) => (a.first_name || "").localeCompare(b.first_name || "")));
       })();
     }
+    // De gebruiker merkte hier niets van — dit was alleen een lint-melding.
+    // Bewust GEEN salonData.appointments erbij. Deze lijst is een momentopname
+    // van het moment dat de modal opengaat, en dat moment komt telkens terug:
+    // showAddAppt springt bij iedere klik op "+ Afspraak" van false naar true,
+    // dus de lijst wordt bij elke opening opnieuw opgebouwd uit de dán geldende
+    // afspraken. Verouderd raken kan hij daardoor niet — een klant die net is
+    // aangemaakt staat er bij de volgende opening gewoon in.
+    // Toevoegen zou juist schade doen: dit blok begint met
+    // setSelectedClientKey(""), en de afsprakenlijst krijgt een nieuwe identiteit
+    // bij élke mutatie, ook die van het realtime-kanaal hierboven. De eigenaar
+    // die net een klant had aangeklikt zou zijn keuze zien wegspringen zodra er
+    // ergens een boeking binnenkomt, met twee extra databasequery's per keer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
   const [invoicePickerFor, setInvoicePickerFor] = useState(null); // appointment id when the extra-profile picker is open

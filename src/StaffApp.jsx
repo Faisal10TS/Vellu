@@ -140,7 +140,28 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   }, []);
 
   // Load data
+  //
+  // Deze laadronde is bewust NIET eenmalig meer. Het staffUser-object wordt
+  // door StaffEntryPage bij élk auth-event (token-refresh, opnieuw inloggen)
+  // vers uit de database gehaald en als nieuwe prop doorgegeven, zónder dat dit
+  // scherm opnieuw aangemaakt wordt. Zowel wie er ingelogd is als de
+  // teamzichtbaarheid van de salon kan dus wijzigen terwijl de medewerker hier
+  // gewoon staat te kijken. Met een lege dep-array draaide de effect dan niet
+  // opnieuw: zette de eigenaar "team ziet elkaars agenda" uit, dan bleven de
+  // afspraken van collega's in de lijst staan — en omdat de filterchips
+  // tegelijk verdwijnen, kon de medewerker ze niet eens meer wegfilteren.
+  // Andersom zag hij na het aanzetten niets van het team tot hij de pagina
+  // herlaadde. Deps toevoegen is hier veilig: geen van deze waarden komt uit
+  // state die deze effect zelf zet, dus een hertrigger-lus kan niet ontstaan.
+  // service_ids is geen array-per-fetch maar simpelweg undefined (staff_members
+  // heeft die kolom niet; de koppeling leeft in staff_services), dus ook die
+  // dep is stabiel.
   useEffect(() => {
+    // Nu de effect opnieuw kan starten, kunnen er twee laadrondes tegelijk
+    // lopen. Zonder deze vlag mag een trage oude ronde de verse uitkomst
+    // overschrijven — dan staat de oude lijst er alsnog, precies het probleem
+    // dat we hierboven repareren.
+    let cancelled = false;
     const load = async () => {
       try {
         // Load ALL salon appointments (staff RLS allows it) so combined bookings
@@ -161,6 +182,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           // Team roster for the filter chips — only needed when the feature is on.
           seeAll ? supabase.from("staff_members").select("id, name, position").eq("owner_id", salonProfile.id).eq("active", true).order("position") : Promise.resolve({ data: [] }),
         ]);
+        if (cancelled) return;
         const isMine = (a) => {
           if (a.staff_id === staffMember.id) return true;
           const assignments = a.staff_assignments || {};
@@ -194,16 +216,48 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       }
     };
     load();
-  }, []);
+    return () => { cancelled = true; };
+  }, [salonProfile.id, staffMember.id, staffMember.user_id, staffMember.service_ids, seeAll]);
 
   // Real-time subscription for staff appointments
+  // seeAll bepaalt het server-side filter van dit kanaal: de hele salon of
+  // alleen de eigen afspraken. Zonder seeAll in de deps hield het kanaal na een
+  // wissel van de schakelaar het oude filter vast. Wat de medewerker daarvan
+  // merkte: zette de eigenaar teamzicht uit, dan bleven nieuwe afspraken van
+  // collega's live binnendruppelen en belandden ze — zonder filterchips —
+  // rechtstreeks in zijn agenda; zette de eigenaar het aan, dan kwam er juist
+  // niets van het team binnen tot een herlaadbeurt. Toevoegen kan hier veilig:
+  // seeAll komt uit de props en niet uit de appointments-state die deze effect
+  // zelf bijwerkt, dus het kanaal wordt alleen heropgezet als de schakelaar
+  // écht omgaat.
+  //
+  // Daarbij hoort wél dat de kanaalNAAM het filter meedraagt, en dat is geen
+  // cosmetica. supabase.channel(naam) maakt geen nieuw kanaal als er al één met
+  // die naam in de lijst staat — het geeft het bestaande terug. En
+  // removeChannel() is asynchroon: het zet het oude kanaal op "leaving" en haalt
+  // het pas uit die lijst als de server de afmelding bevestigt. React draait de
+  // opruiming en de nieuwe effect in dezelfde tick, dus met één vaste naam kreeg
+  // de tweede ronde precies dat wegvallende kanaal terug; .subscribe() slaat de
+  // join dan over (die doet alleen iets vanuit status "closed"), en zodra de
+  // afmelding binnenkomt wist supabase alles met die naam uit de lijst — óók het
+  // "nieuwe" kanaal — waarna removeChannel de websocket sluit omdat er nul
+  // kanalen over lijken. Wat de medewerker daarvan merkte: na het omzetten van
+  // de teamschakelaar kwam er geen enkele live update meer binnen — geen nieuwe
+  // boeking, geen annulering, niets — tot hij de pagina herlaadde. Precies het
+  // euvel dat de dep hierboven moest verhelpen, alleen erger. Met een naam per
+  // filter is het tweede kanaal echt nieuw en meldt het zich netjes aan.
   useEffect(() => {
     if (!staffMember.id || !salonProfile.id) return;
     const channel = supabase
-      .channel("staff-appointments")
+      .channel(`staff-appointments-${seeAll ? `all-${salonProfile.id}` : staffMember.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: seeAll ? `owner_id=eq.${salonProfile.id}` : `staff_id=eq.${staffMember.id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
-          setAppointments(a => [payload.new, ...a]);
+          // Tijdens het omzetten van de schakelaar leeft het oude kanaal nog even
+          // naast het nieuwe (de afmelding kost een netwerkrondje, en een
+          // vertrekkend kanaal blijft zijn callbacks aanroepen). Een boeking die
+          // precies in dat gaatje binnenkomt stond er anders twee keer in. Op id
+          // ontdubbelen is goedkoper dan die race dichttimmeren.
+          setAppointments(a => a.some(x => x.id === payload.new.id) ? a : [payload.new, ...a]);
         } else if (payload.eventType === "UPDATE") {
           setAppointments(a => a.map(x => x.id === payload.new.id ? payload.new : x));
         } else if (payload.eventType === "DELETE") {
@@ -212,7 +266,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [staffMember.id, salonProfile.id]);
+  }, [staffMember.id, salonProfile.id, seeAll]);
 
   // Does appointment `a` involve staff member `id` (primary, assignment map or
   // any breakdown part)? Same rule the owner agenda/dashboard use.

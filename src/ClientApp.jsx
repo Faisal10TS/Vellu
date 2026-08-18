@@ -760,6 +760,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   useEffect(() => {
     setSelectedServices(prev => prev.map(item => item.staff && !isStaffAvailable(item.staff, date) ? { ...item, staff: null } : item));
     setTime(null);
+    // `isStaffAvailable` ontbreekt bewust in de array. Die functie ontstaat bij
+    // elke render opnieuw, en dit blok zet zelf state — toevoegen geeft dus een
+    // lus: state → nieuwe render → nieuwe functie-identiteit → effect opnieuw.
+    // Die lus zou via setTime(null) de zojuist gekozen tijd van de klant blijven
+    // wissen; de tijdknop zou niet ingedrukt te krijgen zijn. Verouderd meelezen
+    // kan hier niet: de functie leest alleen de initialSalon-prop (in App.jsx
+    // één keer gezet vóór dit scherm verschijnt) en `date`, en `date` is juist
+    // de trigger hierboven.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
   const isScrollingToTab = useRef(false);
@@ -851,7 +859,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // dec jan '27 feb '27" leest een stuk rustiger dan zeven keer '26/'27.
     const firstYear = out[0]?.year;
     return out.map(m => ({ ...m, label: m.year === firstYear ? MON[m.month] : `${MON[m.month]} '${String(m.year).slice(2)}` }));
-  }, [windowDays, lang]);
+    // MON in plaats van lang: dit was al goed (MON hángt alleen van lang af, dus
+    // de labels vertaalden altijd al mee), maar we zetten in de array wat de
+    // berekening écht leest. MON is een verwijzing naar één van drie constanten
+    // uit shared.jsx — geen object dat elke render opnieuw ontstaat — dus dit
+    // hertriggert niet vaker dan bij een taalwissel.
+  }, [windowDays, MON]);
   // Welke maand de balk oplicht: wat de klant zelf aanklikte, anders de maand
   // van de gekozen datum, anders de eerste maand van het venster.
   const [monthView, setMonthView] = useState(null);
@@ -1258,6 +1271,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   useEffect(() => {
     if (waitlistOpen) setWaitlistDates(date ? [date] : []);
     else setWaitlistDates([]);
+    // `date` ontbreekt bewust, ook al leest de regel hierboven hem. Toevoegen
+    // zou hier juist een bug máken: dan wist elke dagkeuze binnen de modal de
+    // lijst die de klant daar net staat aan te vinken, en houdt hij nooit meer
+    // dan één dag over. `date` is alleen bedoeld als STARTwaarde op het moment
+    // van openen, en op dat moment is de closure vers — waitlistOpen flipt in
+    // dezelfde render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waitlistOpen]);
 
@@ -1419,7 +1438,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     };
     loadRange();
     return () => { cancelled = true; };
-  }, [initialSalon.id, slotsRefreshKey, selectedLocation?.id, maxAdvanceDays]);
+    // windowDays in plaats van maxAdvanceDays: het is dezelfde afhankelijkheid —
+    // windowDays wordt puur uit maxAdvanceDays berekend — dus de klant heeft hier
+    // nooit iets van gemerkt. Toch noemen we de waarde die de query zelf gebruikt:
+    // groeit die formule ooit een tweede bron, dan verschuift het opgehaalde
+    // venster niet stilletjes zonder dat we opnieuw laden. Meegenomen voordeel:
+    // boven de noodrem van 400 dagen blijft windowDays gelijk, dus een salon die
+    // 500 naar 600 dagen zet triggert nu geen zinloze extra query meer.
+  }, [initialSalon.id, slotsRefreshKey, selectedLocation?.id, windowDays]);
 
   // Check if a time slot overlaps with existing bookings (including break time)
   // For multi-staff salons: only check slots for the same staff member(s)
@@ -1684,6 +1710,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       map[ds] = times.some(tt => !isTimeSlotBooked(tt, booked)) ? "open" : "full";
     }
     return map;
+    // De zes namen die eslint hier mist (`days` plus de vijf hulpfuncties
+    // hierboven) ontstaan bij elke render opnieuw. Toevoegen betekent: deze
+    // dag-voor-dag slotberekening élke render opnieuw draaien — precies wat deze
+    // memo moet voorkomen, en op een venster van honderden dagen voelbaar traag
+    // op een telefoon. Wat werkelijk kan bewegen staat er wél in: de opgehaalde
+    // boekingen, de dienstkeuze, de vestiging en de twee venstergrenzen. De
+    // hulpfuncties lezen daarnaast alleen de initialSalon-prop, en die wordt in
+    // App.jsx één keer gezet vóór dit scherm verschijnt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeBooked, servicesSig, selectedLocation?.id, maxAdvanceDays, minAdvanceHours]);
 
@@ -1695,6 +1729,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       if (dayAvailability[ds] === "open") return ds;
     }
     return null;
+    // `days` ontbreekt bewust: die reeks ontstaat elke render opnieuw en zou de
+    // memo waardeloos maken. dayAvailability hierboven is op exact dezelfde
+    // dagenreeks gebouwd, dus zodra er iets aan de beschikbaarheid verandert
+    // verandert die map en draait dit blok mee.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayAvailability]);
 
