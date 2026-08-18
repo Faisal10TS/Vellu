@@ -2427,7 +2427,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       // Levert altijd een token, ook voor een afspraak van
                       // morgen; alleen bij een mislukte insert is het null en
                       // laat de mail de knop weg.
-                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
+                      // Landcode mee, zodat de vervaldatum in de tijdzone van de
+                      // SALON valt en niet in die van het apparaat van de
+                      // medewerker (die kan op reis of in een ander land zitten).
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonProfile.country_code);
                       await sendEmails("booking_confirmation", {
                         client_name: addApptForm.client_name, client_email: email,
                         service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,

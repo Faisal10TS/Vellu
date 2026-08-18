@@ -280,6 +280,49 @@ async function sendEmails(type, booking) {
   }
 }
 
+// Tijdzone per land — één op één de tabel uit de edge-functies
+// (book-appointment, send-reminders), zodat frontend en server nooit uit elkaar
+// lopen. Via Intl en niet met een vaste offset-tabel, want Amsterdam wisselt
+// tussen +1 en +2 en die grens ligt elk jaar ergens anders; de Caribische
+// eilanden (AW/CW/BQ/SX) staan het hele jaar op UTC-4.
+const TZ_BY_COUNTRY = {
+  NL: "Europe/Amsterdam",
+  BE: "Europe/Brussels",
+  GB: "Europe/London",
+  AW: "America/Curacao",
+  CW: "America/Curacao",
+  BQ: "America/Curacao",
+  SX: "America/Curacao",
+};
+// Onbekend of ontbrekend land valt terug op Amsterdam, net als tzFor() in de
+// edge-functies — de meeste salons staan in Nederland.
+const tzFor = (code) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+
+// Hoeveel de opgegeven zone op dát moment van UTC afwijkt, in ms. We laten Intl
+// de datum in de doelzone formatteren en lezen het verschil met de UTC-waarde
+// terug; zo hoeven we zomertijd nergens zelf te berekenen.
+function tzOffsetMs(at, tz) {
+  try {
+    const p = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(at)) p[part.type] = part.value;
+    const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return asUtc - at.getTime();
+  } catch { return 0; } // onbekende zone: liever de oude UTC-aanname dan crashen
+}
+
+// "2026-08-18" + "14:30" in zone tz → het echte UTC-moment. Null bij onleesbare
+// invoer, zodat de caller de knop kan weglaten in plaats van een Invalid Date
+// door te geven aan toISOString() (dat gooit).
+function localToUtc(dateStr, timeStr, tz) {
+  const naive = new Date(`${dateStr}T${timeStr}:00Z`);
+  if (isNaN(naive.getTime())) return null;
+  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+}
+
 // Create a cancellation token for a manually-booked appointment so the
 // client's confirmation email carries the same cancel button a self-booked
 // client gets (book-appointment creates these server-side; dashboard bookings
@@ -295,21 +338,22 @@ async function sendEmails(type, booking) {
 // hoort op één plek te wonen — cancel-appointment toetst cancel_deadline_hours
 // al — dus geven we nu altijd een token uit, net als book-appointment.
 //
-// TIJDZONE: `${date}T${time}:00` zonder achtervoegsel wordt door de browser in
-// de LOKALE tijdzone gelezen. Dat is bewust: deze functie draait alleen in het
-// dashboard, waar de eigenaar/medewerker in de tijdzone van de eigen salon zit,
-// en de rest van de frontend rekent overal met diezelfde lokale tijd. De
-// serverkant (book-appointment) doet hetzelfde moment, maar dan expliciet via
-// localToUtc(date, time, salonTz) omdat een edge-functie in UTC draait en de
-// salon-tijdzone dus niet uit de omgeving kan afleiden.
+// TIJDZONE: het startmoment hoort in de tijdzone van de SALON gelezen te
+// worden, niet in die van de browser. `${date}T${time}:00` zonder achtervoegsel
+// leest de browser namelijk als LOKALE tijd, en dat klopt alleen zolang de
+// eigenaar fysiek in haar eigen tijdzone zit. Klopt ze vanuit Nederland een
+// afspraak in voor een Bonaire-salon (of zit ze op reis), dan zat de
+// vervaldatum er tot vier uur naast. We rekenen daarom precies zoals
+// supabase/functions/book-appointment/index.ts: tzFor(country_code) +
+// localToUtc(), zodat client en server hetzelfde moment uitrekenen.
 //
 // Retourneert de cancel-URL, of null als de datum/tijd onleesbaar is of de
 // insert faalt — dan is er domweg geen geldige link en laat de caller de knop
 // weg (een dode link is erger dan geen knop).
-async function createCancellationToken(appointmentId, date, time) {
+async function createCancellationToken(appointmentId, date, time, countryCode) {
   try {
-    const expiresAt = new Date(`${date}T${time}:00`);
-    if (isNaN(expiresAt.getTime())) { console.error("cancellation token: ongeldige datum/tijd", date, time); return null; }
+    const expiresAt = localToUtc(date, time, tzFor(countryCode));
+    if (!expiresAt) { console.error("cancellation token: ongeldige datum/tijd", date, time); return null; }
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -2423,6 +2467,9 @@ export {
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken,
+  // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
+  // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
+  TZ_BY_COUNTRY, tzFor, localToUtc,
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
   getPaymentLinkWithAmount,

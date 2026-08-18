@@ -3491,6 +3491,25 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   );
 }
 
+// Ondergrens van het afsprakenvenster dat in salonData zit: het dashboard laadt
+// bij het inloggen alleen de laatste ~90 dagen.
+//
+// WAAROM één gedeelde helper: de hoofdquery (.gte("date", …) bij het laden) en
+// élke plek die daarna beslist "zit deze dag al in het geheugen of moet ik hem
+// bijhalen?" moeten exact dezelfde datum uitrekenen. Dat deden ze niet: de query
+// rekende in UTC (toISOString) en de controles in lokale tijd (fmt). Ten westen
+// van UTC — Bonaire is UTC−4 — verschillen die 's avonds een dag: de query laadde
+// dan vanaf 21 mei terwijl de controles dachten dat 20 mei er óók in zat, dus
+// werd een rapport dat precies op 20 mei begon uit het geheugen bediend zónder
+// die dag. Precies het gat dat fetchApptsBetween juist moest dichten.
+//
+// KEUZE: UTC, want de query bepaalt wat er feitelijk geladen ís; de controles
+// horen de query te volgen en niet andersom. Erger dan een gat kan het niet
+// worden: de controles draaien later dan het laden, dus deze grens ligt altijd
+// op of ná die van de query. Het randgeval kost hooguit één extra query voor een
+// grensdag die toevallig tóch al in het geheugen zat — nooit een ontbrekende dag.
+const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: c } = useTheme();
@@ -3609,8 +3628,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     // Ondergrens van wat zeker in salonData zit: het venster is bij het laden
     // op (laadmoment − 90 dagen) gezet; "nu − 90 dagen" ligt daar nooit vóór,
-    // dus alles vanaf die datum is gegarandeerd al aanwezig.
-    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    // dus alles vanaf die datum is gegarandeerd al aanwezig. Zelfde berekening
+    // als de hoofdquery — zie loadedWindowFrom().
+    const loadedFrom = loadedWindowFrom();
     if (!salonData?.owner_id || !kassaDay || kassaDay >= loadedFrom) { setKassaDayExtra(null); return; }
     let alive = true;
     setKassaDayLoading(true);
@@ -3634,7 +3654,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // maakt maar een foutmelding toont.
   const fetchApptsBetween = async (from, to) => {
     if (!from || !to) return [];
-    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    // Zelfde grens als de hoofdquery (UTC) — een lokale berekening liep op
+    // Bonaire een dag uit de pas; zie loadedWindowFrom().
+    const loadedFrom = loadedWindowFrom();
     if (from >= loadedFrom || !salonData?.owner_id) {
       return (salonData?.appointments || []).filter(a => a.date >= from && a.date <= to);
     }
@@ -3685,7 +3707,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [periodExtra, setPeriodExtra] = useState(null); // { from, to, rows } | null
   const [periodExtraLoading, setPeriodExtraLoading] = useState(false);
   useEffect(() => {
-    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    const loadedFrom = loadedWindowFrom();
     const { from, to } = agendaPeriodRange;
     if (!salonData?.owner_id || !from || from >= loadedFrom) {
       setPeriodExtra(null); setPeriodExtraLoading(false); return;
@@ -3866,7 +3888,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           { data: manualClients },
           { data: staffBlocksData }
         ] = await Promise.all([
-          supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).order("date", { ascending: false }),
+          // De grens van dit venster is de referentie voor alle "zit deze dag al
+          // in het geheugen?"-controles verderop — daarom één gedeelde helper.
+          supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", loadedWindowFrom()).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
           supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position"),
           supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
@@ -4642,6 +4666,112 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     } finally { setProcessingApptId(null); }
   };
 
+  // Het annuleer-token van een afspraak ongeldig maken.
+  //
+  // WAAROM: zonder dit blijft er een geldige annuleerlink rondslingeren voor een
+  // afspraak die al geannuleerd is. De edge-functie cancel-appointment doet dit
+  // wél (`cancellation_tokens.used = true`) — de knop in de agenda deed het niet.
+  //
+  // LET OP: cancellation_tokens heeft vandaag alleen een INSERT- en een
+  // SELECT-policy voor ingelogde eigenaren, géén UPDATE-policy. PostgREST geeft
+  // dan geen fout maar raakt nul rijen. Daarom lezen we eerst of er überhaupt
+  // een open token is en vergelijken we dat met wat de update raakte: zo faalt
+  // dit zichtbaar in plaats van stil, en werkt het vanzelf zodra de policy er
+  // is. Het blokkeert de annulering nooit — die is op dit punt al geslaagd, en
+  // een achtergebleven token is niet gevaarlijk: cancel-appointment weigert elk
+  // token waarvan de afspraak al op 'cancelled' staat ("already_cancelled").
+  const invalidateCancelToken = async (apptId) => {
+    try {
+      // `used` mag NULL zijn (oude rijen), dus niet .eq("used", false).
+      const { data: open } = await supabase
+        .from("cancellation_tokens").select("id")
+        .eq("appointment_id", apptId).not("used", "is", true);
+      if (!open || open.length === 0) return; // geen token, of al gebruikt
+      const { data: hit, error } = await supabase
+        .from("cancellation_tokens").update({ used: true })
+        .eq("appointment_id", apptId).not("used", "is", true).select("id");
+      if (error) { console.error("annuleer-token ongeldig maken mislukt:", error); return; }
+      if (!hit || hit.length === 0) {
+        console.warn("annuleer-token NIET ongeldig gemaakt voor afspraak", apptId,
+          "— RLS staat geen UPDATE op cancellation_tokens toe; de link blijft bestaan (maar weigert, want de afspraak staat op cancelled).");
+      }
+    } catch (e) {
+      console.error("annuleer-token ongeldig maken mislukt:", e);
+    }
+  };
+
+  // Eerste wachtende klant op de wachtlijst laten weten dat er een plek vrijkomt.
+  //
+  // WAAROM hier en niet via de edge-functie cancel-appointment: die is
+  // TOKEN-gestuurd (het token in de annuleerlink ís de authenticatie). Een
+  // afspraak die de salon zelf intikt zonder klant-e-mail heeft helemaal geen
+  // token, dus de knop zou willekeurig falen. Erger: die functie handhaaft
+  // cancel_deadline_hours — de termijn die voor de KLANT geldt, juist niet voor
+  // de eigenaar, die op het laatste moment moet kunnen afzeggen — en ze mailt de
+  // eigenaar "je klant heeft geannuleerd", wat hier pertinent onwaar is.
+  //
+  // Vanuit de browser kan dit veilig, zonder enig geheim in de frontend: de
+  // eigenaar heeft een echte sessie, send-emails accepteert náást het interne
+  // server-naar-server-secret ook een geverifieerd gebruikers-JWT, en de RLS op
+  // waitlist geeft de eigenaar select + update op zijn eigen rijen.
+  //
+  // Retourneert de naam van de gemailde klant, of null als er niemand wachtte.
+  const notifyWaitlistSpot = async (a) => {
+    try {
+      if (salonData.waitlist_enabled === false) return null;
+      if (!salonData.owner_id || !a.date) return null;
+      const { data: entries } = await supabase
+        .from("waitlist").select("id, client_name, client_email")
+        .eq("owner_id", salonData.owner_id)
+        .eq("date", a.date)
+        .eq("status", "waiting")
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const entry = entries?.[0];
+      if (!entry || !entry.client_email) return null;
+      // Eerst claimen, dan pas mailen: lukt de status-update niet, dan gaat er
+      // ook geen mail uit — anders krijgt dezelfde klant bij élke volgende
+      // annulering opnieuw hetzelfde bericht. De .eq("status", "waiting") maakt
+      // het een claim, zodat een gelijktijdige annulering (of de edge-functie
+      // op het klantpad) niet dezelfde persoon dubbel aanschrijft.
+      const { data: claimed, error: updErr } = await supabase
+        .from("waitlist")
+        .update({ status: "notified", notified_at: new Date().toISOString() })
+        .eq("id", entry.id).eq("status", "waiting").select("id");
+      if (updErr || !claimed || claimed.length === 0) return null;
+      const mail = await sendEmails("waitlist_spot_open", {
+        client_name: entry.client_name,
+        client_email: entry.client_email,
+        salon_name: salonData.name,
+        salon_accent: salonData.accent || "",
+        salon_logo: salonData.logo_url || "",
+        // salonData.id is de slug; die maakt de "Boek nu"-knop in de mail.
+        salon_slug: salonData.id || "",
+        date: a.date,
+        // Een wachtlijstrij legt (nog) geen taal van de klant vast, dus is de
+        // markttaal van de salon het beste signaal — zelfde keuze als
+        // cancel-appointment maakt.
+        lang: ownerLangFor(salonData.country_code),
+      });
+      // sendEmails GOOIT niet bij een mislukte verzending, hij geeft
+      // { success: false } terug. Zonder deze controle meldt de toast "X van de
+      // wachtlijst is gemaild" terwijl er niets verstuurd is — en dat is precies
+      // het soort belofte waar de eigenaar op vertrouwt en dus niet mag liegen.
+      // De rij blijft wel op 'notified' staan (die claim was al gezet vóór het
+      // mailen, bewust, tegen dubbele berichten); de eigenaar ziet de klant dus
+      // in het wachtlijstoverzicht staan en kan handmatig contact opnemen.
+      if (!mail?.success) {
+        console.error("wachtlijstmail niet verstuurd voor", entry.client_email, mail?.error);
+        return null;
+      }
+      return entry.client_name || "";
+    } catch (e) {
+      // Best effort: de annulering zelf is al geslaagd en mag hier niet op stuk.
+      console.error("wachtlijst waarschuwen mislukt:", e);
+      return null;
+    }
+  };
+
   // Afspraak ANNULEREN — het normale pad als een afspraak niet doorgaat.
   //
   // WAAROM naast Verwijderen: de agenda kende alleen een harde delete, zonder
@@ -4698,7 +4828,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // annulering niet ongedaan laten lijken.
         console.error("booking_cancelled bericht mislukt:", e);
       }
-      toast.show(lang === "nl" ? "Afspraak geannuleerd" : lang === "es" ? "Cita cancelada" : "Appointment cancelled");
+      // De rest van de nasleep die de edge-functie cancel-appointment óók doet:
+      // het annuleer-token dichtzetten en de wachtlijst waarschuwen. Beide zijn
+      // best-effort en staan bewust ná de statuswijziging + klantbericht.
+      await invalidateCancelToken(a.id);
+      const notified = await notifyWaitlistSpot(a);
+      toast.show(
+        notified !== null
+          ? (lang === "nl" ? `Afspraak geannuleerd — ${notified || "iemand"} van de wachtlijst is gemaild`
+            : lang === "es" ? `Cita cancelada — se ha avisado por correo a ${notified || "alguien"} de la lista de espera`
+            : `Appointment cancelled — ${notified || "someone"} on the waitlist has been emailed`)
+          : (lang === "nl" ? "Afspraak geannuleerd" : lang === "es" ? "Cita cancelada" : "Appointment cancelled")
+      );
     } finally { setProcessingApptId(null); }
   };
 
@@ -4756,7 +4897,34 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // op de échte rij gebeuren — anders schrijft het deelblok zijn eigen tijd en
   // duur naar de parent (de afspraak verschuift en verliest duur) en ziet de
   // mailcheck geen tijdwijziging, dus krijgt de klant ook geen bericht.
-  const fullAppt = (a) => (a && (salonData.appointments || []).find(x => x.id === a.id)) || a;
+  //
+  // WAAROM deze helper ÁLLE bronnen van afspraakrijen moet kennen: salonData
+  // bevat alleen het 90-dagen-venster. Rijen van daarbuiten worden apart
+  // bijgehaald en leven bewust NIET in salonData (anders staan ze dubbel na
+  // herladen): periodExtra (agenda-periodebalk, oudere maand/jaar) en
+  // kassaDayExtra (kassalijst van een oude dag). Zocht fullAppt alleen in
+  // salonData, dan vond hij een oude afspraak niet en gaf hij het DEELBLOK
+  // terug — waarmee de bug hierboven precies terugkwam waar hij het meest
+  // verborgen is: een oude periode mét medewerkerfilter, waar opslaan de
+  // deeltijd naar de parent schreef en de afspraak verschoof. Nieuwe bron van
+  // afspraakrijen erbij? Voeg hem hier toe, anders keert deze bug terug.
+  //
+  // De volgorde is vast en bewust: salonData eerst, want dat is de enige bron
+  // die bij opslaan/annuleren meteen wordt bijgewerkt (update()) en dus de
+  // verste stand heeft; de bijgehaalde vensters zijn momentopnames. Bij een id
+  // dat in meerdere bronnen zit wint zo altijd dezelfde — geen wisselend
+  // gedrag. De _isSubSlot-check is een vangnet: deelblokken horen nooit in een
+  // bron te zitten, en als er ooit toch één in belandt mag hij niet gevonden
+  // worden.
+  const APPT_ROW_SOURCES = () => [salonData.appointments, periodExtra?.rows, kassaDayExtra?.rows];
+  const fullAppt = (a) => {
+    if (!a) return a;
+    for (const src of APPT_ROW_SOURCES()) {
+      const hit = (src || []).find(x => x.id === a.id && !x._isSubSlot);
+      if (hit) return hit;
+    }
+    return a;
+  };
   // Verplaatsen start óók altijd vanaf de ongesplitste rij, om dezelfde reden.
   const startReschedule = (raw) => setRescheduling(fullAppt(raw));
 
@@ -8162,7 +8330,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const isToday = day === today;
                     // Zelfde ondergrens als het fetch-effect hierboven: dagen
                     // vóór het geladen 90-dagen-venster komen uit kassaDayExtra.
-                    const loadedFrom = fmt(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+                    const loadedFrom = loadedWindowFrom();
                     const outOfRange = day < loadedFrom;
                     const extraReady = !!(kassaDayExtra && kassaDayExtra.day === day);
                     // Buiten het venster passen we hetzelfde filter toe als
@@ -15496,7 +15664,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       // Levert altijd een token, ook voor een afspraak van
                       // morgen; alleen bij een mislukte insert is het null en
                       // laat de mail de knop weg.
-                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time);
+                      // Landcode mee, zodat de vervaldatum in de tijdzone van de
+                      // SALON valt en niet in die van de browser — anders zit
+                      // een Bonaire-afspraak die vanuit NL wordt ingeklopt er
+                      // vier uur naast.
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonData.country_code);
                       const bookingConfirmPayload = {
                         client_name: addApptForm.client_name, client_email: email,
                         client_phone: addApptForm.client_phone || null,
