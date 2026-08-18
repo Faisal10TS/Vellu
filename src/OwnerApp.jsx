@@ -6092,13 +6092,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setInvoicePickerFor(null);
     try {
       const a = apptOverride || salonData.appointments.find(x => x.id === id);
+      // Buiten het blok gehesen: de lokale bijwerking onderaan draait ook als
+      // er geen afspraak gevonden is, en heeft het nummer dan nodig.
+      let sentInvoiceNumber = null;
       if (a) {
         const extras = salonData.invoice_profiles || [];
         const isExtra = profileIdx !== null && profileIdx !== undefined && extras[profileIdx];
         const p = isExtra ? extras[profileIdx] : null;
         const prefix = (p ? p.invoice_prefix : salonData.invoice_prefix) || "INV";
-        const nextNum = (p ? p.next_invoice_number : salonData.next_invoice_number) || 1;
+        // Het nummer komt uit de database, niet uit salonData. Dat is het hele
+        // punt: twee tabbladen lazen hier allebei dezelfde gecachte waarde en
+        // stuurden twee facturen met hetzelfde nummer de deur uit. De RPC hoogt
+        // op en geeft terug in één ondeelbare stap, dus een tweede aanroep
+        // krijgt gegarandeerd het volgende nummer.
+        const { data: rpcNum, error: numErr } = await supabase.rpc("next_invoice_number", {
+          p_owner: salonData.owner_id,
+          p_profile_key: p ? (p.id || null) : null,
+        });
+        if (numErr || !rpcNum) {
+          // Zonder gegarandeerd uniek nummer gaat er geen factuur uit. Een
+          // dubbele nummering repareer je niet achteraf.
+          console.error("factuurnummer ophalen mislukt:", numErr);
+          toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
+                   : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
+                   : "Could not get an invoice number — invoice not sent", "error");
+          setProcessingApptId(null);
+          return;
+        }
+        const nextNum = rpcNum;
         const invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
+        sentInvoiceNumber = invoiceNumber;
         await sendEmails("invoice", {
           client_name: a.client_name,
           client_email: a.client_email,
@@ -6146,18 +6169,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           tax_id_label: tax.idLabel,
           lang
         });
-        await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id);
+        // Het nummer wordt nu OPGESLAGEN bij de afspraak. Daarvoor bestond het
+        // alleen in de verstuurde mail, waardoor niet na te zoeken was welk
+        // nummer naar welke klant ging — en de database een duplicaat ook niet
+        // kon weigeren. Er ligt nu een unieke index op (owner_id,
+        // invoice_number).
+        await supabase.from("appointments")
+          .update({ invoice_sent: true, invoice_number: invoiceNumber }).eq("id", id);
+        // De teller is al opgehoogd door de RPC; hier alleen de lokale kopie
+        // bijtrekken zodat het scherm het volgende nummer klopt laat zien.
         if (isExtra) {
-          const nextExtras = extras.map((x, i) => i === profileIdx ? { ...x, next_invoice_number: (x.next_invoice_number || 1) + 1 } : x);
-          await supabase.from("profiles").update({ invoice_profiles: nextExtras }).eq("id", salonData.owner_id);
-          update(d => { d.invoice_profiles = nextExtras; return d; });
+          update(d => {
+            d.invoice_profiles = (d.invoice_profiles || []).map((x, i) =>
+              i === profileIdx ? { ...x, next_invoice_number: nextNum + 1 } : x);
+            return d;
+          });
         } else {
-          const next = (salonData.next_invoice_number || 1) + 1;
-          await supabase.from("profiles").update({ next_invoice_number: next }).eq("id", salonData.owner_id);
-          update(d => { d.next_invoice_number = next; return d; });
+          update(d => { d.next_invoice_number = nextNum + 1; return d; });
         }
       }
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true} : a); return d; });
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true, invoice_number: sentInvoiceNumber ?? a.invoice_number} : a); return d; });
       toast.show(t.invoiceSent);
     } finally { setProcessingApptId(null); }
   };

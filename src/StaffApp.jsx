@@ -427,7 +427,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     try {
     const a = appointments.find(x => x.id === id);
     if (a) {
-      const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}`;
+      // Nummer uit de database in plaats van uit invoiceForm: die laatste is een
+      // gecachte waarde, en twee tabbladen stuurden zo twee facturen met
+      // hetzelfde nummer. De RPC hoogt op en geeft terug in één ondeelbare stap.
+      const { data: rpcNum, error: numErr } = await supabase.rpc("next_staff_invoice_number", {
+        p_staff: staffMember.id,
+      });
+      if (numErr || !rpcNum) {
+        // Zonder gegarandeerd uniek nummer gaat er geen factuur uit.
+        console.error("factuurnummer ophalen mislukt:", numErr);
+        toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
+                 : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
+                 : "Could not get an invoice number — invoice not sent", "error");
+        setProcessingApptId(null);
+        return;
+      }
+      const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(rpcNum).padStart(4, "0")}`;
       await sendEmails("invoice", {
         client_name: a.client_name, client_email: a.client_email,
         service_name: a.service_name, date: a.date, price: a.service_price,
@@ -459,12 +474,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         currency: cur, tax_label: tax.label, tax_id_label: tax.idLabel,
         lang
       });
-      await supabase.from("appointments").update({ invoice_sent: true }).eq("id", id).eq("owner_id", salonProfile.id);
-      // Auto-increment invoice number
-      const nextNum = (invoiceForm.next_invoice_number || 1) + 1;
-      await supabase.from("staff_members").update({ next_invoice_number: nextNum }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
-      setInvoiceForm(f => ({ ...f, next_invoice_number: nextNum }));
-      setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true} : ap));
+      // Het nummer wordt nu vastgelegd bij de afspraak; daarvoor bestond het
+      // alleen in de verstuurde mail. Een unieke index op (owner_id,
+      // invoice_number) weigert vanaf nu een duplicaat.
+      await supabase.from("appointments")
+        .update({ invoice_sent: true, invoice_number: invoiceNumber })
+        .eq("id", id).eq("owner_id", salonProfile.id);
+      // De teller is al opgehoogd door de RPC; alleen de lokale kopie bijtrekken
+      // zodat het scherm het volgende nummer klopt toont.
+      setInvoiceForm(f => ({ ...f, next_invoice_number: rpcNum + 1 }));
+      setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true, invoice_number: invoiceNumber} : ap));
       toast.show(lang === "nl" ? "Factuur verstuurd" : lang === "es" ? "Factura enviada" : "Invoice sent");
     }
     } finally { setProcessingApptId(null); }
