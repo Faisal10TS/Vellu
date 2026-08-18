@@ -1,0 +1,7 @@
+# core.autocrlf staat op true, dus Git zet bij het uitchecken normaal gesproken
+# elk tekstbestand om naar CRLF. Voor migraties is dat een probleem: hun inhoud
+# wordt vergeleken met de SQL zoals die in supabase_migrations.schema_migrations
+# staat (zie supabase/migrations/README.md), en die vergelijking gaat per byte.
+# Eén omgezet regeleinde en de md5 klopt niet meer, terwijl er inhoudelijk niets
+# is veranderd. Migraties blijven daarom LF, ongeacht het besturingssysteem.
+*.sql text eol=lf

@@ -1,0 +1,1 @@
+ALTER TABLE public.staff_day_overrides ALTER COLUMN staff_id DROP NOT NULL;

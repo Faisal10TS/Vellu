@@ -1,0 +1,2 @@
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS btw_rate numeric NOT NULL DEFAULT 21;
+COMMENT ON COLUMN profiles.btw_rate IS 'VAT/BTW percentage shown on invoices. NL: 21 for nail/beauty/cosmetic services, 9 for typical hairdresser services. Only applied on the invoice when the salon also has a btw_id.';

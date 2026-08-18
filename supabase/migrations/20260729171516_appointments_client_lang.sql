@@ -1,0 +1,2 @@
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS lang text;
+COMMENT ON COLUMN appointments.lang IS 'Client-chosen UI language at booking time (nl/en/es); used by send-reminders to localize the reminder email. Null = fall back to salon country.';

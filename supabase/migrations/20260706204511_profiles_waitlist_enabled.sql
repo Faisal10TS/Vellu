@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS waitlist_enabled boolean NOT NULL DEFAULT true;

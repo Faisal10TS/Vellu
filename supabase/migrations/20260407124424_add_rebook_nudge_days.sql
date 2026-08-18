@@ -1,0 +1,1 @@
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rebook_nudge_days integer DEFAULT 28;
