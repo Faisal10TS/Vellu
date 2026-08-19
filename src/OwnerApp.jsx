@@ -4062,8 +4062,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       .channel("owner-appointments")
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `owner_id=eq.${salonData.owner_id}` }, (payload) => {
         if (payload.eventType === "INSERT") {
-          update(d => { d.appointments = [payload.new, ...d.appointments]; return d; });
-          toast.show(langRef.current === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
+          // ONTDUBBELEN OP ID. Wie zelf afrekent of een afspraak inboekt, zet de
+          // rij meteen lokaal in de lijst én krijgt hem daarna nog eens binnen
+          // via dit kanaal. Zolang realtime uitstond viel dat niet op; sinds het
+          // aanstaat verscheen één verkoop twee keer in de kassalijst, met een
+          // dagtotaal van het dubbele. In de database stond hij altijd maar één
+          // keer — het was puur het scherm.
+          let wasNieuw = false;
+          update(d => {
+            if (d.appointments.some(a => a.id === payload.new.id)) return d;
+            wasNieuw = true;
+            d.appointments = [payload.new, ...d.appointments];
+            return d;
+          });
+          // Alleen melden wat de eigenaar NIET zelf net heeft aangemaakt. Een
+          // kassaverkoop is geen "nieuwe boeking", en een rij die al lokaal
+          // stond komt van hemzelf.
+          if (wasNieuw && !payload.new.is_sale) {
+            toast.show(langRef.current === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
+          }
         } else if (payload.eventType === "UPDATE") {
           // Merge the incoming row into the existing local copy instead of replacing
           // wholesale — this preserves any local-only optimistic fields and avoids a
