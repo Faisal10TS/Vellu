@@ -456,3 +456,59 @@ create policy app_admins_self_read on public.app_admins for select to public usi
 -- rij lezen (policy hierboven), en zonder deze grant zou die policy dood zijn.
 revoke all on public.app_admins from anon, authenticated;
 grant select on public.app_admins to authenticated;
+
+-- ================================================== 6. handle_new_user()
+--
+-- TOEGEVOEGD NA DE EERSTE ECHTE HERBOUW-TEST, en dat is precies waarom die
+-- test bestond. Bij het naspelen van alle 99 migraties op een lege database
+-- strandde bestand 11 (20260407191755_tighten_rls_policies) met:
+--
+--     ERROR: 42883: function public.handle_new_user() does not exist
+--
+-- Dat bestand doet op regel 93 alleen `ALTER FUNCTION public.handle_new_user()
+-- SET search_path = public` — het verwacht dus dat de functie er al is. Op
+-- productie was dat ook zo: hij is met de hand in het dashboard aangemaakt in
+-- dezelfde periode vóór de ledger waar ook de 17 tabellen vandaan komen. Deze
+-- baseline dichtte dat gat alleen voor TABELLEN, niet voor functies. Op
+-- productie viel dat nooit op; bij een herbouw meteen.
+--
+-- WAAROM DEZE BODY EN NIET DE ECHTE OUDE
+-- De oorspronkelijke versie is nergens vastgelegd — die bestond alleen in het
+-- dashboard en is later overschreven. Wat hieronder staat is de kern van wat
+-- hij deed: bij een nieuwe registratie een salonprofiel aanmaken, tenzij het
+-- om een uitgenodigde medewerker gaat. Migratie 20260705085304 vervangt hem 17
+-- stappen verderop met CREATE OR REPLACE door de versie die vandaag live is —
+-- die controleert óók op e-mailadres, omdat de uitnodigingsfunctie de
+-- auth-gebruiker aanmaakt vóórdat staff_members.user_id gevuld is. De
+-- eindtoestand van een herbouw is dus hoe dan ook de huidige versie; deze
+-- beginversie bestaat alleen zodat de ALTER in bestand 11 iets heeft om te
+-- wijzigen.
+--
+-- De trigger op auth.users die deze functie afvuurt staat NIET hier maar in
+-- 20260818140001_reconcile_handmatige_wijzigingen, achteraan de reeks: die
+-- moet pas gelegd worden als de functie zijn definitieve vorm heeft.
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $function$
+BEGIN
+  -- Een uitgenodigde medewerker krijgt géén eigen salonprofiel.
+  IF EXISTS (SELECT 1 FROM public.staff_members WHERE user_id = NEW.id) THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO public.profiles (id, email, business_name, slug, city)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'business_name', 'Mijn Salon'),
+    COALESCE(NEW.raw_user_meta_data->>'slug', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'city', 'Nederland')
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$function$;
