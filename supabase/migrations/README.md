@@ -157,18 +157,47 @@ Let er ook op dat `pg_cron` en `pg_net` op een vers project ontbreken.
 `20260717142848_install_pg_net_for_cron_http` maakt pg_net aan; pg_cron komt uit
 de reconcile-migratie achteraan.
 
-## Wat nog niet is bewezen
+## Bewezen op 18 augustus 2026: de herbouw werkt
 
-**Er is nooit een herbouw gedraaid.** Dat deze 95 bestanden samen het schema
-opleveren is afgeleid uit de catalogus en uit een sluitende vergelijking met
-productie — niet aangetoond door ze uit te voeren. De verzoenings-migratie is
-wél echt gedraaid (op productie, waar hij niets veranderde), dus daarvan staat
-vast dat de SQL geldig is en compileert. Voor de basis geldt dat niet.
+Alle 100 bestanden zijn in volgorde op een leeg Supabase-project gedraaid
+(`vellu-herstel-test`). Alle 100 slaagden. Daarna is het resultaat naast
+productie gelegd met een vingerafdruk per onderdeel — een md5 over de
+gesorteerde namen:
 
-Datzelfde geldt voor de dagelijkse back-up: die is nooit teruggezet.
+| onderdeel | herbouw | productie |
+|---|---|---|
+| tabellen  | 33 · `22c8a54e71` | 33 · `22c8a54e71` |
+| kolommen  | 451 · `61ef514072` | 451 · `61ef514072` |
+| functies  | 31 · `5ccbdfb8d8` | 31 · `5ccbdfb8d8` |
+| indexen   | 75 · `2ffa418d14` | 75 · `2ffa418d14` |
+| policies  | 76 · `ce57d49503` | 76 · `ce57d49503` |
+| views     | 3 · `2eab730892` | 3 · `2eab730892` |
+| triggers  | 3 · `41886212bb` | 3 · `41886212bb` |
 
-Een echte test hoort op een leeg tweede project of een Supabase-branch, nooit op
-productie: schema uit deze migraties opbouwen, daarna het nieuwste
-back-up-JSON uit de bucket `db-backups` inlezen, en dan kijken of de app erop
-draait. Zolang dat niet gebeurd is, is herbouwbaarheid een goed onderbouwde
-aanname en geen zekerheid.
+Alle zeven identiek. **Deze map kan het schema van productie reproduceren.**
+
+Dat kostte vier rondes, en elke ronde vond iets dat op productie onzichtbaar was:
+
+1. **Ronde 1** strandde bij bestand 11 op `function public.handle_new_user()
+   does not exist`. De baseline bevatte alleen tabellen, geen functies.
+2. **Ronde 2** strandde op mijn eigen testopstelling (zie het kopje hierboven
+   over storage-restanten), niet op de repo.
+3. **Ronde 3** kwam tot bestand 18 en viel om op
+   `column "owner_id" does not exist` — vier kolommen bleken alleen in
+   productie te bestaan. Opgelost in `20260311134514_drift_service_photos_en_clients`.
+4. **Ronde 4** haalde alle 100. De vergelijking daarna liet nog twee ontbrekende
+   policies op `service_photos` zien; die zijn aan diezelfde driftmigratie
+   toegevoegd, waarna ook de policy-vingerafdruk gelijk werd.
+
+Dat is precies waar zo'n test voor is. Geen van deze vier problemen was
+zichtbaar door naar productie te kijken — daar stond alles er gewoon.
+
+## Wat nog steeds niet is bewezen
+
+**De back-up is nooit teruggezet.** De volgende stap is het nieuwste
+back-up-JSON uit de bucket `db-backups` inlezen op een herbouwd schema en
+kijken of de app erop draait. Pas dan is de hele keten getest, niet alleen het
+schema.
+
+Let ook op wat een herbouw sowieso niet meeneemt (zie het kopje hierboven):
+storage-buckets, de pg_cron-jobs, de edge functions en de secrets.

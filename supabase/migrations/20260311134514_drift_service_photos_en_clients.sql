@@ -82,6 +82,30 @@ begin
   end if;
 end $$;
 
+-- ---------------------------------------------- service_photos: policies
+-- Twee policies die ook alleen in productie bestonden. Migratie
+-- 20260407191755 heeft er zelfs een opmerking over staan ("Keep: Owner manages
+-- photos (ALL via owner_id)") — die gaat er dus van uit dat ze er al zijn,
+-- terwijl niets ze aanmaakt. Zonder deze twee komt een herbouw uit op 74
+-- policies waar productie er 76 heeft, en zou een eigenaar zijn eigen
+-- dienstfoto's niet kunnen beheren.
+--
+-- Ze staan hier en niet in de reconcile-migratie achteraan, omdat ze horen bij
+-- owner_id: die kolom wordt een paar regels hierboven toegevoegd en de policy
+-- filtert erop.
+
+drop policy if exists "Owner manages photos" on public.service_photos;
+create policy "Owner manages photos"
+  on public.service_photos
+  for all to public
+  using ((auth.uid() = owner_id));
+
+drop policy if exists "Public can read photos" on public.service_photos;
+create policy "Public can read photos"
+  on public.service_photos
+  for select to public
+  using (true);
+
 -- --------------------------------------------------------------- clients
 -- no_show_count telt hoe vaak een klant niet is komen opdagen; allergies is een
 -- vrij tekstveld dat op de afspraakkaart wordt getoond. increment_no_show_count
