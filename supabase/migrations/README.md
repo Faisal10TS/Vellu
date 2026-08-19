@@ -126,6 +126,37 @@ migraties vallen:
 - **Secrets** — `RESEND_API_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY`,
   `ADMIN_ALERT_EMAIL`, de Mollie-sleutels, `SUPABASE_SERVICE_ROLE_KEY`.
 
+## Een herbouw testen: doe het op een ECHT leeg project
+
+Dit staat hier omdat het bij de eerste poging twee keer misging.
+
+**Alleen het `public`-schema resetten is niet genoeg.** Migratie
+`20260311125516` en `20260311134513` maken ook storage-buckets aan én policies
+op `storage.objects`. Die overleven een `drop schema public cascade` gewoon, en
+bij de volgende poging strandt migratie 2 op:
+
+```
+ERROR: 42710: policy "Anyone can view service photos" for table "objects" already exists
+```
+
+Dat lijkt op een fout in de repo maar is het niet — op een werkelijk leeg
+project slagen die bestanden. De buckets zelf zijn niet het probleem (die
+worden met `on conflict (id) do nothing` toegevoegd); de **policies** wel, want
+die worden met een kale `create policy` gemaakt, zonder `drop policy if exists`
+ervoor. Ze zijn dus niet herdraaibaar.
+
+Dat is bewust niet rechtgezet: die bestanden zijn byte-voor-byte gelijk aan wat
+er in productie gedraaid heeft, en dat is meer waard dan herdraaibaarheid van
+een reeks die je maar één keer op een lege database hoeft te draaien.
+
+**Dus:** maak voor een test een nieuw project aan, of ruim naast `public` ook
+de policies op `storage.objects` op. Buckets kun je niet via SQL verwijderen —
+Supabase blokkeert dat met een trigger, net als op productie.
+
+Let er ook op dat `pg_cron` en `pg_net` op een vers project ontbreken.
+`20260717142848_install_pg_net_for_cron_http` maakt pg_net aan; pg_cron komt uit
+de reconcile-migratie achteraan.
+
 ## Wat nog niet is bewezen
 
 **Er is nooit een herbouw gedraaid.** Dat deze 95 bestanden samen het schema
