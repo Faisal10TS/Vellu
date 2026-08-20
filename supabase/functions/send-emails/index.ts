@@ -215,6 +215,63 @@ const eNo=b.notes?esc(String(b.notes).slice(0,300)):"";
 const eEm=esc(b.client_email);
 const subj=txt(oLang,`Nieuwe wachtlijst-aanmelding: ${b.client_name}`,`New waitlist request: ${b.client_name}`,`Nueva solicitud de lista de espera: ${b.client_name}`);
 for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Nieuwe wachtlijst-aanmelding","New waitlist request","Nueva solicitud de lista de espera")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`,`<strong>${eC}</strong> quiere unirse a la lista de espera de <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${_hideContact(em)?"":row(txt(oLang,"E-mail","Email","Correo"),eEm)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${b.service_name?row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv):""}${b.staff_name?row(txt(oLang,"Medewerker","Staff","Personal"),esc(b.staff_name)):""}${row(txt(oLang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days",ds.length===1?"Día preferido":"Días preferidos"),daysStr)}${eNo?`<tr><td ${cL}>${txt(oLang,"Notitie","Note","Nota")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div></div>`);}}
+// Betaling voor het Vellu-abonnement niet gelukt. Ging hier eerder NIETS uit:
+// mollie-webhook logde alleen een regel naar de console, dus de salon zag een
+// laadscherm en hoorde daarna nooit meer iets. Dat kostte een klant op Bonaire
+// een avond speculeren of er nu wel of niet EUR 350 was afgeschreven.
+//
+// Toon: geruststellen eerst (er is niets afgeschreven), dan pas wat te doen.
+// De reden komt van Mollie; die codes zijn Engels en technisch, dus ze worden
+// hier naar gewone taal vertaald met een nette terugval voor onbekende codes.
+// Jaarabonnement loopt bijna af. Verstuurd door send-renewal-reminder, een week
+// voor plan_expires_at. Een jaarbetaling verlengt NIET vanzelf (geen
+// machtiging), dus zonder deze mail valt de salon er stilzwijgend uit.
+if(type==="renewal_reminder"){
+const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
+const verlooptOp=b.plan_expires_at?fmtD(String(b.plan_expires_at).slice(0,10),oLang):"";
+await send(plainText(b.owner_email),
+plainText(txt(oLang,`Je Vellu-abonnement loopt bijna af`,`Your Vellu subscription is about to expire`,`Tu suscripción de Vellu está por vencer`)),
+`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je abonnement loopt bijna af","Your subscription is about to expire","Tu suscripción está por vencer")}</h2>
+<p style="color:#666;margin-bottom:8px;">${txt(oLang,`Je jaarabonnement <strong>${esc(planName)}</strong> loopt af op <strong>${esc(verlooptOp)}</strong>.`,`Your yearly <strong>${esc(planName)}</strong> subscription expires on <strong>${esc(verlooptOp)}</strong>.`,`Tu suscripción anual <strong>${esc(planName)}</strong> vence el <strong>${esc(verlooptOp)}</strong>.`)}</p>
+<p style="color:#666;margin-bottom:28px;">${txt(oLang,"Een jaarabonnement wordt niet automatisch verlengd — dat is bewust, zo heb je er zelf grip op. Verleng het met één klik, dan blijft alles gewoon doorlopen.","A yearly subscription does not renew automatically — that is by design, so you stay in control. Renew it in one click and everything keeps running.","Una suscripción anual no se renueva automáticamente — es a propósito, así mantienes el control. Renuévala con un clic y todo sigue funcionando.")}</p>
+<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Nu verlengen","Renew now","Renovar ahora")}</a></p>
+<p style="color:#888;font-size:13px;">${txt(oLang,"Liever maandelijks betalen, of vragen? Antwoord gewoon op deze mail.","Prefer to pay monthly, or have a question? Just reply to this email.","¿Prefieres pagar mensualmente o tienes una pregunta? Responde a este correo.")}</p></div>`);}
+if(type==="payment_failed"){
+const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
+const intervalLabel=b.billing_interval==="yearly"?txt(oLang,"jaarlijks","yearly","anual"):txt(oLang,"maandelijks","monthly","mensual");
+const bedrag=b.amount?`€ ${parseFloat(b.amount).toFixed(2).replace(".",",")}`:"";
+const rc=String(b.reason_code||"");
+// Per code: wat er aan de hand is, en wat de salon eraan kan doen.
+const redenen={
+  card_declined:[txt(oLang,"Je bank heeft de betaling geweigerd.","Your bank declined the payment.","Tu banco rechazó el pago."),
+                 txt(oLang,"Dat gebeurt vaak bij een limiet voor online of buitenlandse betalingen. Bel je bank, of probeer het maandabonnement — dat is een veel kleiner bedrag.","This often happens with a limit on online or foreign payments. Call your bank, or try the monthly plan — that is a much smaller amount.","Suele ocurrir por un límite en pagos en línea o extranjeros. Llama a tu banco o prueba el plan mensual, que es un importe mucho menor.")],
+  insufficient_funds:[txt(oLang,"Er stond niet genoeg saldo op de rekening.","There were insufficient funds.","No había saldo suficiente."),
+                 txt(oLang,"Probeer het opnieuw zodra het saldo toereikend is, of kies het maandabonnement.","Try again once there are sufficient funds, or choose the monthly plan.","Inténtalo de nuevo cuando haya saldo, o elige el plan mensual.")],
+  expired_card:[txt(oLang,"De kaart is verlopen.","The card has expired.","La tarjeta ha caducado."),
+                 txt(oLang,"Probeer het opnieuw met een geldige kaart.","Try again with a valid card.","Inténtalo de nuevo con una tarjeta válida.")],
+  invalid_cvv:[txt(oLang,"De beveiligingscode klopte niet.","The security code was incorrect.","El código de seguridad no era correcto."),
+                 txt(oLang,"Probeer het opnieuw en let op de drie cijfers achterop de kaart.","Try again and check the three digits on the back of the card.","Inténtalo de nuevo y revisa los tres dígitos del reverso.")],
+  expired:[txt(oLang,"De betaling is niet op tijd afgerond.","The payment was not completed in time.","El pago no se completó a tiempo."),
+                 txt(oLang,"Je kunt het gewoon opnieuw proberen.","You can simply try again.","Puedes intentarlo de nuevo.")],
+};
+const paar=redenen[rc]||[txt(oLang,"De betaling is niet gelukt.","The payment did not go through.","El pago no se completó."),
+                 txt(oLang,"Je kunt het opnieuw proberen. Lukt het weer niet, laat het ons weten — dan kijken we mee.","You can try again. If it fails again, let us know and we will look into it.","Puedes intentarlo de nuevo. Si vuelve a fallar, avísanos y lo revisamos.")];
+const [watErIs,watTeDoen]=paar;
+const eB=esc(b.business_name||"");
+await send(plainText(b.owner_email),
+plainText(txt(oLang,"Je betaling is niet gelukt — er is niets afgeschreven","Your payment did not go through — nothing was charged","Tu pago no se completó — no se cobró nada")),
+`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"De betaling is niet gelukt","The payment did not go through","El pago no se completó")}</h2>
+<p style="color:#666;margin-bottom:8px;"><strong>${txt(oLang,"Er is niets van je rekening afgeschreven.","Nothing was charged to your account.","No se cobró nada de tu cuenta.")}</strong></p>
+<p style="color:#666;margin-bottom:28px;">${esc(watErIs)} ${esc(watTeDoen)}</p>
+<div style="background:#faf8f5;border-radius:8px;padding:16px 20px;margin-bottom:28px;">
+<table style="width:100%;border-collapse:collapse;font-size:14px;">
+<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Abonnement","Plan","Plan")}</td><td style="padding:6px 0;text-align:right;">${esc(planName)} (${esc(intervalLabel)})</td></tr>
+${bedrag?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Bedrag","Amount","Importe")}</td><td style="padding:6px 0;text-align:right;">${esc(bedrag)}</td></tr>`:""}
+${eB?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Salon","Salon","Salón")}</td><td style="padding:6px 0;text-align:right;">${eB}</td></tr>`:""}
+</table></div>
+${b.trial_ends_at?`<p style="color:#666;margin-bottom:28px;">${txt(oLang,`Je proefperiode loopt nog tot <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, dus je kunt Vellu gewoon blijven gebruiken terwijl je dit regelt.`,`Your trial still runs until <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, so you can keep using Vellu while you sort this out.`,`Tu periodo de prueba dura hasta el <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, así que puedes seguir usando Vellu mientras lo resuelves.`)}</p>`:""}
+<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Opnieuw proberen","Try again","Intentar de nuevo")}</a></p>
+<p style="color:#888;font-size:13px;">${txt(oLang,"Kom je er niet uit? Antwoord gewoon op deze mail, dan kijken we mee.","Stuck? Just reply to this email and we will help.","¿No lo consigues? Responde a este correo y te ayudamos.")}</p></div>`);}
 if(type==="subscription_invoice"){
 const billerName="Mirah Ventures";const billerKvk="42045867";const billerCity="Amersfoort";const billerEmail="info@vellu.cc";
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";

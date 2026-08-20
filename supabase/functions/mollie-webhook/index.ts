@@ -7,6 +7,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MOLLIE_API_KEY = Deno.env.get("MOLLIE_API_KEY")!;
 const MOLLIE_BASE_URL = "https://api.mollie.com/v2";
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
+const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") || "mirahventures@vellu.cc";
+// Owner-facing mail gaat in de taal van de SALON, niet van de klant. Zelfde
+// verzameling als in cancel-appointment en send-reminders; hier gekopieerd
+// omdat edge functions geen gedeelde module hebben.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 function plain(status: number, body: string) {
@@ -52,6 +58,87 @@ function addInterval(from: Date, interval: "monthly" | "yearly", n = 1): Date {
 function classifyEvent(p: MolliePayment): string {
   const seq = p.sequenceType || "oneoff";
   return `${seq}.${p.status}`;
+}
+
+// Een eerste- of jaarbetaling die niet doorging. HIER GING EERDER NIETS UIT —
+// alleen een console.log. Gevolg: een salon die wilde betalen zag een
+// laadscherm, kreeg daarna niets te horen, en moest zelf navragen of er nu wel
+// of geen geld was afgeschreven. Precies dat gebeurde op 19 augustus bij een
+// salon op Bonaire: haar RBC-kaart werd door de bank geweigerd (3-D Secure was
+// wél geslaagd), de betaling verliep, en niemand kreeg een seintje.
+//
+// Uitgefactoreerd zodat het maandpad (first) en het jaarpad (oneoff) exact
+// hetzelfde doen: een mail naar de salon met wat er aan de hand is en wat te
+// doen, plus een waarschuwing naar de beheerder.
+async function notifyPaymentFailed(
+  payment: MolliePayment,
+  profile: Record<string, unknown>,
+  meta: { plan?: string; billing_interval?: string } | null,
+  ownerId: string,
+): Promise<void> {
+  console.log("payment did not complete:", payment.id, payment.status);
+
+  // Mollie zet de reden in details.failureReason bij een weigering. Bij een
+  // verlopen betaling is er geen failureReason; dan is de status zelf de reden
+  // ("expired" = niet op tijd afgerond).
+  const det = (payment as unknown as { details?: Record<string, unknown> }).details || {};
+  const reasonCode = String(det.failureReason || payment.status || "");
+  const reasonMessage = String(det.failureMessage || "");
+  const p = profile;
+
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+      method: "POST",
+      headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "payment_failed",
+        booking: {
+          owner_email: p.email,
+          owner_id: ownerId,
+          // Salon-taal, niet klant-taal: dit is een bericht aan de eigenaar.
+          owner_lang: DUTCH_COUNTRIES.has(String(p.country_code || "NL")) ? "nl" : "en",
+          business_name: p.business_name,
+          salon_name: p.business_name,
+          plan: meta?.plan || p.plan || "starter",
+          billing_interval: meta?.billing_interval || p.billing_interval || "monthly",
+          amount: parseFloat(payment.amount.value),
+          trial_ends_at: p.trial_ends_at || null,
+          reason_code: reasonCode,
+          reason_message: reasonMessage,
+        },
+      }),
+    });
+  } catch (e) { console.error("payment_failed email error:", e); }
+
+  // En een seintje naar onszelf. Een mislukte betaling is een klant die op het
+  // punt stond te betalen en nu vastloopt; dat wil je dezelfde dag weten, niet
+  // pas als hij eruit valt.
+  try {
+    if (RESEND_API_KEY) {
+      const detail = [
+        `Salon: ${p.business_name || "?"} (${p.email || "?"})`,
+        `Bedrag: EUR ${payment.amount.value}`,
+        `Plan: ${meta?.plan || "?"} (${meta?.billing_interval || "?"})`,
+        `Status: ${payment.status}`,
+        `Reden: ${reasonCode}${reasonMessage ? ` — ${reasonMessage}` : ""}`,
+        det.cardIssuer ? `Kaart: ${det.cardLabel || "?"} van ${det.cardIssuer} (${det.cardIssuerCountry || "?"})` : "",
+        `Mollie: ${payment.id}`,
+      ].filter(Boolean).join("<br/>");
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "Vellu Monitoring <noreply@vellu.cc>",
+          to: [ADMIN_ALERT_EMAIL],
+          subject: `Betaling mislukt: ${p.business_name || ownerId}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:640px;">
+            <h2 style="margin:0 0 12px;">Een salon kon niet betalen</h2>
+            <p style="color:#666;margin:0 0 16px;">De salon heeft hier zelf een mail over gekregen met wat te doen.</p>
+            <p style="font-size:13px;line-height:1.7;">${detail}</p></div>`,
+        }),
+      });
+    }
+  } catch (e) { console.error("admin alert error:", e); }
 }
 
 async function logEvent(ownerId: string | null, p: MolliePayment, eventType: string): Promise<boolean> {
@@ -196,13 +283,111 @@ serve(async (req) => {
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (!profile) {
     console.warn("payment owner has no profile row:", ownerId);
     return plain(200, "ok (no profile)");
   }
+
+  // ── JAARBETALING (eenmalig, GEEN machtiging) ──────────────────────────
+  // create-subscription stuurt jaarabonnementen als sequenceType "oneoff" met
+  // kind "yearly_oneoff": een gewone aankoop, geen doorlopende incasso. Reden
+  // staat daar uitgelegd — een machtiging wordt door veel niet-Europese banken
+  // geweigerd, een eenmalige betaling niet.
+  //
+  // Deze tak lijkt op first.paid hieronder, maar mist bewust de subscription-
+  // creatie bij Mollie: er is geen mandaat en er hoeft niets automatisch te
+  // verlengen. Toegang loopt puur op plan_expires_at; de app rekent daar live
+  // mee (src/App.jsx ~195), dus als die datum verstrijkt vervalt de toegang
+  // vanzelf. send-renewal-reminder herinnert de salon een week van tevoren.
+  if (payment.sequenceType === "oneoff" && meta?.kind === "yearly_oneoff") {
+    if (payment.status === "paid") {
+      const plan = meta?.plan || profile.plan || "professional";
+      const periodStart = new Date();
+      const periodEnd = addInterval(periodStart, "yearly");
+
+      // Referral-krediet uit de proefperiode wordt ook hier verzilverd: de
+      // eerste betaalde periode wordt met de gespaarde dagen verlengd. Zelfde
+      // regel als bij het maandpad, zodat "2 weken gratis" echt gratis is.
+      let creditsUsed = 0;
+      let periodEndWithCredit = periodEnd;
+      if ((profile.referral_credit_days || 0) > 0) {
+        creditsUsed = profile.referral_credit_days || 0;
+        periodEndWithCredit = new Date(periodEnd);
+        periodEndWithCredit.setDate(periodEndWithCredit.getDate() + creditsUsed);
+      }
+
+      const { data: evt } = await supabase
+        .from("payment_events")
+        .select("id")
+        .eq("mollie_payment_id", payment.id)
+        .eq("event_type", eventType)
+        .maybeSingle();
+      const invoiceRow = await createInvoice(
+        ownerId, evt?.id || null, payment, plan, "yearly",
+        (profile as Record<string, unknown>).country_code as string | null,
+        periodStart, periodEnd,
+      );
+      const invoiceFields = invoiceRow ? {
+        invoice_number: (invoiceRow as { invoice_number: string }).invoice_number,
+        amount_excl_vat: (invoiceRow as { amount_excl_vat: number }).amount_excl_vat,
+        vat_amount: (invoiceRow as { vat_amount: number }).vat_amount,
+        vat_rate: (invoiceRow as { vat_rate: number }).vat_rate,
+        period_start: periodStart.toISOString(),
+      } : {};
+
+      const yearUpdates: Record<string, unknown> = {
+        plan,
+        billing_interval: "yearly",
+        subscription_status: "active",
+        // GEEN mollie_subscription_id: er is bewust geen doorlopend abonnement
+        // bij Mollie. Een eventueel oud abonnement-id wissen we, zodat de
+        // recurring-takken hieronder deze salon niet als abonnee behandelen.
+        mollie_subscription_id: null,
+        mollie_mandate_id: null,
+        current_period_start: periodStart.toISOString(),
+        plan_expires_at: periodEndWithCredit.toISOString(),
+        cancel_at_period_end: false,
+        cancelled_at: null,
+      };
+      if (creditsUsed > 0) {
+        yearUpdates.referral_credit_days = 0;
+        yearUpdates.referral_credit_days_redeemed =
+          ((profile as { referral_credit_days_redeemed?: number }).referral_credit_days_redeemed || 0) + creditsUsed;
+      }
+      await supabase.from("profiles").update(yearUpdates).eq("id", ownerId);
+
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+          method: "POST",
+          headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "subscription_invoice",
+            booking: {
+              owner_email: (profile as Record<string, unknown>).email,
+              owner_id: ownerId,
+              plan,
+              billing_interval: "yearly",
+              amount: parseFloat(payment.amount.value),
+              period_end: periodEndWithCredit.toISOString(),
+              business_name: (profile as Record<string, unknown>).business_name,
+              credits_used: creditsUsed || 0,
+              ...invoiceFields,
+            },
+          }),
+        });
+      } catch (e) { console.error("yearly subscription_invoice email error:", e); }
+    } else if (["failed", "expired", "canceled"].includes(payment.status)) {
+      // Zelfde mislukte-betaling-afhandeling als bij het maandpad: een mail
+      // naar de salon en een seintje naar de beheerder. Uitgefactoreerd zodat
+      // beide takken exact hetzelfde doen.
+      await notifyPaymentFailed(payment, profile, meta, ownerId);
+    }
+    return plain(200, "ok");
+  }
+
   if (payment.sequenceType === "first") {
     if (payment.status === "paid") {
       const plan = meta?.plan || profile.plan || "starter";
@@ -295,7 +480,7 @@ serve(async (req) => {
         });
       } catch (e) { console.error("subscription_invoice email error:", e); }
     } else if (["failed", "expired", "canceled"].includes(payment.status)) {
-      console.log("first payment did not complete:", payment.id, payment.status);
+      await notifyPaymentFailed(payment, profile, meta, ownerId);
     }
     return plain(200, "ok");
   }

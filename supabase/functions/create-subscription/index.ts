@@ -164,32 +164,68 @@ serve(async (req) => {
     await supabase.from("profiles").update({ mollie_customer_id: customerId }).eq("id", userId);
   }
 
-  // Step 2: Create the first payment. `sequenceType: "first"` tells Mollie
-  // this payment also establishes a mandate for future recurring charges.
+  // Step 2: de betaling zelf. Hier splitst het pad, en dat is de kern van deze
+  // functie.
+  //
+  // MAANDELIJKS blijft een MACHTIGING (`sequenceType: "first"`). Twaalf keer per
+  // jaar handmatig laten betalen is onwerkbaar, dus daar moet automatisch
+  // geïncasseerd kunnen worden.
+  //
+  // JAARLIJKS wordt een GEWONE EENMALIGE BETALING (`sequenceType: "oneoff"`).
+  // Eén keer per jaar hoeft niet automatisch; een factuur met een betaalverzoek
+  // is voor een zakelijke klant normaal en vaak zelfs prettiger dan een stille
+  // afschrijving van EUR 350. Het verschil is groot voor wie het moet betalen:
+  //
+  //   machtiging  -> de bank wordt gevraagd om HERHAALD te mogen afschrijven.
+  //                  Banken keuren dat strenger, en veel niet-Europese
+  //                  uitgevers weigeren het categorisch. Bovendien vallen alle
+  //                  methodes af die geen machtiging kunnen afgeven —
+  //                  bankoverschrijving bijvoorbeeld.
+  //   eenmalig    -> gewone aankoop. Elke ingeschakelde methode mag, en de
+  //                  kans op een weigering is veel kleiner.
+  //
+  // Aanleiding: op 19 augustus wilde een salon op Bonaire het jaarabonnement
+  // afnemen. Haar RBC-creditcard werd door de eigen bank geweigerd terwijl
+  // 3-D Secure wél slaagde. Ze had geen enkel alternatief, want iDEAL werkt
+  // alleen met een Nederlandse bankrekening.
+  const isYearly = interval === "yearly";
   const description =
     plan === "starter" ? "Vellu Starter" : "Vellu Professional";
-  const intervalLabel = interval === "yearly" ? "yearly" : "monthly";
+  const intervalLabel = isYearly ? "yearly" : "monthly";
 
   const paymentBody: Record<string, unknown> = {
     amount: { currency: "EUR", value: amount.toFixed(2) },
     customerId,
-    sequenceType: "first",
-    // Pin the first-payment methods to the recurring-capable ones we support.
-    // Without an explicit method, Mollie auto-selects across ALL enabled
-    // methods and returns "No suitable payment methods found" if any enabled
-    // method (e.g. Apple Pay) can't anchor a recurring mandate. iDEAL +
-    // creditcard both create reusable SEPA/card mandates, so list them.
-    method: ["ideal", "creditcard"],
-    description: `${description} (${intervalLabel}) — first payment`,
+    sequenceType: isYearly ? "oneoff" : "first",
+    description: `${description} (${intervalLabel}) — ${isYearly ? "yearly payment" : "first payment"}`,
     redirectUrl: `${returnOrigin}/owner?subscription=success`,
     webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
     metadata: {
       owner_id: userId,
       plan,
       billing_interval: interval,
-      kind: "subscription_first_payment",
+      // De webhook splitst hierop: "yearly_oneoff" activeert een jaar toegang
+      // zonder een Mollie-abonnement aan te maken.
+      kind: isYearly ? "yearly_oneoff" : "subscription_first_payment",
     },
   };
+
+  if (!isYearly) {
+    // LET OP — deze lijst moet blijven staan voor het machtigingspad, en de
+    // reden staat er niet voor niets bij: zonder expliciete `method` kiest
+    // Mollie uit ALLE ingeschakelde methodes en geeft hij
+    // "No suitable payment methods found" zodra er één tussen zit die geen
+    // machtiging kan afgeven (Apple Pay bijvoorbeeld). iDEAL en creditcard
+    // maken allebei een herbruikbare SEPA- of kaartmachtiging.
+    //
+    // Wil je hier een methode bij, controleer dan eerst in het Mollie-dashboard
+    // dat hij aanstaat én dat hij doorlopende machtigingen ondersteunt. PayPal
+    // kan dat bijvoorbeeld wel; bankoverschrijving niet.
+    paymentBody.method = ["ideal", "creditcard"];
+  }
+  // Voor het jaarlijkse pad juist GEEN lijst: bij een eenmalige betaling kan
+  // elke ingeschakelde methode mee, inclusief bankoverschrijving en PayPal.
+  // Wat je in het Mollie-dashboard aanzet verschijnt daar meteen.
 
   const pRes = await mollieFetch("/payments", {
     method: "POST",

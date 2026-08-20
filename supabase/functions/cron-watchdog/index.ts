@@ -34,6 +34,11 @@ const MONITORED = [
   { name: "send-followups", schedule: "daily 10:30", maxAgeHours: 25 },
   { name: "send-rebook-nudge", schedule: "daily 11:00", maxAgeHours: 25 },
   { name: "db-backup", schedule: "daily 03:00", maxAgeHours: 25 },
+  // Draait elk uur, dus een gat van meer dan drie uur betekent dat er iets mis
+  // is. Deze staat er nadrukkelijk bij: hij is zelf het vangnet onder de
+  // betaal-webhook, en een vangnet zonder toezicht is geen vangnet.
+  { name: "check-pending-payments", schedule: "hourly at :20", maxAgeHours: 3 },
+  { name: "send-renewal-reminder", schedule: "daily", maxAgeHours: 25 },
 ];
 
 async function emailAdmin(subject, html) {

@@ -148,3 +148,20 @@ enabled = true
 # stilvallen door een ontbrekend blok hier. Live op false (v10).
 verify_jwt = false
 entrypoint = "./functions/cron-watchdog/index.ts"
+
+[functions.check-pending-payments]
+enabled = true
+# Vangnet onder mollie-webhook: zoekt eerste betalingen die zijn gestart maar
+# nooit een uitkomst kregen, en trapt de webhook er opnieuw voor aan. Wordt door
+# pg_cron aangeroepen zonder gebruikers-JWT, dus verify_jwt moet false zijn.
+# Bewust geen geheim: de functie geeft alleen aantallen terug en het enige wat
+# je ermee kunt is een idempotente herverwerking starten.
+verify_jwt = false
+entrypoint = "./functions/check-pending-payments/index.ts"
+
+[functions.send-renewal-reminder]
+enabled = true
+# Cron: waarschuwt een jaarabonnee een week voor plan_expires_at. Aangeroepen
+# door pg_cron zonder gebruikers-JWT, dus verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/send-renewal-reminder/index.ts"
