@@ -59,6 +59,8 @@ export function generateProductReportPDF({
   salon, appointments, range, lang = "nl",
   currencySymbol = "€", moneyLocale = "nl-NL",
   taxIdLabel = "BTW-id", taxCfg = null,
+  // Eigen logo als data-URL, zie generateRevenueReportPDF. Afwezig = Vellu-merk.
+  logo = null,
 }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -173,12 +175,29 @@ export function generateProductReportPDF({
   doc.setTextColor(120, 120, 120);
   doc.text(range.label || `${fmtDate(range.from, lang)} — ${fmtDate(range.to, lang)}`, margin, 78);
 
-  doc.setFontSize(10);
-  doc.setTextColor(...ACCENT);
-  doc.text("vellu", pageW - margin, 60, { align: "right" });
-  doc.setDrawColor(...ACCENT);
-  doc.setLineWidth(0.5);
-  doc.line(pageW - margin - 30, 66, pageW - margin, 66);
+  // Eigen logo rechtsboven als het meekomt, anders het Vellu-merk. Het
+  // bedrijfsblok hieronder begint op y=110, dus een logo tot y=80 overlapt niet.
+  if (logo && logo.dataUrl) {
+    try {
+      const maxW = 120, maxH = 40;
+      const ratio = (logo.w || 1) / (logo.h || 1);
+      let w = maxW, h = maxW / ratio;
+      if (h > maxH) { h = maxH; w = maxH * ratio; }
+      const fmt = /png/i.test(logo.dataUrl.slice(0, 30)) ? "PNG" : "JPEG";
+      doc.addImage(logo.dataUrl, fmt, pageW - margin - w, 40, w, h);
+    } catch {
+      doc.setFontSize(10);
+      doc.setTextColor(...ACCENT);
+      doc.text("vellu", pageW - margin, 60, { align: "right" });
+    }
+  } else {
+    doc.setFontSize(10);
+    doc.setTextColor(...ACCENT);
+    doc.text("vellu", pageW - margin, 60, { align: "right" });
+    doc.setDrawColor(...ACCENT);
+    doc.setLineWidth(0.5);
+    doc.line(pageW - margin - 30, 66, pageW - margin, 66);
+  }
 
   // ── Company block ────────────────────────────────────────────────────
   let y = 110;

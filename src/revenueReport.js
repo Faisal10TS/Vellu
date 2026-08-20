@@ -61,6 +61,10 @@ export function generateRevenueReportPDF({
   currencySymbol = "€", moneyLocale = "nl-NL",
   taxLabel = "BTW", taxIdLabel = "BTW-id", taxRate = 0.21, showTax = true,
   taxCfg = null,
+  // Eigen logo als data-URL ({dataUrl, w, h}), voorbereid door de aanroeper.
+  // Aanwezig = de salon heeft een logo én de vlag show_logo_on_invoice staat
+  // aan. Afwezig = het Vellu-woordmerk, zoals voorheen.
+  logo = null,
 }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595.28 x 841.89 pt
 
@@ -109,15 +113,36 @@ export function generateRevenueReportPDF({
     doc.text(`${T("Medewerker", "Team member", "Miembro del equipo")}: ${s(staffName)}`, margin, 94);
   }
 
-  // Vellu wordmark top-right (just text, no image — keeps PDF tiny)
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...ACCENT);
-  doc.text("vellu", pageW - margin, 60, { align: "right" });
-  // Thin accent line under wordmark
-  doc.setDrawColor(...ACCENT);
-  doc.setLineWidth(0.5);
-  doc.line(pageW - margin - 30, 66, pageW - margin, 66);
+  // Rechtsboven: het eigen logo van de salon als dat meekomt, anders het
+  // Vellu-woordmerk. De salon vroeg terecht waarom op háár omzetrapport het
+  // merk van Vellu stond; met een logo én de vlag aan staat nu haar eigen logo.
+  if (logo && logo.dataUrl) {
+    // Passend binnen een vak van 120 x 40 pt, verhouding behouden. try/catch
+    // zodat een onverwacht beeldformaat het rapport nooit laat klappen.
+    try {
+      const maxW = 120, maxH = 40;
+      const ratio = (logo.w || 1) / (logo.h || 1);
+      let w = maxW, h = maxW / ratio;
+      if (h > maxH) { h = maxH; w = maxH * ratio; }
+      const fmt = /png/i.test(logo.dataUrl.slice(0, 30)) ? "PNG" : "JPEG";
+      doc.addImage(logo.dataUrl, fmt, pageW - margin - w, 40, w, h);
+    } catch {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...ACCENT);
+      doc.text("vellu", pageW - margin, 60, { align: "right" });
+    }
+  } else {
+    // Vellu wordmark top-right (just text, no image — keeps PDF tiny)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...ACCENT);
+    doc.text("vellu", pageW - margin, 60, { align: "right" });
+    // Thin accent line under wordmark
+    doc.setDrawColor(...ACCENT);
+    doc.setLineWidth(0.5);
+    doc.line(pageW - margin - 30, 66, pageW - margin, 66);
+  }
 
   // ── COMPANY BLOCK ────────────────────────────────────────
   // Right-aligned address block, invoice-style

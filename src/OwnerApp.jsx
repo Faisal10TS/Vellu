@@ -1048,6 +1048,38 @@ const apptInvolvesStaff = (a, id) =>
   Object.values(a.staff_assignments || {}).includes(id) ||
   (Array.isArray(a.service_breakdown) && a.service_breakdown.some(b => b.staff_id === id));
 
+// Laadt het salonlogo als data-URL voor in een PDF. jsPDF kan geen externe URL
+// tekenen — het beeld moet als base64 mee. Geeft {dataUrl, w, h} terug (w/h
+// nodig voor de juiste verhouding), of null als er geen logo is, de vlag uit
+// staat, of het laden mislukt. Een rapport mag NOOIT stuklopen op een logo, dus
+// elke fout valt stil terug op null en dan tekent het rapport het Vellu-merk.
+async function loadLogoForPdf(salonData) {
+  if (salonData?.show_logo_on_invoice === false) return null;
+  const url = salonData?.logo_url;
+  if (!url) return null;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+    const dims = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+    if (!dims) return null;
+    return { dataUrl, w: dims.w, h: dims.h };
+  } catch {
+    return null;
+  }
+}
+
 // `fixedStaffName`: set by the staff app, where the appointments are already
 // scoped to one team member — hides the team chips and stamps that name on
 // the PDF instead.
@@ -1130,8 +1162,9 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       // registered (has a tax id) and a rate > 0 — same rule as the invoice.
       const _money = currencyForCountry(salonData.country_code);
       const _tax = resolveTax(salonData);
+      const _logo = await loadLogoForPdf(salonData);
       const result = mod.generateRevenueReportPDF({
-        salon: salonData, appointments: inRange, range, lang,
+        salon: salonData, appointments: inRange, range, lang, logo: _logo,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
         taxCfg: _tax,
@@ -3965,6 +3998,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           break_minutes: data.break_minutes || 0,
           slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
+          // Default true: een kolom die net is toegevoegd is bij bestaande
+          // salons niet undefined maar echt true (NOT NULL DEFAULT true), maar
+          // ?? true dekt ook een oude gecachte sessie zonder het veld.
+          show_logo_on_invoice: data.show_logo_on_invoice ?? true,
           cover_image_url: data.cover_image_url || "",
           cover_focal_y: data.cover_focal_y ?? 50,
           cover_focal_x: data.cover_focal_x ?? 50,
@@ -5855,8 +5892,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         : scope === "month"
         ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
         : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      const _logoP = await loadLogoForPdf(salonData);
       mod.generateProductReportPDF({
-        salon: salonData,
+        salon: salonData, logo: _logoP,
         appointments: rows,
         range: { from, to, label },
         lang,
@@ -6178,7 +6216,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const t = taxForSale(a, taxCfg);
             return t.lines.map((l) => ({ kind: l.kind, name: l.name, qty: l.qty || 1, gross: l.gross, rate: l.rate }));
           })(),
-          salon_logo: salonData.logo_url || "",
+          // De factuur volgt de aan/uit-knop "Logo op facturen en rapporten".
+          // Staat hij uit, dan sturen we geen logo mee en valt de mailkop terug
+          // op de bedrijfsnaam. De boekingsbevestiging (hierboven en -onder)
+          // toont het logo altijd — dat is branding naar de klant, geen factuur.
+          salon_logo: salonData.show_logo_on_invoice !== false ? (salonData.logo_url || "") : "",
           // Currency + tax label from the salon's country → invoice shows $ / ABB
           // for a Bonaire salon (send-emails defaults to € / BTW if omitted).
           currency: cur,
@@ -11150,9 +11192,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: c.text, marginBottom: 2 }}>{t.logo}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Verschijnt op je pagina en facturen" : lang === "es" ? "Se muestra en tu página y en las facturas" : "Shown on your page and invoices"}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Verschijnt op je boekingspagina" : lang === "es" ? "Se muestra en tu página de reservas" : "Shown on your booking page"}</div>
                     </div>
                   </div>
+
+                  {/* Logo op factuur en rapporten aan/uit. Alleen tonen als er
+                      een logo IS — anders is er niets om aan of uit te zetten.
+                      Zonder logo tekenen de rapporten gewoon het "vellu"-merk. */}
+                  {salonData.logo_url && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, padding: "12px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 2 }}>
+                          {lang === "nl" ? "Logo op facturen en rapporten" : lang === "es" ? "Logo en facturas e informes" : "Logo on invoices and reports"}
+                        </div>
+                        <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>
+                          {lang === "nl" ? "Aan: je eigen logo bovenaan. Uit: het Vellu-merk." : lang === "es" ? "Activado: tu propio logo arriba. Desactivado: la marca Vellu." : "On: your own logo at the top. Off: the Vellu wordmark."}
+                        </div>
+                      </div>
+                      <div
+                        onClick={() => update(d => { d.show_logo_on_invoice = !d.show_logo_on_invoice; return d; })}
+                        style={{ width: 36, height: 20, borderRadius: 10, background: salonData.show_logo_on_invoice ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.show_logo_on_invoice ? 18 : 2, transition: "left 0.2s" }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Cover image upload */}
@@ -15235,6 +15298,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   break_minutes: salonData.break_minutes || 0,
                   slot_interval_minutes: salonData.slot_interval_minutes || 30,
                   logo_url: salonData.logo_url || null,
+                  show_logo_on_invoice: salonData.show_logo_on_invoice !== false,
                   cover_image_url: salonData.cover_image_url || null,
                   cover_focal_y: salonData.cover_focal_y ?? 50,
                   cover_focal_x: salonData.cover_focal_x ?? 50,
