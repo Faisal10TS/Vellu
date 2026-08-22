@@ -42,6 +42,15 @@ verify_jwt = false
 import_map = "./functions/send-reminders/deno.json"
 entrypoint = "./functions/send-reminders/index.ts"
 
+[functions.send-push-notification]
+enabled = true
+# Server-to-server vanuit book-appointment/cancel-appointment met
+# x-internal-secret (geen gebruikers-JWT); de testknop in Instellingen stuurt
+# wél een JWT, die de functie zelf controleert (user_id = aanroeper).
+# verify_jwt=true zou de interne aanroepen aan de gateway 401'en — zie send-emails.
+verify_jwt = false
+entrypoint = "./functions/send-push-notification/index.ts"
+
 [functions.reschedule-appointment]
 enabled = true
 # Does its own Bearer-token validation in-function (verifyUser); deployed

@@ -966,6 +966,25 @@ serve(async (req) => {
         }),
       }));
     }
+    // Push-melding op de telefoon/browser van de eigenaar (sinds 2026-08-22,
+    // zie send-push-notification + OwnerApp Instellingen → Meldingen). De
+    // functie doet niets als de eigenaar geen abonnement heeft; fire-and-forget
+    // net als de mails — een mislukte push mag de boeking nooit raken.
+    {
+      const ownerNl = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL");
+      const priceStr = `${emailBase.currency}${Number(totalPrice || 0).toFixed(2)}`;
+      jobs.push(fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+        method: "POST",
+        headers: internalHeaders,
+        body: JSON.stringify({
+          user_id: salon.id,
+          title: ownerNl ? "Nieuwe boeking" : "New booking",
+          body: `${firstName} ${lastName} · ${date} ${time} · ${combinedName} · ${priceStr}`,
+          url: "/owner",
+          tag: `booking-${appt.id}`,
+        }),
+      }));
+    }
     await Promise.allSettled(jobs);
     // We attempted the server-side sends; tell the client not to run its
     // (auth-doomed) fallback regardless of each message's per-provider outcome.

@@ -20,6 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow
 } from "./shared.jsx";
+import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
 // genoeg om gewoon mee te bundelen — jsPDF blijft lazy.
 import { computeTax, linesFromSale, buildSnapshot, taxForSale } from "./taxEngine.js";
@@ -13409,6 +13410,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
               {/* ═══ PLANNING TAB ═══ */}
               {settingsTab === "planning" && <>
+
+              {/* Push-meldingen (PWA/browser) — zie src/PushSettings.jsx */}
+              <PushSettingsCard userId={salonData.owner_id} t={t} accent={accent} c={c} toast={toast} SL={SL} />
 
               {/* Business Hours */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>

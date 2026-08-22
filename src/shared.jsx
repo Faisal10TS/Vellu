@@ -246,6 +246,14 @@ function useSEO({ title, description, ogImage, url }) {
   }, [title, description, ogImage, url]);
 }
 
+// ─── WEB PUSH ─────────────────────────────────────────────────
+// Publieke VAPID-sleutel (P-256, base64url). Hoort publiek te zijn: de browser
+// gebruikt hem alleen om het push-abonnement aan onze server te binden. De
+// privésleutel staat als Supabase-secret VAPID_KEYS_JWK (edge function
+// send-push-notification); back-up buiten de repo. Nieuwe sleutel = alle
+// bestaande abonnementen ongeldig, dus niet zomaar vervangen.
+const VAPID_PUBLIC_KEY = "BCeiyrqKda2DOs06mTkRNehQtW9xOvon8eP6L-AAKr_SZz800Jfh29VTqWXthFap4IvI5ks8_U7-2JJ-x_BrH1k";
+
 // ─── SHARED IMAGE COMPRESSION ────────────────────────────────
 // Elke upload naar Storage gaat hierdoorheen. Tot 2026-08-22 bleef alles onder
 // 1 MB ongemoeid en gingen logo, cover en teamfoto's er helemaal omheen. Gevolg:
@@ -851,6 +859,13 @@ const _T_RAW = {
     anyStaff:"Geen voorkeur", noStaff:"Nog geen medewerkers",
     businessHours:"Openingstijden", openTime:"Open", closeTime:"Sluit",
     businessHoursDesc:"Stel je werkdagen en -uren in", closedOnDay:"Gesloten op deze dag",
+    pushTitle:"Meldingen op je telefoon", pushDesc:"Krijg direct een melding bij een nieuwe boeking of annulering — ook als Vellu niet open staat.",
+    pushEnable:"Meldingen aanzetten", pushDisable:"Uitzetten op dit apparaat", pushOn:"Aan op dit apparaat", pushOff:"Uit op dit apparaat",
+    pushTest:"Stuur testmelding", pushTestSent:"Testmelding verstuurd — kijk op je vergrendelscherm of in de meldingen.",
+    pushDenied:"Meldingen zijn geblokkeerd in je browser. Zet ze aan via de site-instellingen van je browser en probeer opnieuw.",
+    pushUnsupported:"Deze browser ondersteunt geen meldingen.",
+    pushIosHint:"Op iPhone werkt dit alleen vanuit de app op je beginscherm: tik in Safari op Delen → 'Zet op beginscherm', open Vellu daarna vanaf je beginscherm en zet meldingen hier aan.",
+    pushDevices:"Actief op {n} apparaat/apparaten", pushBusy:"Bezig…",
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
     salonContact:"Contactgegevens salon", salonContactDesc:"Zichtbaar op je salonpagina voor klanten",
@@ -1130,6 +1145,13 @@ const _T_RAW = {
     anyStaff:"No preference", noStaff:"No staff members yet",
     businessHours:"Business Hours", openTime:"Open", closeTime:"Close",
     businessHoursDesc:"Set your working days and hours", closedOnDay:"Closed on this day",
+    pushTitle:"Notifications on your phone", pushDesc:"Get an instant notification for every new booking or cancellation — even when Vellu isn't open.",
+    pushEnable:"Enable notifications", pushDisable:"Turn off on this device", pushOn:"On for this device", pushOff:"Off on this device",
+    pushTest:"Send test notification", pushTestSent:"Test notification sent — check your lock screen or notification tray.",
+    pushDenied:"Notifications are blocked in your browser. Allow them in your browser's site settings and try again.",
+    pushUnsupported:"This browser doesn't support notifications.",
+    pushIosHint:"On iPhone this only works from the home-screen app: in Safari tap Share → 'Add to Home Screen', open Vellu from your home screen and enable notifications here.",
+    pushDevices:"Active on {n} device(s)", pushBusy:"Working…",
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
     salonContact:"Salon contact details", salonContactDesc:"Visible on your salon page for clients",
@@ -1409,6 +1431,13 @@ const _T_RAW = {
     anyStaff:"Sin preferencia", noStaff:"Aún no hay miembros del equipo",
     businessHours:"Horario de atención", openTime:"Apertura", closeTime:"Cierre",
     businessHoursDesc:"Define tus días y horas de trabajo", closedOnDay:"Cerrado este día",
+    pushTitle:"Notificaciones en tu teléfono", pushDesc:"Recibe un aviso al instante con cada reserva o cancelación, aunque Vellu no esté abierto.",
+    pushEnable:"Activar notificaciones", pushDisable:"Desactivar en este dispositivo", pushOn:"Activadas en este dispositivo", pushOff:"Desactivadas en este dispositivo",
+    pushTest:"Enviar notificación de prueba", pushTestSent:"Prueba enviada: mira la pantalla de bloqueo o el centro de notificaciones.",
+    pushDenied:"Las notificaciones están bloqueadas en tu navegador. Actívalas en los ajustes del sitio e inténtalo de nuevo.",
+    pushUnsupported:"Este navegador no admite notificaciones.",
+    pushIosHint:"En iPhone solo funciona desde la app de la pantalla de inicio: en Safari toca Compartir → 'Añadir a pantalla de inicio', abre Vellu desde ahí y activa las notificaciones aquí.",
+    pushDevices:"Activo en {n} dispositivo(s)", pushBusy:"Un momento…",
     // New customization translations
     bookingPolicy:"Política de reservas", bookingPolicyDesc:"Condiciones que los clientes deben aceptar antes de reservar",
     salonContact:"Datos de contacto del salón", salonContactDesc:"Visibles en tu página para los clientes",
@@ -2501,7 +2530,7 @@ export {
   useToast, ToastContainer,
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
-  compressImage, sendEmails, sendSMS, createCancellationToken,
+  compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,

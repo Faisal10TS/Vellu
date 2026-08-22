@@ -153,7 +153,26 @@ async function notifyOwnerCancellation(b: {
   client_name?: string; client_phone?: string | null; service_name?: string;
   date?: string; time?: string; reason?: string | null;
   staff_view_revenue?: boolean; staff_view_client_contact?: boolean;
+  owner_id?: string;
 }) {
+  // Push-melding naar de eigenaar (sinds 2026-08-22, zie send-push-notification).
+  // Los van de mail: geen abonnement = niets; een mislukte push raakt de
+  // annulering niet. Bewust vóór de e-mail-check, want de push werkt ook
+  // zonder owner_email.
+  if (b.owner_id) {
+    const nl = (b.lang || "nl") === "nl";
+    fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY },
+      body: JSON.stringify({
+        user_id: b.owner_id,
+        title: nl ? "Afspraak geannuleerd" : "Appointment cancelled",
+        body: `${b.client_name || ""} · ${b.date || ""} ${b.time || ""} · ${b.service_name || ""}`.trim(),
+        url: "/owner",
+        tag: `cancel-${b.owner_id}-${b.date}-${b.time}`,
+      }),
+    }).catch((e) => console.error("owner cancellation push failed:", e));
+  }
   try {
     if (!b.owner_email) return;
     await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
@@ -387,6 +406,7 @@ serve(async (req) => {
   await Promise.all([
     // Owner + assigned staff: "your client cancelled".
     notifyOwnerCancellation({
+      owner_id: appt.owner_id,
       owner_email: notify.owner_email,
       staff_email: notify.staff_email,
       staff_view_revenue: notify.staff_view_revenue,
