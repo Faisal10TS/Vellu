@@ -42,6 +42,10 @@
     {
       "path": "/api/send-birthday-emails",
       "schedule": "10 9 * * *"
+    },
+    {
+      "path": "/api/cron-health-check",
+      "schedule": "30 11 * * *"
     }
   ]
 }

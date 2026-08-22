@@ -1141,7 +1141,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       // then routes them to StaffApp via resolveUserRole.
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).maybeSingle();
       const slug = profile?.slug || data.user.email.split("@")[0];
-      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, account_type: profile?.account_type || "joint" });
+      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, subscription_status: profile?.subscription_status || null, mollie_subscription_id: profile?.mollie_subscription_id || null, account_type: profile?.account_type || "joint" });
     }
     setLoading(false);
   };

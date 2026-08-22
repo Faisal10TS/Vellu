@@ -17,13 +17,16 @@
 //  de bron: send-reminders v17 schrijft de rij bij elke run in het 09/10-UTC-
 //  venster, ook met nul digests. Hier alleen het verwachtingslabel aangescherpt.
 //
-// BEKENDE BEPERKING, bewust niet weggemoffeld: deze functie kan zichzelf niet
+// BEKENDE BEPERKING, sinds 2026-08-22 AFGEDEKT: deze functie kan zichzelf niet
 // bewaken. Valt hij stil, dan is er ook niemand die dat constateert — precies
 // wat er vier maanden lang gebeurd is toen pg_net ontbrak. Zichzelf aan
 // MONITORED toevoegen lost dat niet op: een functie die niet draait, kan ook
-// niet klagen dat hij niet draait. Daar is een externe hartslag voor nodig
-// (een uptime-monitor die dit endpoint dagelijks aanroept en alarmeert als het
-// antwoord uitblijft). Zolang die er niet is, blijft dit een blinde vlek.
+// niet klagen dat hij niet draait. Daarom draait er nu op Vercel (andere
+// infrastructuur, andere scheduler) api/cron-health-check.js: die kijkt
+// dagelijks of ónze hartslag er is, trapt deze functie anders direct aan en
+// schrijft zelf de hartslag 'vercel-cron-health-check' — die wij hier op onze
+// beurt bewaken. De twee houden elkaar in de gaten; alleen als Supabase én
+// Vercel tegelijk stil zijn, hoort niemand iets.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -49,6 +52,12 @@ const MONITORED = [
   // betaal-webhook, en een vangnet zonder toezicht is geen vangnet.
   { name: "check-pending-payments", schedule: "hourly at :20", maxAgeHours: 3 },
   { name: "send-renewal-reminder", schedule: "daily", maxAgeHours: 25 },
+  // De waakhond voor de waakhond (Vercel-cron, zie api/cron-health-check.js).
+  // Hij schrijft 'error' als hij ónze hartslag stilgevallen vond — die rij
+  // komt dan via de "errored"-tak hieronder in de mail die hij zelf heeft
+  // afgedwongen. Vercel Hobby plant op het uur, niet de minuut: 11:30 kan tot
+  // ~12:29 uitlopen, maar blijft binnen 25 uur.
+  { name: "vercel-cron-health-check", schedule: "daily 11:30 UTC (Vercel)", maxAgeHours: 25 },
 ];
 
 async function emailAdmin(subject, html) {

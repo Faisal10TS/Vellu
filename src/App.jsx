@@ -21,6 +21,31 @@ const ContactPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: 
 const DpaPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.DpaPage })));
 const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.GoogleIntegrationPage })));
 
+// ─── PLAN-TOEGANG ─────────────────────────────────────────────
+// Mag deze eigenaar de app in? Normaal: een plan én plan_expires_at in de
+// toekomst (een datum zonder tijd geldt tot het EINDE van die dag).
+//
+// Verlengingscoulance (sinds 2026-08-22): voor een LOPEND betaald abonnement
+// (subscription_status 'active' + Mollie-abonnement) geldt 3 dagen speling ná
+// plan_expires_at. Mollie incasseert de verlenging op zijn eigen moment en pas
+// de webhook (recurring.paid) schuift plan_expires_at op; komt die webhook te
+// laat of even niet aan, dan stond een betalende salon tot nu toe op de minuut
+// voor een dichte deur. Mislukt de incasso écht, dan zet de webhook
+// subscription_status op 'past_due' en vervalt de coulance direct. Proefaccounts
+// en jaarklanten-zonder-abonnement (eenmalige betaling) hebben geen
+// mollie_subscription_id en krijgen hem dus nooit.
+const RENEWAL_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+function planIsActive(owner) {
+  if (!owner?.plan) return false;
+  const raw = owner.plan_expires_at;
+  if (!raw) return true;
+  const exp = new Date(typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + "T23:59:59" : raw);
+  const now = new Date();
+  if (exp > now) return true;
+  const renewing = owner.subscription_status === "active" && !!owner.mollie_subscription_id;
+  return renewing && (now - exp) < RENEWAL_GRACE_MS;
+}
+
 // ─── ROLE RESOLUTION ─────────────────────────────────────────
 // Figure out whether a logged-in auth user is a SALON OWNER or a STAFF member.
 //
@@ -128,6 +153,9 @@ function OwnerEntryPage({ lang, setLang }) {
                 accent: profile.accent_color,
                 plan: profile.plan || null,
                 plan_expires_at: profile.plan_expires_at || null,
+                // Nodig voor de verlengingscoulance in planIsActive().
+                subscription_status: profile.subscription_status || null,
+                mollie_subscription_id: profile.mollie_subscription_id || null,
                 account_type: profile.account_type || "joint"
               });
             }
@@ -189,10 +217,8 @@ function OwnerEntryPage({ lang, setLang }) {
   // Staff member — redirect to /staff
   if (staffUser) return <Navigate to="/staff" replace />;
 
-  // Check if plan is active
-  // If plan_expires_at is a date-only string (YYYY-MM-DD) the plan is valid through the END of that day.
-  // If it's a full timestamp, use it as-is — do NOT special-case only length===10.
-  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(typeof owner.plan_expires_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(owner.plan_expires_at) ? owner.plan_expires_at + "T23:59:59" : owner.plan_expires_at) > new Date());
+  // Check if plan is active (incl. verlengingscoulance — zie planIsActive).
+  const hasPlan = planIsActive(owner);
 
   if (owner && !hasPlan) {
     return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
@@ -829,9 +855,8 @@ function AppInner({ lang, setLang }) {
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
       {screen === "owner" && (() => {
-        // If plan_expires_at is a date-only string (YYYY-MM-DD) the plan is valid through the END of that day.
-  // If it's a full timestamp, use it as-is — do NOT special-case only length===10.
-  const hasPlan = owner?.plan && (!owner.plan_expires_at || new Date(typeof owner.plan_expires_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(owner.plan_expires_at) ? owner.plan_expires_at + "T23:59:59" : owner.plan_expires_at) > new Date());
+        // Zelfde regel als in OwnerEntryPage, incl. verlengingscoulance.
+        const hasPlan = planIsActive(owner);
         if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
         return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}

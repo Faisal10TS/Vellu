@@ -24,7 +24,17 @@
 // De gebeurtenissen heten:
 //   first_payment.created   — gestart, uitkomst nog onbekend
 //   first.paid / first.expired / first.failed / first.canceled — de uitkomst
+//   oneoff.paid / oneoff.expired / ...  — idem, maar voor het JAARabonnement:
+//                             dat loopt sinds 20-08 als eenmalige betaling
+//                             (sequenceType "oneoff"), dus de uitkomst heet
+//                             "oneoff.*" en niet "first.*".
 // Een rij uit de eerste groep zonder tegenhanger in de tweede is blijven hangen.
+//
+// v2 (22-08): de uitkomst-check keek alleen naar "first.%". Een betaald
+// jaarabonnement (oneoff.paid, My Whims 21-08) bleef daardoor voor altijd
+// "hangend" en de webhook werd er elk uur opnieuw voor aangetrapt — onschadelijk
+// (logEvent ontdubbelt → HTTP 409, niets gebeurt) maar 17 loze aanroepen per
+// dag, en elke volgende jaarklant zou er één bij leggen.
 //
 // TOEGANG: verify_jwt=false, zoals de andere cron-functies. Er is bewust geen
 // geheim: de functie geeft alleen aantallen terug, raakt geen klantgegevens aan,
@@ -77,13 +87,13 @@ serve(async () => {
         { headers: { "Content-Type": "application/json" } });
     }
 
-    // Welke daarvan hebben al een uitkomst? Alles wat met "first." begint is
-    // een eindstand; "first_payment.created" niet (die heeft een underscore).
+    // Welke daarvan hebben al een uitkomst? Alles wat met "first." of "oneoff."
+    // begint is een eindstand; "first_payment.created" niet (underscore).
     const { data: afgerond, error: e2 } = await supabase
       .from("payment_events")
       .select("mollie_payment_id, event_type")
       .in("mollie_payment_id", ids)
-      .like("event_type", "first.%");
+      .or("event_type.like.first.%,event_type.like.oneoff.%");
     if (e2) throw e2;
 
     const klaar = new Set((afgerond || []).map(r => r.mollie_payment_id));
