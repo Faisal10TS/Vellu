@@ -51,6 +51,13 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-push-notification/index.ts"
 
+[functions.translate-text]
+enabled = true
+# Alleen vanuit het ingelogde dashboard (vertaalknop); de gateway mag anonieme
+# aanroepen weigeren. Bestand stond tot 22-08-2026 alleen gedeployd (v7).
+verify_jwt = true
+entrypoint = "./functions/translate-text/index.ts"
+
 [functions.reschedule-appointment]
 enabled = true
 # Does its own Bearer-token validation in-function (verifyUser); deployed
