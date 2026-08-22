@@ -247,20 +247,55 @@ function useSEO({ title, description, ogImage, url }) {
 }
 
 // ─── SHARED IMAGE COMPRESSION ────────────────────────────────
-async function compressImage(file, maxDim = 1600) {
-  if (file.size <= 1024 * 1024) return file;
+// Elke upload naar Storage gaat hierdoorheen. Tot 2026-08-22 bleef alles onder
+// 1 MB ongemoeid en gingen logo, cover en teamfoto's er helemaal omheen. Gevolg:
+// een logo van 1,5 MB op élke weergave van de boekingspagina, servicefoto's van
+// 400-550 kB in tegels van 300 px, ~6 MB per paginaweergave — en een
+// overschreden egress-quotum bij Supabase. Nu: altijd schalen naar maxDim en
+// opnieuw coderen, tenzij het bestand al klein genoeg is (≤ COMPRESS_SKIP_BYTES
+// én binnen maxDim). Een PNG blijft alleen PNG als er écht transparantie in zit
+// (logo's); anders wordt het JPEG, voor foto's 5-10× kleiner. De aanroeper
+// bepaalt maxDim naar gebruik: logo/teamfoto 512, product 800, servicefoto
+// 1400, cover 1600.
+const COMPRESS_SKIP_BYTES = 150 * 1024;
+
+async function compressImage(file, maxDim = 1600, { quality = 0.8 } = {}) {
+  if (!file || !file.type?.startsWith("image/")) return file;
   try {
-    const img = await createImageBitmap(file);
-    const canvas = document.createElement("canvas");
+    // EXIF-rotatie toepassen vóór het tekenen, anders komt een telefoonfoto
+    // soms gedraaid terug; een browser die de optie niet kent negeert hem.
+    const img = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const fits = img.width <= maxDim && img.height <= maxDim;
+    if (fits && file.size <= COMPRESS_SKIP_BYTES) { img.close?.(); return file; }
     const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
-    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.close?.();
+    const keepPng = file.type === "image/png" && canvasHasAlpha(ctx, canvas.width, canvas.height);
+    const mime = keepPng ? "image/png" : "image/jpeg";
+    const blob = await new Promise(r => canvas.toBlob(r, mime, keepPng ? undefined : quality));
+    if (!blob) return file;
+    // Paste het al en valt de hercodering groter uit, dan is het origineel beter.
+    if (fits && blob.size >= file.size) return file;
+    const base = file.name.replace(/\.[^.]+$/, "") || "image";
+    return new File([blob], base + (keepPng ? ".png" : ".jpg"), { type: mime });
   } catch (e) {
     return file; // fallback to original
   }
+}
+
+// Steekproef op het alpha-kanaal (elke ~7e pixel): alleen een PNG met échte
+// transparantie verdient het om PNG te blijven — een JPEG zou de doorzichtige
+// achtergrond zwart maken. Bij twijfel (getImageData faalt) niets kapotmaken.
+function canvasHasAlpha(ctx, w, h) {
+  try {
+    const d = ctx.getImageData(0, 0, w, h).data;
+    for (let i = 3; i < d.length; i += 4 * 7) if (d[i] < 250) return true;
+  } catch { return true; }
+  return false;
 }
 
 // ─── EMAIL HELPER ─────────────────────────────────────────────

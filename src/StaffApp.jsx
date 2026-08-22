@@ -392,9 +392,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
   const staffAddPhoto = async (serviceId, file) => {
     setStaffPhotoUploading(serviceId);
-    const uploadFile = await compressImage(file);
+    // Zelfde maat en cache-termijn als de eigenaarsupload in OwnerApp (addPhoto).
+    const uploadFile = await compressImage(file, 1400);
     const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
-    const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
+    const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false });
     if (uploadError) { console.error("Upload error:", uploadError); setStaffPhotoUploading(null); return; }
     const { data: { publicUrl } } = supabase.storage.from("service-photos").getPublicUrl(fileName);
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({

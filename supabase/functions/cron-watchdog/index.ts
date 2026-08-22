@@ -10,6 +10,13 @@
 //    ADMIN_ALERT_EMAIL niet ingesteld, dan ging de waarschuwing daarheen; nu
 //    valt hij terug op een adres dat in de repo mag staan.
 //
+// 2026-08-22: eerste vals alarm van precies die digest-bewaking. De rij werd
+//  door send-reminders alleen geschreven bij ≥1 verstuurde digest, dus op een
+//  dag zonder afspraken voor morgen (zaterdag → zondag) was er geen hartslag en
+//  meldde dit script "stale, 27.0h" terwijl alles gewoon draaide. Opgelost aan
+//  de bron: send-reminders v17 schrijft de rij bij elke run in het 09/10-UTC-
+//  venster, ook met nul digests. Hier alleen het verwachtingslabel aangescherpt.
+//
 // BEKENDE BEPERKING, bewust niet weggemoffeld: deze functie kan zichzelf niet
 // bewaken. Valt hij stil, dan is er ook niemand die dat constateert — precies
 // wat er vier maanden lang gebeurd is toen pg_net ontbrak. Zichzelf aan
@@ -30,7 +37,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const MONITORED = [
   { name: "send-reminders", schedule: "daily 10:00", maxAgeHours: 25 },
-  { name: "send-reminders-digest", schedule: "daily 09:00 UTC", maxAgeHours: 25 },
+  // Geschreven door send-reminders in het digest-venster (UTC-uur 9 en 10),
+  // sinds v17 ook bij nul verstuurde digests — dus een ontbrekende rij betekent
+  // echt dat de digest-code niet gedraaid heeft.
+  { name: "send-reminders-digest", schedule: "daily 09:00-10:59 UTC (digest window)", maxAgeHours: 25 },
   { name: "send-followups", schedule: "daily 10:30", maxAgeHours: 25 },
   { name: "send-rebook-nudge", schedule: "daily 11:00", maxAgeHours: 25 },
   { name: "db-backup", schedule: "daily 03:00", maxAgeHours: 25 },

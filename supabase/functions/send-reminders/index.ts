@@ -61,6 +61,13 @@
 //   3. De digest blijft in het vertrouwde venster (UTC-uur 9 of 10) — zonder
 //      die grens zou de uurlijkse cron hem om 00:00 UTC versturen, midden in
 //      de nacht voor alle markten. Zie DIGEST_UTC_HOURS.
+//
+// v17 (2026-08-22): de digest-hartslag ('send-reminders-digest' in cron_health)
+//   wordt nu bij ÉLKE run in het 09/10-venster geschreven, ook bij nul digests.
+//   cron-watchdog bewaakt die rij sinds 18-08 met een 25-uursgrens, en "alleen
+//   een rij bij ≥1 digest" gaf daardoor vals alarm op elke dag zonder afspraken
+//   voor morgen (zaterdag 22-08: nul afspraken voor zondag → geen rij → mail
+//   "stale, 27.0h"). Zie DIGEST_JOB_NAME.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -257,20 +264,22 @@ function fmtDate(dateStr: string, lang: string) {
 const DIGEST_UTC_HOURS = new Set([9, 10]);
 
 // Hartslag-rij voor de digest in cron_health — sinds v16 puur TELEMETRIE, niet
-// langer de dedupe. De dedupe zelf leeft nu per eigenaar in salon_digest_log
-// (zie de digest-lus in serve): de oude ene-rij-per-dag-aanpak was
-// alles-of-niets, waardoor een salon wiens eerste afspraak-van-morgen pas ná de
-// eerste digest-run geboekt werd, die dag geen agenda-mail meer kreeg. We
-// schrijven deze rij nog wél bij ≥1 verstuurde digest, zodat in cron_health
-// zichtbaar blijft wanneer er digests uitgingen; de naam staat niet in de
-// MONITORED-lijst van cron-watchdog, dus een dag zonder digests geeft geen
-// vals alarm.
+// langer de dedupe. De dedupe zelf leeft per eigenaar in salon_digest_log (zie
+// de digest-lus in serve): de oude ene-rij-per-dag-aanpak was alles-of-niets,
+// waardoor een salon wiens eerste afspraak-van-morgen pas ná de eerste
+// digest-run geboekt werd, die dag geen agenda-mail meer kreeg.
+//
+// Sinds v17 schrijven we deze rij bij ELKE run in het 09/10-venster, ook als er
+// nul digests uitgingen (items_processed = 0). cron-watchdog heeft de naam op
+// 18-08-2026 in zijn MONITORED-lijst gezet (25 uur), en met de oude regel
+// "alleen een rij bij ≥1 digest" betekende een dag zonder afspraken voor morgen
+// (een zaterdag, een feestdag) automatisch een vals "stale"-alarm. De rij zegt
+// nu "de digest-code heeft gedraaid"; items_processed zegt hoeveel mails er
+// daadwerkelijk uitgingen. Niet in het venster → geen rij, dat is dan ook geen
+// digest-run.
 const DIGEST_JOB_NAME = "send-reminders-digest";
 
-// Telemetrie-rij wegschrijven, alleen bij minstens één verstuurde digest: een
-// ronde zonder digests (niets in de agenda's van morgen) hoeft geen rij.
 async function recordDigestSent(count: number) {
-  if (count <= 0) return;
   try {
     await supabase.from("cron_health").insert({
       job_name: DIGEST_JOB_NAME,

@@ -5477,9 +5477,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (!file) return;
     setProductPhotoUploading(productId);
     try {
-      const fileName = `${salonData.owner_id}/product_${Date.now()}.${file.name.split(".").pop()}`;
-      const compressed = await compressImage(file);
-      const { error } = await supabase.storage.from("business-images").upload(fileName, compressed);
+      // 800 px is ruim voor een productfoto (miniatuur + bewerkformulier). De
+      // extensie komt van het gecomprimeerde bestand: PNG kan JPEG geworden zijn.
+      // Cache een jaar: de naam bevat een timestamp en wordt nooit overschreven.
+      const compressed = await compressImage(file, 800);
+      const fileName = `${salonData.owner_id}/product_${Date.now()}.${compressed.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("business-images").upload(fileName, compressed, { cacheControl: "31536000" });
       if (error) { toast.show(t.somethingWrong, "error"); return; }
       const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
       await supabase.from("products").update({ photo_url: publicUrl }).eq("id", productId);
@@ -6350,11 +6353,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   const addPhoto = async (serviceId, file) => {
     setPhotoUploading(serviceId);
-    const uploadFile = await compressImage(file);
+    // 1400 px dekt de lightbox op een 3×-telefoon; de tegel zelf is 300 px.
+    // Cache een jaar: de naam bevat een timestamp en wordt nooit overschreven.
+    const uploadFile = await compressImage(file, 1400);
     const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("service-photos")
-      .upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
+      .upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false });
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
@@ -11176,8 +11181,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                           const file = e.target.files[0];
                           if (!file) return;
-                          const fileName = `${salonData.owner_id}/logo_${Date.now()}.${file.name.split(".").pop()}`;
-                          const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                          // Het logo staat op 44-50 px in de boekingspagina en
+                          // op facturen/rapporten; 512 px is daar ruim voor. Een
+                          // rauw logo van 1,5 MB ging tot 22-08-2026 op élke
+                          // paginaweergave over de lijn (zie compressImage).
+                          const uploadFile = await compressImage(file, 512, { quality: 0.85 });
+                          const fileName = `${salonData.owner_id}/logo_${Date.now()}.${uploadFile.name.split(".").pop()}`;
+                          const { error } = await supabase.storage.from("business-images").upload(fileName, uploadFile, { cacheControl: "31536000" });
                           // Zonder else-tak verdween een mislukte upload geruisloos:
                           // geen toast, geen console-regel, en de eigenaar zag
                           // gewoon zijn oude logo staan zonder te weten waarom.
@@ -11308,8 +11318,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                         const file = e.target.files[0];
                         if (!file) return;
-                        const fileName = `${salonData.owner_id}/cover_${Date.now()}.${file.name.split(".").pop()}`;
-                        const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                        // Cover: hero van maximaal 300 px hoog over de volle
+                        // breedte; 1600 px breed is ruim voor desktop én retina.
+                        const uploadFile = await compressImage(file, 1600);
+                        const fileName = `${salonData.owner_id}/cover_${Date.now()}.${uploadFile.name.split(".").pop()}`;
+                        const { error } = await supabase.storage.from("business-images").upload(fileName, uploadFile, { cacheControl: "31536000" });
                         // Zelfde valkuil als bij het logo: zonder foutafhandeling
                         // verdween een mislukte upload geruisloos.
                         if (error) { console.error("cover upload:", error); toast.show(t.somethingWrong, "error"); return; }
@@ -13166,8 +13179,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
                                 const file = e.target.files[0];
                                 if (!file) return;
-                                const fileName = `${salonData.owner_id}/staff_${m.id}_${Date.now()}.${file.name.split(".").pop()}`;
-                                const { error } = await supabase.storage.from("business-images").upload(fileName, file);
+                                // Teamfoto wordt als avatar van 40 px getoond; 512 px is ruim.
+                                const uploadFile = await compressImage(file, 512);
+                                const fileName = `${salonData.owner_id}/staff_${m.id}_${Date.now()}.${uploadFile.name.split(".").pop()}`;
+                                const { error } = await supabase.storage.from("business-images").upload(fileName, uploadFile, { cacheControl: "31536000" });
                                 if (!error) {
                                   const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
                                   await supabase.from("staff_members").update({ avatar_url: publicUrl }).eq("id", m.id);
