@@ -453,7 +453,13 @@ function SalonRoute({ lang, setLang }) {
       // de kassa maar NIET online tonen. Het filter zit in de query zelf
       // (PostgREST filtert de embedded rows) zodat verborgen producten nooit
       // over de lijn gaan — RLS filtert al op active, dit filtert daarbovenop.
-      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).single();
+      // services.visible: dezelfde gedachte als products.visible_online. Een
+      // dienst "on hold" (nog niet gestart, seizoenspauze, verlof) blijft in de
+      // agenda en de rapporten van de eigenaar staan, maar hoort niet op de
+      // boekingspagina. Ook dit filter zit in de query zelf, zodat een verborgen
+      // dienst niet eens over de lijn gaat. De echte grens staat in
+      // book-appointment: die weigert een verborgen service_id.
+      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).eq("services.visible", true).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load related data in parallel for faster page load
       const [

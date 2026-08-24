@@ -578,7 +578,10 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
       if (rows.length) {
         const ids = rows.map(r => r.id);
         const [{ data: svcs }, { data: cats }] = await Promise.all([
-          supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids),
+          // visible=true: een verborgen dienst ("on hold") mag een salon niet in
+          // de zoekresultaten trekken — de bezoeker klikt dan door en vindt hem
+          // nergens op de boekingspagina terug.
+          supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids).eq("visible", true),
           supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", ids).order("position", { ascending: true }),
         ]);
         for (const s of (svcs || [])) {

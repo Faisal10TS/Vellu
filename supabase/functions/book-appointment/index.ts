@@ -240,11 +240,18 @@ serve(async (req) => {
   }
 
   // ---------- 2. Validate services belong to this salon ----------
+  // visible=true is hier geen weergave-detail maar de echte grens: de
+  // boekingspagina toont een verborgen dienst ("on hold") niet, maar iemand kan
+  // een service_id rechtstreeks POSTen. Zo'n boeking hoort te stranden, anders
+  // krijgt de salon alsnog afspraken voor iets wat ze niet aanbiedt. Het filter
+  // staat in de query, dus een verborgen dienst valt vanzelf in de
+  // lengte-controle hieronder en geeft "invalid_service".
   const { data: services, error: svcErr } = await supabase
     .from("services")
     .select("id, name_nl, name_en, name_es, price, duration, owner_id")
     .in("id", service_ids)
-    .eq("owner_id", salon.id);
+    .eq("owner_id", salon.id)
+    .eq("visible", true);
   if (svcErr) return err(500, "db_error_services", origin);
   if (!services || services.length !== service_ids.length) return err(400, "invalid_service", origin);
 

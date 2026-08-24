@@ -12223,6 +12223,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}</div>
                               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                {/* Zonder dit label lijkt een verborgen dienst gewoon
+                                    "aan" — het oogje alleen is te makkelijk te missen. */}
+                                {s.visible === false && (
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 999, border: `1px solid ${c.border}`, color: c.textMuted }}>
+                                    {lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden"}
+                                  </span>
+                                )}
                                 <span>{s.duration} {t.min}</span>
                                 {variantCount > 0 && <><span>·</span><span>{variantCount} {variantCount === 1 ? (lang === "nl" ? "variant" : lang === "es" ? "variante" : "variant") : (lang === "nl" ? "varianten" : lang === "es" ? "variantes" : "variants")}</span></>}
                                 {extrasCount > 0 && <><span>·</span><span>{extrasCount} extra{extrasCount === 1 ? "" : "s"}</span></>}
@@ -12260,6 +12267,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
                             {/* Actions */}
                             <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                              {/* Zichtbaarheid — "on hold" zonder de dienst kwijt te
+                                  raken: prijs, duur, vertalingen, varianten en de
+                                  historie blijven staan, alleen klanten zien hem niet
+                                  meer en kunnen hem niet boeken (book-appointment
+                                  weigert een verborgen service_id). Handig bij
+                                  seizoenspauze, verlof of een behandeling die je nog
+                                  niet aanbiedt. Schrijft direct weg, net als het
+                                  oogje bij producten; visible heeft default true dus
+                                  bestaande diensten staan gewoon online. */}
+                              <button type="button" onClick={async () => {
+                                const next = s.visible === false;
+                                const { error } = await supabase.from("services").update({ visible: next }).eq("id", s.id);
+                                if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                update(d => { d.services = d.services.map(x => x.id === s.id ? { ...x, visible: next } : x); return d; });
+                              }} title={s.visible !== false
+                                ? (lang === "nl" ? "Zichtbaar — klanten kunnen dit boeken"
+                                  : lang === "es" ? "Visible — los clientes pueden reservarlo"
+                                  : "Visible — clients can book this")
+                                : (lang === "nl" ? "Verborgen — niet op je boekingspagina, wel in je eigen agenda"
+                                  : lang === "es" ? "Oculto — no en tu página de reservas, sí en tu agenda"
+                                  : "Hidden — not on your booking page, still in your own calendar")}
+                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${s.visible !== false ? `${accent}55` : c.inputBorder}`, background: "transparent", color: s.visible !== false ? accent : c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", opacity: s.visible !== false ? 1 : 0.55 }}>
+                                <NavIcon name="eye" size={13} color="currentColor" />
+                              </button>
                               <button onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", description_nl: s.description_nl || "", description_en: s.description_en || "", price: s.price, duration: s.duration, category_id: s.category_id || "" }); setExpandedServiceId(null); }}
                                 style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
                                 title={lang === "nl" ? "Bewerken" : lang === "es" ? "Editar" : "Edit"}>
