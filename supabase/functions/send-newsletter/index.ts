@@ -204,9 +204,9 @@ serve(async (req) => {
   // Build the branded HTML body.
   const logo = safeImg(profile.logo_url);
   const header = logo
-    // Alleen de breedte begrenzen — max-width én max-height samen plet het logo
-    // in een deel van de mailprogramma's. Zie de toelichting in send-emails.
-    ? `<div style="text-align:center;margin-bottom:28px;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="width:auto;height:auto;max-width:180px;display:block;margin:0 auto;border:0;" /></div>`
+    // Alleen de breedte begrenzen (max-width én max-height samen plet het logo)
+    // en een wit kaartje eronder voor de donkere modus. Zie send-emails.
+    ? `<div style="text-align:center;margin-bottom:28px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:separate;"><tr><td style="background:#ffffff;border-radius:14px;padding:14px 18px;text-align:center;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="width:auto;height:auto;max-width:180px;display:block;border:0;" /></td></tr></table></div>`
     : `<div style="text-align:center;margin-bottom:28px;"><div style="font-size:26px;font-weight:600;color:#1a1a1a;">${esc(salonName)}</div></div>`;
   const bodyHtml = esc(message).replace(/\r?\n/g, "<br>");
   const html = `<div style="font-family:Georgia,'Times New Roman',serif;max-width:560px;margin:0 auto;padding:40px 24px;color:#1a1a1a;background:#ffffff;">
