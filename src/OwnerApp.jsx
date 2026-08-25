@@ -4093,6 +4093,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const langRef = useRef(lang);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
+  // Zie de inhaal-effect hieronder: het kanaal roept dit aan zodra het (opnieuw)
+  // verbonden is. Via een ref omdat de functie pas in dat latere effect bestaat.
+  const resyncApptsRef = useRef(null);
+
   // Real-time subscription for new/updated appointments
   useEffect(() => {
     if (!salonData.owner_id) return;
@@ -4128,7 +4132,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           update(d => { d.appointments = d.appointments.filter(a => a.id !== payload.old.id); return d; });
         }
       })
-      .subscribe();
+      // Bij (her)verbinden alles ophalen wat tijdens de onderbreking langskwam.
+      // Zonder dit blijft precies het gat bestaan dat de toelichting hieronder
+      // beschrijft: een gemiste INSERT komt nooit meer binnen.
+      .subscribe((status) => { if (status === "SUBSCRIBED") resyncApptsRef.current?.(); });
     return () => { supabase.removeChannel(channel); };
     // De gebruiker merkte hier niets van — dit was alleen een lint-melding.
     // Bewust alleen owner_id in de dependency-array. Doorslaggevend: `update`
@@ -4147,6 +4154,71 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // vastgelegde verwijzing nog steeds op de actuele state werkt. De enige
     // waarde die hier écht meebeweegt is de taal van de toast-tekst, en die
     // loopt daarom hierboven al via langRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salonData.owner_id]);
+
+  // ── Inhaalslag na afwezigheid ────────────────────────────────
+  // Een binnenkomende boeking bereikt een AL GEOPEND scherm alleen via het
+  // kanaal hierboven — en juist die websocket valt weg zodra de telefoon in
+  // slaap gaat of de eigenaar naar een andere app wisselt. Gemiste INSERTs
+  // worden niet ingehaald (zie de toelichting hierboven), dus stond de boeking
+  // wél in de mailbox maar niet in de agenda, tot een harde herlaad.
+  //
+  // Gemeld door een salon op Bonaire (24-08-2026): twee boekingen via haar
+  // website, allebei netjes bevestigd per mail, geen van beide in haar agenda.
+  // Haar sessie stond op dat moment al ruim een dag open. De afspraken stonden
+  // gewoon in de database — puur het scherm liep achter. Dat is het ergste
+  // soort stille fout in een agenda-app: je mist een klant zonder het te weten.
+  //
+  // Daarom: bij terugkeer naar het scherm (en bij herverbinden van het kanaal)
+  // het venster opnieuw ophalen en samenvoegen. Samenvoegen in plaats van
+  // vervangen, zodat lokale velden op bestaande rijen blijven staan; rijen die
+  // serverzijde zijn verdwenen vallen wel weg.
+  useEffect(() => {
+    if (!salonData.owner_id) return;
+    let alive = true;
+    let busy = false;
+    // Start op "nu": het kanaal meldt vlak na het laden zijn eerste SUBSCRIBED,
+    // en die hoeft de zojuist geladen lijst niet meteen nog eens op te halen.
+    let lastSync = Date.now();
+    const resync = async () => {
+      if (!alive || busy || document.visibilityState !== "visible") return;
+      if (Date.now() - lastSync < 10000) return;
+      busy = true;
+      const { data, error } = await supabase
+        .from("appointments").select("*")
+        .eq("owner_id", salonData.owner_id)
+        .gte("date", loadedWindowFrom())
+        .order("date", { ascending: false });
+      busy = false;
+      if (!alive || error || !data) return;
+      lastSync = Date.now();
+      update(d => {
+        const fresh = new Map(data.map(a => [a.id, a]));
+        const from = loadedWindowFrom();
+        // Rijen buiten het opgehaalde venster (de 90-dagengrens schuift mee)
+        // blijven staan — die zegt deze query niets over.
+        const kept = (d.appointments || [])
+          .filter(a => fresh.has(a.id) || a.date < from)
+          .map(a => fresh.has(a.id) ? { ...a, ...fresh.get(a.id) } : a);
+        const known = new Set(kept.map(a => a.id));
+        const added = data.filter(a => !known.has(a.id));
+        d.appointments = added.length ? [...added, ...kept] : kept;
+        return d;
+      });
+    };
+    resyncApptsRef.current = resync;
+    const onVisible = () => { if (document.visibilityState === "visible") resync(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", resync);
+    return () => {
+      alive = false;
+      resyncApptsRef.current = null;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", resync);
+    };
+    // Zelfde reden als bij het kanaal hierboven: `update` bestaat pas verderop
+    // in de component, dus hij mag hier niet in de dependency-array staan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salonData.owner_id]);
 

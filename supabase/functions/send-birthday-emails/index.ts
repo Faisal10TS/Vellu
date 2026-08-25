@@ -123,7 +123,9 @@ function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang 
   lang: string;
 }) {
   const header = logo
-    ? `<div style="text-align:center;margin-bottom:28px;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="max-height:56px;max-width:200px;" /></div>`
+    // Alleen de breedte begrenzen — max-width én max-height samen plet het logo
+    // in een deel van de mailprogramma's. Zie de toelichting in send-emails.
+    ? `<div style="text-align:center;margin-bottom:28px;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="width:auto;height:auto;max-width:180px;display:block;margin:0 auto;border:0;" /></div>`
     : `<div style="text-align:center;margin-bottom:28px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;color:#1a1a1a;">${esc(salonName)}</h1></div>`;
   const link = slug ? `https://vellu.cc/${esc(slug)}` : "";
   const heading = firstName

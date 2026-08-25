@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import {
@@ -43,6 +43,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // agenda show the whole salon with a per-stylist filter; otherwise only
   // this stylist's own appointments (the default).
   const seeAll = salonProfile.staff_see_all === true;
+  // Het kanaal roept de inhaalslag aan zodra het (opnieuw) verbonden is; die
+  // functie bestaat pas in een later effect, vandaar de ref.
+  const resyncApptsRef = useRef(null);
   // Owner-configurable visibility (Instellingen → Team): hide revenue/prices
   // and client contact details from staff. Missing column (older rows) or
   // true = current behaviour, everything visible.
@@ -264,9 +267,55 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           setAppointments(a => a.filter(x => x.id !== payload.old.id));
         }
       })
-      .subscribe();
+      // Bij (her)verbinden inhalen wat tijdens de onderbreking langskwam —
+      // zie het inhaal-effect hieronder.
+      .subscribe((status) => { if (status === "SUBSCRIBED") resyncApptsRef.current?.(); });
     return () => { supabase.removeChannel(channel); };
   }, [staffMember.id, salonProfile.id, seeAll]);
+
+  // ── Inhaalslag na afwezigheid ────────────────────────────────
+  // Zelfde gat als in OwnerApp (daar uitgebreid toegelicht): het kanaal
+  // hierboven is de enige route naar een al geopend scherm, en die websocket
+  // valt weg zodra de telefoon in slaap gaat. Gemiste INSERTs worden niet
+  // ingehaald, dus miste een medewerker een boeking tot hij herlaadde.
+  useEffect(() => {
+    if (!staffMember.id || !salonProfile.id) return;
+    let alive = true;
+    let busy = false;
+    let lastSync = Date.now(); // eerste SUBSCRIBED volgt vlak op het laden
+    const isMine = (a) => {
+      if (a.staff_id === staffMember.id) return true;
+      if (Object.values(a.staff_assignments || {}).includes(staffMember.id)) return true;
+      const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+      return breakdown.some(p => p.staff_id === staffMember.id);
+    };
+    const resync = async () => {
+      if (!alive || busy || document.visibilityState !== "visible") return;
+      if (Date.now() - lastSync < 10000) return;
+      busy = true;
+      // Zelfde RPC en venster als de hoofdlading — die stript serverzijde de
+      // velden die deze medewerker niet mag zien.
+      const { data, error } = await supabase.rpc("staff_list_appointments", {
+        p_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      });
+      busy = false;
+      if (!alive || error || !data) return;
+      lastSync = Date.now();
+      const rows = (seeAll ? data : data.filter(isMine))
+        .slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      setAppointments(rows);
+    };
+    resyncApptsRef.current = resync;
+    const onVisible = () => { if (document.visibilityState === "visible") resync(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", resync);
+    return () => {
+      alive = false;
+      resyncApptsRef.current = null;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", resync);
+    };
+  }, [staffMember.id, staffMember.user_id, salonProfile.id, seeAll]);
 
   // Does appointment `a` involve staff member `id` (primary, assignment map or
   // any breakdown part)? Same rule the owner agenda/dashboard use.
