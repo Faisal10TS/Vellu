@@ -2215,18 +2215,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
         {/* ═══ HERO BANNER ═══ */}
         {(() => {
-          // coverFit: "contain" zodra bijsnijden >22% van de afbeelding zou
-          // kosten — tenzij de eigenaar de cover zelf heeft gepositioneerd
-          // (zoom of duidelijk verschoven focuspunt), dan respecteren we dat.
+          // coverFit "contain" is UITSLUITEND voor breed banier-artwork
+          // (aspect >= 2.1 — logo-banieren zoals die van My Whims) dat door
+          // vullend bijsnijden zichtbaar zou sneuvelen. Foto's — ook portret,
+          // die verliezen bij vullen nu eenmaal veel (TTNB, 27-08) — blijven
+          // ALTIJD gewoon vullend, net als een cover die de eigenaar zelf
+          // heeft gepositioneerd (zoom of verschoven focuspunt).
           const heroH = initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220);
           const coverTuned = (Number(initialSalon.cover_zoom) || 1) > 1.05
             || Math.abs((initialSalon.cover_focal_x ?? 50) - 50) > 6
             || Math.abs((initialSalon.cover_focal_y ?? 50) - 50) > 6;
           let coverFit = "cover";
-          if (coverNatAspect && !coverTuned && typeof window !== "undefined") {
+          if (coverNatAspect && coverNatAspect >= 2.1 && !coverTuned && typeof window !== "undefined") {
             const ca = window.innerWidth / heroH;
             const crop = coverNatAspect < ca ? 1 - coverNatAspect / ca : 1 - ca / coverNatAspect;
-            if (crop > 0.22) coverFit = "contain";
+            if (crop > 0.12) coverFit = "contain";
           }
           return (<>
         <div className="profile-hero" style={{ height: heroH }}>
