@@ -296,6 +296,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // donker accent moet de tekst óp knoppen/chips licht zijn (onAccentInk).
   const accent = readableAccent(initialSalon.accent, theme);
   const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
+  // Beeldverhouding van de cover (naturalWidth/naturalHeight), gezet bij
+  // onLoad. Een cover die als "vullend" te veel zou verliezen — een breed
+  // logo-artwork zoals dat van My Whims — schakelt naar volledig-zichtbaar
+  // met een geblurde vulling (zie coverFit hieronder).
+  const [coverNatAspect, setCoverNatAspect] = useState(null);
   const t = T[lang];
   // Currency symbol for this salon (from its country_code). Every price on this
   // page prefixes with `cur` instead of a hardcoded "€", so a Bonaire salon
@@ -2209,10 +2214,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         <div className="profile-scroll-area">
 
         {/* ═══ HERO BANNER ═══ */}
-        <div className="profile-hero" style={{ height: initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220) }}>
+        {(() => {
+          // coverFit: "contain" zodra bijsnijden >22% van de afbeelding zou
+          // kosten — tenzij de eigenaar de cover zelf heeft gepositioneerd
+          // (zoom of duidelijk verschoven focuspunt), dan respecteren we dat.
+          const heroH = initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220);
+          const coverTuned = (Number(initialSalon.cover_zoom) || 1) > 1.05
+            || Math.abs((initialSalon.cover_focal_x ?? 50) - 50) > 6
+            || Math.abs((initialSalon.cover_focal_y ?? 50) - 50) > 6;
+          let coverFit = "cover";
+          if (coverNatAspect && !coverTuned && typeof window !== "undefined") {
+            const ca = window.innerWidth / heroH;
+            const crop = coverNatAspect < ca ? 1 - coverNatAspect / ca : 1 - ca / coverNatAspect;
+            if (crop > 0.22) coverFit = "contain";
+          }
+          return (
+        <div className="profile-hero" style={{ height: heroH }}>
+          {initialSalon.cover_image_url && coverFit === "contain" && (
+            <img src={initialSalon.cover_image_url} className="profile-hero-backdrop" alt="" aria-hidden="true" />
+          )}
           {initialSalon.cover_image_url && (
-            <img src={initialSalon.cover_image_url} className="profile-hero-cover" alt={`${initialSalon.name} cover`}
-              style={{ objectPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
+            <img src={initialSalon.cover_image_url} className={`profile-hero-cover${coverFit === "contain" ? " fit-contain" : ""}`} alt={`${initialSalon.name} cover`}
+              onLoad={e => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) setCoverNatAspect(im.naturalWidth / im.naturalHeight); }}
+              style={coverFit === "contain" ? undefined : { objectPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
                 transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
                 transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
@@ -2256,6 +2280,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             </div>
           </div>
         </div>
+          );
+        })()}
 
         {/* ═══ BODY — main + sidebar ═══ */}
         <div className="profile-body">

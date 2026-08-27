@@ -1945,6 +1945,15 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-hero-cover {
     width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0;
   }
+  /* Cover-artwork (breed logo/banier) dat door object-fit: cover te veel zou
+     verliezen, tonen we volledig; de vulling eromheen is dezelfde afbeelding,
+     geblurd. Iets oversized zodat de blur-rand buiten beeld valt. */
+  .profile-hero-cover.fit-contain { object-fit: contain; }
+  .profile-hero-backdrop {
+    position: absolute; top: -28px; left: -28px;
+    width: calc(100% + 56px); height: calc(100% + 56px);
+    object-fit: cover; filter: blur(26px) saturate(1.05) brightness(0.8);
+  }
   .profile-hero-gradient {
     position: absolute; inset: 0;
     background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.7) 100%);
