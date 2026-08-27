@@ -637,7 +637,7 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // filters as the visitor types. Each card is painted with the salon's own
 // accent colour, cover and logo. A dashed "your salon here?" card at the
 // end turns the section into an acquisition surface too.
-function SalonFinder({ lang, t, c, goToSlug, navigate }) {
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader }) {
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
@@ -695,6 +695,9 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
   return (
     <div id="find-salon" style={{ padding: "8px 24px 44px", position: "relative", zIndex: 10 }}>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        {/* De Atelier-richting zet zijn eigen genummerde kop boven dit blok en
+            verbergt deze centrale kop met hideHeader. */}
+        {!hideHeader && (
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <Reveal from="translateY(10px)" duration={0.5}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.28em", textTransform: "uppercase", color: ACCENT, marginBottom: 10 }}>
@@ -708,6 +711,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
             <div style={{ fontSize: 12, color: c.textLabel, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>{t.findSalonSub}</div>
           </Reveal>
         </div>
+        )}
 
         {/* Search pill */}
         <div style={{ maxWidth: 460, margin: "0 auto 20px", position: "relative" }}>
@@ -1627,4 +1631,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 // ─── REVIEW FORM ────────────────────────────────────────────
 
 export { LandingScreen, OwnerAuth };
+// Gedeeld met de "Atelier"-richting (src/LandingAtelier.jsx): dezelfde
+// werkende onderdelen en bewegingslaag, andere huid. De componenten nemen hun
+// kleuren als prop (`c`), dus de ivoor-pagina geeft gewoon zijn eigen palet mee.
+export {
+  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
+  Reveal, KineticLine, HeroEnter, Marquee, SectionHead, TweenedNumber,
+  ParallaxLayer, CursorRing, ScrollProgress, glowMove,
+};
 export default LandingScreen;

@@ -6,7 +6,10 @@ import {
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
-const LandingScreen = lazy(() => import("./LandingScreen.jsx").then(m => ({ default: m.LandingScreen })));
+// Op deze branch (landing-atelier) draait de "Atelier"-richting: ivoor
+// redactioneel, ter vergelijking naast de Signature-branch. OwnerAuth blijft
+// gewoon uit LandingScreen.jsx komen.
+const LandingScreen = lazy(() => import("./LandingAtelier.jsx").then(m => ({ default: m.LandingScreen })));
 const OwnerAuth = lazy(() => import("./LandingScreen.jsx").then(m => ({ default: m.OwnerAuth })));
 const ClientApp = lazy(() => import("./ClientApp.jsx"));
 const OwnerApp = lazy(() => import("./OwnerApp.jsx"));
