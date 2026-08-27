@@ -2277,16 +2277,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
                 transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
-          {coverFit === "contain" ? (
-            /* Artwork-cover (logo-banier): het beeld zegt zelf al wie de salon
-               is — geen tekstlaag eroverheen. Met een naadloze randkleur-band
-               is ook geen schaduw nodig; alleen de blur-fallback krijgt een
-               zachte voet zodat het geheel niet zweeft. Naam/meta/share staan
-               in de balk ónder de hero. */
-            coverEdge ? null : (
-              <div className="profile-hero-gradient" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 55%, rgba(0,0,0,0.28) 100%)" }} />
-            )
-          ) : (<>
           <div className="profile-hero-gradient" />
           <div className="profile-hero-content">
             <h1 className="profile-hero-name" style={{ fontSize: isMobile ? 28 : 42 }}>{initialSalon.name}</h1>
@@ -2326,40 +2316,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               />
             </div>
           </div>
-          </>)}
         </div>
-        {coverFit === "contain" && (
-          <div style={{ textAlign: "center", padding: isMobile ? "16px 16px 2px" : "22px 20px 4px" }}>
-            <h1 style={{ fontFamily: "var(--display-font, 'Cormorant Garamond', serif)", fontWeight: 300, letterSpacing: "0.03em", color: c.text, fontSize: isMobile ? 26 : 36, margin: 0 }}>{initialSalon.name}</h1>
-            {initialSalon.city && (
-              <div style={{ fontSize: 13, color: c.textLabel, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>{initialSalon.city}</div>
-            )}
-            {(initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0) && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 10, fontSize: 13, color: c.textSub, flexWrap: "wrap" }}>
-                {initialSalon.reviews?.length > 0 && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <svg width={13} height={13} viewBox="0 0 20 20" fill={accent}>
-                      <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
-                    </svg>
-                    <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
-                  </span>
-                )}
-                {initialSalon.reviews?.length > 0 && initialSalon.services?.length > 0 && (
-                  <span style={{ width: 3, height: 3, borderRadius: "50%", background: c.textMuted }} />
-                )}
-                {initialSalon.services?.length > 0 && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <NavIcon name="scissors" size={13} color={c.textSub} />
-                    <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
-                  </span>
-                )}
-              </div>
-            )}
-            <div style={{ marginTop: 12, display: "flex", justifyContent: "center", position: "relative" }}>
-              <SalonShareButton salon={initialSalon} lang={lang} open={shareOpen} setOpen={setShareOpen} accent={accent} />
-            </div>
-          </div>
-        )}
         </>);
         })()}
 
