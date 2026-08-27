@@ -54,24 +54,33 @@ const P = {
   btnOnDark: BONE,
 };
 
-// Redactionele sectiekop: nummer + titel links, haarlijn eronder.
-function AtHead({ n, title, sub }) {
+// Redactionele sectiekop: nummer + titel links, haarlijn eronder. `tone`
+// volgt de band waarop de kop staat: bone (canvas), putty (lichte band) of
+// earth (rijke band — daar wordt de titel bone en hoort kleine sub-tekst NIET
+// direct op de band, maar in het bone-paneel eronder).
+function AtHead({ n, title, sub, tone = "bone" }) {
+  const onEarth = tone === "earth";
+  const numCol = onEarth ? PUTTY : EARTH;
+  const dashCol = onEarth ? `${BONE}55` : `${EARTH}55`;
+  const titleCol = onEarth ? BONE : INK;
+  const subCol = onEarth ? `${BONE}e6` : tone === "putty" ? "#5f5240" : P.textLabel;
+  const rule = onEarth ? `${BONE}30` : tone === "putty" ? `${EARTH}44` : PUTTY;
   return (
     <div style={{ marginBottom: 38 }}>
       <Reveal from="translateY(12px)" duration={0.5}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: EARTH, letterSpacing: "0.14em" }}>{n}</span>
-          <span style={{ flex: "0 1 34px", height: 1, background: `${EARTH}55` }} />
-          <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(30px, 5.4vw, 46px)", fontWeight: 300, lineHeight: 1.1, color: INK, letterSpacing: "0.01em" }}>{title}</h2>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: numCol, letterSpacing: "0.14em" }}>{n}</span>
+          <span style={{ flex: "0 1 34px", height: 1, background: dashCol }} />
+          <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(30px, 5.4vw, 46px)", fontWeight: 300, lineHeight: 1.1, color: titleCol, letterSpacing: "0.01em" }}>{title}</h2>
         </div>
       </Reveal>
       {sub && (
         <Reveal delay={110}>
-          <div style={{ fontSize: 13, color: P.textLabel, lineHeight: 1.65, maxWidth: 520, marginTop: 12 }}>{sub}</div>
+          <div style={{ fontSize: 13, color: subCol, lineHeight: 1.65, maxWidth: 520, marginTop: 12 }}>{sub}</div>
         </Reveal>
       )}
       <Reveal delay={170} from="scaleX(0)" duration={0.8}>
-        <div style={{ height: 1, background: PUTTY, marginTop: 22, transformOrigin: "left center" }} />
+        <div style={{ height: 1, background: rule, marginTop: 22, transformOrigin: "left center" }} />
       </Reveal>
     </div>
   );
@@ -317,28 +326,33 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── MARQUEE — outline-serif in mushroom, tussen haarlijnen. ── */}
-        <div className="at-outline" style={{ position: "relative", zIndex: 10, margin: "16px 0 0" }}>
-          <Marquee items={marqueeWords} c={{ ...P, textSub: "transparent" }} accent={EARTH} />
+        {/* ── MARQUEE — putty-band met outline-serif, de eerste kleurwissel. ── */}
+        <div className="at-outline" style={{ position: "relative", zIndex: 10, margin: "22px 0 0", background: PUTTY }}>
+          <Marquee items={marqueeWords} c={{ ...P, textSub: "transparent", border: `${EARTH}3d` }} accent={EARTH} />
         </div>
 
-        {/* ── 01 · SALON VINDEN ── */}
+        {/* ── 01 · SALON VINDEN — op bone. ── */}
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 8px`, position: "relative", zIndex: 10 }}>
           <AtHead n="01" title={t.findSalonTitle} sub={t.findSalonSub} />
         </div>
         <SalonFinder lang={lang} t={t} c={P} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} />
 
-        {/* ── 02 · DE REKENSOM ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 7vw, 70px) ${pad} 0`, position: "relative", zIndex: 10 }}>
-          <AtHead n="02" title={t.calcTitle} sub={t.calcSub} />
-          <Reveal>
-            <div style={{ maxWidth: 700, margin: "0 auto 0 0", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 24, padding: "30px clamp(20px, 4vw, 36px)" }}>
-              <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} />
-            </div>
-          </Reveal>
+        {/* ── 02 · DE REKENSOM — de rijke earth-band; de rekentool zelf staat
+              in een bone-paneel zodat de kleine cijfers leesbaar blijven. ── */}
+        <div style={{ background: EARTH, position: "relative", zIndex: 10, marginTop: "clamp(36px, 6vw, 60px)" }}>
+          <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 90% at 85% 0%, ${MUSHROOM}33 0%, transparent 60%)`, pointerEvents: "none" }} />
+          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
+            <AtHead n="02" title={t.calcTitle} tone="earth" />
+            <Reveal>
+              <div style={{ maxWidth: 700, margin: "0 auto 0 0", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 24, padding: "26px clamp(20px, 4vw, 36px) 30px", boxShadow: "0 26px 60px -34px rgba(0,0,0,0.45)" }}>
+                <div style={{ fontSize: 12.5, color: P.textLabel, lineHeight: 1.6, marginBottom: 20, maxWidth: 520 }}>{t.calcSub}</div>
+                <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} />
+              </div>
+            </Reveal>
+          </div>
         </div>
 
-        {/* ── 03 · HOE HET WERKT — redactionele rijen met grote nummers. ── */}
+        {/* ── 03 · HOE HET WERKT — terug op bone, redactionele rijen. ── */}
         <div id="how-it-works" style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
           <AtHead n="03" title={t.liveIn3} />
           <div>
@@ -356,24 +370,27 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 04 · ALLES WAT JE NODIG HEBT — tweekoloms checklijst. ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
-          <AtHead n="04" title={t.everythingNeeded} />
-          <div className="at-feat-grid">
-            {feats.map((f, i) => {
-              const [title, desc] = featOf(f);
-              return (
-                <Reveal key={i} delay={(i % 2) * 70 + Math.floor(i / 2) * 60}>
-                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${PUTTY}` }}>
-                    <span aria-hidden="true" style={{ color: EARTH, fontSize: 11, lineHeight: "22px" }}>◆</span>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 4, letterSpacing: "0.01em" }}>{title}</div>
-                      <div style={{ fontSize: 12.5, color: P.textLabel, lineHeight: 1.65 }}>{desc}</div>
+        {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, tweekoloms checklijst.
+              Putty is licht genoeg voor espresso-tekst er direct op. ── */}
+        <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
+          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
+            <AtHead n="04" title={t.everythingNeeded} tone="putty" />
+            <div className="at-feat-grid">
+              {feats.map((f, i) => {
+                const [title, desc] = featOf(f);
+                return (
+                  <Reveal key={i} delay={(i % 2) * 70 + Math.floor(i / 2) * 60}>
+                    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${EARTH}3d` }}>
+                      <span aria-hidden="true" style={{ color: EARTH, fontSize: 11, lineHeight: "22px" }}>◆</span>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 4, letterSpacing: "0.01em" }}>{title}</div>
+                        <div style={{ fontSize: 12.5, color: "#5f5240", lineHeight: 1.65 }}>{desc}</div>
+                      </div>
                     </div>
-                  </div>
-                </Reveal>
-              );
-            })}
+                  </Reveal>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -447,20 +464,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 06 · FAQ ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
-          <AtHead n="06" title={t.faqTitle} />
+        {/* ── 06 · FAQ — tweede putty-band; loopt direct door in de finale. ── */}
+        <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
+          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
+          <AtHead n="06" title={t.faqTitle} tone="putty" />
           <Reveal delay={80}>
             <div style={{ maxWidth: 760 }}>
               {faqs.map(([q, a], i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${PUTTY}` }}>
+                <div key={i} style={{ borderBottom: `1px solid ${EARTH}3d` }}>
                   <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
                     <div style={{ fontSize: 20, color: EARTH, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                     <div style={{ overflow: "hidden" }}>
-                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: P.textSub, lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
+                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: "#5f5240", lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
                     </div>
                   </div>
                 </div>
@@ -468,18 +486,19 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
           </Reveal>
           <Reveal delay={140}>
-            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, color: P.textSub }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, color: "#5f5240" }}>
               <span>{lang === "nl" ? "Nog vragen? Stel ze in de chat linksonder, of mail ons —" : lang === "es" ? "¿Aún tienes preguntas? Pregunta en el chat abajo a la izquierda, o escríbenos —" : "Still have questions? Ask in the chat bottom-left, or email us —"}</span>
               <a href="mailto:mirahventures@vellu.cc" style={{ color: INK, borderBottom: `1px solid ${EARTH}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
-              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px" }} onClick={() => navigate("/contact")}>
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px", borderColor: EARTH }} onClick={() => navigate("/contact")}>
                 {lang === "nl" ? "Neem contact op" : lang === "es" ? "Contáctanos" : "Contact us"}
               </button>
             </div>
           </Reveal>
+          </div>
         </div>
 
-        {/* ── FINALE — espresso-vlak over de volle breedte, putty-knop. ── */}
-        <div style={{ marginTop: "clamp(56px, 9vw, 96px)", background: INK, position: "relative", zIndex: 10 }}>
+        {/* ── FINALE — espresso-vlak, sluit direct aan op de putty-band. ── */}
+        <div style={{ background: INK, position: "relative", zIndex: 10 }}>
           <div aria-hidden="true" style={{ position: "absolute", top: "-30%", right: "6%", width: "40%", height: "80%", background: `radial-gradient(ellipse at center, ${EARTH}55 0%, transparent 65%)`, pointerEvents: "none" }} />
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(64px, 10vw, 110px) ${pad}`, textAlign: "center", position: "relative" }}>
             <Reveal>
