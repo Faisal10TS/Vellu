@@ -18,7 +18,8 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
+  AT, AT_COLORS, AtelierSkin,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -1821,9 +1822,11 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
 // trial_used flip, and Mollie customer creation are all enforced there. This
 // component is purely UI + thin error handling.
 function PlanSelection({ user, lang, setLang, onLogout }) {
-  const { colors: c } = useTheme();
+  // Vaste Atelier-huid (27-08): de planKeuze zit in de merk-funnel vóór de
+  // app (bone landing → bone login → bone planKeuze → app met eigen thema).
+  const c = AT_COLORS;
   const t = T[lang];
-  const accent = ACCENT;
+  const accent = AT.EARTH;
   const toast = useToast();
 
   const [billingInterval, setBillingInterval] = useState("monthly");
@@ -1984,7 +1987,8 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   if (postCheckout) {
     return (
       <Layout>
-        <div style={{ background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Jost',sans-serif", color: c.text, textAlign: "center" }}>
+        <AtelierSkin />
+        <div className="atelier" style={{ background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Jost',sans-serif", color: c.text, textAlign: "center" }}>
           <div style={{ marginBottom: 24 }}><NavIcon name="check" size={48} color={c.success} /></div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 12 }}>
             {lang === "nl" ? "Welkom bij Vellu!" : lang === "es" ? "¡Bienvenido a Vellu!" : "Welcome to Vellu!"}
@@ -1996,7 +2000,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
               ? "Estamos activando tu suscripción. Un momento…"
               : "Your subscription is being activated. One moment…"}
           </div>
-          <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         </div>
       </Layout>
     );
@@ -2013,9 +2017,10 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
   return (
     <Layout>
+      <AtelierSkin />
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
-      <div style={{
+      <div className="atelier" style={{
         background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column",
         alignItems: "center", padding: "0 24px 40px",
         fontFamily: "'Jost',sans-serif", color: c.text, position: "relative"
@@ -2027,7 +2032,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         <div style={{ width: "100%", maxWidth: 720, padding: "24px 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <ThemeToggle />
+            {/* Geen thema-toggle: dit scherm draagt de vaste Atelier-huid. */}
             <LangToggle lang={lang} setLang={setLang} />
             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={onLogout}>{t.logout}</button>
           </div>
@@ -2035,7 +2040,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 
         <div style={{ maxWidth: 720, width: "100%", position: "relative", zIndex: 10, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{ marginBottom: 16 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
+            <div style={{ marginBottom: 16 }}><NavIcon name="crown" size={36} color={accent} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{t.choosePlan}</div>
             <div style={{ fontSize: 13, color: c.textLabel }}>
               {canTrial

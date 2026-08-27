@@ -4,8 +4,8 @@
   "description": "Het premium platform voor beauty ondernemers",
   "start_url": "/owner",
   "display": "standalone",
-  "background_color": "#0d0b0a",
-  "theme_color": "#0d0b0a",
+  "background_color": "#F4EFE6",
+  "theme_color": "#5B4C3A",
   "orientation": "portrait",
   "icons": [
     {

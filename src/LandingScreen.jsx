@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
-  useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
+  useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
+  AT, AT_COLORS, AtelierSkin
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -23,6 +24,46 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // Eén klok voor de hero-choreografie: kopregel-beats → badge/sub/cta's →
+  // stats. Bij beperk-beweging staat alles al klaar vóór de eerste verf.
+  // Dubbele rAF zodat de browser de verborgen begintoestand écht geverfd
+  // heeft en de transition dus loopt in plaats van overslaat.
+  const [heroReady, setHeroReady] = useState(prefersReducedMotion);
+  useEffect(() => {
+    if (heroReady) return;
+    let id2;
+    const id1 = requestAnimationFrame(() => { id2 = requestAnimationFrame(() => setHeroReady(true)); });
+    return () => { cancelAnimationFrame(id1); if (id2) cancelAnimationFrame(id2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sticky nav krijgt pas een rug (blur + rand) zodra er gescrold is.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Voor wie Vellu is — de doorlopende band onder de hero, in de taal van de
+  // bezoeker. Zelfde doelgroep als t.heroTag, uitgeschreven.
+  const marqueeWords = lang === "nl"
+    ? ["Nagelstylistes", "Lash artists", "Brow studio's", "Kappers", "Barbers", "PMU-specialisten", "Huidtherapeuten", "Make-up artists"]
+    : lang === "es"
+      ? ["Manicuristas", "Artistas de pestañas", "Estudios de cejas", "Peluquerías", "Barberos", "Especialistas en PMU", "Esteticistas", "Maquilladoras"]
+      : ["Nail artists", "Lash techs", "Brow studios", "Hairdressers", "Barbers", "PMU artists", "Skin therapists", "Makeup artists"];
+
+  // Sectie-wenkbrauwen (klein goud label boven elke titel).
+  const eyebrow = {
+    find: lang === "nl" ? "Voor klanten" : lang === "es" ? "Para clientes" : "For clients",
+    calc: lang === "nl" ? "Reken het na" : lang === "es" ? "Haz las cuentas" : "Do the math",
+    how: lang === "nl" ? "Hoe het werkt" : lang === "es" ? "Cómo funciona" : "How it works",
+    feat: lang === "nl" ? "Alles wat je nodig hebt" : lang === "es" ? "Todo lo que necesitas" : "Everything you need",
+    price: lang === "nl" ? "Prijzen" : lang === "es" ? "Precios" : "Pricing",
+    faq: lang === "nl" ? "Vragen" : lang === "es" ? "Preguntas" : "Questions",
+  };
 
   const goToSlug = (slug) => {
     let clean = slug.toLowerCase().trim()
@@ -73,26 +114,53 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ position: "absolute", top: "-20%", left: "20%", width: "60%", height: "60%", background: `radial-gradient(ellipse at center, ${ACCENT}0a 0%, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "10%", right: "-10%", width: "40%", height: "40%", background: `radial-gradient(ellipse at center, ${ACCENT}06 0%, transparent 60%)`, pointerEvents: "none" }} />
 
-        {/* Navigation — extra top padding for iOS Dynamic Island / notch. */}
-        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(16px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 32px) 16px", position: "relative", zIndex: 10, maxWidth: 1100, margin: "0 auto" }}>
-          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              className="btn-ghost"
-              onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })}
-              style={{ fontSize: 10, padding: "8px 10px", whiteSpace: "nowrap", color: c.textMuted, borderColor: "transparent", display: "none" }}
-              data-show-on-desktop
-            >
-              {t.findSalonNav}
-            </button>
-            <ThemeToggle />
-            <LangToggle lang={lang} setLang={setLang} />
-            <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 12px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
-              <NavIcon name="crown" size={12} color={ACCENT} /> {t.signIn}
-            </button>
+        {/* Scrollvoortgang + cursor-ring — de stille signatuur-laag. */}
+        <ScrollProgress />
+        <CursorRing />
+
+        {/* Navigation — sticky; krijgt een blur-rug zodra er gescrold is.
+            Extra top padding for iOS Dynamic Island / notch. */}
+        <nav style={{ position: "sticky", top: 0, zIndex: 40, background: scrolled ? `${c.bg}ec` : "transparent", backdropFilter: scrolled ? "blur(14px)" : "none", WebkitBackdropFilter: scrolled ? "blur(14px)" : "none", borderBottom: `1px solid ${scrolled ? c.border : "transparent"}`, transition: "background 0.3s ease, border-color 0.3s ease" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(12px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 32px) 12px", maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })}
+                style={{ fontSize: 10, padding: "8px 10px", whiteSpace: "nowrap", color: c.textMuted, borderColor: "transparent", display: "none" }}
+                data-show-on-desktop
+              >
+                {t.findSalonNav}
+              </button>
+              <ThemeToggle />
+              <LangToggle lang={lang} setLang={setLang} />
+              <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 12px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
+                <NavIcon name="crown" size={12} color={ACCENT} /> {t.signIn}
+              </button>
+            </div>
           </div>
         </nav>
-        <style>{`@media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }`}</style>
+        <style>{`
+          @media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }
+          /* ── Signatuur-laag: marquee, cursor-ring, kaartgloed, ademlicht ── */
+          .vl-marquee-track { animation: vlMarquee 30s linear infinite; }
+          .vl-marquee:hover .vl-marquee-track { animation-play-state: paused; }
+          @keyframes vlMarquee { to { transform: translateX(-50%); } }
+          .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${ACCENT}99; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
+          .vl-cursor.grow { width: 46px; height: 46px; margin: -23px 0 0 -23px; border-color: ${ACCENT}; }
+          .vl-cursor-dot { position: fixed; top: 0; left: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: ${ACCENT}; pointer-events: none; z-index: 80; }
+          .vl-glow { position: relative; }
+          .vl-glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), ${ACCENT}17, transparent 65%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+          .vl-glow:hover::after { opacity: 1; }
+          @media (hover: none) { .vl-glow::after { display: none; } }
+          .vl-breathe { position: relative; }
+          .vl-breathe::after { content: ""; position: absolute; inset: 0; border-radius: 28px; box-shadow: 0 0 90px -26px ${ACCENT}66, inset 0 0 46px -34px ${ACCENT}44; animation: vlBreath 5.5s ease-in-out infinite; pointer-events: none; }
+          @keyframes vlBreath { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+          @media (prefers-reduced-motion: reduce) {
+            .vl-marquee-track { animation: none; }
+            .vl-breathe::after { animation: none; }
+          }
+        `}</style>
 
         {/* ─── HERO — copy left, live product mockup right (stacks on mobile) ─── */}
         <style>{`
@@ -113,66 +181,83 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (prefers-reduced-motion: reduce) { .hero-phone-float { animation: none; } }
         `}</style>
         <div className="hero-grid">
-          <div className="hero-copy fade-up">
-            <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 26 }}>
-              <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
-            </div>
-            {/* Three beats, three lines — each beat wrapped in nowrap so a
-                line can never break mid-phrase ("Jouw salon. Jouw / regels.")
-                at in-between viewport widths. Mirrors the og-image. */}
+          <div className="hero-copy">
+            <HeroEnter ready={heroReady} delay={0}>
+              <div style={{ display: "inline-block", background: `${ACCENT}15`, border: `1px solid ${ACCENT}33`, borderRadius: 100, padding: "6px 18px", fontSize: 11, fontWeight: 500, color: ACCENT, letterSpacing: "0.04em", marginBottom: 26 }}>
+                <NavIcon name="sparkle" size={11} color={ACCENT} /> {t.heroTag}
+              </div>
+            </HeroEnter>
+            {/* Three beats, three lines — elke beat schuift uit zijn eigen
+                masker omhoog (KineticLine houdt ze nowrap, net als eerst, en
+                spiegelt de og-image). */}
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(42px, 7.5vw, 64px)", fontWeight: 300, letterSpacing: "0.05em", lineHeight: 1.06, marginBottom: 22 }}>
-              <span style={{ whiteSpace: "nowrap" }}>{t.heroTitle}</span>
-              <br />
-              <span style={{ whiteSpace: "nowrap" }}>{t.heroTitle2}</span>
-              <br />
-              <span style={{ color: ACCENT, whiteSpace: "nowrap" }}>{t.heroBrand}</span>
+              <KineticLine ready={heroReady} delay={120}>{t.heroTitle}</KineticLine>
+              <KineticLine ready={heroReady} delay={250}>{t.heroTitle2}</KineticLine>
+              <KineticLine ready={heroReady} delay={380}><span style={{ color: ACCENT }}>{t.heroBrand}</span></KineticLine>
             </h1>
-            <p className="hero-sub" style={{ fontSize: "clamp(14px, 2vw, 16px)", color: c.textSub, lineHeight: 1.7, maxWidth: 440, marginBottom: 34, letterSpacing: "0.01em" }}>
-              {t.heroSub}
-            </p>
-            <div className="hero-ctas">
-              <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => navigate("/owner")}>
-                {t.startFree}
-              </button>
-              <button className="btn-ghost" style={{ width: "auto", padding: "16px 28px", fontSize: 13, color: c.textSub }} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
-                {t.howItWork}
-              </button>
-            </div>
+            <HeroEnter ready={heroReady} delay={560}>
+              <p className="hero-sub" style={{ fontSize: "clamp(14px, 2vw, 16px)", color: c.textSub, lineHeight: 1.7, maxWidth: 440, marginBottom: 34, letterSpacing: "0.01em" }}>
+                {t.heroSub}
+              </p>
+            </HeroEnter>
+            <HeroEnter ready={heroReady} delay={680}>
+              <div className="hero-ctas">
+                <button className="btn-primary" style={{ width: "auto", padding: "16px 36px", fontSize: 13 }} onClick={() => navigate("/owner")}>
+                  {t.startFree}
+                </button>
+                <button className="btn-ghost" style={{ width: "auto", padding: "16px 28px", fontSize: 13, color: c.textSub }} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
+                  {t.howItWork}
+                </button>
+              </div>
+            </HeroEnter>
             {/* Stats — full strength, they carry the pitch */}
-            <div className="hero-stats" style={{ display: "flex", gap: "14px 36px", flexWrap: "wrap", marginTop: 40 }}>
-              {[
-                { num: "0%", nl: "Commissie", en: "Commission" },
-                { num: "24/7", nl: "Online boekbaar", en: "Bookable online" },
-                { num: "€19", nl: "Vast per maand", en: "Fixed per month" },
-              ].map((s, i) => (
-                <div key={i}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>{s.num}</div>
-                  <div style={{ fontSize: 10, color: c.textSub, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>{lang === "nl" ? s.nl : s.en}</div>
-                </div>
-              ))}
-            </div>
+            <HeroEnter ready={heroReady} delay={800}>
+              <div className="hero-stats" style={{ display: "flex", gap: "14px 36px", flexWrap: "wrap", marginTop: 40 }}>
+                {[
+                  { num: "0%", nl: "Commissie", en: "Commission" },
+                  { num: "24/7", nl: "Online boekbaar", en: "Bookable online" },
+                  { num: "€19", nl: "Vast per maand", en: "Fixed per month" },
+                ].map((s, i) => (
+                  <div key={i} style={{ opacity: heroReady ? 1 : 0, transform: heroReady ? "none" : "translateY(10px)", transition: `opacity 0.6s ease ${820 + i * 110}ms, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) ${820 + i * 110}ms` }}>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>{s.num}</div>
+                    <div style={{ fontSize: 10, color: c.textSub, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>{lang === "nl" ? s.nl : s.en}</div>
+                  </div>
+                ))}
+              </div>
+            </HeroEnter>
             {/* Quiet, truthful trust line — real salons in both markets use
                 Vellu today. No inflated numbers, no fabricated quotes. */}
-            <div className="hero-stats" style={{ display: "flex", marginTop: 22, fontSize: 11, color: c.textMuted, letterSpacing: "0.05em" }}>
-              {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
-                : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
-                : "Used by salons in the Netherlands and the Caribbean"}
-            </div>
+            <HeroEnter ready={heroReady} delay={1050}>
+              <div className="hero-stats" style={{ display: "flex", marginTop: 22, fontSize: 11, color: c.textMuted, letterSpacing: "0.05em" }}>
+                {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
+                  : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
+                  : "Used by salons in the Netherlands and the Caribbean"}
+              </div>
+            </HeroEnter>
           </div>
-          <div className="fade-up">
-            <HeroPhoneMockup lang={lang} c={c} />
-            {/* "See it live" — screenshots convince, clicking sells. Links to
-                the seeded demo salon so a prospect can poke a REAL booking
-                page (clearly labelled as an example). */}
-            <div style={{ textAlign: "center", marginTop: 2 }}>
-              <button
-                onClick={() => navigate("/bloomstudio")}
-                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 12, color: ACCENT, letterSpacing: "0.04em", padding: "8px 12px", borderBottom: `1px solid ${ACCENT}44` }}
-              >
-                {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
-              </button>
-            </div>
-          </div>
+          <HeroEnter ready={heroReady} delay={430}>
+            {/* De telefoon drijft heel licht tegen de scroll in — diepte
+                zonder circus (desktop only, zie ParallaxLayer). */}
+            <ParallaxLayer speed={-0.04}>
+              <HeroPhoneMockup lang={lang} c={c} />
+              {/* "See it live" — screenshots convince, clicking sells. Links to
+                  the seeded demo salon so a prospect can poke a REAL booking
+                  page (clearly labelled as an example). */}
+              <div style={{ textAlign: "center", marginTop: 2 }}>
+                <button
+                  onClick={() => navigate("/bloomstudio")}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 12, color: ACCENT, letterSpacing: "0.04em", padding: "8px 12px", borderBottom: `1px solid ${ACCENT}44` }}
+                >
+                  {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+                </button>
+              </div>
+            </ParallaxLayer>
+          </HeroEnter>
+        </div>
+
+        {/* ─── MARQUEE — voor wie Vellu is, als doorlopende band. ─── */}
+        <div style={{ position: "relative", zIndex: 10, margin: "10px 0 44px" }}>
+          <Marquee items={marqueeWords} c={c} />
         </div>
 
         {/* ─── FIND-A-SALON — Fresha/Treatwell have a marketplace search;
@@ -191,6 +276,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ padding: "0 24px 60px", position: "relative", zIndex: 10 }}>
           <Reveal><div style={{ maxWidth: 700, margin: "0 auto", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 24, padding: "32px clamp(20px, 4vw, 36px)" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.28em", textTransform: "uppercase", color: ACCENT, marginBottom: 10 }}>{eyebrow.calc}</div>
               <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 300, marginBottom: 6 }}>{t.calcTitle}</h2>
               <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.55, maxWidth: 460, margin: "0 auto" }}>{t.calcSub}</div>
             </div>
@@ -200,43 +286,35 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ─── HOW IT WORKS — subtle tint band breaks the page rhythm ─── */}
         <div id="how-it-works" style={{ padding: "64px 24px", position: "relative", zIndex: 10, background: `linear-gradient(180deg, transparent, ${ACCENT}07 18%, ${ACCENT}07 82%, transparent)` }}>
-          <Reveal><div style={{ maxWidth: 900, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {t.liveIn3}
-              </h2>
-              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
-            </div>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <SectionHead eyebrow={eyebrow.how} title={t.liveIn3} c={c} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
               {[
                 { num: "01", icon: "diamond", title: t.step1, desc: t.step1d },
                 { num: "02", icon: "target", title: t.step2, desc: t.step2d },
                 { num: "03", icon: "sparkle", title: t.step3, desc: t.step3d }
               ].map((item, i) => (
-                <div key={i} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden" }}>
-                  <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${ACCENT}12` }}>{item.num}</div>
-                  <div style={{ marginBottom: 16 }}><NavIcon name={item.icon} size={28} color={ACCENT} /></div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 10 }}>
-                    {item.title}
+                <Reveal key={i} delay={i * 110}>
+                  <div className="vl-glow" onMouseMove={glowMove} style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
+                    <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${ACCENT}12` }}>{item.num}</div>
+                    <div style={{ marginBottom: 16 }}><NavIcon name={item.icon} size={28} color={ACCENT} /></div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 10 }}>
+                      {item.title}
+                    </div>
+                    <div style={{ fontSize: 13, color: c.textLabel, lineHeight: 1.7 }}>
+                      {item.desc}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: c.textLabel, lineHeight: 1.7 }}>
-                    {item.desc}
-                  </div>
-                </div>
+                </Reveal>
               ))}
             </div>
-          </div></Reveal>
+          </div>
         </div>
 
         {/* ─── FEATURES ─── */}
         <div style={{ padding: "48px 24px 64px", position: "relative", zIndex: 10 }}>
-          <Reveal><div style={{ maxWidth: 900, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {t.everythingNeeded}
-              </h2>
-              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
-            </div>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+            <SectionHead eyebrow={eyebrow.feat} title={t.everythingNeeded} c={c} />
             {/* Bento grid — two anchor cards with real visual weight, then
                 supporting tiles. Breaks the uniform-tile monotony and gives
                 the eye a hierarchy to follow. */}
@@ -251,7 +329,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             `}</style>
             <div className="bento">
               {/* Anchor 1 — your own branded page, with a mini URL + row mock */}
-              <div className="bento-card bento-wide" style={{ padding: "24px 22px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20 }}>
+              <Reveal className="bento-wide">
+              <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "24px 22px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, height: "100%", boxSizing: "border-box" }}>
                 <NavIcon name="calendar" size={24} color={ACCENT} />
                 <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? "Eigen boekingspagina" : lang === "es" ? "Tu propia página de reservas" : "Your own booking page"}</div>
                 <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6, marginBottom: 16 }}>{lang === "nl" ? "Jouw merk, jouw kleuren, jouw link. Klanten boeken direct bij jou — zonder tussenpartij." : lang === "es" ? "Tu marca, tus colores, tu enlace. Los clientes reservan directamente contigo — sin intermediarios." : "Your brand, your colors, your link. Clients book directly with you — no middleman."}</div>
@@ -260,12 +339,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <span style={{ color: c.textSub }}>vellu.cc/</span><span style={{ color: ACCENT, fontWeight: 600 }}>{lang === "nl" ? "jouw-naam" : "your-name"}</span>
                 </div>
               </div>
+              </Reveal>
               {/* Anchor 2 — 0% commission, oversized numeral */}
-              <div className="bento-card" style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${ACCENT}14, transparent 70%)`, border: `1px solid ${ACCENT}33`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <Reveal delay={90}>
+              <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${ACCENT}14, transparent 70%)`, border: `1px solid ${ACCENT}33`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", boxSizing: "border-box" }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 64, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>0%</div>
                 <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>{lang === "nl" ? "Commissie" : lang === "es" ? "Comisión" : "Commission"}</div>
                 <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke euro van elke boeking blijft van jou." : lang === "es" ? "Tarifa mensual fija. Cada euro de cada reserva es tuyo." : "Flat monthly fee. Every euro of every booking stays yours."}</div>
               </div>
+              </Reveal>
               {/* Supporting tiles */}
               {[
                 { icon: "team", nl: "Team accounts", en: "Team accounts", sub: { nl: "Elke medewerker een eigen login, agenda en diensten", en: "Each staff member gets their own login, schedule and services" } },
@@ -275,7 +357,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 { icon: "camera", nl: "Portfolio", en: "Portfolio", sub: { nl: "Foto's per behandeling tonen", en: "Show photos per treatment" } },
                 { icon: "tag", nl: "Kortingscodes", en: "Discount codes", sub: { nl: "Maak en deel korting met je klanten", en: "Create and share discounts with clients" }, code: true },
               ].map((f, i) => (
-                <div key={i} className="bento-card" style={{ padding: "20px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20 }}>
+                <Reveal key={i} delay={150 + i * 70}>
+                <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "20px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, height: "100%", boxSizing: "border-box" }}>
                   <NavIcon name={f.icon} size={22} color={ACCENT} />
                   <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, marginBottom: 4 }}>{lang === "nl" ? f.nl : f.en}</div>
                   <div style={{ fontSize: 11, color: c.textLabel, lineHeight: 1.55 }}>{lang === "nl" ? f.sub.nl : f.sub.en}</div>
@@ -291,9 +374,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     <div style={{ marginTop: 12, display: "inline-block", padding: "4px 10px", border: `1px dashed ${ACCENT}66`, borderRadius: 8, fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", color: ACCENT }}>WELKOM10</div>
                   )}
                 </div>
+                </Reveal>
               ))}
             </div>
-          </div></Reveal>
+          </div>
         </div>
 
         {/* TESTIMONIALS section removed — the previous hardcoded names/quotes are
@@ -303,15 +387,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ─── PRICING — tinted band, mirrors the how-it-works section ─── */}
         <div style={{ padding: "64px 24px", position: "relative", zIndex: 10, background: `linear-gradient(180deg, transparent, ${ACCENT}07 18%, ${ACCENT}07 82%, transparent)` }}>
-          <Reveal><div style={{ maxWidth: 700, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 32 }}>
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {t.simplePricing}
-              </h2>
-              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
-            </div>
+          <div style={{ maxWidth: 700, margin: "0 auto" }}>
+            <SectionHead eyebrow={eyebrow.price} title={t.simplePricing} c={c} />
             {/* Billing cycle toggle */}
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+            <Reveal delay={120}><div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
               <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 100, padding: 4, position: "relative" }}>
                 {[
                   { key: "monthly", label: t.billingMonthly },
@@ -360,7 +439,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   );
                 })}
               </div>
-            </div>
+            </div></Reveal>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               {[
                 { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"] } },
@@ -370,10 +449,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 const displayPrice = billingCycle === "yearly" ? yearlyTotal : plan.price;
                 const displaySuffix = billingCycle === "yearly" ? t.perYear : t.perMonth;
                 return (
-                <div key={i} style={{
+                <Reveal key={i} delay={i * 130}>
+                <div className="vl-glow" onMouseMove={glowMove} style={{
                   background: plan.popular ? `${ACCENT}08` : c.bgCard,
                   border: `1.5px solid ${plan.popular ? ACCENT : c.border}`,
-                  borderRadius: 24, padding: "32px 28px", position: "relative"
+                  borderRadius: 24, padding: "32px 28px", position: "relative", height: "100%", boxSizing: "border-box"
                 }}>
                   {plan.popular && (
                     <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: ACCENT, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "5px 16px", borderRadius: 100 }}>
@@ -383,7 +463,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{plan.name}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: ACCENT }}>
-                      €{displayPrice}<span style={{ fontSize: 16, color: c.textMuted }}>{displaySuffix}</span>
+                      €<TweenedNumber value={displayPrice} format={(n) => Math.round(n)} /><span style={{ fontSize: 16, color: c.textMuted }}>{displaySuffix}</span>
                     </div>
                     {billingCycle === "yearly" && (
                       <div style={{ fontSize: 11, color: c.textSub, marginTop: 4, fontWeight: 500 }}>
@@ -403,6 +483,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     {t.getStarted}
                   </button>
                 </div>
+                </Reveal>
                 );
               })}
             </div>
@@ -422,30 +503,34 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <div style={{ marginTop: 20 }}>
               <PlanCompareTable lang={lang} accent={ACCENT} />
             </div>
-          </div></Reveal>
+          </div>
         </div>
 
         {/* ─── FAQ ─── */}
         <div style={{ padding: "60px 24px", position: "relative", zIndex: 10 }}>
-          <Reveal><div style={{ maxWidth: 700, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 48 }}>
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 8 }}>
-                {t.faqTitle}
-              </h2>
-              <div style={{ width: 50, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto" }} />
-            </div>
+          <div style={{ maxWidth: 700, margin: "0 auto" }}>
+            <SectionHead eyebrow={eyebrow.faq} title={t.faqTitle} c={c} />
+            <Reveal delay={100}>
+            <div>
             {faqs.map(([q, a], i) => (
               <div key={i} style={{ borderBottom: "1px solid " + c.border, marginBottom: 0 }}>
                 <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "18px 0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{q}</div>
-                  <div style={{ fontSize: 18, color: c.textMuted, transition: "transform 0.2s", transform: faqOpen === i ? "rotate(45deg)" : "none" }}>+</div>
+                  <div style={{ fontSize: 18, color: c.textMuted, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none" }}>+</div>
                 </div>
-                {faqOpen === i && (
-                  <div style={{ paddingBottom: 18, fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{a}</div>
-                )}
+                {/* Antwoord blijft gemount; hoogte animeert via de
+                    grid-template-rows 0fr→1fr-truc (geen scrollHeight-meting
+                    nodig, werkt met elke inhoudslengte). */}
+                <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
+                  <div style={{ overflow: "hidden" }}>
+                    <div style={{ paddingBottom: 18, fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{a}</div>
+                  </div>
+                </div>
               </div>
             ))}
-          </div></Reveal>
+            </div>
+            </Reveal>
+          </div>
         </div>
 
         {/* ─── QUESTIONS / CONTACT ─── */}
@@ -472,7 +557,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ─── FINAL CTA ─── */}
         <div style={{ padding: "20px 24px 80px", textAlign: "center", position: "relative", zIndex: 10 }}>
-          <Reveal><div style={{ maxWidth: 600, margin: "0 auto", background: `linear-gradient(160deg, ${ACCENT}10, transparent 60%), ${c.bgCard}`, border: `1px solid ${ACCENT}33`, borderRadius: 28, padding: "52px 32px" }}>
+          <Reveal><div className="vl-breathe" style={{ maxWidth: 600, margin: "0 auto", background: `linear-gradient(160deg, ${ACCENT}10, transparent 60%), ${c.bgCard}`, border: `1px solid ${ACCENT}33`, borderRadius: 28, padding: "52px 32px" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 300, marginBottom: 12 }}>
               {t.ctaTitle}
             </div>
@@ -553,7 +638,7 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // filters as the visitor types. Each card is painted with the salon's own
 // accent colour, cover and logo. A dashed "your salon here?" card at the
 // end turns the section into an acquisition surface too.
-function SalonFinder({ lang, t, c, goToSlug, navigate }) {
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT }) {
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
@@ -611,10 +696,23 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
   return (
     <div id="find-salon" style={{ padding: "8px 24px 44px", position: "relative", zIndex: 10 }}>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        {/* De Atelier-richting zet zijn eigen genummerde kop boven dit blok en
+            verbergt deze centrale kop met hideHeader. */}
+        {!hideHeader && (
         <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4.5vw, 34px)", fontWeight: 300, marginBottom: 6 }}>{t.findSalonTitle}</h2>
-          <div style={{ fontSize: 12, color: c.textLabel, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>{t.findSalonSub}</div>
+          <Reveal from="translateY(10px)" duration={0.5}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.28em", textTransform: "uppercase", color: ACCENT, marginBottom: 10 }}>
+              {lang === "nl" ? "Voor klanten" : lang === "es" ? "Para clientes" : "For clients"}
+            </div>
+          </Reveal>
+          <Reveal delay={60}>
+            <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(24px, 4.5vw, 34px)", fontWeight: 300, marginBottom: 6 }}>{t.findSalonTitle}</h2>
+          </Reveal>
+          <Reveal delay={130}>
+            <div style={{ fontSize: 12, color: c.textLabel, maxWidth: 420, margin: "0 auto", lineHeight: 1.55 }}>{t.findSalonSub}</div>
+          </Reveal>
         </div>
+        )}
 
         {/* Search pill */}
         <div style={{ maxWidth: 460, margin: "0 auto 20px", position: "relative" }}>
@@ -645,7 +743,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
         ) : (
           <div className="salon-strip">
             {list.map(s => {
-              const acc = s.accent_color || ACCENT;
+              const acc = s.accent_color || accent;
               return (
                 <button key={s.slug} className="salon-card" onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
@@ -675,11 +773,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
             })}
             {/* "Your salon here?" — acquisition card, always last */}
             <button className="salon-card" onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
-              style={{ border: `1.5px dashed ${ACCENT}66`, background: `${ACCENT}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${ACCENT}88`, display: "flex", alignItems: "center", justifyContent: "center", color: ACCENT, fontSize: 18, marginBottom: 10 }}>+</div>
+              style={{ border: `1.5px dashed ${accent}66`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${accent}88`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 18, marginBottom: 10 }}>+</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
-              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
+              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
             </button>
           </div>
         )}
@@ -707,7 +805,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate }) {
 // Renders a floating "Start trial" pill bottom-right once the visitor has
 // scrolled past the hero. Hidden while in the hero so it doesn't compete
 // with the primary CTA there.
-function StickyStartPill({ onClick, label }) {
+function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff" }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 600);
@@ -722,7 +820,7 @@ function StickyStartPill({ onClick, label }) {
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 50,
         padding: "12px 22px", borderRadius: 100, border: "none",
-        background: ACCENT, color: "#fff",
+        background: bg, color: fg,
         fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600,
         boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
         cursor: "pointer",
@@ -753,7 +851,7 @@ function revealsInstantly() {
 // Scroll-reveal wrapper: children fade/slide in the first time they enter
 // the viewport. No-ops (instantly visible) when IntersectionObserver is
 // unavailable or the user prefers reduced motion.
-function Reveal({ children, delay = 0 }) {
+function Reveal({ children, delay = 0, from = "translateY(22px)", duration = 0.65, className, style }) {
   const ref = useRef(null);
   // Beginwaarde uit revealsInstantly() in plaats van uit een effect. Wat de
   // gebruiker hiervan merkte: wie "beperk beweging" aan had staan, kreeg de
@@ -786,10 +884,207 @@ function Reveal({ children, delay = 0 }) {
     return () => io.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ opacity: vis ? 1 : 0, transform: vis ? "none" : "translateY(22px)", transition: `opacity 0.65s ease ${delay}ms, transform 0.65s ease ${delay}ms` }}>
+    <div ref={ref} className={className} style={{ opacity: vis ? 1 : 0, transform: vis ? "none" : from, transition: `opacity ${duration}s ease ${delay}ms, transform ${duration}s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms`, ...style }}>
       {children}
     </div>
   );
+}
+
+// ─── SIGNATURE-LAAG (landing-rebuild 2026-08-27) ─────────────────────────────
+// De bewegingsgrammatica van de Mirah "Signature"-demo's, vertaald naar React
+// en het Vellu-goud: kinetische kopregel, scrollvoortgang, marquee, parallax,
+// muiscursor-ring en getallen-tweens. Alles valt óf stil bij "beperk beweging",
+// óf bestaat alleen op desktop (fine pointer). JS weg = statische pagina.
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+const finePointer = () =>
+  typeof window !== "undefined" && !!window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches;
+
+// Dunne gouden voortgangslijn bovenaan — schrijft direct op de DOM-node in een
+// rAF-tick, dus geen re-render per scroll-pixel.
+function ScrollProgress({ color = ACCENT }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (ref.current) ref.current.style.transform = `scaleX(${max > 0 ? Math.min(window.scrollY / max, 1) : 0})`;
+    };
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    update();
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
+  }, []);
+  return <div ref={ref} aria-hidden="true" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${color}cc, ${color})`, transformOrigin: "0 50%", transform: "scaleX(0)", zIndex: 60, pointerEvents: "none" }} />;
+}
+
+// Eén kopregel-"beat": masker + omhoogschuiven met vertraging. `ready` komt
+// van de ouder zodat alle regels op één klok lopen; bij beperk-beweging staat
+// ready al op true vóór de eerste verf en beweegt er niets.
+function KineticLine({ children, delay = 0, ready }) {
+  // paddingBottom/marginBottom-compensatie: de maskers knippen met overflow
+  // hidden, en bij lineHeight 1.06 steekt een staartletter (y, g, j) anders
+  // permanent buiten zijn regelvak.
+  return (
+    <span style={{ display: "block", overflow: "hidden", paddingBottom: "0.14em", marginBottom: "-0.14em" }}>
+      <span style={{ display: "block", whiteSpace: "nowrap", transform: ready ? "none" : "translateY(118%)", transition: `transform 0.95s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms` }}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
+// Vertraagde binnenkomst voor hero-onderdelen onder de kopregel (badge, sub,
+// cta's, stats). Zelfde klok als de kopregel.
+function HeroEnter({ children, delay = 0, ready }) {
+  return (
+    <div style={{ opacity: ready ? 1 : 0, transform: ready ? "none" : "translateY(14px)", transition: `opacity 0.7s ease ${delay}ms, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms` }}>
+      {children}
+    </div>
+  );
+}
+
+// Doorlopende woordenband — twee identieke helften, -50% translate = naadloze
+// lus. Puur CSS-animatie (goedkoop, ook mobiel); pauzeert bij hover en staat
+// stil bij beperk-beweging (zie de klassen in LandingScreen).
+function Marquee({ items, c, accent = ACCENT }) {
+  const half = (key) => (
+    <div key={key} style={{ display: "flex", flexShrink: 0 }}>
+      {items.map((w, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 26, padding: "0 13px", fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(20px, 3vw, 28px)", fontWeight: 300, letterSpacing: "0.06em", color: c.textSub, whiteSpace: "nowrap" }}>
+          {w}
+          <span aria-hidden="true" style={{ fontSize: 11, color: accent, opacity: 0.75 }}>✦</span>
+        </span>
+      ))}
+    </div>
+  );
+  return (
+    <div aria-hidden="true" className="vl-marquee" style={{ overflow: "hidden", padding: "26px 0", borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}`, maskImage: "linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent)", WebkitMaskImage: "linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent)" }}>
+      <div className="vl-marquee-track" style={{ display: "flex", width: "max-content" }}>
+        {half(0)}{half(1)}
+      </div>
+    </div>
+  );
+}
+
+// Vast koppatroon voor elke sectie: klein goud "wenkbrauw"-label, serif-titel,
+// en een lijn die zich uittekent (scaleX via Reveal's from-prop).
+function SectionHead({ eyebrow, title, sub, c }) {
+  return (
+    <div style={{ textAlign: "center", marginBottom: 44 }}>
+      {eyebrow && (
+        <Reveal from="translateY(10px)" duration={0.5}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.28em", textTransform: "uppercase", color: ACCENT, marginBottom: 12 }}>{eyebrow}</div>
+        </Reveal>
+      )}
+      <Reveal delay={70}>
+        <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 300, marginBottom: 12, lineHeight: 1.15 }}>{title}</h2>
+      </Reveal>
+      <Reveal delay={190} from="scaleX(0)" duration={0.8}>
+        <div style={{ width: 56, height: 1, background: `linear-gradient(90deg, transparent, ${ACCENT}, transparent)`, margin: "0 auto", transformOrigin: "center" }} />
+      </Reveal>
+      {sub && (
+        <Reveal delay={240}>
+          <div style={{ fontSize: 12.5, color: c.textLabel, lineHeight: 1.6, maxWidth: 460, margin: "14px auto 0" }}>{sub}</div>
+        </Reveal>
+      )}
+    </div>
+  );
+}
+
+// Getal dat naar zijn nieuwe waarde toe-eased (besparingsteller). Bij
+// beperk-beweging springt hij direct.
+function TweenedNumber({ value, format }) {
+  const [disp, setDisp] = useState(value);
+  const fromRef = useRef(value);
+  useEffect(() => {
+    const from = fromRef.current;
+    fromRef.current = value;
+    if (from === value || prefersReducedMotion()) { setDisp(value); return; }
+    let raf;
+    const start = performance.now(), dur = 550;
+    const step = (now) => {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisp(from + (value - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{format(disp)}</>;
+}
+
+// Laag die traag met de scroll meedrijft (deco-gloed, hero-telefoon). Alleen
+// desktop + volledige beweging; anders gewoon een statische div.
+function ParallaxLayer({ speed = 0.08, style, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (prefersReducedMotion() || !finePointer()) return;
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      if (ref.current) ref.current.style.transform = `translate3d(0, ${(window.scrollY * speed).toFixed(1)}px, 0)`;
+    };
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [speed]);
+  return <div ref={ref} style={style}>{children}</div>;
+}
+
+// Gouden cursor-ring die de muis naijlt en groeit boven klikbare elementen.
+// De systeemcursor blijft gewoon zichtbaar (geen verstoppertje met de UX);
+// bestaat alleen op fine-pointer-apparaten zonder beperk-beweging.
+function CursorRing() {
+  const ringRef = useRef(null);
+  const dotRef = useRef(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (prefersReducedMotion() || !finePointer()) return;
+    setOn(true);
+    let tx = -100, ty = -100, rx = -100, ry = -100, raf, grow = false;
+    const move = (e) => {
+      tx = e.clientX; ty = e.clientY;
+      if (dotRef.current) dotRef.current.style.transform = `translate(${tx}px, ${ty}px)`;
+    };
+    const over = (e) => {
+      const g = !!e.target?.closest?.("a, button, input, select, textarea, [role=button], [role=radio], [role=tab]");
+      if (g !== grow) { grow = g; ringRef.current?.classList.toggle("grow", g); }
+    };
+    const loop = () => {
+      rx += (tx - rx) * 0.16; ry += (ty - ry) * 0.16;
+      if (ringRef.current) ringRef.current.style.transform = `translate(${rx.toFixed(1)}px, ${ry.toFixed(1)}px)`;
+      raf = requestAnimationFrame(loop);
+    };
+    window.addEventListener("mousemove", move, { passive: true });
+    window.addEventListener("mouseover", over, { passive: true });
+    raf = requestAnimationFrame(loop);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseover", over);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  if (!on) return null;
+  return (
+    <>
+      <div ref={ringRef} className="vl-cursor" aria-hidden="true" />
+      <div ref={dotRef} className="vl-cursor-dot" aria-hidden="true" />
+    </>
+  );
+}
+
+// Zet per kaart de muispositie als CSS-variabelen; de .vl-glow::after-laag
+// (zie de stylesheet in LandingScreen) tekent daar een zachte goudgloed.
+function glowMove(e) {
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  el.style.setProperty("--mx", (e.clientX - r.left) + "px");
+  el.style.setProperty("--my", (e.clientY - r.top) + "px");
 }
 
 // Real product screenshots shown inside the hero phone frame, cross-faded on a
@@ -810,7 +1105,9 @@ const HERO_SHOTS = [
 // booking page, built from plain divs so it always matches the product's
 // design language. Stays inside the site's gold palette so the hero reads as
 // one composition.
-function HeroPhoneMockup({ lang, c }) {
+// `accent` stuurt alleen de gloed rond het toestel; de CSS-terugval-mockup
+// binnenin blijft bewust productgoud — dat ís de app.
+function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
   const services = [
     [lang === "nl" ? "Gel manicure" : lang === "es" ? "Manicura en gel" : "Gel manicure", "45 min", "€38"],
     [lang === "nl" ? "BIAB nieuwe set" : lang === "es" ? "BIAB set nuevo" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : lang === "es" ? "Desde €52" : "From €52"],
@@ -834,14 +1131,14 @@ function HeroPhoneMockup({ lang, c }) {
   return (
     <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "14px 0 18px" }}>
       {/* Ambient gold glow behind the device */}
-      <div style={{ position: "absolute", inset: "-16%", background: `radial-gradient(58% 52% at 50% 42%, ${ACCENT}26 0%, transparent 62%)`, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: "-16%", background: `radial-gradient(58% 52% at 50% 42%, ${accent}26 0%, transparent 62%)`, pointerEvents: "none" }} />
 
       <div className="hero-phone-float" style={{ position: "relative" }}>
         {/* Device — brushed-metal frame with a soft edge highlight */}
         <div style={{
           position: "relative", width: 276, borderRadius: 50, padding: 11,
           background: "linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%)",
-          boxShadow: `0 52px 92px -30px rgba(0,0,0,0.78), 0 0 84px -20px ${ACCENT}5c, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)`,
+          boxShadow: `0 52px 92px -30px rgba(0,0,0,0.78), 0 0 84px -20px ${accent}5c, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)`,
         }}>
           {/* Physical side buttons */}
           <div style={{ position: "absolute", left: -2, top: 116, width: 3, height: 24, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
@@ -948,7 +1245,7 @@ function HeroPhoneMockup({ lang, c }) {
 // Interactive bookings × avg-price calculator that contrasts a fixed Vellu
 // fee against an approximate Treatwell commission. Kept intentionally simple
 // (two sliders, three result lines) so the takeaway lands at a glance.
-function SavingsCalculator({ lang, t, c }) {
+function SavingsCalculator({ lang, t, c, accent = ACCENT }) {
   const [bookings, setBookings] = useState(50);
   const [avgPrice, setAvgPrice] = useState(45);
   const revenue = bookings * avgPrice;
@@ -963,19 +1260,19 @@ function SavingsCalculator({ lang, t, c }) {
   return (
     <div>
       <style>{`
-        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
       `}</style>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 22 }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
-            <span>{t.calcBookings}</span><span style={{ color: ACCENT, fontWeight: 600 }}>{bookings}</span>
+            <span>{t.calcBookings}</span><span style={{ color: accent, fontWeight: 600 }}>{bookings}</span>
           </div>
           <input type="range" min={5} max={300} step={5} value={bookings} onChange={e => setBookings(parseInt(e.target.value))} style={slider} />
         </div>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
-            <span>{t.calcAvgPrice}</span><span style={{ color: ACCENT, fontWeight: 600 }}>€{avgPrice}</span>
+            <span>{t.calcAvgPrice}</span><span style={{ color: accent, fontWeight: 600 }}>€{avgPrice}</span>
           </div>
           <input type="range" min={10} max={200} step={5} value={avgPrice} onChange={e => setAvgPrice(parseInt(e.target.value))} style={slider} />
         </div>
@@ -985,10 +1282,10 @@ function SavingsCalculator({ lang, t, c }) {
         <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
         <Row label={t.calcVelluCost} value={`− €${velluMonthly}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
       </div>
-      <div style={{ textAlign: "center", padding: "18px 18px", background: `${ACCENT}10`, border: `1px solid ${ACCENT}33`, borderRadius: 14 }}>
+      <div style={{ textAlign: "center", padding: "18px 18px", background: `${accent}10`, border: `1px solid ${accent}33`, borderRadius: 14 }}>
         <div style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{t.calcSavingsYear}</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 42, fontWeight: 300, color: ACCENT, lineHeight: 1.1 }}>
-          {fmt(savingsYear)}
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 42, fontWeight: 300, color: accent, lineHeight: 1.1 }}>
+          <TweenedNumber value={savingsYear} format={fmt} />
         </div>
       </div>
       <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>{t.calcFootnote}</div>
@@ -1007,7 +1304,9 @@ function Row({ label, value, c, negative }) {
 
 // ─── OWNER AUTH ───────────────────────────────────────────────
 function OwnerAuth({ onLogin, onBack, lang, setLang }) {
-  const { colors: c } = useTheme();
+  // Vaste Atelier-huid (27-08): de login hoort bij de bone-merkwereld van de
+  // landing, niet bij het licht/donker-thema van de app erachter.
+  const c = AT_COLORS;
   const t = T[lang];
   // Derive referral code from URL synchronously at mount. If present, initial
   // mode is "signup" directly — avoids the React warning about setState in an
@@ -1151,16 +1450,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
   return (
     <Layout>
-      <div style={{ 
-        background: c.bg, 
-        minHeight: "100dvh", 
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "center", 
-        padding: "40px 24px", 
-        fontFamily: "'Jost',sans-serif", 
-        color: c.text, 
-        position: "relative" 
+      <AtelierSkin />
+      <div className="atelier" style={{
+        background: c.bg,
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "40px 24px",
+        fontFamily: "'Jost',sans-serif",
+        color: c.text,
+        position: "relative"
       }}>
         {/* Background decoration */}
         <div style={{ 
@@ -1171,7 +1471,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           width: "80%", 
           maxWidth: 600,
           height: "50%", 
-          background: `radial-gradient(ellipse at center, ${ACCENT}08 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse at center, ${AT.EARTH}08 0%, transparent 70%)`,
           pointerEvents: "none"
         }} />
 
@@ -1180,17 +1480,21 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {t.back}</button>
         </div>
 
-        {/* Lang toggle — same safe-area offset. */}
-        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", alignItems: "center", gap: 8 }}>
-          <ThemeToggle />
-          <LangToggle lang={lang} setLang={setLang} />
+        {/* Taalkeuze — same safe-area offset. Geen thema-toggle: deze pagina
+            draagt de vaste Atelier-huid. */}
+        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", gap: 2, border: `1px solid ${AT.PUTTY}`, borderRadius: 100, padding: 3, background: c.bgCard }}>
+          {["nl", "en", "es"].map(l => (
+            <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? AT.ESPRESSO : "transparent", color: lang === l ? AT.BONE : AT.EARTH }}>
+              {l}
+            </button>
+          ))}
         </div>
 
         {/* Ruimte boven de kroon: op korte telefoonschermen schoof het logo
             anders onder de absoluut geplaatste thema/taal-knoppen. */}
         <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10, paddingTop: "calc(72px + env(safe-area-inset-top, 0px))", paddingBottom: 24 }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 36 }}>
-            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
+            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={AT.EARTH} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{t.ownerLogin}</div>
             <div style={{ fontSize: 13, color: c.textLabel, marginTop: 8, letterSpacing: "0.02em" }}>{t.ownerSub}</div>
           </div>
@@ -1207,8 +1511,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                   flex: 1, padding: "12px", border: "none", background: "transparent",
                   fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer",
                   letterSpacing: "0.1em", textTransform: "uppercase",
-                  color: mode === m ? ACCENT : c.textMuted,
-                  borderBottom: `2px solid ${mode === m ? ACCENT : "transparent"}`,
+                  color: mode === m ? AT.EARTH : c.textMuted,
+                  borderBottom: `2px solid ${mode === m ? AT.EARTH : "transparent"}`,
                   marginBottom: -1, transition: "all 0.2s"
                 }}>{label}</button>
               ))}
@@ -1216,7 +1520,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
             {mode === "signup" && referrerName && (
               <div style={{
-                background: `${ACCENT}12`, border: `1px solid ${ACCENT}33`, borderRadius: 12,
+                background: `${AT.EARTH}12`, border: `1px solid ${AT.EARTH}33`, borderRadius: 12,
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
               }}>
                 {lang === "nl" ? (
@@ -1271,8 +1575,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                     {[["joint", "user", t.jointAccount, t.jointDesc, t.jointInfo], ["team", "team", t.teamAccount, t.teamDesc, t.teamInfo]].map(([type, icon, label, desc, info]) => (
                       <div key={type} onClick={() => setForm(f => ({...f, accountType: type}))} style={{
                         flex: 1, padding: "14px 12px", borderRadius: 14, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
-                        background: form.accountType === type ? `${ACCENT}12` : c.inputBg,
-                        border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`,
+                        background: form.accountType === type ? `${AT.EARTH}12` : c.inputBg,
+                        border: `1.5px solid ${form.accountType === type ? AT.EARTH : c.inputBorder}`,
                         position: "relative"
                       }}>
                         {/* Info icon — click stops propagation so tapping the ⓘ
@@ -1284,8 +1588,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                           style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textLabel, fontSize: 10, fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontWeight: 700, lineHeight: 1, cursor: "help", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                           i
                         </button>
-                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? ACCENT : c.textSub} /></div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? ACCENT : c.text }}>{label}</div>
+                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? AT.EARTH : c.textSub} /></div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? AT.EARTH : c.text }}>{label}</div>
                         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, lineHeight: 1.3 }}>{desc}</div>
                       </div>
                     ))}
@@ -1312,13 +1616,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
             {mode === "signin" && (
               <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer", userSelect: "none" }}>
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: ACCENT, cursor: "pointer" }} />
+                  style={{ width: 16, height: 16, accentColor: AT.EARTH, cursor: "pointer" }} />
                 <span style={{ fontSize: 12, color: c.textSub }}>
                   {lang === "nl" ? "Onthoud mijn gegevens" : lang === "es" ? "Recordarme" : "Remember me"}
                 </span>
               </label>
             )}
-            {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
+            {error && <div style={{ fontSize: 12, color: "#a8564a", marginBottom: 16, textAlign: "center" }}>{error}</div>}
             {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
             {mode === "signin" && (
@@ -1337,4 +1641,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 // ─── REVIEW FORM ────────────────────────────────────────────
 
 export { LandingScreen, OwnerAuth };
+// Gedeeld met de "Atelier"-richting (src/LandingAtelier.jsx): dezelfde
+// werkende onderdelen en bewegingslaag, andere huid. De componenten nemen hun
+// kleuren als prop (`c`), dus de ivoor-pagina geeft gewoon zijn eigen palet mee.
+export {
+  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
+  Reveal, KineticLine, HeroEnter, Marquee, SectionHead, TweenedNumber,
+  ParallaxLayer, CursorRing, ScrollProgress, glowMove,
+};
 export default LandingScreen;
