@@ -36,6 +36,9 @@ const MUSHROOM = "#C4B39A";
 const PUTTY = "#DED1BA";
 const BONE = "#F4EFE6";
 const INK = ESPRESSO;
+// Voor lopende tekst óp de mushroom-band: espresso zelf haalt daar net geen
+// AA-contrast (≈4:1), dit verdiepte espresso wel (≈5,4:1). Zelfde familie.
+const ESPRESSO_DEEP = "#453A2B";
 
 // Sleutels spiegelen het thema-object zodat de gedeelde componenten
 // (SalonFinder, rekentool, telefoon, chat) er direct mee overweg kunnen.
@@ -60,11 +63,12 @@ const P = {
 // direct op de band, maar in het bone-paneel eronder).
 function AtHead({ n, title, sub, tone = "bone" }) {
   const onEarth = tone === "earth";
-  const numCol = onEarth ? PUTTY : EARTH;
-  const dashCol = onEarth ? `${BONE}55` : `${EARTH}55`;
-  const titleCol = onEarth ? BONE : INK;
-  const subCol = onEarth ? `${BONE}e6` : tone === "putty" ? "#5f5240" : P.textLabel;
-  const rule = onEarth ? `${BONE}30` : tone === "putty" ? `${EARTH}44` : PUTTY;
+  const onMush = tone === "mushroom";
+  const numCol = onEarth ? PUTTY : onMush ? BONE : EARTH;
+  const dashCol = onEarth ? `${BONE}55` : onMush ? `${ESPRESSO_DEEP}55` : `${EARTH}55`;
+  const titleCol = onEarth ? BONE : onMush ? ESPRESSO_DEEP : INK;
+  const subCol = onEarth ? `${BONE}e6` : onMush ? ESPRESSO_DEEP : tone === "putty" ? "#5f5240" : P.textLabel;
+  const rule = onEarth ? `${BONE}30` : onMush ? `${ESPRESSO_DEEP}30` : tone === "putty" ? `${EARTH}44` : PUTTY;
   return (
     <div style={{ marginBottom: 38 }}>
       <Reveal from="translateY(12px)" duration={0.5}>
@@ -464,21 +468,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 06 · FAQ — tweede putty-band; loopt direct door in de finale. ── */}
-        <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
+        {/* ── 06 · FAQ — mushroom-band; loopt direct door in de finale. Tekst
+              hier in verdiept espresso (ESPRESSO_DEEP) voor AA-contrast. ── */}
+        <div style={{ background: MUSHROOM, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
-          <AtHead n="06" title={t.faqTitle} tone="putty" />
+          <AtHead n="06" title={t.faqTitle} tone="mushroom" />
           <Reveal delay={80}>
             <div style={{ maxWidth: 760 }}>
               {faqs.map(([q, a], i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${EARTH}3d` }}>
+                <div key={i} style={{ borderBottom: `1px solid ${ESPRESSO_DEEP}30` }}>
                   <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
-                    <div style={{ fontSize: 20, color: EARTH, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: ESPRESSO_DEEP }}>{q}</div>
+                    <div style={{ fontSize: 20, color: ESPRESSO_DEEP, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                     <div style={{ overflow: "hidden" }}>
-                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: "#5f5240", lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
+                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: ESPRESSO_DEEP, lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
                     </div>
                   </div>
                 </div>
@@ -486,10 +491,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
           </Reveal>
           <Reveal delay={140}>
-            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, color: "#5f5240" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, color: ESPRESSO_DEEP }}>
               <span>{lang === "nl" ? "Nog vragen? Stel ze in de chat linksonder, of mail ons —" : lang === "es" ? "¿Aún tienes preguntas? Pregunta en el chat abajo a la izquierda, o escríbenos —" : "Still have questions? Ask in the chat bottom-left, or email us —"}</span>
-              <a href="mailto:mirahventures@vellu.cc" style={{ color: INK, borderBottom: `1px solid ${EARTH}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
-              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px", borderColor: EARTH }} onClick={() => navigate("/contact")}>
+              <a href="mailto:mirahventures@vellu.cc" style={{ color: ESPRESSO_DEEP, borderBottom: `1px solid ${ESPRESSO_DEEP}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px", borderColor: ESPRESSO_DEEP, color: ESPRESSO_DEEP }} onClick={() => navigate("/contact")}>
                 {lang === "nl" ? "Neem contact op" : lang === "es" ? "Contáctanos" : "Contact us"}
               </button>
             </div>
