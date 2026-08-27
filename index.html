@@ -54,6 +54,41 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Zelfherstel voor een verouderde app-shell. Na een deploy krijgen alle
+      // JS-chunks nieuwe gehashte namen; een gecachte index.html (PWA/Safari/
+      // service worker) vraagt dan om bestanden die niet meer bestaan en het
+      // scherm blijft wit — nog vóór React (en Sentry) start. Vang zowel het
+      // falen van het hoofdscript als van lazy chunks (vite:preloadError) op
+      // en herlaad precies één keer met een cache-buster zodat de verse shell
+      // wordt opgehaald. main.jsx ruimt de query-parameter daarna weer op.
+      (function () {
+        var KEY = "vellu_shell_healed";
+        function healOnce() {
+          var guarded = false;
+          try {
+            guarded = !!sessionStorage.getItem(KEY);
+            sessionStorage.setItem(KEY, String(Date.now()));
+          } catch (e) {
+            guarded = location.search.indexOf("shellheal=") !== -1;
+          }
+          if (guarded) return;
+          try {
+            var u = new URL(location.href);
+            u.searchParams.set("shellheal", String(Date.now()));
+            location.replace(u.toString());
+          } catch (e) { location.reload(); }
+        }
+        addEventListener("error", function (e) {
+          var t = e && e.target;
+          if (t && t.tagName === "SCRIPT" && t.src && t.src.indexOf("/assets/") !== -1) healOnce();
+        }, true);
+        addEventListener("vite:preloadError", function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          healOnce();
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
     <script>
       // Register Service Worker

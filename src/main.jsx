@@ -8,6 +8,18 @@ import { initSentry, ErrorBoundary } from './sentry.js'
 // render of App are captured. No-op unless VITE_SENTRY_DSN is set.
 initSentry()
 
+// Opruimen na het shell-zelfherstel uit index.html: de cache-buster uit de
+// adresbalk halen en de eenmalige-herlaad-beveiliging weer op scherp zetten
+// (dit script draait = de shell en zijn chunks zijn weer consistent).
+try {
+  const u = new URL(window.location.href)
+  if (u.searchParams.has('shellheal')) {
+    u.searchParams.delete('shellheal')
+    window.history.replaceState(window.history.state, '', u)
+  }
+  sessionStorage.removeItem('vellu_shell_healed')
+} catch { /* private mode */ }
+
 // Fallback UI when a crash bubbles all the way up. Keep it minimal + branded
 // so the user understands something went wrong but isn't left on a blank
 // white screen. Sentry has already been notified by the time this renders.

@@ -9,7 +9,10 @@
 // Bump CACHE_NAME on any change here: `activate` deletes every cache whose
 // name doesn't match, which is how a poisoned cache gets cleared from
 // already-installed clients.
-const CACHE_NAME = 'vellu-v3';
+// v4 (2026-08-27): purge caches die vergiftigd konden zijn — de SPA-rewrite
+// gaf tot vandaag 200+index.html terug voor verdwenen /assets/-chunks, en die
+// HTML werd hier onder de .js-URL gecachet (witte-scherm-incident).
+const CACHE_NAME = 'vellu-v4';
 
 // ─── Web push (sinds 2026-08-22) ─────────────────────────────────────────
 // De edge function send-push-notification stuurt een JSON-payload
