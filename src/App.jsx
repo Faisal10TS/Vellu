@@ -46,6 +46,30 @@ function planIsActive(owner) {
   return renewing && (now - exp) < RENEWAL_GRACE_MS;
 }
 
+// Poortje vóór het "Kies een plan"-scherm. Het founder/beheerdersaccount heeft
+// GEEN salonprofiel (het ís geen salon) en viel op /owner daardoor door alle
+// checks heen op de plan-muur — een doodlopende weg, want de beheerder hoort op
+// /admin (27-08-2026). Eén rpc-check vóór we de muur tonen: beheerders gaan
+// door naar /admin, iedereen anders ziet gewoon de plannen. De rpc draait
+// alleen op dit pad, dus salons met een geldig plan merken er niets van.
+function PlanSelectionGate(props) {
+  const navigate = useNavigate();
+  const [showPlans, setShowPlans] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    supabase.rpc("is_admin")
+      .then(({ data }) => {
+        if (!alive) return;
+        if (data === true) navigate("/admin", { replace: true });
+        else setShowPlans(true);
+      })
+      .catch(() => { if (alive) setShowPlans(true); });
+    return () => { alive = false; };
+  }, [navigate]);
+  if (!showPlans) return null;
+  return <PlanSelection {...props} />;
+}
+
 // ─── ROLE RESOLUTION ─────────────────────────────────────────
 // Figure out whether a logged-in auth user is a SALON OWNER or a STAFF member.
 //
@@ -158,6 +182,12 @@ function OwnerEntryPage({ lang, setLang }) {
                 mollie_subscription_id: profile.mollie_subscription_id || null,
                 account_type: profile.account_type || "joint"
               });
+            } else {
+              // Sessie mét owner-rol maar zónder profielrij: het founder-
+              // account. Zonder deze tak bleef owner null en toonde /owner het
+              // INLOGscherm terwijl je al ingelogd was. Beheerder → /admin.
+              const { data: adm } = await supabase.rpc("is_admin");
+              if (!cancelled && adm === true) { navigate("/admin", { replace: true }); return; }
             }
           }
         }
@@ -221,7 +251,7 @@ function OwnerEntryPage({ lang, setLang }) {
   const hasPlan = planIsActive(owner);
 
   if (owner && !hasPlan) {
-    return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
+    return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
   }
 
   if (owner) {
@@ -863,7 +893,7 @@ function AppInner({ lang, setLang }) {
       {screen === "owner" && (() => {
         // Zelfde regel als in OwnerEntryPage, incl. verlengingscoulance.
         const hasPlan = planIsActive(owner);
-        if (!hasPlan) return <PlanSelection user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
+        if (!hasPlan) return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
         return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}
     </>
