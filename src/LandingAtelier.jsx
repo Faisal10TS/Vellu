@@ -313,17 +313,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <HeroEnter ready={heroReady} delay={460}>
               <ParallaxLayer speed={-0.035}>
-                {/* Putty-paneel als sokkel; de telefoon staat er licht gedraaid op. */}
-                <div style={{ position: "relative", borderRadius: 30, padding: "30px 12px 20px", background: `linear-gradient(165deg, ${PUTTY}, ${PUTTY}55 55%, transparent), ${P.bgCard}`, border: `1px solid ${PUTTY}` }}>
-                  <div style={{ transform: "rotate(-3deg)" }}>
-                    <HeroPhoneMockup lang={lang} c={P} accent={MUSHROOM} />
-                  </div>
-                  <div style={{ textAlign: "center", marginTop: 0 }}>
-                    <button onClick={() => navigate("/bloomstudio")}
-                      style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, padding: "6px 2px" }}>
-                      {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
-                    </button>
-                  </div>
+                {/* Telefoon vrijstaand en rechtop, zoals op de andere versies —
+                    geen sokkelpaneel, geen rotatie (feedback 27-08). */}
+                <HeroPhoneMockup lang={lang} c={P} accent={MUSHROOM} />
+                <div style={{ textAlign: "center", marginTop: 2 }}>
+                  <button onClick={() => navigate("/bloomstudio")}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, padding: "6px 2px" }}>
+                    {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+                  </button>
                 </div>
               </ParallaxLayer>
             </HeroEnter>
