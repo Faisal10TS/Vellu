@@ -637,7 +637,7 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // filters as the visitor types. Each card is painted with the salon's own
 // accent colour, cover and logo. A dashed "your salon here?" card at the
 // end turns the section into an acquisition surface too.
-function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader }) {
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT }) {
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
@@ -742,7 +742,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader }) {
         ) : (
           <div className="salon-strip">
             {list.map(s => {
-              const acc = s.accent_color || ACCENT;
+              const acc = s.accent_color || accent;
               return (
                 <button key={s.slug} className="salon-card" onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
@@ -772,11 +772,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader }) {
             })}
             {/* "Your salon here?" — acquisition card, always last */}
             <button className="salon-card" onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
-              style={{ border: `1.5px dashed ${ACCENT}66`, background: `${ACCENT}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${ACCENT}88`, display: "flex", alignItems: "center", justifyContent: "center", color: ACCENT, fontSize: 18, marginBottom: 10 }}>+</div>
+              style={{ border: `1.5px dashed ${accent}66`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${accent}88`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 18, marginBottom: 10 }}>+</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
-              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
+              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
             </button>
           </div>
         )}
@@ -804,7 +804,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader }) {
 // Renders a floating "Start trial" pill bottom-right once the visitor has
 // scrolled past the hero. Hidden while in the hero so it doesn't compete
 // with the primary CTA there.
-function StickyStartPill({ onClick, label }) {
+function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff" }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 600);
@@ -819,7 +819,7 @@ function StickyStartPill({ onClick, label }) {
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 50,
         padding: "12px 22px", borderRadius: 100, border: "none",
-        background: ACCENT, color: "#fff",
+        background: bg, color: fg,
         fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600,
         boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
         cursor: "pointer",
@@ -901,7 +901,7 @@ const finePointer = () =>
 
 // Dunne gouden voortgangslijn bovenaan — schrijft direct op de DOM-node in een
 // rAF-tick, dus geen re-render per scroll-pixel.
-function ScrollProgress() {
+function ScrollProgress({ color = ACCENT }) {
   const ref = useRef(null);
   useEffect(() => {
     let ticking = false;
@@ -916,7 +916,7 @@ function ScrollProgress() {
     update();
     return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
   }, []);
-  return <div ref={ref} aria-hidden="true" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${ACCENT}cc, ${ACCENT})`, transformOrigin: "0 50%", transform: "scaleX(0)", zIndex: 60, pointerEvents: "none" }} />;
+  return <div ref={ref} aria-hidden="true" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${color}cc, ${color})`, transformOrigin: "0 50%", transform: "scaleX(0)", zIndex: 60, pointerEvents: "none" }} />;
 }
 
 // Eén kopregel-"beat": masker + omhoogschuiven met vertraging. `ready` komt
@@ -948,13 +948,13 @@ function HeroEnter({ children, delay = 0, ready }) {
 // Doorlopende woordenband — twee identieke helften, -50% translate = naadloze
 // lus. Puur CSS-animatie (goedkoop, ook mobiel); pauzeert bij hover en staat
 // stil bij beperk-beweging (zie de klassen in LandingScreen).
-function Marquee({ items, c }) {
+function Marquee({ items, c, accent = ACCENT }) {
   const half = (key) => (
     <div key={key} style={{ display: "flex", flexShrink: 0 }}>
       {items.map((w, i) => (
         <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 26, padding: "0 13px", fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(20px, 3vw, 28px)", fontWeight: 300, letterSpacing: "0.06em", color: c.textSub, whiteSpace: "nowrap" }}>
           {w}
-          <span aria-hidden="true" style={{ fontSize: 11, color: ACCENT, opacity: 0.75 }}>✦</span>
+          <span aria-hidden="true" style={{ fontSize: 11, color: accent, opacity: 0.75 }}>✦</span>
         </span>
       ))}
     </div>
@@ -1104,7 +1104,9 @@ const HERO_SHOTS = [
 // booking page, built from plain divs so it always matches the product's
 // design language. Stays inside the site's gold palette so the hero reads as
 // one composition.
-function HeroPhoneMockup({ lang, c }) {
+// `accent` stuurt alleen de gloed rond het toestel; de CSS-terugval-mockup
+// binnenin blijft bewust productgoud — dat ís de app.
+function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
   const services = [
     [lang === "nl" ? "Gel manicure" : lang === "es" ? "Manicura en gel" : "Gel manicure", "45 min", "€38"],
     [lang === "nl" ? "BIAB nieuwe set" : lang === "es" ? "BIAB set nuevo" : "BIAB new set", "60–75 min", lang === "nl" ? "Vanaf €52" : lang === "es" ? "Desde €52" : "From €52"],
@@ -1128,14 +1130,14 @@ function HeroPhoneMockup({ lang, c }) {
   return (
     <div className="hero-phone-wrap" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "14px 0 18px" }}>
       {/* Ambient gold glow behind the device */}
-      <div style={{ position: "absolute", inset: "-16%", background: `radial-gradient(58% 52% at 50% 42%, ${ACCENT}26 0%, transparent 62%)`, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: "-16%", background: `radial-gradient(58% 52% at 50% 42%, ${accent}26 0%, transparent 62%)`, pointerEvents: "none" }} />
 
       <div className="hero-phone-float" style={{ position: "relative" }}>
         {/* Device — brushed-metal frame with a soft edge highlight */}
         <div style={{
           position: "relative", width: 276, borderRadius: 50, padding: 11,
           background: "linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%)",
-          boxShadow: `0 52px 92px -30px rgba(0,0,0,0.78), 0 0 84px -20px ${ACCENT}5c, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)`,
+          boxShadow: `0 52px 92px -30px rgba(0,0,0,0.78), 0 0 84px -20px ${accent}5c, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)`,
         }}>
           {/* Physical side buttons */}
           <div style={{ position: "absolute", left: -2, top: 116, width: 3, height: 24, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
@@ -1242,7 +1244,7 @@ function HeroPhoneMockup({ lang, c }) {
 // Interactive bookings × avg-price calculator that contrasts a fixed Vellu
 // fee against an approximate Treatwell commission. Kept intentionally simple
 // (two sliders, three result lines) so the takeaway lands at a glance.
-function SavingsCalculator({ lang, t, c }) {
+function SavingsCalculator({ lang, t, c, accent = ACCENT }) {
   const [bookings, setBookings] = useState(50);
   const [avgPrice, setAvgPrice] = useState(45);
   const revenue = bookings * avgPrice;
@@ -1257,19 +1259,19 @@ function SavingsCalculator({ lang, t, c }) {
   return (
     <div>
       <style>{`
-        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${ACCENT}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
       `}</style>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 22 }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
-            <span>{t.calcBookings}</span><span style={{ color: ACCENT, fontWeight: 600 }}>{bookings}</span>
+            <span>{t.calcBookings}</span><span style={{ color: accent, fontWeight: 600 }}>{bookings}</span>
           </div>
           <input type="range" min={5} max={300} step={5} value={bookings} onChange={e => setBookings(parseInt(e.target.value))} style={slider} />
         </div>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
-            <span>{t.calcAvgPrice}</span><span style={{ color: ACCENT, fontWeight: 600 }}>€{avgPrice}</span>
+            <span>{t.calcAvgPrice}</span><span style={{ color: accent, fontWeight: 600 }}>€{avgPrice}</span>
           </div>
           <input type="range" min={10} max={200} step={5} value={avgPrice} onChange={e => setAvgPrice(parseInt(e.target.value))} style={slider} />
         </div>
@@ -1279,9 +1281,9 @@ function SavingsCalculator({ lang, t, c }) {
         <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
         <Row label={t.calcVelluCost} value={`− €${velluMonthly}${lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo"}`} c={c} negative />
       </div>
-      <div style={{ textAlign: "center", padding: "18px 18px", background: `${ACCENT}10`, border: `1px solid ${ACCENT}33`, borderRadius: 14 }}>
+      <div style={{ textAlign: "center", padding: "18px 18px", background: `${accent}10`, border: `1px solid ${accent}33`, borderRadius: 14 }}>
         <div style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{t.calcSavingsYear}</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 42, fontWeight: 300, color: ACCENT, lineHeight: 1.1 }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 42, fontWeight: 300, color: accent, lineHeight: 1.1 }}>
           <TweenedNumber value={savingsYear} format={fmt} />
         </div>
       </div>

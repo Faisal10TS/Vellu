@@ -1,42 +1,58 @@
 // LandingAtelier — de "volledige herbouw"-richting naast de Signature-branch
 // (2026-08-27). Zelfde inhoud, zelfde drie talen, zelfde werkende onderdelen
 // (SalonFinder, rekentool, telefoon met echte screenshots, chat), maar een
-// omgekeerd canvas: warm ivoorpapier, inkt-typografie op tijdschriftformaat,
-// goud als sieraad in plaats van behang, genummerde redactionele secties en
-// een inkt-finale. Vast palet — deze richting kiest bewust één look, dus geen
-// dark-mode-toggle; de app zelf behoudt gewoon zijn thema's.
+// eigen kleurwereld: Faisals aardpalet van 27-08 — géén goud meer, espresso
+// als inkt en earth brown als accent. Redactionele opbouw: genummerde secties,
+// haarlijnen, monumentale serif, espresso-finale.
+//
+//   Deep Espresso Clay  #5B4C3A — inkt (koppen, knoppen, finale-vlak)
+//   Rich Earth Brown    #8A7356 — accent (wenkbrauwen, markers, onderstrepen)
+//   Soft Mushroom Beige #C4B39A — zachte accenten (grote nummers, outline)
+//   Warm Putty          #DED1BA — haarlijnen, vlakken, tags
+//   Gentle Bone White   #F4EFE6 — canvas
+//
+// Vast palet — deze richting kiest bewust één look, dus geen dark-mode-toggle;
+// de app zelf behoudt gewoon zijn thema's. De telefoon-screenshots tonen de
+// echte (goudkleurige) app — dat is het product en mag zo blijven.
 //
 // Deling met LandingScreen.jsx: de bewegingslaag (Reveal, KineticLine,
 // Marquee, …) en de functionele blokken komen daarvandaan; ze nemen kleuren
-// als prop, dus dit bestand geeft zijn eigen palet (P) mee. De globale
-// .btn-*/.input-field-stijlen volgen het app-thema en worden hier binnen
-// .atelier overschreven, anders lekt een donker thema de ivoorpagina in.
+// als props (`c` + `accent`), dus dit bestand geeft zijn eigen palet mee. De
+// globale .btn-*/.input-field-stijlen volgen het app-thema en worden hier
+// binnen .atelier overschreven, anders lekt een donker thema de bone-pagina in.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
-import { useSEO, ACCENT, T, Layout, NavIcon } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 } from "./LandingScreen.jsx";
 
-// Vast ivoor/inkt-palet. Sleutels spiegelen het thema-object zodat de
-// gedeelde componenten (SalonFinder, rekentool, telefoon, chat) er direct
-// mee overweg kunnen.
+const ESPRESSO = "#5B4C3A";
+const EARTH = "#8A7356";
+const MUSHROOM = "#C4B39A";
+const PUTTY = "#DED1BA";
+const BONE = "#F4EFE6";
+const INK = ESPRESSO;
+
+// Sleutels spiegelen het thema-object zodat de gedeelde componenten
+// (SalonFinder, rekentool, telefoon, chat) er direct mee overweg kunnen.
+// textSub/textLabel zijn espresso-mengingen i.p.v. puur earth: kleine
+// lopende tekst moet AA-contrast op bone houden.
 const P = {
-  bg: "#f7f3eb",
-  bgCard: "#fffdf8",
-  text: "#221b12",
-  textSub: "#5d5344",
-  textLabel: "#6d6250",
-  textMuted: "#94886f",
-  border: "#e5dcc9",
-  inputBorder: "#d8cdb5",
-  inputBg: "#fffdf8",
-  btnOnDark: "#f7f3eb",
+  bg: BONE,
+  bgCard: "#FAF6EE",
+  text: ESPRESSO,
+  textSub: "#6B5A45",
+  textLabel: "#75634B",
+  textMuted: EARTH,
+  border: PUTTY,
+  inputBorder: MUSHROOM,
+  inputBg: "#FAF6EE",
+  btnOnDark: BONE,
 };
-const INK = "#221b12";
 
 // Redactionele sectiekop: nummer + titel links, haarlijn eronder.
 function AtHead({ n, title, sub }) {
@@ -44,8 +60,8 @@ function AtHead({ n, title, sub }) {
     <div style={{ marginBottom: 38 }}>
       <Reveal from="translateY(12px)" duration={0.5}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: ACCENT, letterSpacing: "0.14em" }}>{n}</span>
-          <span style={{ flex: "0 1 34px", height: 1, background: `${INK}22` }} />
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: EARTH, letterSpacing: "0.14em" }}>{n}</span>
+          <span style={{ flex: "0 1 34px", height: 1, background: `${EARTH}55` }} />
           <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(30px, 5.4vw, 46px)", fontWeight: 300, lineHeight: 1.1, color: INK, letterSpacing: "0.01em" }}>{title}</h2>
         </div>
       </Reveal>
@@ -55,7 +71,7 @@ function AtHead({ n, title, sub }) {
         </Reveal>
       )}
       <Reveal delay={170} from="scaleX(0)" duration={0.8}>
-        <div style={{ height: 1, background: `${INK}1a`, marginTop: 22, transformOrigin: "left center" }} />
+        <div style={{ height: 1, background: PUTTY, marginTop: 22, transformOrigin: "left center" }} />
       </Reveal>
     </div>
   );
@@ -159,33 +175,33 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   return (
     <Layout>
       <div className="atelier" style={{ background: P.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: INK, position: "relative", overflow: "clip" }}>
-        {/* Papier-ademing: twee heel zachte goudvlekken in de marge. */}
-        <div aria-hidden="true" style={{ position: "absolute", top: "-12%", right: "-8%", width: "48%", height: "42%", background: `radial-gradient(ellipse at center, ${ACCENT}14 0%, transparent 65%)`, pointerEvents: "none" }} />
-        <div aria-hidden="true" style={{ position: "absolute", top: "38%", left: "-14%", width: "44%", height: "40%", background: `radial-gradient(ellipse at center, ${ACCENT}0d 0%, transparent 65%)`, pointerEvents: "none" }} />
+        {/* Papier-ademing: twee zachte mushroom-vlekken in de marge. */}
+        <div aria-hidden="true" style={{ position: "absolute", top: "-12%", right: "-8%", width: "48%", height: "42%", background: `radial-gradient(ellipse at center, ${MUSHROOM}30 0%, transparent 65%)`, pointerEvents: "none" }} />
+        <div aria-hidden="true" style={{ position: "absolute", top: "38%", left: "-14%", width: "44%", height: "40%", background: `radial-gradient(ellipse at center, ${MUSHROOM}1e 0%, transparent 65%)`, pointerEvents: "none" }} />
 
-        <ScrollProgress />
+        <ScrollProgress color={INK} />
         <CursorRing />
 
         {/* Scoped stijlen: knoppen/inputs los van het app-thema + de
             bewegingsklassen die anders in LandingScreen's stylesheet wonen. */}
         <style>{`
-          .atelier .btn-primary { background: ${INK}; color: ${P.bg}; border: 1px solid ${INK}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
-          .atelier .btn-primary:hover { transform: translateY(-1px); background: #362c1d; box-shadow: 0 14px 28px -16px ${INK}; }
-          .atelier .btn-ghost { background: transparent; color: ${INK}; border: 1px solid ${INK}33; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
-          .atelier .btn-ghost:hover { border-color: ${INK}88; background: ${INK}08; }
+          .atelier .btn-primary { background: ${INK}; color: ${BONE}; border: 1px solid ${INK}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
+          .atelier .btn-primary:hover { transform: translateY(-1px); background: #4a3e2f; box-shadow: 0 14px 28px -16px ${INK}; }
+          .atelier .btn-ghost { background: transparent; color: ${INK}; border: 1px solid ${MUSHROOM}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+          .atelier .btn-ghost:hover { border-color: ${EARTH}; background: ${PUTTY}55; }
           .atelier .input-field { background: ${P.inputBg}; border: 1px solid ${P.inputBorder}; color: ${INK}; font-family: 'Jost', sans-serif; outline: none; }
-          .atelier .input-field::placeholder { color: ${P.textMuted}; }
-          .atelier .input-field:focus { border-color: ${ACCENT}; }
-          .atelier ::selection { background: ${ACCENT}55; }
+          .atelier .input-field::placeholder { color: ${EARTH}; }
+          .atelier .input-field:focus { border-color: ${EARTH}; }
+          .atelier ::selection { background: ${PUTTY}; }
           .vl-marquee-track { animation: vlMarquee 32s linear infinite; }
           .vl-marquee:hover .vl-marquee-track { animation-play-state: paused; }
           @keyframes vlMarquee { to { transform: translateX(-50%); } }
-          .at-outline { color: transparent; -webkit-text-stroke: 1px ${INK}55; }
-          .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${ACCENT}; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
+          .at-outline { color: transparent; -webkit-text-stroke: 1px ${MUSHROOM}; }
+          .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${EARTH}; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
           .vl-cursor.grow { width: 46px; height: 46px; margin: -23px 0 0 -23px; border-color: ${INK}; }
           .vl-cursor-dot { position: fixed; top: 0; left: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: ${INK}; pointer-events: none; z-index: 80; }
           .vl-glow { position: relative; }
-          .vl-glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), ${ACCENT}1c, transparent 65%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+          .vl-glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), ${MUSHROOM}40, transparent 65%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
           .vl-glow:hover::after { opacity: 1; }
           @media (hover: none) { .vl-glow::after { display: none; } }
           .at-hero-grid { display: grid; grid-template-columns: 1fr; gap: 44px; align-items: center; }
@@ -203,21 +219,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           .at-step { transition: background 0.25s ease; }
-          .at-step:hover { background: ${INK}05; }
+          .at-step:hover { background: ${PUTTY}44; }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
-        {/* ── NAV — haarlijn, inkt, rustig. ── */}
-        <nav style={{ position: "sticky", top: 0, zIndex: 40, background: scrolled ? "#f7f3ebee" : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", WebkitBackdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: `1px solid ${scrolled ? P.border : "transparent"}`, transition: "background 0.3s ease, border-color 0.3s ease" }}>
+        {/* ── NAV — haarlijn, espresso, rustig. ── */}
+        <nav style={{ position: "sticky", top: 0, zIndex: 40, background: scrolled ? `${BONE}ee` : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", WebkitBackdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: `1px solid ${scrolled ? PUTTY : "transparent"}`, transition: "background 0.3s ease, border-color 0.3s ease" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
             <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 24px)", fontWeight: 400, letterSpacing: "0.22em", color: INK }}>vellu</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: P.textMuted, display: isMobile ? "none" : "inline" }}>
+              <button onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, display: isMobile ? "none" : "inline" }}>
                 {t.findSalonNav}
               </button>
-              <div style={{ display: "flex", gap: 2, border: `1px solid ${P.border}`, borderRadius: 100, padding: 3, background: P.bgCard }}>
+              <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 3, background: P.bgCard }}>
                 {["nl", "en", "es"].map(l => (
-                  <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? INK : "transparent", color: lang === l ? P.bg : P.textMuted }}>
+                  <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? INK : "transparent", color: lang === l ? BONE : EARTH }}>
                     {l}
                   </button>
                 ))}
@@ -230,19 +246,19 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </nav>
 
         {/* ── HERO — redactioneel: klein wenkbrauw-label, monumentale serif,
-              telefoon op een goudpaneel, licht gedraaid. ── */}
+              telefoon op een putty-paneel, licht gedraaid. ── */}
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 8vw, 84px) ${pad} 40px`, position: "relative", zIndex: 10 }}>
           <div className="at-hero-grid">
             <div className="at-hero-copy">
               <HeroEnter ready={heroReady} delay={0}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase", color: ACCENT, marginBottom: 26 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase", color: EARTH, marginBottom: 26 }}>
                   {t.heroTag}
                 </div>
               </HeroEnter>
               <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(46px, 8.6vw, 88px)", fontWeight: 300, letterSpacing: "0.01em", lineHeight: 1.02, marginBottom: 26, color: INK }}>
                 <KineticLine ready={heroReady} delay={120}>{t.heroTitle}</KineticLine>
                 <KineticLine ready={heroReady} delay={260}>{t.heroTitle2}</KineticLine>
-                <KineticLine ready={heroReady} delay={400}><em style={{ fontStyle: "italic", color: ACCENT, fontWeight: 400 }}>{t.heroBrand}</em></KineticLine>
+                <KineticLine ready={heroReady} delay={400}><em style={{ fontStyle: "italic", color: EARTH, fontWeight: 400 }}>{t.heroBrand}</em></KineticLine>
               </h1>
               <HeroEnter ready={heroReady} delay={580}>
                 <p style={{ fontSize: "clamp(14px, 2vw, 16px)", color: P.textSub, lineHeight: 1.75, maxWidth: 460, marginBottom: 34, marginLeft: isMobile ? "auto" : 0, marginRight: isMobile ? "auto" : 0 }}>
@@ -255,7 +271,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     {t.startFree}
                   </button>
                   <button onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
-                    style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${ACCENT}`, paddingBottom: 4 }}>
+                    style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, paddingBottom: 4 }}>
                     {t.howItWork} ↓
                   </button>
                 </div>
@@ -267,15 +283,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     { num: "24/7", nl: "Online boekbaar", en: "Bookable online", es: "Reservas online" },
                     { num: "€19", nl: "Vast per maand", en: "Fixed per month", es: "Fijo al mes" },
                   ].map((s, i) => (
-                    <div key={i} style={{ padding: "0 clamp(14px, 2.6vw, 30px)", borderLeft: i === 0 ? "none" : `1px solid ${P.border}`, opacity: heroReady ? 1 : 0, transform: heroReady ? "none" : "translateY(10px)", transition: `opacity 0.6s ease ${860 + i * 110}ms, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) ${860 + i * 110}ms` }}>
+                    <div key={i} style={{ padding: "0 clamp(14px, 2.6vw, 30px)", borderLeft: i === 0 ? "none" : `1px solid ${PUTTY}`, opacity: heroReady ? 1 : 0, transform: heroReady ? "none" : "translateY(10px)", transition: `opacity 0.6s ease ${860 + i * 110}ms, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) ${860 + i * 110}ms` }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(28px, 3.4vw, 38px)", fontWeight: 300, color: INK, lineHeight: 1 }}>{s.num}</div>
-                      <div style={{ fontSize: 9.5, color: P.textMuted, letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 6 }}>{lang === "nl" ? s.nl : lang === "es" ? s.es : s.en}</div>
+                      <div style={{ fontSize: 9.5, color: EARTH, letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 6 }}>{lang === "nl" ? s.nl : lang === "es" ? s.es : s.en}</div>
                     </div>
                   ))}
                 </div>
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={1080}>
-                <div style={{ marginTop: 24, fontSize: 11, color: P.textMuted, letterSpacing: "0.05em" }}>
+                <div style={{ marginTop: 24, fontSize: 11, color: EARTH, letterSpacing: "0.05em" }}>
                   {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
                     : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
                     : "Used by salons in the Netherlands and the Caribbean"}
@@ -284,14 +300,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <HeroEnter ready={heroReady} delay={460}>
               <ParallaxLayer speed={-0.035}>
-                {/* Goudpaneel als sokkel; de telefoon staat er licht gedraaid op. */}
-                <div style={{ position: "relative", borderRadius: 30, padding: "30px 12px 20px", background: `linear-gradient(165deg, ${ACCENT}2e, ${ACCENT}0e 55%, transparent), ${P.bgCard}`, border: `1px solid ${P.border}` }}>
+                {/* Putty-paneel als sokkel; de telefoon staat er licht gedraaid op. */}
+                <div style={{ position: "relative", borderRadius: 30, padding: "30px 12px 20px", background: `linear-gradient(165deg, ${PUTTY}, ${PUTTY}55 55%, transparent), ${P.bgCard}`, border: `1px solid ${PUTTY}` }}>
                   <div style={{ transform: "rotate(-3deg)" }}>
-                    <HeroPhoneMockup lang={lang} c={P} />
+                    <HeroPhoneMockup lang={lang} c={P} accent={MUSHROOM} />
                   </div>
                   <div style={{ textAlign: "center", marginTop: 0 }}>
                     <button onClick={() => navigate("/bloomstudio")}
-                      style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${ACCENT}`, padding: "6px 2px" }}>
+                      style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, padding: "6px 2px" }}>
                       {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
                     </button>
                   </div>
@@ -301,23 +317,23 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── MARQUEE — outline-serif, tussen haarlijnen. ── */}
+        {/* ── MARQUEE — outline-serif in mushroom, tussen haarlijnen. ── */}
         <div className="at-outline" style={{ position: "relative", zIndex: 10, margin: "16px 0 0" }}>
-          <Marquee items={marqueeWords} c={{ ...P, textSub: "transparent" }} />
+          <Marquee items={marqueeWords} c={{ ...P, textSub: "transparent" }} accent={EARTH} />
         </div>
 
         {/* ── 01 · SALON VINDEN ── */}
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 8px`, position: "relative", zIndex: 10 }}>
           <AtHead n="01" title={t.findSalonTitle} sub={t.findSalonSub} />
         </div>
-        <SalonFinder lang={lang} t={t} c={P} goToSlug={goToSlug} navigate={navigate} hideHeader />
+        <SalonFinder lang={lang} t={t} c={P} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} />
 
         {/* ── 02 · DE REKENSOM ── */}
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 7vw, 70px) ${pad} 0`, position: "relative", zIndex: 10 }}>
           <AtHead n="02" title={t.calcTitle} sub={t.calcSub} />
           <Reveal>
-            <div style={{ maxWidth: 700, margin: "0 auto 0 0", background: P.bgCard, border: `1px solid ${P.border}`, borderRadius: 24, padding: "30px clamp(20px, 4vw, 36px)" }}>
-              <SavingsCalculator lang={lang} t={t} c={P} />
+            <div style={{ maxWidth: 700, margin: "0 auto 0 0", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 24, padding: "30px clamp(20px, 4vw, 36px)" }}>
+              <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} />
             </div>
           </Reveal>
         </div>
@@ -328,8 +344,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div>
             {steps.map((s, i) => (
               <Reveal key={i} delay={i * 110}>
-                <div className="at-step" style={{ display: "grid", gridTemplateColumns: "clamp(64px, 10vw, 120px) 1fr", gap: "clamp(14px, 3vw, 34px)", alignItems: "start", padding: "clamp(20px, 3.4vw, 34px) 8px", borderBottom: `1px solid ${P.border}`, borderRadius: 10 }}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: ACCENT, lineHeight: 0.9 }}>{s.n}</div>
+                <div className="at-step" style={{ display: "grid", gridTemplateColumns: "clamp(64px, 10vw, 120px) 1fr", gap: "clamp(14px, 3vw, 34px)", alignItems: "start", padding: "clamp(20px, 3.4vw, 34px) 8px", borderBottom: `1px solid ${PUTTY}`, borderRadius: 10 }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9 }}>{s.n}</div>
                   <div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(21px, 3vw, 28px)", fontWeight: 400, color: INK, marginBottom: 8 }}>{s.title}</div>
                     <div style={{ fontSize: 13.5, color: P.textLabel, lineHeight: 1.75, maxWidth: 560 }}>{s.desc}</div>
@@ -348,8 +364,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               const [title, desc] = featOf(f);
               return (
                 <Reveal key={i} delay={(i % 2) * 70 + Math.floor(i / 2) * 60}>
-                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${P.border}` }}>
-                    <span aria-hidden="true" style={{ color: ACCENT, fontSize: 11, lineHeight: "22px" }}>◆</span>
+                  <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${PUTTY}` }}>
+                    <span aria-hidden="true" style={{ color: EARTH, fontSize: 11, lineHeight: "22px" }}>◆</span>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 4, letterSpacing: "0.01em" }}>{title}</div>
                       <div style={{ fontSize: 12.5, color: P.textLabel, lineHeight: 1.65 }}>{desc}</div>
@@ -361,20 +377,20 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 05 · PRIJZEN — Starter op papier, Professional in inkt. ── */}
+        {/* ── 05 · PRIJZEN — Starter op bone, Professional in espresso. ── */}
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
           <AtHead n="05" title={t.simplePricing} />
           <Reveal delay={90}>
             <div style={{ display: "flex", marginBottom: 26 }}>
-              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${P.border}`, borderRadius: 100, padding: 4 }}>
+              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 4 }}>
                 {[{ key: "monthly", label: t.billingMonthly }, { key: "yearly", label: t.billingYearly }].map(opt => {
                   const active = billingCycle === opt.key;
                   return (
                     <button key={opt.key} role="radio" aria-checked={active} onClick={() => setBillingCycle(opt.key)}
-                      style={{ padding: "9px 20px", borderRadius: 100, border: "none", background: active ? INK : "transparent", color: active ? P.bg : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}>
+                      style={{ padding: "9px 20px", borderRadius: 100, border: "none", background: active ? INK : "transparent", color: active ? BONE : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}>
                       {opt.label}
                       {opt.key === "yearly" && (
-                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 100, background: active ? `${ACCENT}` : `${ACCENT}2a`, color: active ? INK : "#8a6d3b" }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 100, background: active ? PUTTY : `${EARTH}26`, color: active ? INK : EARTH }}>
                           {t.twoMonthsFree}
                         </span>
                       )}
@@ -392,31 +408,31 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               const dark = plan.popular;
               return (
                 <Reveal key={i} delay={i * 130}>
-                  <div className="vl-glow" onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? P.bg : INK, border: `1px solid ${dark ? INK : P.border}`, borderRadius: 26, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
+                  <div className="vl-glow" onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 26, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
                     {dark && (
-                      <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: ACCENT, borderRadius: 100, padding: "5px 12px" }}>
+                      <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: PUTTY, borderRadius: 100, padding: "5px 12px" }}>
                         {t.popular}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 18, color: dark ? `${P.bg}bb` : P.textLabel }}>{plan.name}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 56, fontWeight: 300, color: dark ? ACCENT : INK, lineHeight: 1 }}>
-                      €<TweenedNumber value={displayPrice} format={(n) => Math.round(n)} /><span style={{ fontSize: 16, color: dark ? `${P.bg}88` : P.textMuted, fontFamily: "'Jost',sans-serif" }}>{displaySuffix}</span>
+                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 18, color: dark ? MUSHROOM : P.textLabel }}>{plan.name}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 56, fontWeight: 300, color: dark ? PUTTY : INK, lineHeight: 1 }}>
+                      €<TweenedNumber value={displayPrice} format={(n) => Math.round(n)} /><span style={{ fontSize: 16, color: dark ? `${BONE}88` : EARTH, fontFamily: "'Jost',sans-serif" }}>{displaySuffix}</span>
                     </div>
                     {billingCycle === "yearly" && (
-                      <div style={{ fontSize: 11, marginTop: 6, color: dark ? `${P.bg}99` : P.textSub }}>
-                        {t.yearlyEquivalent.replace("{m}", (yearlyTotal / 12).toFixed(2).replace(".", ","))} · <span style={{ color: ACCENT }}>{t.twoMonthsFree}</span>
+                      <div style={{ fontSize: 11, marginTop: 6, color: dark ? `${BONE}99` : P.textSub }}>
+                        {t.yearlyEquivalent.replace("{m}", (yearlyTotal / 12).toFixed(2).replace(".", ","))} · <span style={{ color: dark ? MUSHROOM : EARTH }}>{t.twoMonthsFree}</span>
                       </div>
                     )}
-                    <div style={{ height: 1, background: dark ? `${P.bg}22` : P.border, margin: "22px 0" }} />
+                    <div style={{ height: 1, background: dark ? `${BONE}22` : PUTTY, margin: "22px 0" }} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26 }}>
                       {(lang === "nl" ? plan.features.nl : plan.features.en).map((f, j) => (
-                        <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: dark ? `${P.bg}dd` : P.textSub }}>
-                          <NavIcon name="check" size={13} color={ACCENT} />{f}
+                        <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: dark ? `${BONE}dd` : P.textSub }}>
+                          <NavIcon name="check" size={13} color={dark ? MUSHROOM : EARTH} />{f}
                         </div>
                       ))}
                     </div>
                     <button onClick={() => navigate("/owner")}
-                      style={{ width: "100%", padding: "15px 20px", borderRadius: 100, border: `1px solid ${dark ? ACCENT : INK}`, background: dark ? ACCENT : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
+                      style={{ width: "100%", padding: "15px 20px", borderRadius: 100, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
                       {t.getStarted}
                     </button>
                   </div>
@@ -424,7 +440,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               );
             })}
           </div>
-          <div style={{ fontSize: 11.5, color: P.textMuted, marginTop: 16, lineHeight: 1.6, maxWidth: 560 }}>
+          <div style={{ fontSize: 11.5, color: P.textLabel, marginTop: 16, lineHeight: 1.6, maxWidth: 560 }}>
             {lang === "nl"
               ? "Alle prijzen in euro's, incl. btw. Betaal je van buiten de eurozone? Je kaart rekent automatisch om."
               : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
@@ -437,10 +453,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <Reveal delay={80}>
             <div style={{ maxWidth: 760 }}>
               {faqs.map(([q, a], i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${P.border}` }}>
+                <div key={i} style={{ borderBottom: `1px solid ${PUTTY}` }}>
                   <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
-                    <div style={{ fontSize: 20, color: P.textMuted, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
+                    <div style={{ fontSize: 20, color: EARTH, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                     <div style={{ overflow: "hidden" }}>
@@ -454,7 +470,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <Reveal delay={140}>
             <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, color: P.textSub }}>
               <span>{lang === "nl" ? "Nog vragen? Stel ze in de chat linksonder, of mail ons —" : lang === "es" ? "¿Aún tienes preguntas? Pregunta en el chat abajo a la izquierda, o escríbenos —" : "Still have questions? Ask in the chat bottom-left, or email us —"}</span>
-              <a href="mailto:mirahventures@vellu.cc" style={{ color: INK, borderBottom: `1px solid ${ACCENT}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
+              <a href="mailto:mirahventures@vellu.cc" style={{ color: INK, borderBottom: `1px solid ${EARTH}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
               <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px" }} onClick={() => navigate("/contact")}>
                 {lang === "nl" ? "Neem contact op" : lang === "es" ? "Contáctanos" : "Contact us"}
               </button>
@@ -462,51 +478,51 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </Reveal>
         </div>
 
-        {/* ── FINALE — inktvlak over de volle breedte, goudknop. ── */}
+        {/* ── FINALE — espresso-vlak over de volle breedte, putty-knop. ── */}
         <div style={{ marginTop: "clamp(56px, 9vw, 96px)", background: INK, position: "relative", zIndex: 10 }}>
-          <div aria-hidden="true" style={{ position: "absolute", top: "-30%", right: "6%", width: "40%", height: "80%", background: `radial-gradient(ellipse at center, ${ACCENT}22 0%, transparent 65%)`, pointerEvents: "none" }} />
+          <div aria-hidden="true" style={{ position: "absolute", top: "-30%", right: "6%", width: "40%", height: "80%", background: `radial-gradient(ellipse at center, ${EARTH}55 0%, transparent 65%)`, pointerEvents: "none" }} />
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(64px, 10vw, 110px) ${pad}`, textAlign: "center", position: "relative" }}>
             <Reveal>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(32px, 6vw, 54px)", fontWeight: 300, color: P.bg, lineHeight: 1.12, marginBottom: 16 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(32px, 6vw, 54px)", fontWeight: 300, color: BONE, lineHeight: 1.12, marginBottom: 16 }}>
                 {t.ctaTitle}
               </div>
             </Reveal>
             <Reveal delay={110}>
-              <p style={{ fontSize: 14, color: `${P.bg}99`, marginBottom: 34, lineHeight: 1.7 }}>{t.ctaSub}</p>
+              <p style={{ fontSize: 14, color: MUSHROOM, marginBottom: 34, lineHeight: 1.7 }}>{t.ctaSub}</p>
             </Reveal>
             <Reveal delay={200}>
               <button onClick={() => navigate("/owner")}
-                style={{ padding: "18px 46px", borderRadius: 100, border: "none", background: ACCENT, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: `0 18px 44px -18px ${ACCENT}` }}>
+                style={{ padding: "18px 46px", borderRadius: 100, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
                 {t.startFree}
               </button>
             </Reveal>
           </div>
-          {/* Footer op het inktvlak — zelfde juridische regels als altijd. */}
-          <footer style={{ borderTop: `1px solid ${P.bg}22`, position: "relative" }}>
+          {/* Footer op het espresso-vlak — zelfde juridische regels als altijd. */}
+          <footer style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
             <div style={{ maxWidth: maxW, margin: "0 auto", padding: `22px ${pad} 30px`, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center" }}>
-              <div style={{ fontSize: 10, color: `${P.bg}77`, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", letterSpacing: "0.04em" }}>
-                <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: `${P.bg}77`, textDecoration: "none" }}>Mirah Ventures</a>
+              <div style={{ fontSize: 10, color: MUSHROOM, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", letterSpacing: "0.04em" }}>
+                <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: MUSHROOM, textDecoration: "none" }}>Mirah Ventures</a>
                 <span>·</span>
                 <span>KVK 42045867</span>
                 <span>·</span>
                 <span>BTW NL005453873B29</span>
               </div>
-              <div style={{ fontSize: 11, color: `${P.bg}77`, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
+              <div style={{ fontSize: 11, color: MUSHROOM, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
                 <span>© {new Date().getFullYear()} vellu</span>
-                <a href="/privacy" style={{ color: `${P.bg}99`, textDecoration: "none", borderBottom: `1px solid ${P.bg}33` }}>Privacy</a>
-                <a href="/terms" style={{ color: `${P.bg}99`, textDecoration: "none", borderBottom: `1px solid ${P.bg}33` }}>{t.terms}</a>
-                <a href="/dpa" style={{ color: `${P.bg}99`, textDecoration: "none", borderBottom: `1px solid ${P.bg}33` }}>{t.dpa}</a>
-                <a href="/contact" style={{ color: `${P.bg}99`, textDecoration: "none", borderBottom: `1px solid ${P.bg}33` }}>Contact</a>
+                <a href="/privacy" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>Privacy</a>
+                <a href="/terms" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>{t.terms}</a>
+                <a href="/dpa" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>{t.dpa}</a>
+                <a href="/contact" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>Contact</a>
               </div>
             </div>
           </footer>
         </div>
 
-        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} />
+        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} />
         <SupportChat
           lang={lang}
           c={P}
-          accent={ACCENT}
+          accent={ESPRESSO}
           isMobile={isMobile}
           side="left"
           launcherBottom={20}
