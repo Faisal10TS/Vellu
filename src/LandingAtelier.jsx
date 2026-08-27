@@ -234,21 +234,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ── HERO — redactioneel: klein wenkbrauw-label, monumentale serif,
               telefoon op een putty-paneel, licht gedraaid. ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 8vw, 84px) ${pad} 40px`, position: "relative", zIndex: 10 }}>
+        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(28px, 5vw, 52px) ${pad} 24px`, position: "relative", zIndex: 10 }}>
           <div className="at-hero-grid">
             <div className="at-hero-copy">
               <HeroEnter ready={heroReady} delay={0}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase", color: EARTH, marginBottom: 26 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase", color: EARTH, marginBottom: 20 }}>
                   {t.heroTag}
                 </div>
               </HeroEnter>
-              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(46px, 8.6vw, 88px)", fontWeight: 300, letterSpacing: "0.01em", lineHeight: 1.02, marginBottom: 26, color: INK }}>
+              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(44px, 8vw, 78px)", fontWeight: 300, letterSpacing: "0.01em", lineHeight: 1.02, marginBottom: 20, color: INK }}>
                 <KineticLine ready={heroReady} delay={120}>{t.heroTitle}</KineticLine>
                 <KineticLine ready={heroReady} delay={260}>{t.heroTitle2}</KineticLine>
                 <KineticLine ready={heroReady} delay={400}><em style={{ fontStyle: "italic", color: EARTH, fontWeight: 400 }}>{t.heroBrand}</em></KineticLine>
               </h1>
               <HeroEnter ready={heroReady} delay={580}>
-                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", color: P.textSub, lineHeight: 1.75, maxWidth: 460, marginBottom: 34, marginLeft: isMobile ? "auto" : 0, marginRight: isMobile ? "auto" : 0 }}>
+                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", color: P.textSub, lineHeight: 1.75, maxWidth: 460, marginBottom: 26, marginLeft: isMobile ? "auto" : 0, marginRight: isMobile ? "auto" : 0 }}>
                   {t.heroSub}
                 </p>
               </HeroEnter>
@@ -264,7 +264,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={840}>
-                <div className="at-stats" style={{ marginTop: 46 }}>
+                <div className="at-stats" style={{ marginTop: 30 }}>
                   {[
                     { num: "0%", nl: "Commissie", en: "Commission", es: "Comisión" },
                     { num: "24/7", nl: "Online boekbaar", en: "Bookable online", es: "Reservas online" },
@@ -278,7 +278,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={1080}>
-                <div style={{ marginTop: 24, fontSize: 11, color: EARTH, letterSpacing: "0.05em" }}>
+                <div style={{ marginTop: 16, fontSize: 11, color: EARTH, letterSpacing: "0.05em" }}>
                   {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
                     : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
                     : "Used by salons in the Netherlands and the Caribbean"}
@@ -303,7 +303,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ── MARQUEE — espresso-woorden op de putty-band, zelfde kleur als de
               trial-knop (feedback 27-08; outline-versie verworpen). ── */}
-        <div style={{ position: "relative", zIndex: 10, margin: "22px 0 0", background: PUTTY }}>
+        <div style={{ position: "relative", zIndex: 10, margin: "14px 0 0", background: PUTTY }}>
           <Marquee items={marqueeWords} c={{ ...P, textSub: ESPRESSO, border: `${EARTH}3d` }} accent={EARTH} />
         </div>
 
