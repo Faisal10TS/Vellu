@@ -6913,7 +6913,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Show loading skeleton while data is being fetched
   if (!dataLoaded) {
     return (
-      <Layout accent={accent}>
+      <Layout accent={accent} rawAccent={salonData.accent}>
         <div style={{ background: c.bg, height: "100dvh", display: "flex", fontFamily: "'Jost',sans-serif", color: c.text }}>
     
           <DashboardSkeleton />
@@ -6935,7 +6935,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   }
 
   return (
-    <Layout accent={accent}>
+    <Layout accent={accent} rawAccent={salonData.accent}>
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
 

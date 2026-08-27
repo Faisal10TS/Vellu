@@ -2174,7 +2174,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   ];
 
   if (mode === "profile") return (
-    <Layout accent={accent}>
+    <Layout accent={accent} rawAccent={initialSalon.accent}>
 
       <div className="profile-root" style={{ background: c.bg, fontFamily: "var(--body-font, 'Jost', sans-serif)", color: c.text }}>
 
@@ -2908,7 +2908,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   );
 
   return (
-    <Layout accent={accent}>
+    <Layout accent={accent} rawAccent={initialSalon.accent}>
 
       <div style={{
         minHeight: "100dvh", 

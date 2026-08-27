@@ -762,7 +762,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   ];
 
   return (
-    <Layout accent={accent}>
+    <Layout accent={accent} rawAccent={salonProfile.accent_color}>
 
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
