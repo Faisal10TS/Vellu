@@ -299,8 +299,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Beeldverhouding van de cover (naturalWidth/naturalHeight), gezet bij
   // onLoad. Een cover die als "vullend" te veel zou verliezen — een breed
   // logo-artwork zoals dat van My Whims — schakelt naar volledig-zichtbaar
-  // met een geblurde vulling (zie coverFit hieronder).
+  // (zie coverFit hieronder). coverEdge is dan de gemiddelde randkleur van
+  // het artwork: de hele band krijgt die kleur zodat het beeld naadloos van
+  // rand tot rand doorloopt (géén losse blur-blokken; telefoon vult boven/
+  // onder, desktop links/rechts — zelfde mechanisme, beide naadloos).
   const [coverNatAspect, setCoverNatAspect] = useState(null);
+  const [coverEdge, setCoverEdge] = useState(null);
+  const sampleCoverEdge = (url) => {
+    try {
+      const probe = new Image();
+      probe.crossOrigin = "anonymous"; // storage stuurt ACAO:* — bij weigering valt onerror terug op blur
+      probe.onload = () => {
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = 24; cv.height = 24;
+          const ctx = cv.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(probe, 0, 0, 24, 24);
+          const d = ctx.getImageData(0, 0, 24, 24).data;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) {
+            if (x > 1 && x < 22 && y > 1 && y < 22) continue; // alleen de buitenste ring
+            const i = (y * 24 + x) * 4;
+            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+          }
+          setCoverEdge(`rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})`);
+        } catch { /* canvas taint: blur-backdrop blijft de fallback */ }
+      };
+      probe.src = url;
+    } catch { /* geen sampling mogelijk */ }
+  };
   const t = T[lang];
   // Currency symbol for this salon (from its country_code). Every price on this
   // page prefixes with `cur` instead of a hardcoded "€", so a Bonaire salon
@@ -2232,22 +2259,33 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             if (crop > 0.12) coverFit = "contain";
           }
           return (<>
-        <div className="profile-hero" style={{ height: heroH }}>
-          {initialSalon.cover_image_url && coverFit === "contain" && (
+        <div className="profile-hero" style={{ height: heroH, ...(coverFit === "contain" && coverEdge ? { background: coverEdge } : {}) }}>
+          {initialSalon.cover_image_url && coverFit === "contain" && !coverEdge && (
             <img src={initialSalon.cover_image_url} className="profile-hero-backdrop" alt="" aria-hidden="true" />
           )}
           {initialSalon.cover_image_url && (
             <img src={initialSalon.cover_image_url} className={`profile-hero-cover${coverFit === "contain" ? " fit-contain" : ""}`} alt={`${initialSalon.name} cover`}
-              onLoad={e => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) setCoverNatAspect(im.naturalWidth / im.naturalHeight); }}
+              onLoad={e => {
+                const im = e.currentTarget;
+                if (im.naturalWidth && im.naturalHeight) {
+                  const asp = im.naturalWidth / im.naturalHeight;
+                  setCoverNatAspect(asp);
+                  if (asp >= 2.1) sampleCoverEdge(im.src);
+                }
+              }}
               style={coverFit === "contain" ? undefined : { objectPosition: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
                 transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
                 transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%` }} />
           )}
           {coverFit === "contain" ? (
             /* Artwork-cover (logo-banier): het beeld zegt zelf al wie de salon
-               is — geen tekstlaag eroverheen, alleen een zachte voetschaduw.
-               Naam/meta/share staan in de balk ónder de hero. */
-            <div className="profile-hero-gradient" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 55%, rgba(0,0,0,0.28) 100%)" }} />
+               is — geen tekstlaag eroverheen. Met een naadloze randkleur-band
+               is ook geen schaduw nodig; alleen de blur-fallback krijgt een
+               zachte voet zodat het geheel niet zweeft. Naam/meta/share staan
+               in de balk ónder de hero. */
+            coverEdge ? null : (
+              <div className="profile-hero-gradient" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 55%, rgba(0,0,0,0.28) 100%)" }} />
+            )
           ) : (<>
           <div className="profile-hero-gradient" />
           <div className="profile-hero-content">
