@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin,
+  AT, AT_COLORS, AtelierSkin, readableAccent,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -3551,7 +3551,7 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
-  const { colors: c } = useTheme();
+  const { colors: c, theme } = useTheme();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
 
@@ -3912,7 +3912,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     const load = async () => {
       try {
-      const { data, error: profileError } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", user.slug).single();
+      const { data, error: profileError } = await supabase.from("profiles").select("*, services(*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)), products(*)").eq("slug", user.slug).single();
       if (profileError) { console.error("Profile load error:", profileError); setDataLoaded(true); return; }
       if (data) {
         // Load all related data in parallel for faster dashboard load
@@ -4064,7 +4064,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               name_en: s.name_en || s.name || "",
               photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
               variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-              extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
+              // excluded_staff_ids: wie deze extra NIET uitvoert (leeg = iedereen).
+              extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)).map(e => ({ ...e, excluded_staff_ids: (e.staff_extra_exclusions || []).map(x => x.staff_id) }))
             })),
           // Retail products (Professional) — the owner's RLS policy also
           // returns inactive rows, so the dashboard can manage the full list.
@@ -4227,7 +4228,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salonData.owner_id]);
 
-  const accent = salonData.accent;
+  // Wit accent in licht thema (of zwart in donker) is onleesbaar in het eigen
+  // dashboard — render het dan als neutrale inkt (zie readableAccent).
+  const accent = readableAccent(salonData.accent, theme);
   const appts = salonData.appointments;
   const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a));
   // Agenda-tak: kassa-verkopen horen hier niet — die staan in de Kassa-tab.
@@ -12544,13 +12547,60 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               <input type="checkbox" checked={!!editExtraForm.per_unit} onChange={ev => setEditExtraForm(f => ({...f, per_unit: ev.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
                                               {lang === "nl" ? "Klant kan aantal kiezen (bijv. 3 gebroken nagels)" : lang === "es" ? "El cliente puede elegir una cantidad (p. ej. 3 uñas rotas)" : "Client can choose a quantity (e.g. 3 broken nails)"}
                                             </label>
+                                            {/* Per medewerker aan/uit — wie voert deze extra uit? Uit =
+                                                uitsluitingsrij; klanten die die medewerker kiezen zien
+                                                de extra dan niet (en de server weigert de combinatie). */}
+                                            {(salonData.staff || []).filter(m => m.active !== false).length > 0 && (
+                                              <div style={{ marginBottom: 10 }}>
+                                                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
+                                                  {lang === "nl" ? "Wie voert dit uit?" : lang === "es" ? "¿Quién lo realiza?" : "Who performs this?"}
+                                                </div>
+                                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                                  {(salonData.staff || []).filter(m => m.active !== false).map(m => {
+                                                    const off = (editExtraForm.excluded_staff_ids || []).includes(m.id);
+                                                    return (
+                                                      <div key={m.id} onClick={() => setEditExtraForm(f => {
+                                                        const cur = f.excluded_staff_ids || [];
+                                                        return { ...f, excluded_staff_ids: off ? cur.filter(x => x !== m.id) : [...cur, m.id] };
+                                                      })}
+                                                        style={{
+                                                          padding: "6px 12px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 500,
+                                                          border: `1px solid ${off ? c.border : accent}`,
+                                                          background: off ? "transparent" : `${accent}14`,
+                                                          color: off ? c.textMuted : accent,
+                                                          textDecoration: off ? "line-through" : "none",
+                                                          transition: "all 0.15s"
+                                                        }}>
+                                                        {m.name}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                                <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5 }}>
+                                                  {lang === "nl" ? "Doorgestreept = voert deze extra niet uit." : lang === "es" ? "Tachado = no realiza este extra." : "Struck through = doesn't perform this extra."}
+                                                </div>
+                                              </div>
+                                            )}
                                             <div style={{ display: "flex", gap: 6 }}>
                                               <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
                                                 const filled = await autoFillTranslations(editExtraForm, [{ nl: "name_nl", en: "name_en" }], lang);
                                                 const exDur = editExtraForm.duration === "" || editExtraForm.duration == null ? null : Math.max(0, Math.min(480, parseInt(editExtraForm.duration) || 0));
                                                 const { error } = await supabase.from("service_extras").update({ name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: exDur, per_unit: !!editExtraForm.per_unit }).eq("id", e.id);
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
-                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: exDur, per_unit: !!editExtraForm.per_unit} : ex)} : svc); return d; });
+                                                // Per-medewerker-uitsluitingen: alleen het verschil wegschrijven.
+                                                const exclOrig = e.excluded_staff_ids || [];
+                                                const exclNext = editExtraForm.excluded_staff_ids || [];
+                                                const exclAdd = exclNext.filter(id => !exclOrig.includes(id));
+                                                const exclDel = exclOrig.filter(id => !exclNext.includes(id));
+                                                if (exclDel.length > 0) {
+                                                  const { error: delErr } = await supabase.from("staff_extra_exclusions").delete().eq("extra_id", e.id).in("staff_id", exclDel);
+                                                  if (delErr) { toast.show(t.somethingWrong, "error"); return; }
+                                                }
+                                                if (exclAdd.length > 0) {
+                                                  const { error: insErr } = await supabase.from("staff_extra_exclusions").insert(exclAdd.map(sid => ({ staff_id: sid, extra_id: e.id })));
+                                                  if (insErr) { toast.show(t.somethingWrong, "error"); return; }
+                                                }
+                                                update(d => { d.services = d.services.map(svc => svc.id === s.id ? {...svc, extras: svc.extras.map(ex => ex.id === e.id ? {...ex, name_nl: filled.name_nl, name_en: filled.name_en || null, name_es: filled.name_es || null, price: parseFloat(filled.price), duration: exDur, per_unit: !!editExtraForm.per_unit, excluded_staff_ids: exclNext} : ex)} : svc); return d; });
                                                 setEditingExtra(null);
                                               }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
                                               <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingExtra(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
@@ -12563,10 +12613,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
                                               {(parseInt(e.duration) || 0) > 0 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>+{parseInt(e.duration)} min</div>}
+                                              {(e.excluded_staff_ids || []).length > 0 && (
+                                                <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                                                  {(lang === "nl" ? "Niet door: " : lang === "es" ? "No por: " : "Not by: ")}
+                                                  {(salonData.staff || []).filter(m => (e.excluded_staff_ids || []).includes(m.id)).map(m => m.name).join(", ") || "—"}
+                                                </div>
+                                              )}
                                             </div>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
-                                              <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, duration: e.duration == null ? "" : String(e.duration), per_unit: !!e.per_unit }); }}
+                                              <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, duration: e.duration == null ? "" : String(e.duration), per_unit: !!e.per_unit, excluded_staff_ids: e.excluded_staff_ids || [] }); }}
                                                 style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="edit" size={11} color="currentColor" />
                                               </button>

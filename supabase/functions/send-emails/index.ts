@@ -31,7 +31,12 @@ if(tok){callerId=await verifyUserToken(tok);authed=!!callerId;}
 }
 if(!authed)return new Response(JSON.stringify({error:"unauthorized"}),{status:401,headers:{...headers,"Content-Type":"application/json"}});
 const fmtD=(ds,l="nl")=>{try{const d=new Date(ds+"T12:00:00");if(l==="es"){const dy=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];const mo=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}if(l==="en"){const dy=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];const mo=["January","February","March","April","May","June","July","August","September","October","November","December"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}const dy=["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];const mo=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}catch{return esc(ds);}};
-const acOf=(b)=>/^#[0-9a-fA-F]{6}$/.test(String(b.salon_accent||""))?b.salon_accent:"#c9a96e";
+// Mails renderen op witte/creme kaarten. Een (bijna) wit salon-accent
+// (Honeysets koos #ffffff, 27-08-2026) maakt koppen en knoppen onzichtbaar —
+// zak zulke accenten naar neutrale donkere inkt, net als readableAccent in
+// de app (shared.jsx) dat voor het lichte thema doet.
+const _lum=(hex)=>{const h=hex.slice(1);const v=(i)=>{const x=parseInt(h.slice(i,i+2),16)/255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);};return 0.2126*v(0)+0.7152*v(2)+0.0722*v(4);};
+const acOf=(b)=>{const a=/^#[0-9a-fA-F]{6}$/.test(String(b.salon_accent||""))?b.salon_accent:"#c9a96e";return _lum(a)>0.72?"#3a3a3a":a;};
 // LOGO: begrens ALLEEN de breedte en laat de hoogte meelopen (height:auto).
 // Met max-width ÉN max-height samen rekt een deel van de mailprogramma's — op
 // iPhone onder meer — het beeld naar precies die twee maten in plaats van de

@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify
+  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent
 } from "./shared.jsx";
 
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
@@ -291,7 +291,9 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false }) {
   const { colors: c, theme } = useTheme();
-  const accent = initialSalon.accent || ACCENT;
+  // readableAccent: wit accent in licht thema (of zwart in donker) zou overal
+  // in de achtergrond verdwijnen — render het dan als neutrale inkt.
+  const accent = readableAccent(initialSalon.accent, theme);
   const t = T[lang];
   // Currency symbol for this salon (from its country_code). Every price on this
   // page prefixes with `cur` instead of a hardcoded "€", so a Bonaire salon
@@ -996,8 +998,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // in book-appointment).
   const requireStaffPick = initialSalon.account_type === "team" && (initialSalon.staff || []).length > 1;
   const staffEligibleForService = (svcId) => (initialSalon.staff || []).filter(s => !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(svcId));
+  // Extra's kunnen per medewerker uitstaan ("Russian manicure doet Lady niet"):
+  // excluded_staff_ids op de extra. Geen lijst = iedereen voert hem uit.
+  const extraAllowedFor = (e, staffId) => !(e?.excluded_staff_ids || []).includes(staffId);
+  const staffEligibleForItem = (item) => staffEligibleForService(item.service.id)
+    .filter(m => (item.extras || []).every(e => extraAllowedFor(e, m.id)));
   const missingStaff = requireStaffPick
-    ? selectedServices.filter(item => !item.staff && staffEligibleForService(item.service.id).length > 0)
+    ? selectedServices.filter(item => !item.staff && staffEligibleForItem(item).length > 0)
     : [];
   const canProceedStep1 = selectedServices.length > 0
     && selectedServices.every(item => !item.service.variants?.length || item.variant)
@@ -1472,7 +1479,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           duration: ((item.variant ? item.variant.duration : item.service.duration) || 30) + itemExtrasDuration(item),
           eligible: item.staff
             ? [item.staff]
-            : allStaff.filter(s => !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)),
+            : allStaff.filter(s => (!s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id))
+                && (item.extras || []).every(e => extraAllowedFor(e, s.id))),
         }))
       : [{ duration: Math.max(getDuration(), 30), eligible: [] }];
 
@@ -1544,7 +1552,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       const eligible = item.staff
         ? [item.staff]
         : allStaff.filter(s =>
-            !s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id)
+            (!s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id))
+            && (item.extras || []).every(e => extraAllowedFor(e, s.id))
           );
       return { duration, eligible };
     });
@@ -2002,6 +2011,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             : "This product is no longer available online — please reload.",
         invalid_staff: lang === "es" ? "Este estilista ya no está disponible — recarga la página." : isNl ? "Deze medewerker is niet meer beschikbaar — ververs de pagina." : "This staff member is no longer available — please reload.",
         staff_not_assigned: lang === "es" ? "Este estilista no realiza este tratamiento." : isNl ? "Deze medewerker doet deze behandeling niet." : "This staff member does not perform this treatment.",
+        staff_extra_excluded: lang === "es" ? "Este estilista no realiza uno de los extras elegidos — ajusta tu selección." : isNl ? "Deze medewerker voert een van de gekozen extra's niet uit — pas je keuze aan." : "This staff member doesn't perform one of the chosen extras — please adjust your selection.",
         staff_required: lang === "es" ? "Elige un estilista para cada tratamiento." : isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
         staff_day_blocked: lang === "es" ? "Este estilista no está disponible este día." : isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
         staff_time_blocked: lang === "es" ? "Este estilista no está disponible en esta franja horaria." : isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
@@ -3094,6 +3104,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const isSel = isServiceSelected(s.id);
                   const item = getServiceItem(s.id);
                   const staffForService = getStaffForService(s.id);
+                  // Gekozen extra's kunnen medewerkers uitsluiten — alleen wie
+                  // álle gekozen extra's uitvoert is nog kiesbaar.
+                  const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
                   const displayPrice = s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`;
                   return (
@@ -3204,7 +3217,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div style={{ marginBottom: staffForService.length > 0 ? 14 : 0 }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectExtras}</div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              {s.extras.map(e => {
+                              {s.extras.filter(e =>
+                                // Gekozen medewerker → alleen extra's die die persoon
+                                // uitvoert. Nog geen keuze → verberg alleen extra's
+                                // die NIEMAND van de beschikbare medewerkers doet.
+                                item?.staff
+                                  ? extraAllowedFor(e, item.staff.id)
+                                  : (staffForService.length === 0 || staffForService.some(m => extraAllowedFor(e, m.id)))
+                              ).map(e => {
                                 const extraSel = item?.extras?.find(x => x.id === e.id);
                                 const qty = extraSel?.qty || 1;
                                 const showStep = extraSel && e.per_unit;
@@ -3254,7 +3274,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     transition: "all 0.15s"
                                   }}>{t.anyStaff}</div>
                               )}
-                              {staffForService.map(m => (
+                              {staffPickable.map(m => (
                                 <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
                                   style={{
                                     padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -3267,6 +3287,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 </div>
                               ))}
                             </div>
+                            {staffPickable.length === 0 && (item?.extras || []).length > 0 && (
+                              <div style={{ fontSize: 11, color: c.danger, marginTop: 6 }}>
+                                {lang === "nl" ? "Deze combinatie van extra's kan niet door één medewerker worden uitgevoerd — pas je extra's aan." : lang === "es" ? "Esta combinación de extras no la puede realizar una sola persona — ajusta tus extras." : "This combination of extras can't be done by one team member — please adjust your extras."}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3961,6 +3986,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       const isSel = isServiceSelected(s.id);
                       const item = getServiceItem(s.id);
                       const staffForService = getStaffForService(s.id);
+                      const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                       return (
                       <div key={s.id}>
                         <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
@@ -4033,7 +4059,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         {isSel && s.extras?.length > 0 && (
                           <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectExtras}</SL>
-                            {s.extras.map(e => {
+                            {s.extras.filter(e =>
+                              item?.staff
+                                ? extraAllowedFor(e, item.staff.id)
+                                : (staffForService.length === 0 || staffForService.some(m => extraAllowedFor(e, m.id)))
+                            ).map(e => {
                               const extraSel = item?.extras?.find(x => x.id === e.id);
                               const qty = extraSel?.qty || 1;
                               return (
@@ -4070,13 +4100,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
                                 </div>
                               )}
-                              {staffForService.map(m => (
+                              {staffPickable.map(m => (
                                 <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                                 </div>
                               ))}
                             </div>
+                            {staffPickable.length === 0 && (item?.extras || []).length > 0 && (
+                              <div style={{ fontSize: 11, color: c.danger, marginTop: 6 }}>
+                                {lang === "nl" ? "Deze combinatie van extra's kan niet door één medewerker worden uitgevoerd — pas je extra's aan." : lang === "es" ? "Esta combinación de extras no la puede realizar una sola persona — ajusta tus extras." : "This combination of extras can't be done by one team member — please adjust your extras."}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

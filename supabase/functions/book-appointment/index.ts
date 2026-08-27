@@ -369,6 +369,27 @@ serve(async (req) => {
         if (anyRows) return err(400, "staff_not_assigned", origin);
       }
     }
+
+    // Extra's kunnen per medewerker uitstaan (staff_extra_exclusions:
+    // rij = "voert deze extra NIET uit"). De publieke pagina filtert dit al,
+    // maar dit is de trust-nothing-grens: een geknutseld verzoek dat een
+    // uitgesloten combinatie boekt, wordt hier geweigerd.
+    if (extraIdsFlat.length > 0) {
+      const { data: exclRows, error: exclErr } = await supabase
+        .from("staff_extra_exclusions")
+        .select("staff_id, extra_id")
+        .in("staff_id", staffIdsFlat);
+      if (exclErr) return err(500, "db_error_staff_extras", origin);
+      const excluded = new Set((exclRows || []).map((r) => `${r.staff_id}:${r.extra_id}`));
+      if (excluded.size > 0) {
+        for (const [sid, stid] of Object.entries(staff_ids_per_service || {})) {
+          if (!stid) continue;
+          for (const eid of ((extra_ids as Record<string, string[]>)?.[sid] || [])) {
+            if (excluded.has(`${stid}:${eid}`)) return err(400, "staff_extra_excluded", origin);
+          }
+        }
+      }
+    }
   }
 
   // ---------- 6. Recalculate price + duration server-side ----------

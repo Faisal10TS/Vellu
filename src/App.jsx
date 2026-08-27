@@ -494,7 +494,7 @@ function SalonRoute({ lang, setLang }) {
       // boekingspagina. Ook dit filter zit in de query zelf, zodat een verborgen
       // dienst niet eens over de lijn gaat. De echte grens staat in
       // book-appointment: die weigert een verborgen service_id.
-      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).eq("services.visible", true).single();
+      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).eq("services.visible", true).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       // Load related data in parallel for faster page load
       const [
@@ -580,7 +580,9 @@ function SalonRoute({ lang, setLang }) {
             name_en: s.name_en || s.name || "",
             photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path, focal_x: p.focal_x ?? 50, focal_y: p.focal_y ?? 50 })),
             variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-            extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0))
+            // excluded_staff_ids: medewerkers die deze extra NIET uitvoeren
+            // (geen rijen = iedereen doet hem, net als service_ids leeg = alles).
+            extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)).map(e => ({ ...e, excluded_staff_ids: (e.staff_extra_exclusions || []).map(x => x.staff_id) }))
           })),
         // Retail products (Professional plan). Anonymous visitors only get
         // active rows (RLS); sort mirrors the owner's list order.

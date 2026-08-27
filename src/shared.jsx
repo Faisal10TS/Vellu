@@ -1684,6 +1684,31 @@ const T = new Proxy(_T_RAW, {
 // arbitrary rules. Strictly validate as a hex color (3/4/6/8 digits) before use, and
 // fall back to the default accent if anything else is passed.
 const _sanitizeAccent = (a) => (typeof a === "string" && /^#[0-9a-fA-F]{3,8}$/.test(a.trim())) ? a.trim() : ACCENT;
+
+// Relatieve luminantie (0..1) van een hexkleur — voor contrastbeslissingen.
+const _hexLum = (raw) => {
+  const h = _sanitizeAccent(raw).slice(1);
+  const full = h.length < 6 ? h.split("").map(ch => ch + ch).join("").slice(0, 6) : h.slice(0, 6);
+  const [r, g, b] = [0, 2, 4].map(i => {
+    const v = parseInt(full.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+// Salons mogen elk accent kiezen, ook wit of zwart. Onleesbaar wordt het pas
+// in het thema met dezelfde helderheid: een wit accent op het lichte thema
+// (of zwart op donker) verdwijnt in de achtergrond — witte tekst op witte
+// knoppen, onzichtbare prijzen. Dan renderen we het accent als neutrale inkt:
+// de "witte" salon oogt strak zwart-wit in licht thema en houdt het echte
+// witte accent in donker thema (en andersom voor zwart).
+export const readableAccent = (raw, themeName) => {
+  const hex = _sanitizeAccent(raw);
+  const L = _hexLum(hex);
+  if (themeName === "light" && L > 0.72) return "#262626";
+  if (themeName === "dark" && L < 0.05) return "#e9e9e9";
+  return hex;
+};
 const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent(rawAccent); return `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; overflow-x: clip; }

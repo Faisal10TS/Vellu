@@ -9,17 +9,17 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
-  const { colors: c } = useTheme();
+  const { colors: c, theme } = useTheme();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
-  const accent = salonProfile.accent_color || ACCENT;
+  const accent = readableAccent(salonProfile.accent_color, theme);
   // Currency symbol from the salon's country_code — all amounts staff see (their
   // revenue, service prices, client spend) show this instead of a hardcoded €.
   const cur = curSym(salonProfile.country_code);
@@ -179,7 +179,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           // destructuring hieronder gelijk blijft.
           supabase.rpc("staff_list_appointments", { p_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] })
             .then(r => ({ data: (r.data || []).sort((a, b) => String(b.date).localeCompare(String(a.date))), error: r.error })),
-          supabase.from("services").select("*, service_variants(*), service_extras(*), service_photos(*)").eq("owner_id", salonProfile.id),
+          supabase.from("services").select("*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)").eq("owner_id", salonProfile.id),
           supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
           supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
           // Team roster for the filter chips — only needed when the feature is on.
@@ -211,7 +211,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         setServices(filtered.map(s => ({
           ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
-          extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)),
+          extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)).map(e => ({ ...e, excluded_staff_ids: (e.staff_extra_exclusions || []).map(x => x.staff_id) })),
           photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
         })));
       } catch (e) {
