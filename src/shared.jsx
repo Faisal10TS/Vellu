@@ -901,7 +901,12 @@ const _T_RAW = {
     cancelBooking:"Afspraak annuleren", cancelBookingDesc:"Weet je zeker dat je wilt annuleren?",
     cancellationReason:"Reden voor annulering (optioneel)", confirmCancel:"Ja, annuleren",
     bookingCancelled:"Je afspraak is geannuleerd", cannotCancel:"Annuleren niet meer mogelijk",
-    cancelBeforeTime:"Annuleren kan tot 24 uur van tevoren",
+    // Deze tekst hoort bij status "expired": het annuleertoken verloopt op het
+    // STARTMOMENT van de afspraak, dus die is dan al geweest. Er stond "tot 24
+    // uur van tevoren", een termijn die nergens gehandhaafd wordt — de echte
+    // termijn is profiles.cancel_deadline_hours en die heeft zijn eigen scherm
+    // ("too_late", mét het juiste aantal uur en een belknop).
+    cancelBeforeTime:"Deze link is verlopen — de afspraak is inmiddels geweest. Neem contact op met de salon als je nog iets wilt regelen.",
     // Pagination & Timeline
     showMore:"Meer laden", showLess:"Minder tonen", showing:"Getoond", of:"van",
     todaySchedule:"Schema vandaag", nextUp:"Volgende", inProgress:"Nu bezig", upcoming:"Straks",
@@ -1187,7 +1192,7 @@ const _T_RAW = {
     cancelBooking:"Cancel booking", cancelBookingDesc:"Are you sure you want to cancel?",
     cancellationReason:"Reason for cancellation (optional)", confirmCancel:"Yes, cancel",
     bookingCancelled:"Your booking has been cancelled", cannotCancel:"Cancellation no longer possible",
-    cancelBeforeTime:"Cancellations must be made 24 hours in advance",
+    cancelBeforeTime:"This link has expired — the appointment has already passed. Please contact the salon if there is still something to arrange.",
     // Pagination & Timeline
     showMore:"Load more", showLess:"Show less", showing:"Showing", of:"of",
     todaySchedule:"Today's schedule", nextUp:"Next up", inProgress:"In progress", upcoming:"Upcoming",
@@ -1473,7 +1478,7 @@ const _T_RAW = {
     cancelBooking:"Cancelar reserva", cancelBookingDesc:"¿Seguro que quieres cancelar?",
     cancellationReason:"Motivo de la cancelación (opcional)", confirmCancel:"Sí, cancelar",
     bookingCancelled:"Tu reserva ha sido cancelada", cannotCancel:"Ya no es posible cancelar",
-    cancelBeforeTime:"Las cancelaciones deben hacerse con 24 horas de anticipación",
+    cancelBeforeTime:"Este enlace ha caducado — la cita ya ha pasado. Ponte en contacto con el salón si aún necesitas resolver algo.",
     // Pagination & Timeline
     showMore:"Cargar más", showLess:"Mostrar menos", showing:"Mostrando", of:"de",
     todaySchedule:"Agenda de hoy", nextUp:"A continuación", inProgress:"En curso", upcoming:"Próximas",

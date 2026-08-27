@@ -15958,7 +15958,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
                         // Klanttaal, niet de UI-taal van de eigenaar.
                         owner_id: salonData.owner_id, lang: apptLang, currency: cur,
-                        cancel_url: cancelUrl || null
+                        cancel_url: cancelUrl || null,
+                        // Zelfde termijn als cancel-appointment handhaaft.
+                        cancel_deadline_hours: salonData.cancel_deadline_hours ?? 0
                       };
                       // Zonder e-mailadres slaan we de mail over in plaats van
                       // hem naar een leeg adres te sturen (dat faalt en levert

@@ -2559,7 +2559,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                         payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
                         salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur,
-                        cancel_url: cancelUrl || null
+                        cancel_url: cancelUrl || null,
+                        // Zelfde termijn als cancel-appointment handhaaft.
+                        cancel_deadline_hours: salonProfile.cancel_deadline_hours ?? 0
                       });
                     }
                     // Notify owner about new booking

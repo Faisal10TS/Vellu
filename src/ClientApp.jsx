@@ -1875,6 +1875,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
           owner_email: result.owner_email || "info@vellu.cc",
           cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
+          // Zelfde termijn als cancel-appointment straks handhaaft; zonder dit
+          // noemt de mail geen getal in plaats van een verkeerd getal.
+          cancel_deadline_hours: initialSalon.cancel_deadline_hours ?? 0,
         }).catch(e => console.error("confirmation email failed:", e));
 
         sendEmails("booking_notification", {

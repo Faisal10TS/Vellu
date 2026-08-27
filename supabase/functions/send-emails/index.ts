@@ -83,7 +83,18 @@ const sCU=safeImgSrc(b.cancel_url);
 const row=(l,r)=>`<tr><td ${cL}>${l}</td><td ${cR}>${r}</td></tr>`;
 const totRow=(l,r)=>`<tr ${gL}><td style="padding:12px 0 4px;font-weight:600;color:${AC};">${l}</td><td style="padding:12px 0 4px;font-weight:600;color:${AC};text-align:right;">${r}</td></tr>`;
 if(type==="booking_confirmation"){
-const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${txt(lang,"Kun je niet komen? Annuleer tot 24 uur van tevoren:","Can't make it? Cancel up to 24 hours in advance:","¿No puedes venir? Cancela hasta 24 horas antes:")}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment","Cancelar cita")}</a></div>`:"";
+// ANNULEERTERMIJN KOMT VAN DE SALON, niet uit een vaste tekst. Hier stond
+// "tot 24 uur van tevoren" hardgecodeerd terwijl cancel-appointment
+// profiles.cancel_deadline_hours handhaaft. Bij een salon met 12 uur dacht de
+// klant 18 uur van tevoren dat het al te laat was en kwam die gewoon niet
+// opdagen; bij een salon met 48 uur klikte de klant juist op een link die al
+// dood was. Ontbreekt de waarde (oudere caller) of staat hij op 0 — altijd
+// annuleerbaar — dan noemen we bewust GEEN termijn, liever dan een verkeerde.
+const cdh=parseInt(String(b.cancel_deadline_hours??""));
+const cTxt=Number.isFinite(cdh)&&cdh>0
+?txt(lang,`Kun je niet komen? Annuleer tot ${cdh} uur van tevoren:`,`Can't make it? Cancel up to ${cdh} hours in advance:`,`¿No puedes venir? Cancela hasta ${cdh} horas antes:`)
+:txt(lang,"Kun je niet komen? Annuleer je afspraak hier:","Can't make it? Cancel your appointment here:","¿No puedes venir? Cancela tu cita aquí:");
+const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${cTxt}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment","Cancelar cita")}</a></div>`:"";
 await send(plainText(b.client_email),plainText(txt(lang,`Bevestiging afspraak bij ${b.salon_name}`,`Appointment confirmed at ${b.salon_name}`,`Cita confirmada en ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is bevestigd","Your appointment is confirmed","Tu cita está confirmada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`Bedankt voor je boeking bij <strong>${eS}</strong>`,`Thank you for booking at <strong>${eS}</strong>`,`Gracias por tu reserva en <strong>${eS}</strong>`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Datum","Date","Fecha"),eD)}${row(txt(lang,"Tijd","Time","Hora"),eT)}${row(txt(lang,"Betaling","Payment","Pago"),b.payment==="online"?txt(lang,"Betaalverzoek na afloop","Payment request afterwards","Solicitud de pago después"):txt(lang,"Betalen bij afspraak","Pay at appointment","Pago en la cita"))}${totRow(txt(lang,"Totaal","Total","Total"),fP(b.price))}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Tot dan, ${eC}!`,`See you then, ${eC}!`,`¡Hasta entonces, ${eC}!`)}</p></div>`);}
 // Staff copies respect the owner's visibility toggles (Instellingen → Team):
 // phone/e-mail weg als klantgegevens uit staat, prijsregel weg als omzet uit
