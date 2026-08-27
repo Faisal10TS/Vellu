@@ -137,9 +137,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   // Zelfde inhoud als de andere richting; alleen de vorm verschilt.
   const steps = [
-    { n: "01", title: t.step1, desc: t.step1d },
-    { n: "02", title: t.step2, desc: t.step2d },
-    { n: "03", title: t.step3, desc: t.step3d },
+    { n: "01", icon: "diamond", title: t.step1, desc: t.step1d },
+    { n: "02", icon: "target", title: t.step2, desc: t.step2d },
+    { n: "03", icon: "sparkle", title: t.step3, desc: t.step3d },
   ];
   const feats = [
     { nl: ["Eigen boekingspagina", "Jouw merk, jouw kleuren, jouw link — vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij."], en: ["Your own booking page", "Your brand, your colors, your link — vellu.cc/your-name. Clients book directly with you, no middleman."], es: ["Tu propia página de reservas", "Tu marca, tus colores, tu enlace — vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios."] },
@@ -227,12 +227,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-ctas { justify-content: flex-start; }
             .at-stats { justify-content: start; }
           }
-          .at-feat-grid { display: grid; grid-template-columns: 1fr; gap: 0 44px; }
-          @media (min-width: 760px) { .at-feat-grid { grid-template-columns: 1fr 1fr; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
-          .at-step { transition: background 0.25s ease; }
-          .at-step:hover { background: ${PUTTY}44; }
+          .bento { display: grid; gap: 14px; grid-template-columns: 1fr; }
+          .bento-card { transition: transform 0.25s ease, border-color 0.25s ease; }
+          .bento-card:hover { transform: translateY(-3px); }
+          @media (min-width: 720px) {
+            .bento { grid-template-columns: repeat(3, 1fr); }
+            .bento-wide { grid-column: span 2; }
+          }
+          @media (prefers-reduced-motion: reduce) { .bento-card, .bento-card:hover { transition: none; transform: none; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
@@ -353,17 +357,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 03 · HOE HET WERKT — terug op bone, redactionele rijen. ── */}
+        {/* ── 03 · HOE HET WERKT — terug op bone; de kaartvariant uit de
+              Signature-versie, in het aardpalet (mix-besluit 27-08). ── */}
         <div id="how-it-works" style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
           <AtHead n="03" title={t.liveIn3} />
-          <div>
-            {steps.map((s, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+            {steps.map((item, i) => (
               <Reveal key={i} delay={i * 110}>
-                <div className="at-step" style={{ display: "grid", gridTemplateColumns: "clamp(64px, 10vw, 120px) 1fr", gap: "clamp(14px, 3vw, 34px)", alignItems: "start", padding: "clamp(20px, 3.4vw, 34px) 8px", borderBottom: `1px solid ${PUTTY}`, borderRadius: 10 }}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9 }}>{s.n}</div>
-                  <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(21px, 3vw, 28px)", fontWeight: 400, color: INK, marginBottom: 8 }}>{s.title}</div>
-                    <div style={{ fontSize: 13.5, color: P.textLabel, lineHeight: 1.75, maxWidth: 560 }}>{s.desc}</div>
+                <div className="vl-glow" onMouseMove={glowMove} style={{ background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 24, padding: "32px 28px", position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
+                  <div style={{ position: "absolute", top: 16, right: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: `${MUSHROOM}66` }}>{item.n}</div>
+                  <div style={{ marginBottom: 16 }}><NavIcon name={item.icon} size={28} color={EARTH} /></div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 10, color: INK }}>
+                    {item.title}
+                  </div>
+                  <div style={{ fontSize: 13, color: P.textLabel, lineHeight: 1.7 }}>
+                    {item.desc}
                   </div>
                 </div>
               </Reveal>
@@ -376,18 +384,58 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
             <AtHead n="04" title={t.everythingNeeded} tone="putty" />
-            <div className="at-feat-grid">
-              {feats.map((f, i) => {
+            {/* Bento uit de Signature-versie, in het aardpalet: bone-kaarten
+                op de putty-band (mix-besluit 27-08). */}
+            <div className="bento">
+              {/* Anker 1 — eigen boekingspagina met URL-pil */}
+              <Reveal className="bento-wide">
+              <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "24px 22px", background: P.bgCard, border: `1px solid ${EARTH}33`, borderRadius: 20, height: "100%", boxSizing: "border-box" }}>
+                <NavIcon name="calendar" size={24} color={EARTH} />
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 10, marginBottom: 4, color: INK }}>{featOf(feats[0])[0]}</div>
+                <div style={{ fontSize: 12, color: P.textLabel, lineHeight: 1.6, marginBottom: 16 }}>{featOf(feats[0])[1]}</div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", background: BONE, border: `1px solid ${EARTH}44`, borderRadius: 100, fontSize: 12 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#7d9a6b", flexShrink: 0 }} />
+                  <span style={{ color: P.textSub }}>vellu.cc/</span><span style={{ color: EARTH, fontWeight: 600 }}>{lang === "nl" ? "jouw-naam" : "your-name"}</span>
+                </div>
+              </div>
+              </Reveal>
+              {/* Anker 2 — 0% commissie, groot cijfer */}
+              <Reveal delay={90}>
+              <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${MUSHROOM}4d, transparent 70%), ${P.bgCard}`, border: `1px solid ${EARTH}44`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", boxSizing: "border-box" }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 64, fontWeight: 300, color: EARTH, lineHeight: 1 }}>0%</div>
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4, color: INK }}>{featOf(feats[1])[0].replace("0% ", "").replace(/^de /, "")}</div>
+                <div style={{ fontSize: 12, color: P.textLabel, lineHeight: 1.6 }}>{featOf(feats[1])[1]}</div>
+              </div>
+              </Reveal>
+              {/* Ondersteunende tegels */}
+              {feats.slice(2).map((f, i) => {
                 const [title, desc] = featOf(f);
+                const meta = [
+                  { icon: "team" },
+                  { icon: "mail" },
+                  { icon: "star2", stars: true },
+                  { icon: "palette", swatch: true },
+                  { icon: "camera" },
+                  { icon: "tag", code: true },
+                ][i] || { icon: "sparkle" };
                 return (
-                  <Reveal key={i} delay={(i % 2) * 70 + Math.floor(i / 2) * 60}>
-                    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${EARTH}3d` }}>
-                      <span aria-hidden="true" style={{ color: EARTH, fontSize: 11, lineHeight: "22px" }}>◆</span>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 4, letterSpacing: "0.01em" }}>{title}</div>
-                        <div style={{ fontSize: 12.5, color: "#5f5240", lineHeight: 1.65 }}>{desc}</div>
+                  <Reveal key={i} delay={150 + i * 70}>
+                  <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "20px", background: P.bgCard, border: `1px solid ${EARTH}33`, borderRadius: 20, height: "100%", boxSizing: "border-box" }}>
+                    <NavIcon name={meta.icon} size={22} color={EARTH} />
+                    <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, marginBottom: 4, color: INK }}>{title}</div>
+                    <div style={{ fontSize: 11, color: P.textLabel, lineHeight: 1.55 }}>{desc}</div>
+                    {meta.stars && <div style={{ marginTop: 10, fontSize: 12, color: EARTH, letterSpacing: "0.2em" }}>★★★★★</div>}
+                    {meta.swatch && (
+                      <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
+                        {["#c9a96e", "#b7a29a", "#8fa596", "#a49ab8"].map(col => (
+                          <span key={col} style={{ width: 16, height: 16, borderRadius: "50%", background: col, border: `2px solid ${P.bgCard}`, boxShadow: `0 0 0 1px ${EARTH}44` }} />
+                        ))}
                       </div>
-                    </div>
+                    )}
+                    {meta.code && (
+                      <div style={{ marginTop: 12, display: "inline-block", padding: "4px 10px", border: `1px dashed ${EARTH}88`, borderRadius: 8, fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", color: EARTH }}>WELKOM10</div>
+                    )}
+                  </div>
                   </Reveal>
                 );
               })}
