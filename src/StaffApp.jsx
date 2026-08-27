@@ -9,17 +9,18 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
-  const { colors: c, theme } = useTheme();
+  const { colors: themeC, theme } = useTheme();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
   const accent = readableAccent(salonProfile.accent_color, theme);
+  const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
   // Currency symbol from the salon's country_code — all amounts staff see (their
   // revenue, service prices, client spend) show this instead of a hardcoded €.
   const cur = curSym(salonProfile.country_code);

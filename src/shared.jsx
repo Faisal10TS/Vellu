@@ -1709,7 +1709,15 @@ export const readableAccent = (raw, themeName) => {
   if (themeName === "dark" && L < 0.05) return "#e9e9e9";
   return hex;
 };
-const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent(rawAccent); return `
+
+// Inktkleur voor tekst BOVENOP een accentvlak (knoppen, actieve chips).
+// Het thematoken btnOnDark is donkere inkt — prima op goud, onleesbaar op een
+// donker accent (espresso, of het genormaliseerde inkt-accent hierboven).
+// Boven ~0.25 luminantie wint donkere inkt (goud = 0.42 blijft dus zoals het
+// was), daaronder warmwit.
+export const onAccentInk = (accentHex, fallbackInk) =>
+  _hexLum(accentHex) > 0.25 ? fallbackInk : "#f6f2ec";
+const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent(rawAccent); const onAccent = onAccentInk(accent, c.btnOnDark); return `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
   body { overscroll-behavior: none; overflow-x: clip; }
@@ -1723,7 +1731,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .scale-in { animation: scaleIn 0.3s cubic-bezier(0.16,1,0.3,1) both; }
 
   .btn-primary {
-    background: ${accent}; color: ${c.btnOnDark}; border: none; border-radius: 100px;
+    background: ${accent}; color: ${onAccent}; border: none; border-radius: 100px;
     padding: 15px 28px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; width: 100%;
     transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
@@ -1763,7 +1771,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     cursor: pointer; transition: all 0.18s; text-align: center; color: ${c.textSub};
   }
   .time-chip:hover { border-color: ${accent}55; color: ${accent}; background: ${accent}09; }
-  .time-chip.sel { background: ${accent}; border-color: ${accent}; color: ${c.btnOnDark}; font-weight: 600; }
+  .time-chip.sel { background: ${accent}; border-color: ${accent}; color: ${onAccent}; font-weight: 600; }
 
   .day-chip {
     display: flex; flex-direction: column; align-items: center;
@@ -1774,7 +1782,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .day-scroll::-webkit-scrollbar { display: none; }
   .day-chip:hover { background: ${accent}18; border-color: ${accent}44; }
   .day-chip.sel { background: ${accent}; border-color: ${accent}; }
-  .day-chip.sel span { color: ${c.btnOnDark} !important; }
+  .day-chip.sel span { color: ${onAccent} !important; }
 
   .appt-card {
     background: ${c.bgCard}; border: 1px solid ${c.border};
@@ -1818,7 +1826,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
 
   .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 100px; padding: 4px; display: flex; gap: 2px; }
   .lang-btn { padding: 7px 12px; border-radius: 100px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
-  .lang-btn.active { background: ${accent}; color: ${c.btnOnDark}; }
+  .lang-btn.active { background: ${accent}; color: ${onAccent}; }
   .lang-btn.inactive { background: transparent; color: ${c.textLabel}; }
 
   .photo-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-top: 12px; }
@@ -2059,7 +2067,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   .profile-service-book-btn {
     padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 600;
     letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
-    background: ${accent}; color: ${c.btnOnDark}; border: none;
+    background: ${accent}; color: ${onAccent}; border: none;
     transition: all 0.2s; flex-shrink: 0; white-space: nowrap;
     font-family: var(--body-font, 'Jost', sans-serif);
   }
@@ -2146,7 +2154,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   }
   .profile-book-btn {
     width: 100%; padding: 13px; border-radius: 100px; border: none;
-    background: ${accent}; color: ${c.btnOnDark}; font-size: 14px; font-weight: 600;
+    background: ${accent}; color: ${onAccent}; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s; font-family: var(--body-font, 'Jost', sans-serif);
     margin-top: 16px;
   }
@@ -2187,7 +2195,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
     pointer-events: none;
   }
   .profile-mobile-pill {
-    background: ${accent}; color: ${c.btnOnDark}; border: none; border-radius: 100px;
+    background: ${accent}; color: ${onAccent}; border: none; border-radius: 100px;
     padding: 14px 40px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
     pointer-events: auto;
@@ -2204,7 +2212,7 @@ const makeCSS = (rawAccent, c = THEMES.dark) => { const accent = _sanitizeAccent
   }
   .profile-cat-pill:hover { border-color: ${c.textLabel}; color: ${c.text}; }
   .profile-cat-pill.active {
-    background: ${accent}; color: ${c.btnOnDark}; border-color: ${accent}; font-weight: 600;
+    background: ${accent}; color: ${onAccent}; border-color: ${accent}; font-weight: 600;
   }
 
   /* Powered by footer */

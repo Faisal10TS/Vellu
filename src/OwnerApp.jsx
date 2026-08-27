@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -3551,7 +3551,7 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
-  const { colors: c, theme } = useTheme();
+  const { colors: themeC, theme } = useTheme();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
 
@@ -4229,8 +4229,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   }, [salonData.owner_id]);
 
   // Wit accent in licht thema (of zwart in donker) is onleesbaar in het eigen
-  // dashboard — render het dan als neutrale inkt (zie readableAccent).
+  // dashboard — render het dan als neutrale inkt (zie readableAccent), en op
+  // een donker accent wordt de tekst óp knoppen/chips licht (onAccentInk).
   const accent = readableAccent(salonData.accent, theme);
+  const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
   const appts = salonData.appointments;
   const activeAppts = appts.filter(a => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a));
   // Agenda-tak: kassa-verkopen horen hier niet — die staan in de Kassa-tab.

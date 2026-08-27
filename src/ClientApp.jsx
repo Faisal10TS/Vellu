@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent
+  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk
 } from "./shared.jsx";
 
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
@@ -290,10 +290,12 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false }) {
-  const { colors: c, theme } = useTheme();
+  const { colors: themeC, theme } = useTheme();
   // readableAccent: wit accent in licht thema (of zwart in donker) zou overal
-  // in de achtergrond verdwijnen — render het dan als neutrale inkt.
+  // in de achtergrond verdwijnen — render het dan als neutrale inkt. En op een
+  // donker accent moet de tekst óp knoppen/chips licht zijn (onAccentInk).
   const accent = readableAccent(initialSalon.accent, theme);
+  const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
   const t = T[lang];
   // Currency symbol for this salon (from its country_code). Every price on this
   // page prefixes with `cur` instead of a hardcoded "€", so a Bonaire salon
