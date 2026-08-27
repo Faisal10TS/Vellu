@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
-  useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable
+  useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
+  AT, AT_COLORS, AtelierSkin
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -1303,7 +1304,9 @@ function Row({ label, value, c, negative }) {
 
 // ─── OWNER AUTH ───────────────────────────────────────────────
 function OwnerAuth({ onLogin, onBack, lang, setLang }) {
-  const { colors: c } = useTheme();
+  // Vaste Atelier-huid (27-08): de login hoort bij de bone-merkwereld van de
+  // landing, niet bij het licht/donker-thema van de app erachter.
+  const c = AT_COLORS;
   const t = T[lang];
   // Derive referral code from URL synchronously at mount. If present, initial
   // mode is "signup" directly — avoids the React warning about setState in an
@@ -1447,16 +1450,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
   return (
     <Layout>
-      <div style={{ 
-        background: c.bg, 
-        minHeight: "100dvh", 
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "center", 
-        padding: "40px 24px", 
-        fontFamily: "'Jost',sans-serif", 
-        color: c.text, 
-        position: "relative" 
+      <AtelierSkin />
+      <div className="atelier" style={{
+        background: c.bg,
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "40px 24px",
+        fontFamily: "'Jost',sans-serif",
+        color: c.text,
+        position: "relative"
       }}>
         {/* Background decoration */}
         <div style={{ 
@@ -1467,7 +1471,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           width: "80%", 
           maxWidth: 600,
           height: "50%", 
-          background: `radial-gradient(ellipse at center, ${ACCENT}08 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse at center, ${AT.EARTH}08 0%, transparent 70%)`,
           pointerEvents: "none"
         }} />
 
@@ -1476,17 +1480,21 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {t.back}</button>
         </div>
 
-        {/* Lang toggle — same safe-area offset. */}
-        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", alignItems: "center", gap: 8 }}>
-          <ThemeToggle />
-          <LangToggle lang={lang} setLang={setLang} />
+        {/* Taalkeuze — same safe-area offset. Geen thema-toggle: deze pagina
+            draagt de vaste Atelier-huid. */}
+        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", gap: 2, border: `1px solid ${AT.PUTTY}`, borderRadius: 100, padding: 3, background: c.bgCard }}>
+          {["nl", "en", "es"].map(l => (
+            <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? AT.ESPRESSO : "transparent", color: lang === l ? AT.BONE : AT.EARTH }}>
+              {l}
+            </button>
+          ))}
         </div>
 
         {/* Ruimte boven de kroon: op korte telefoonschermen schoof het logo
             anders onder de absoluut geplaatste thema/taal-knoppen. */}
         <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10, paddingTop: "calc(72px + env(safe-area-inset-top, 0px))", paddingBottom: 24 }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 36 }}>
-            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
+            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={AT.EARTH} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{t.ownerLogin}</div>
             <div style={{ fontSize: 13, color: c.textLabel, marginTop: 8, letterSpacing: "0.02em" }}>{t.ownerSub}</div>
           </div>
@@ -1503,8 +1511,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                   flex: 1, padding: "12px", border: "none", background: "transparent",
                   fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer",
                   letterSpacing: "0.1em", textTransform: "uppercase",
-                  color: mode === m ? ACCENT : c.textMuted,
-                  borderBottom: `2px solid ${mode === m ? ACCENT : "transparent"}`,
+                  color: mode === m ? AT.EARTH : c.textMuted,
+                  borderBottom: `2px solid ${mode === m ? AT.EARTH : "transparent"}`,
                   marginBottom: -1, transition: "all 0.2s"
                 }}>{label}</button>
               ))}
@@ -1512,7 +1520,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
             {mode === "signup" && referrerName && (
               <div style={{
-                background: `${ACCENT}12`, border: `1px solid ${ACCENT}33`, borderRadius: 12,
+                background: `${AT.EARTH}12`, border: `1px solid ${AT.EARTH}33`, borderRadius: 12,
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
               }}>
                 {lang === "nl" ? (
@@ -1567,8 +1575,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                     {[["joint", "user", t.jointAccount, t.jointDesc, t.jointInfo], ["team", "team", t.teamAccount, t.teamDesc, t.teamInfo]].map(([type, icon, label, desc, info]) => (
                       <div key={type} onClick={() => setForm(f => ({...f, accountType: type}))} style={{
                         flex: 1, padding: "14px 12px", borderRadius: 14, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
-                        background: form.accountType === type ? `${ACCENT}12` : c.inputBg,
-                        border: `1.5px solid ${form.accountType === type ? ACCENT : c.inputBorder}`,
+                        background: form.accountType === type ? `${AT.EARTH}12` : c.inputBg,
+                        border: `1.5px solid ${form.accountType === type ? AT.EARTH : c.inputBorder}`,
                         position: "relative"
                       }}>
                         {/* Info icon — click stops propagation so tapping the ⓘ
@@ -1580,8 +1588,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                           style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textLabel, fontSize: 10, fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontWeight: 700, lineHeight: 1, cursor: "help", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                           i
                         </button>
-                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? ACCENT : c.textSub} /></div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? ACCENT : c.text }}>{label}</div>
+                        <div style={{ marginBottom: 4 }}><NavIcon name={icon} size={20} color={form.accountType === type ? AT.EARTH : c.textSub} /></div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: form.accountType === type ? AT.EARTH : c.text }}>{label}</div>
                         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, lineHeight: 1.3 }}>{desc}</div>
                       </div>
                     ))}
@@ -1608,13 +1616,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
             {mode === "signin" && (
               <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer", userSelect: "none" }}>
                 <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: ACCENT, cursor: "pointer" }} />
+                  style={{ width: 16, height: 16, accentColor: AT.EARTH, cursor: "pointer" }} />
                 <span style={{ fontSize: 12, color: c.textSub }}>
                   {lang === "nl" ? "Onthoud mijn gegevens" : lang === "es" ? "Recordarme" : "Remember me"}
                 </span>
               </label>
             )}
-            {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 16, textAlign: "center" }}>{error}</div>}
+            {error && <div style={{ fontSize: 12, color: "#a8564a", marginBottom: 16, textAlign: "center" }}>{error}</div>}
             {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
             {mode === "signin" && (

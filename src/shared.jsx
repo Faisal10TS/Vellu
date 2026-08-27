@@ -2529,6 +2529,72 @@ function Linkify({ text, color }) {
 }
 
 // ─── EXPORTS ─────────────────────────────────────────────────
+// ─── ATELIER-HUID (nieuwe merkwereld, 2026-08-27) ────────────────────────────
+// Faisals aardpalet voor alles vóór de app: landing, login, wachtwoordherstel
+// en planKeuze. De app zelf (dashboard) behoudt zijn eigen licht/donker-thema.
+//   Deep Espresso Clay #5B4C3A · Rich Earth Brown #8A7356 · Soft Mushroom
+//   Beige #C4B39A · Warm Putty #DED1BA · Gentle Bone White #F4EFE6
+const AT = {
+  ESPRESSO: "#5B4C3A",
+  EARTH: "#8A7356",
+  MUSHROOM: "#C4B39A",
+  PUTTY: "#DED1BA",
+  BONE: "#F4EFE6",
+  DEEP: "#453A2B", // verdiept espresso: lopende tekst óp mushroom (AA)
+};
+
+// Thema-vormig kleurenobject zodat bestaande componenten (c.bg, c.border, …)
+// zonder verbouwing op de Atelier-huid kunnen draaien. textSub/textLabel zijn
+// espresso-mengingen: kleine tekst moet AA-contrast op bone houden.
+const AT_COLORS = {
+  bg: AT.BONE,
+  bgCard: "#FAF6EE",
+  text: AT.ESPRESSO,
+  textSub: "#6B5A45",
+  textLabel: "#75634B",
+  textMuted: AT.EARTH,
+  border: AT.PUTTY,
+  inputBorder: AT.MUSHROOM,
+  inputBg: "#FAF6EE",
+  selectBg: "#FAF6EE",
+  btnOnDark: AT.BONE,
+  success: "#5f7d54",
+};
+
+// Scoped stylesheet voor pagina's in de Atelier-huid: knoppen/inputs los van
+// het app-thema (anders lekt donker thema de bone-pagina in) + de generieke
+// bewegingsklassen (cursor-ring, kaartgloed, marquee). Render hem één keer en
+// zet className="atelier" op de paginawortel.
+function AtelierSkin() {
+  return (
+    <style>{`
+      .atelier .btn-primary { background: ${AT.ESPRESSO}; color: ${AT.BONE}; border: 1px solid ${AT.ESPRESSO}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
+      .atelier .btn-primary:hover { transform: translateY(-1px); background: #4a3e2f; box-shadow: 0 14px 28px -16px ${AT.ESPRESSO}; }
+      .atelier .btn-ghost { background: transparent; color: ${AT.ESPRESSO}; border: 1px solid ${AT.MUSHROOM}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+      .atelier .btn-ghost:hover { border-color: ${AT.EARTH}; background: ${AT.PUTTY}55; }
+      .atelier .input-field { background: ${AT_COLORS.inputBg}; border: 1px solid ${AT_COLORS.inputBorder}; color: ${AT.ESPRESSO}; font-family: 'Jost', sans-serif; outline: none; }
+      .atelier .input-field::placeholder { color: ${AT.EARTH}; }
+      .atelier .input-field:focus { border-color: ${AT.EARTH}; }
+      .atelier select, .atelier option { color: ${AT.ESPRESSO}; }
+      .atelier ::selection { background: ${AT.PUTTY}; }
+      .atelier .lang-toggle { background: ${AT_COLORS.bgCard}; border: 1px solid ${AT.PUTTY}; }
+      .atelier .lang-btn.active { background: ${AT.ESPRESSO}; color: ${AT.BONE}; }
+      .atelier .lang-btn.inactive { background: transparent; color: ${AT.EARTH}; }
+      .vl-marquee-track { animation: vlMarquee 32s linear infinite; }
+      .vl-marquee:hover .vl-marquee-track { animation-play-state: paused; }
+      @keyframes vlMarquee { to { transform: translateX(-50%); } }
+      .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${AT.EARTH}; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
+      .vl-cursor.grow { width: 46px; height: 46px; margin: -23px 0 0 -23px; border-color: ${AT.ESPRESSO}; }
+      .vl-cursor-dot { position: fixed; top: 0; left: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: ${AT.ESPRESSO}; pointer-events: none; z-index: 80; }
+      .vl-glow { position: relative; }
+      .vl-glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), ${AT.MUSHROOM}40, transparent 65%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+      .vl-glow:hover::after { opacity: 1; }
+      @media (hover: none) { .vl-glow::after { display: none; } }
+      @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
+    `}</style>
+  );
+}
+
 export {
   THEMES, ThemeContext, ThemeProvider, useTheme,
   Skeleton, DashboardSkeleton,
@@ -2536,6 +2602,7 @@ export {
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
+  AT, AT_COLORS, AtelierSkin,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,

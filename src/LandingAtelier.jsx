@@ -23,39 +23,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
-import { useSEO, T, Layout, NavIcon } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 } from "./LandingScreen.jsx";
 
-const ESPRESSO = "#5B4C3A";
-const EARTH = "#8A7356";
-const MUSHROOM = "#C4B39A";
-const PUTTY = "#DED1BA";
-const BONE = "#F4EFE6";
+// Eén bron van waarheid: het palet leeft in shared.jsx (AT/AT_COLORS), zodat
+// de login-, wachtwoord- en planschermen exact dezelfde huid dragen.
+const { ESPRESSO, EARTH, MUSHROOM, PUTTY, BONE } = AT;
 const INK = ESPRESSO;
-// Voor lopende tekst óp de mushroom-band: espresso zelf haalt daar net geen
-// AA-contrast (≈4:1), dit verdiepte espresso wel (≈5,4:1). Zelfde familie.
-const ESPRESSO_DEEP = "#453A2B";
-
-// Sleutels spiegelen het thema-object zodat de gedeelde componenten
-// (SalonFinder, rekentool, telefoon, chat) er direct mee overweg kunnen.
-// textSub/textLabel zijn espresso-mengingen i.p.v. puur earth: kleine
-// lopende tekst moet AA-contrast op bone houden.
-const P = {
-  bg: BONE,
-  bgCard: "#FAF6EE",
-  text: ESPRESSO,
-  textSub: "#6B5A45",
-  textLabel: "#75634B",
-  textMuted: EARTH,
-  border: PUTTY,
-  inputBorder: MUSHROOM,
-  inputBg: "#FAF6EE",
-  btnOnDark: BONE,
-};
+const ESPRESSO_DEEP = AT.DEEP;
+const P = AT_COLORS;
 
 // Sectiekop: gecentreerde serif-titel met een korte lijn die zich uittekent
 // (nummers en streepje verwijderd op Faisals verzoek, 27-08). `tone` volgt de
@@ -321,9 +301,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── MARQUEE — putty-band met outline-serif, de eerste kleurwissel. ── */}
-        <div className="at-outline" style={{ position: "relative", zIndex: 10, margin: "22px 0 0", background: PUTTY }}>
-          <Marquee items={marqueeWords} c={{ ...P, textSub: "transparent", border: `${EARTH}3d` }} accent={EARTH} />
+        {/* ── MARQUEE — espresso-woorden op de putty-band, zelfde kleur als de
+              trial-knop (feedback 27-08; outline-versie verworpen). ── */}
+        <div style={{ position: "relative", zIndex: 10, margin: "22px 0 0", background: PUTTY }}>
+          <Marquee items={marqueeWords} c={{ ...P, textSub: ESPRESSO, border: `${EARTH}3d` }} accent={EARTH} />
         </div>
 
         {/* ── 01 · SALON VINDEN — op bone. ── */}

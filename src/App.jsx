@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym,
+  AT, AT_COLORS, AtelierSkin
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -237,7 +238,7 @@ function OwnerEntryPage({ lang, setLang }) {
   if (recovery || recoveryError) {
     return (
       <SetPasswordScreen
-        lang={lang} c={c}
+        lang={lang} c={AT_COLORS}
         expired={!!recoveryError}
         onDone={() => {
           try { window.history.replaceState(null, "", window.location.pathname); } catch { /* hash blijft dan staan */ }
@@ -310,11 +311,12 @@ function SetPasswordScreen({ lang, c, expired, onDone }) {
 
   const veld = { width: "100%", marginBottom: 12 };
   return (
-    <Layout accent={ACCENT}>
-      <div style={{ minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <Layout accent={AT.EARTH}>
+      <AtelierSkin />
+      <div className="atelier" style={{ minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 400 }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={ACCENT} /></div>
+            <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={AT.EARTH} /></div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300 }}>
               {toonExpired
                 ? T3("Link verlopen", "Enlace caducado", "Link expired")
@@ -338,7 +340,7 @@ function SetPasswordScreen({ lang, c, expired, onDone }) {
                   </div>
                   <input className="input-field" type="email" style={veld} placeholder={T3("Je e-mailadres", "Tu correo", "Your email address")}
                     value={mail} onChange={e => setMail(e.target.value)} onKeyDown={e => e.key === "Enter" && nieuweLink()} />
-                  {err && <div style={{ color: "#f87171", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+                  {err && <div style={{ color: "#a8564a", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
                   <button className="btn-primary" style={{ width: "100%" }} disabled={busy} onClick={nieuweLink}>
                     {busy ? "…" : T3("Stuur nieuwe herstellink", "Enviar enlace nuevo", "Send new reset link")}
                   </button>
@@ -357,7 +359,7 @@ function SetPasswordScreen({ lang, c, expired, onDone }) {
                   value={pw} onChange={e => setPw(e.target.value)} />
                 <input className="input-field" type="password" autoComplete="new-password" style={veld} placeholder={T3("Herhaal wachtwoord", "Repite la contraseña", "Repeat password")}
                   value={pw2} onChange={e => setPw2(e.target.value)} onKeyDown={e => e.key === "Enter" && opslaan()} />
-                {err && <div style={{ color: "#f87171", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+                {err && <div style={{ color: "#a8564a", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
                 <button className="btn-primary" style={{ width: "100%" }} disabled={busy} onClick={opslaan}>
                   {busy ? "…" : T3("Opslaan en inloggen", "Guardar e iniciar sesión", "Save and sign in")}
                 </button>
