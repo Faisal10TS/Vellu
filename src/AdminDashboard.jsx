@@ -293,16 +293,16 @@ export default function AdminDashboard({ onLogout }) {
         {tab === "billing" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-              <StatCard label="MRR" value={fmtEur(billing?.mrr_eur)} sub={`${billing?.paying_count ?? 0} paying · monthly recurring`} accent={accent} c={c} />
+              <StatCard label="MRR" value={fmtEur(billing?.mrr_eur)} sub={`${billing?.paying_count ?? 0} paying · yearly at monthly equivalent`} accent={accent} c={c} />
               <StatCard label="ARR" value={fmtEur(billing?.arr_eur)} sub="annual run-rate" accent={accent} c={c} />
               <StatCard label="Collected to date" value={fmtEur(billing?.collected_total_eur)} sub={`${billing?.invoices_count ?? 0} invoices · ${fmtEur(billing?.collected_30d_eur)} last 30d`} accent={accent} c={c} />
               <StatCard label="Trials" value={billing?.trialing_count ?? 0} sub={`${billing?.trials_ending_14d ?? 0} ending in 14 days`} accent={accent} c={c} />
               {(billing?.churning_count ?? 0) > 0 && <StatCard label="Churning" value={billing.churning_count} sub="cancel at period end" accent={c.danger} c={c} />}
-              {(billing?.comped_count ?? 0) > 0 && <StatCard label="Comped / free" value={billing.comped_count} sub="active, no Mollie sub" accent={c.textSub} c={c} />}
+              {(billing?.comped_count ?? 0) > 0 && <StatCard label="Comped / free" value={billing.comped_count} sub="active, not paying (demo/comped)" accent={c.textSub} c={c} />}
             </div>
 
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-              MRR counts only salons with an active subscription backed by a real Mollie payment. Trials and comped/demo accounts contribute €0 until they convert. All amounts in euro — Vellu always bills in euro, whatever currency the salon itself uses.
+              MRR counts salons with an active Mollie subscription, plus yearly customers with a paid invoice covering today (the yearly flow is a one-off payment, no Mollie subscription) — yearly counts at its monthly equivalent (price ÷ 12). Trials and comped/demo accounts contribute €0 until they convert. All amounts in euro — Vellu always bills in euro, whatever currency the salon itself uses.
             </div>
 
             {/* Trials ending soon — the conversion window worth chasing */}
