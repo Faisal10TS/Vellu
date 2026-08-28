@@ -1728,6 +1728,18 @@ export const accentEdge = (raw, themeName) => {
   if (themeName === "dark" && L < 0.05) return "rgba(255,255,255,0.38)";
   return "transparent";
 };
+
+// Geldt deze blokkade-rij (staff_day_overrides) op deze datum? Eenmalige
+// rijen matchen exact op hun datum; terugkerende rijen (weekday 0-6 gezet,
+// "elke zondag") gelden elke week op die weekdag VANAF hun ankerdatum.
+// dateStr = "YYYY-MM-DD"; lokale parsing zodat de weekdag niet UTC-schuift.
+export const blockAppliesOn = (b, dateStr) => {
+  if (!b || !dateStr) return false;
+  if (b.weekday == null) return b.date === dateStr;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  return new Date(y, m - 1, d).getDay() === b.weekday && dateStr >= b.date;
+};
 // `rawAccent` is het (eventueel via readableAccent genormaliseerde) accent
 // voor tekst/tinten/randen; `surfaceRaw` is de ONbewerkte merkkleur voor
 // gevulde knoppen en chips — een "witte" salon houdt zo witte pillen, met een

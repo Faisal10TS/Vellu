@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -3948,7 +3948,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // Staff-authored blocks (staff_day_overrides). Owner sees them in
           // the agenda so they know why a stylist isn't bookable, and can
           // remove one on their behalf if it was a mistake.
-          supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+          supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]},weekday.not.is.null`)
         ]);
         // Shape client_no_shows as a lookup by email so renderApptCard is O(1).
         const clientNoShowsMap = {};
@@ -5208,7 +5208,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // blokkade een medewerker raakt die aan deze afspraak is toegewezen —
     // anders krijgt een team-salon bij elke boeking ruis van collega's.
     for (const b of (salonData.staff_blocks || [])) {
-      if (b.date !== date) continue;
+      if (!blockAppliesOn(b, date)) continue;
       // Dienst-specifieke blokkades hebben hier geen dienst-context om tegen
       // te toetsen; de eigenaar mag handmatig altijd om zo'n blokkade heen.
       if (b.service_id) continue;
@@ -5292,7 +5292,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const openBlockModal = () => {
     const seed = calDate || fmt(getToday());
     setBlockEditId(null);
-    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "" });
+    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
     setBlockModalOpen(true);
   };
 
@@ -5309,6 +5309,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       staff_id: b.staff_id || "",
       staff_name: (salonData.staff || []).find(s => s.id === b.staff_id)?.name || "",
       service_id: b.service_id || "",
+      repeat: b.weekday != null,
     });
     setBlockModalOpen(true);
   };
@@ -5331,10 +5332,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       : "";
     // Editing an existing time-block row → UPDATE in place.
     const serviceId = blockForm.service_id || null;
+    // Wekelijkse herhaling: weekday van de gekozen (start)datum; NULL = eenmalig.
+    const repeatWeekday = blockForm.repeat && from ? parseDate(from).getDay() : null;
     if (blockEditId) {
       const { data: updated, error } = await supabase
         .from("staff_day_overrides")
-        .update({ staff_id: staffId, service_id: serviceId, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
+        .update({ staff_id: staffId, service_id: serviceId, weekday: repeatWeekday, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
         .eq("id", blockEditId).eq("owner_id", salonData.owner_id)
         .select("*").single();
       setBlockSaving(false);
@@ -5356,6 +5359,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           owner_id: salonData.owner_id,
           staff_id: staffId,
           service_id: serviceId,
+          weekday: repeatWeekday,
           date: from,
           block_time_start: blockForm.time_start,
           block_time_end: blockForm.time_end,
@@ -5373,30 +5377,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Tijdvak geblokkeerd" : lang === "es" ? "Franja horaria bloqueada" : "Time window blocked");
       return;
     }
-    // Hele dag(en) mét dienst: het legacy-JSON-model kent geen service_id,
-    // dus dit wordt één rij per dag in staff_day_overrides zonder tijden
-    // (= hele dag, alleen die dienst — "maandag geen brows, pedicures wél").
-    if (serviceId) {
-      const rows = [];
-      let curD = parseDate(from);
-      const endD = parseDate(blockForm.to || from);
-      while (curD <= endD) {
-        rows.push({
+    // Hele dag(en) mét dienst of mét wekelijkse herhaling: het legacy-JSON-
+    // model kent geen service_id/weekday, dus dit worden rijen in
+    // staff_day_overrides zonder tijden. Bij herhaling is het ÉÉN rij
+    // (weekday gezet, date = anker) — geen losse datums die ooit oplopen.
+    if (serviceId || repeatWeekday != null) {
+      let rows;
+      const reasonTxt = blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked");
+      if (repeatWeekday != null) {
+        rows = [{
           owner_id: salonData.owner_id,
           staff_id: staffId,
           service_id: serviceId,
-          date: fmt(curD),
+          weekday: repeatWeekday,
+          date: from,
           kind: "block",
-          reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked"),
-        });
-        curD.setDate(curD.getDate() + 1);
+          reason: reasonTxt,
+        }];
+      } else {
+        rows = [];
+        let curD = parseDate(from);
+        const endD = parseDate(blockForm.to || from);
+        while (curD <= endD) {
+          rows.push({
+            owner_id: salonData.owner_id,
+            staff_id: staffId,
+            service_id: serviceId,
+            date: fmt(curD),
+            kind: "block",
+            reason: reasonTxt,
+          });
+          curD.setDate(curD.getDate() + 1);
+        }
       }
       const { data: insertedRows, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
       setBlockSaving(false);
       if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
       update(d => { d.staff_blocks = [...(d.staff_blocks || []), ...(insertedRows || [])]; return d; });
       setBlockModalOpen(false);
-      toast.show(lang === "nl" ? "Dienst geblokkeerd voor die dag(en)" : lang === "es" ? "Tratamiento bloqueado para ese día" : "Treatment blocked for that day");
+      toast.show(repeatWeekday != null
+        ? (lang === "nl" ? "Wekelijkse blokkade ingesteld" : lang === "es" ? "Bloqueo semanal configurado" : "Weekly block set")
+        : (lang === "nl" ? "Dienst geblokkeerd voor die dag(en)" : lang === "es" ? "Tratamiento bloqueado para ese día" : "Treatment blocked for that day"));
       return;
     }
     // Full-day / date-range block path — untouched.
@@ -7064,15 +7085,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
+                <div style={{ display: "grid", gridTemplateColumns: blockForm.repeat ? "1fr" : "1fr 1fr", gap: 10 }}>
+                  <div><label style={lbl}>{blockForm.repeat ? (lang === "nl" ? "Vanaf" : lang === "es" ? "Desde" : "Starting") : (lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From")}</label>
                     <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
                   </div>
+                  {!blockForm.repeat && (
                   <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
                     <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
                   </div>
+                  )}
                 </div>
               )}
+              {/* Herhalen — "elke zondag dicht" / "elke woensdag geen brows".
+                  Eén terugkerende rij (weekday) i.p.v. losse datums: geldt
+                  elke week vanaf de gekozen datum tot de blokkade weg is. */}
+              {(() => {
+                const WD = lang === "nl"
+                  ? ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"]
+                  : lang === "es"
+                  ? ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
+                  : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                const wd = blockForm.from ? WD[parseDate(blockForm.from).getDay()] : null;
+                return (
+                  <div><label style={lbl}>{lang === "nl" ? "Herhalen?" : lang === "es" ? "¿Repetir?" : "Repeat?"}</label>
+                    <select className="input-field" value={blockForm.repeat ? "weekly" : "once"} onChange={e => setBlockForm(f => ({ ...f, repeat: e.target.value === "weekly" }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                      <option value="once">{lang === "nl" ? "Eenmalig" : lang === "es" ? "Una vez" : "One time"}</option>
+                      <option value="weekly">{wd ? (lang === "nl" ? `Elke ${wd}` : lang === "es" ? `Cada ${wd}` : `Every ${wd}`) : (lang === "nl" ? "Elke week op deze dag" : lang === "es" ? "Cada semana este día" : "Every week on this day")}</option>
+                    </select>
+                    {blockForm.repeat && wd && (
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                        {lang === "nl" ? `Geldt elke ${wd} vanaf de gekozen datum, totdat je de blokkade verwijdert.` : lang === "es" ? `Se aplica cada ${wd} desde la fecha elegida, hasta que elimines el bloqueo.` : `Applies every ${wd} from the chosen date until you remove the block.`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {(salonData.staff || []).length > 0 && (
                 <div><label style={lbl}>{lang === "nl" ? "Voor wie?" : lang === "es" ? "¿Quién?" : "Who?"}</label>
                   <select className="input-field" value={blockForm.staff_id} onChange={e => setBlockForm(f => ({ ...f, staff_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
@@ -9128,7 +9175,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   });
                 }
                 for (const b of (salonData.staff_blocks || [])) {
-                  if (b.date !== calDate) continue;
+                  if (!blockAppliesOn(b, calDate)) continue;
                   if (agendaStaff && b.staff_id !== agendaStaff) continue;
                   rawBlocks.push({
                     key: `sb-${b.id}`,
@@ -9485,7 +9532,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         // Dienst-specifieke blokkades ("geen brows vandaag") blokkeren
                         // de dag/medewerker niet als geheel — die tonen we alleen als
                         // banner in de dagweergave, niet als rood gestreepte dag.
-                        .filter(b => b.date === ds && !b.service_id && (!agendaStaff || b.staff_id === agendaStaff));
+                        .filter(b => blockAppliesOn(b, ds) && !b.service_id && (!agendaStaff || b.staff_id === agendaStaff));
                       const staffNameById = (id) => (salonData.staff || []).find(sm => sm.id === id)?.name || "";
                       const staffFullDayBlock = staffBlocksHere.find(b => !b.block_time_start);
                       const staffTimeBlocks = staffBlocksHere.filter(b => b.block_time_start);
@@ -9833,7 +9880,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Staff-authored block banners (staff_day_overrides). One card
                   per matching row so the owner can unblock each individually. */}
               {calViewMode !== "year" && (salonData.staff_blocks || [])
-                .filter(b => b.date === calDate && (!agendaStaff || b.staff_id === agendaStaff))
+                .filter(b => blockAppliesOn(b, calDate) && (!agendaStaff || b.staff_id === agendaStaff))
                 .map(b => {
                   const isTimeBlock = !!b.block_time_start;
                   const staffName = (salonData.staff || []).find(sm => sm.id === b.staff_id)?.name || "";
@@ -9841,7 +9888,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const svcRow = b.service_id ? (salonData.services || []).find(sv => sv.id === b.service_id) : null;
                   const svcLabel = svcRow ? (lang === "nl" ? (svcRow.name_nl || svcRow.name) : (svcRow.name_en || svcRow.name_nl || svcRow.name)) : null;
                   const removeBlock = async () => {
-                    if (!window.confirm(lang === "nl" ? `Deblokkade van ${staffName} verwijderen?` : lang === "es" ? `¿Quitar el bloqueo de ${staffName}?` : `Remove ${staffName}'s block?`)) return;
+                    const vraagNl = b.weekday != null ? "Dit is een wekelijkse blokkade — verwijderen stopt hem voor álle komende weken. Doorgaan?" : `Deblokkade van ${staffName} verwijderen?`;
+                    const vraagEs = b.weekday != null ? "Este bloqueo es semanal — al quitarlo desaparece para todas las semanas. ¿Continuar?" : `¿Quitar el bloqueo de ${staffName}?`;
+                    const vraagEn = b.weekday != null ? "This is a weekly block — removing it stops it for all future weeks. Continue?" : `Remove ${staffName}'s block?`;
+                    if (!window.confirm(lang === "nl" ? vraagNl : lang === "es" ? vraagEs : vraagEn)) return;
                     const { error } = await supabase.from("staff_day_overrides").delete().eq("id", b.id);
                     if (error) { toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "Error al eliminar" : "Delete failed", "error"); return; }
                     update(d => { d.staff_blocks = (d.staff_blocks || []).filter(x => x.id !== b.id); return d; });
@@ -9862,6 +9912,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `${staffName} bloqueó ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
                             : (lang === "nl" ? `${staffName} is vrij` : lang === "es" ? `${staffName} está libre` : `${staffName} is off`)}
                         </div>
+                        {b.weekday != null && (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.danger, letterSpacing: "0.04em", marginBottom: 2 }}>
+                            {lang === "nl" ? `↻ elke ${["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][b.weekday]}` : lang === "es" ? `↻ cada ${["domingo","lunes","martes","miércoles","jueves","viernes","sábado"][b.weekday]}` : `↻ every ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][b.weekday]}`}
+                          </div>
+                        )}
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
                           {b.reason || (lang === "nl" ? "Eigen blokkade — geen reden opgegeven" : lang === "es" ? "Bloqueo propio — sin motivo indicado" : "Own block — no reason given")}
                         </div>

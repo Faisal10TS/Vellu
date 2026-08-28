@@ -11,7 +11,7 @@ import {
   getToday, fmt, parseDate, getDays,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk
+  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
 } from "./shared.jsx";
 
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
@@ -470,6 +470,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Day override helpers (blocked/exception days)
   const dayOverrides = initialSalon.day_overrides || {};
   const isDayBlocked = (dateStr) => {
+    // Rij-gebaseerde hele-dag-salonblokkade — o.a. de wekelijkse ("elke
+    // zondag dicht"): salonbreed (geen staff), geen dienst, geen tijden.
+    for (const b of initialSalon.staff_blocks || []) {
+      if (b.staff_id || b.service_id) continue;
+      if (b.block_time_start && b.block_time_end) continue;
+      if (blockAppliesOn(b, dateStr)) return true;
+    }
     const override = dayOverrides[dateStr];
     if (!override || override.type !== "blocked") return false;
     // If it has specific time bounds, it's a time-slot block, NOT a full-day block
@@ -491,7 +498,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // are salon-wide time blocks. Iterate through every match on this date
     // so multiple windows (e.g. 10-11 AND 14-15) all take effect.
     for (const b of initialSalon.staff_blocks || []) {
-      if (b.date !== dateStr) continue;
+      if (!blockAppliesOn(b, dateStr)) continue;
       if (b.staff_id) continue;
       // Dienst-specifieke blokkades gelden niet salon-breed — die worden per
       // dienst in de slot-berekening getoetst (getAvailableTimes).
@@ -1644,7 +1651,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // NULL = niemand doet die dienst dan (één behandelkamer, bezet).
     const svcBlocks = [];
     for (const b of initialSalon.staff_blocks || []) {
-      if (b.date !== forDate) continue;
+      if (!blockAppliesOn(b, forDate)) continue;
       if (b.service_id) {
         svcBlocks.push({
           staffId: b.staff_id || null,

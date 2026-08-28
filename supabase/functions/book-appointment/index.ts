@@ -728,16 +728,22 @@ serve(async (req) => {
   // A stylist can mark themselves off (whole day) or block a time window even
   // when the salon is open. If any staff involved in this booking has a
   // matching block on this date, reject the booking.
+  // Terugkerende blokkades ("elke zondag"): weekday-rijen gelden elke week op
+  // die dag vanaf hun ankerdatum. De query haalt beide vormen op; de
+  // ankercheck (date >= b.date) gebeurt hieronder in JS.
+  const blokGeldtVandaag = (b: any) =>
+    b.weekday == null ? b.date === date : (b.weekday === dayOfWeek && date >= b.date);
   if (staffIdsFlat.length > 0) {
-    const { data: staffBlocks, error: sbErr } = await supabase
+    const { data: staffBlocksRaw, error: sbErr } = await supabase
       .from("staff_day_overrides")
-      .select("staff_id, service_id, block_time_start, block_time_end")
+      .select("staff_id, service_id, weekday, date, block_time_start, block_time_end")
       .in("staff_id", staffIdsFlat)
-      .eq("date", date)
+      .or(`date.eq.${date},weekday.eq.${dayOfWeek}`)
       // kind='exception' rows are EXTRA availability, not blocks — without
       // this filter every exception day would reject its own bookings.
       .eq("kind", "block");
     if (sbErr) return err(500, "db_error_staff_blocks", origin);
+    const staffBlocks = (staffBlocksRaw || []).filter(blokGeldtVandaag);
     for (const b of staffBlocks || []) {
       if (b.service_id) {
         // Dienst-specifieke blokkade ("maandag geen brows voor Demi"): alleen
@@ -761,14 +767,15 @@ serve(async (req) => {
   // Salon-wide time blocks live as staff_day_overrides rows with staff_id IS
   // NULL. Multiple rows per date are supported so the owner can carve out
   // several unavailable windows (e.g. 10-11 AND 14-15).
-  const { data: salonBlocks, error: sbErrAll } = await supabase
+  const { data: salonBlocksRaw, error: sbErrAll } = await supabase
     .from("staff_day_overrides")
-    .select("service_id, block_time_start, block_time_end")
+    .select("service_id, weekday, date, block_time_start, block_time_end")
     .is("staff_id", null)
     .eq("owner_id", salon.id)
-    .eq("date", date)
+    .or(`date.eq.${date},weekday.eq.${dayOfWeek}`)
     .eq("kind", "block");
   if (sbErrAll) return err(500, "db_error_salon_blocks", origin);
+  const salonBlocks = (salonBlocksRaw || []).filter(blokGeldtVandaag);
   for (const b of salonBlocks || []) {
     if (b.service_id) {
       // Salonbrede dienst-blokkade (staff_id NULL + service_id): niemand
@@ -781,7 +788,10 @@ serve(async (req) => {
       if (ps < toMinutes(b.block_time_end) && pe > toMinutes(b.block_time_start)) return err(400, "service_day_blocked", origin);
       continue;
     }
-    if (!b.block_time_start || !b.block_time_end) continue;
+    // Rij-gebaseerde hele-dag-salonblokkade (bestond eerst alleen als legacy
+    // JSON; wekelijkse blokkades maken hem nu ook als rij aan): geen tijden
+    // en geen dienst = de salon is die dag dicht.
+    if (!b.block_time_start || !b.block_time_end) return err(400, "day_blocked", origin);
     const blockStart = toMinutes(b.block_time_start);
     const blockEnd = toMinutes(b.block_time_end);
     if (apptStartMin < blockEnd && apptEndMin > blockStart) return err(400, "slot_blocked", origin);

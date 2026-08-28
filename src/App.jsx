@@ -519,7 +519,9 @@ function SalonRoute({ lang, setLang }) {
         supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position"),
         // fmt = LOCAL date. toISOString() is UTC: late-evening in a UTC-negative
         // timezone it says "tomorrow" and silently drops TODAY's staff blocks.
-        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).gte("date", fmt(new Date())),
+        // Ook terugkerende blokkades (weekday gezet) meenemen — hun anker-
+        // datum kan in het verleden liggen en zou anders uit de gte vallen.
+        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${fmt(new Date())},weekday.not.is.null`),
       ]);
       setSalon({
         id: data.slug,
