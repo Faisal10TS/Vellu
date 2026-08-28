@@ -3622,6 +3622,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Edit states
   const [editingService, setEditingService] = useState(null);
   const [expandedServiceId, setExpandedServiceId] = useState(null);
+  // Dienst-editor in vier segmenten (Prijzen · Extra's · Team · Foto's) —
+  // herontwerp 28-08 na Faisals mockup-akkoord. svcSeg = actieve tab;
+  // variantPriceFold = variant-id waarvan de per-teamlid-prijzen open staan;
+  // svcCatFilter = categorie-filterchip boven de dienstenlijst.
+  const [svcSeg, setSvcSeg] = useState("prijzen");
+  const [svcCatFilter, setSvcCatFilter] = useState("all");
+  const [variantPriceFold, setVariantPriceFold] = useState(null);
+  useEffect(() => { setSvcSeg("prijzen"); setVariantPriceFold(null); }, [expandedServiceId]);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
@@ -12281,6 +12289,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const uncat = [];
                   for (const s of salonData.services) {
                     if (!matches(s)) continue;
+                    // Categorie-filterchip: alleen de gekozen categorie tonen.
+                    if (svcCatFilter !== "all" && (svcCatFilter === "__uncat" ? s.category_id : s.category_id !== svcCatFilter)) continue;
                     if (s.category_id) {
                       if (!buckets.has(s.category_id)) buckets.set(s.category_id, []);
                       buckets.get(s.category_id).push(s);
@@ -12399,19 +12409,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ) : (
                         <>
                           {/* ── HEADER ROW — always visible ── */}
+                          {/* Eén rustige rij (herontwerp 28-08): foto, naam, meta,
+                              prijs, pijl. De actieknoppen (bewerk/verberg/verwijder)
+                              staan pas in het uitgeklapte deel — zo past de rij ook
+                              op een telefoon zonder de naamkolom plat te drukken. */}
                           <div style={{
-                            display: "flex", flexDirection: isMobile ? "column" : "row",
-                            alignItems: isMobile ? "stretch" : "center", gap: 10,
+                            display: "flex", alignItems: "center", gap: 10,
                             padding: isMobile ? 12 : 16, cursor: "pointer",
                             background: isExpanded ? `${accent}08` : "transparent",
                             transition: "background 0.15s"
                           }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
-                          {/* Op smalle schermen drukten prijs + vier knoppen de
-                              naamkolom naar 0px (naam onzichtbaar, meta verticaal
-                              gestapeld) — vandaar deze twee-regel-layout op mobiel:
-                              regel 1 = foto + naam + meta, regel 2 = prijs + acties.
-                              Desktop houdt de oude één-regel-indeling. */}
-                          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                             {/* Drag handle — only renders when there's more than one
                                 service to reorder; single-service salons don't need it. */}
                             {salonData.services.length > 1 && (
@@ -12431,6 +12438,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 {s.visible === false && (
                                   <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 999, border: `1px solid ${c.border}`, color: c.textMuted }}>
                                     {lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden"}
+                                  </span>
+                                )}
+                                {(salonData.staff || []).some(mm => (mm.price_overrides || []).some(o => o.service_id === s.id)) && (
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 999, border: `1px solid ${accent}55`, color: accent, background: `${accent}10` }}>
+                                    {lang === "nl" ? "Teamprijzen" : lang === "es" ? "Precios de equipo" : "Team prices"}
                                   </span>
                                 )}
                                 <span>{s.duration} {t.min}</span>
@@ -12466,69 +12478,57 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 )}
                               </div>
                             </div>
-                            {isMobile && (
-                              <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                              </div>
-                            )}
-                          </div>
-                          {/* Regel 2 (mobiel) / rechterdeel (desktop): prijs + acties */}
-                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 19 : 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
-                            {/* Actions */}
-                            <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                              {/* Zichtbaarheid — "on hold" zonder de dienst kwijt te
-                                  raken: prijs, duur, vertalingen, varianten en de
-                                  historie blijven staan, alleen klanten zien hem niet
-                                  meer en kunnen hem niet boeken (book-appointment
-                                  weigert een verborgen service_id). Handig bij
-                                  seizoenspauze, verlof of een behandeling die je nog
-                                  niet aanbiedt. Schrijft direct weg, net als het
-                                  oogje bij producten; visible heeft default true dus
-                                  bestaande diensten staan gewoon online. */}
-                              <button type="button" onClick={async () => {
-                                const next = s.visible === false;
-                                const { error } = await supabase.from("services").update({ visible: next }).eq("id", s.id);
-                                if (error) { toast.show(t.somethingWrong, "error"); return; }
-                                update(d => { d.services = d.services.map(x => x.id === s.id ? { ...x, visible: next } : x); return d; });
-                              }} title={s.visible !== false
-                                ? (lang === "nl" ? "Zichtbaar — klanten kunnen dit boeken"
-                                  : lang === "es" ? "Visible — los clientes pueden reservarlo"
-                                  : "Visible — clients can book this")
-                                : (lang === "nl" ? "Verborgen — niet op je boekingspagina, wel in je eigen agenda"
-                                  : lang === "es" ? "Oculto — no en tu página de reservas, sí en tu agenda"
-                                  : "Hidden — not on your booking page, still in your own calendar")}
-                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${s.visible !== false ? `${accent}55` : c.inputBorder}`, background: "transparent", color: s.visible !== false ? accent : c.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", opacity: s.visible !== false ? 1 : 0.55 }}>
-                                <NavIcon name="eye" size={13} color="currentColor" />
-                              </button>
-                              <button onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", description_nl: s.description_nl || "", description_en: s.description_en || "", price: s.price, duration: s.duration, category_id: s.category_id || "" }); setExpandedServiceId(null); }}
-                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
-                                title={lang === "nl" ? "Bewerken" : lang === "es" ? "Editar" : "Edit"}>
-                                <NavIcon name="edit" size={13} color="currentColor" />
-                              </button>
-                              <button onClick={async () => { if (await showConfirm(lang === "nl" ? "Dienst verwijderen?" : lang === "es" ? "¿Eliminar servicio?" : "Delete service?")) deleteService(s.id); }}
-                                style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
-                                title={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}>
-                                <NavIcon name="xmark" size={13} color="currentColor" />
-                              </button>
-                              {!isMobile && (
-                              <div role="button" tabIndex={0}
-                                onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}
-                                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedServiceId(isExpanded ? null : s.id); } }}
-                                title={isExpanded ? (lang === "nl" ? "Inklappen" : lang === "es" ? "Contraer" : "Collapse") : (lang === "nl" ? "Uitklappen" : lang === "es" ? "Expandir" : "Expand")}
-                                style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, cursor: "pointer", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                              </div>
-                              )}
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 16 : 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>{displayPrice}</div>
+                            <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                             </div>
                           </div>
-                          </div>
-
-                          {/* ── EXPANDED CONTENT ── */}
+                          {/* ── EXPANDED CONTENT — vier segmenten ── */}
                           {isExpanded && (
-                            <div style={{ padding: "0 16px 18px", borderTop: `1px solid ${c.border}` }}>
+                            <div style={{ padding: "0 16px 18px", borderTop: `1px solid ${c.border}` }} onClick={e => e.stopPropagation()}>
+                              {/* Actiebalk: de knoppen die eerst de rij verstopten */}
+                              <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
+                                <button className="btn-ghost" style={{ fontSize: 10, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6 }}
+                                  onClick={() => { setEditingService(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", description_nl: s.description_nl || "", description_en: s.description_en || "", price: s.price, duration: s.duration, category_id: s.category_id || "" }); setExpandedServiceId(null); }}>
+                                  <NavIcon name="edit" size={11} color="currentColor" /> {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
+                                </button>
+                                <button className="btn-ghost" style={{ fontSize: 10, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6, color: s.visible !== false ? accent : c.textMuted, borderColor: s.visible !== false ? `${accent}55` : c.inputBorder }}
+                                  onClick={async () => {
+                                    const next = s.visible === false;
+                                    const { error } = await supabase.from("services").update({ visible: next }).eq("id", s.id);
+                                    if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                    update(d => { d.services = d.services.map(x => x.id === s.id ? { ...x, visible: next } : x); return d; });
+                                  }}>
+                                  <NavIcon name="eye" size={11} color="currentColor" /> {s.visible !== false ? (lang === "nl" ? "Zichtbaar" : lang === "es" ? "Visible" : "Visible") : (lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden")}
+                                </button>
+                                <button className="btn-ghost" style={{ fontSize: 10, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6, color: c.danger, borderColor: `${c.danger}44` }}
+                                  onClick={async () => { if (await showConfirm(lang === "nl" ? "Dienst verwijderen?" : lang === "es" ? "¿Eliminar servicio?" : "Delete service?")) deleteService(s.id); }}>
+                                  <NavIcon name="xmark" size={11} color="currentColor" /> {lang === "nl" ? "Verwijder" : lang === "es" ? "Eliminar" : "Delete"}
+                                </button>
+                              </div>
+                              {/* Segmenten: alles over deze dienst in vier tabjes */}
+                              {(() => {
+                                const teamLeden = (salonData.staff || []).filter(m => m.active !== false);
+                                const segs = [
+                                  { k: "prijzen", nl: "Prijzen", en: "Prices", es: "Precios" },
+                                  { k: "extras", nl: "Extra's", en: "Extras", es: "Extras" },
+                                  ...(teamLeden.length > 0 ? [{ k: "team", nl: "Team", en: "Team", es: "Equipo" }] : []),
+                                  { k: "fotos", nl: "Foto's", en: "Photos", es: "Fotos" },
+                                ];
+                                return (
+                                  <div style={{ display: "flex", gap: 4, background: c.inputBg, border: `1px solid ${c.border}`, borderRadius: 100, padding: 4, marginTop: 14 }}>
+                                    {segs.map(sg => (
+                                      <button key={sg.k} type="button" onClick={() => setSvcSeg(sg.k)}
+                                        style={{ flex: 1, border: "none", borderRadius: 100, padding: "7px 0", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif",
+                                          background: svcSeg === sg.k ? accent : "transparent", color: svcSeg === sg.k ? c.btnOnDark : c.textSub, transition: "all 0.15s" }}>
+                                        {lang === "nl" ? sg.nl : lang === "es" ? sg.es : sg.en}
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                               {/* VARIANTS */}
-                              <div style={{ marginTop: 18 }}>
+                              <div style={{ marginTop: 18, display: svcSeg === "prijzen" ? undefined : "none" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.variants}</div>
                                   <div style={{ fontSize: 10, color: c.textMuted }}>{variantCount}</div>
@@ -12597,6 +12597,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             </div>
                                           </div>
                                         ) : (
+                                          <div>
                                           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -12621,6 +12622,66 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               </button>
                                             </div>
                                           </div>
+                                          {/* Prijs per teamlid, per variant — dé oplossing voor
+                                              salons waar alles varianten zijn (TTNB): collega 1
+                                              doet de full set voor 55, collega 2 voor 45. */}
+                                          {(() => {
+                                            const leden = (salonData.staff || []).filter(mm => mm.active !== false);
+                                            if (leden.length === 0) return null;
+                                            const afwijkend = leden.filter(mm => (mm.price_overrides || []).some(o => o.service_id === s.id && o.variant_id === v.id)).length;
+                                            const open = variantPriceFold === v.id;
+                                            return (
+                                              <div style={{ marginTop: 4, marginLeft: 30 }}>
+                                                <button type="button" onClick={() => setVariantPriceFold(open ? null : v.id)}
+                                                  style={{ background: "transparent", border: "none", color: accent, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 2, fontFamily: "'Jost',sans-serif" }}>
+                                                  {open ? "▾" : "▸"} {lang === "nl" ? "Prijs per teamlid" : lang === "es" ? "Precio por profesional" : "Price per staff member"}{afwijkend > 0 ? ` · ${afwijkend} ${lang === "nl" ? "afwijkend" : lang === "es" ? "distinto" : "custom"}` : ""}
+                                                </button>
+                                                {open && (
+                                                  <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: c.bg, border: `1px dashed ${c.border}`, borderRadius: 10, marginTop: 4 }}>
+                                                    {leden.map(mm => {
+                                                      const ov = (mm.price_overrides || []).find(o => o.service_id === s.id && o.variant_id === v.id);
+                                                      return (
+                                                        <div key={mm.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                          <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mm.name}</div>
+                                                          <input className="input-field" type="number" min="0" step="0.01"
+                                                            key={`${mm.id}:${v.id}:${ov ? ov.price : "std"}`}
+                                                            defaultValue={ov ? ov.price : ""}
+                                                            placeholder={`${cur}${parseFloat(v.price || 0).toFixed(2)}`}
+                                                            onBlur={async ev2 => {
+                                                              const raw = ev2.target.value.trim();
+                                                              const had = ov ? parseFloat(ov.price) : null;
+                                                              if (raw === "") {
+                                                                if (had == null) return;
+                                                                const { error } = await supabase.from("staff_service_prices").delete().eq("staff_id", mm.id).eq("service_id", s.id).eq("variant_id", v.id);
+                                                                if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                                update(d => { d.staff = d.staff.map(x => x.id === mm.id ? { ...x, price_overrides: (x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)) } : x); return d; });
+                                                                toast.show(lang === "nl" ? `${mm.name} rekent weer de variantprijs` : lang === "es" ? `${mm.name} vuelve al precio de la variante` : `${mm.name} is back on the variant price`);
+                                                                return;
+                                                              }
+                                                              const val = parseFloat(raw);
+                                                              if (!Number.isFinite(val) || val < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+                                                              if (had != null && Math.abs(val - had) < 0.005) return;
+                                                              const { error } = await supabase.from("staff_service_prices").upsert(
+                                                                { staff_id: mm.id, service_id: s.id, variant_id: v.id, price: val },
+                                                                { onConflict: "staff_id,service_id,variant_id" }
+                                                              );
+                                                              if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                              update(d => { d.staff = d.staff.map(x => x.id === mm.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)), { service_id: s.id, variant_id: v.id, price: val }] } : x); return d; });
+                                                              toast.show(lang === "nl" ? `${mm.name}: ${cur}${val.toFixed(2)} voor deze variant` : lang === "es" ? `${mm.name}: ${cur}${val.toFixed(2)} para esta variante` : `${mm.name}: ${cur}${val.toFixed(2)} for this variant`);
+                                                            }}
+                                                            style={{ width: 120, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
+                                                        </div>
+                                                      );
+                                                    })}
+                                                    <div style={{ fontSize: 10, color: c.textMuted }}>
+                                                      {lang === "nl" ? `Leeg = variantprijs (${cur}${parseFloat(v.price || 0).toFixed(2)}). De klant ziet de prijs van de gekozen medewerker.` : lang === "es" ? `Vacío = precio de la variante (${cur}${parseFloat(v.price || 0).toFixed(2)}).` : `Empty = variant price (${cur}${parseFloat(v.price || 0).toFixed(2)}). Clients see the chosen staff member's price.`}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+                                          </div>
                                         )}
                                       </div>
                                         )}
@@ -12637,26 +12698,61 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 </div>
                               </div>
 
-                              {/* PRIJS PER MEDEWERKER — afwijkende prijs voor dezelfde
-                                  dienst per teamlid ("collega 1 doet manicure voor 55,
-                                  collega 2 voor 45"). Leeg veld = standaardprijs; opslaan
-                                  gebeurt direct bij het verlaten van het veld. */}
-                              {(salonData.staff || []).filter(m => m.active !== false).length > 0 && (
-                                <div style={{ marginTop: 20 }}>
-                                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 10 }}>
-                                    {lang === "nl" ? "Prijs per medewerker" : lang === "es" ? "Precio por profesional" : "Price per staff member"}
-                                  </div>
-                                  {(s.variants || []).length > 0 ? (
-                                    <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>
-                                      {lang === "nl" ? "Deze dienst gebruikt varianten — de variantprijs geldt voor iedereen." : lang === "es" ? "Este tratamiento usa variantes — el precio de la variante aplica a todos." : "This service uses variants — the variant price applies to everyone."}
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                      {(salonData.staff || []).filter(m => m.active !== false).map(m => {
-                                        const ovRow = (m.price_overrides || []).find(o => o.service_id === s.id && !o.variant_id);
-                                        return (
-                                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                            <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                              {/* TEAM-TAB — alles over deze dienst per teamlid op één
+                                  plek: voert-uit-schuifje (staff_services), prijs
+                                  (staff_service_prices, alleen bij diensten zonder
+                                  varianten — met varianten staan de prijzen onder
+                                  Prijzen) en extra-uitzonderingen (tikbare chips). */}
+                              {svcSeg === "team" && (
+                                <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                                  {(salonData.staff || []).filter(m => m.active !== false).map(m => {
+                                    const doetAlles = (m.service_ids || []).length === 0;
+                                    const doetDienst = doetAlles || (m.service_ids || []).includes(s.id);
+                                    const ovRow = (m.price_overrides || []).find(o => o.service_id === s.id && !o.variant_id);
+                                    const toggleDoet = async () => {
+                                      if (doetDienst) {
+                                        if (doetAlles) {
+                                          // "Doet alles" is impliciet (nul rijen) — materialiseer
+                                          // eerst rijen voor alle ándere diensten, dan valt deze af.
+                                          const anderen = salonData.services.filter(x => x.id !== s.id).map(x => ({ staff_id: m.id, service_id: x.id }));
+                                          if (anderen.length === 0) { toast.show(lang === "nl" ? "Dit is de enige dienst — voeg eerst een andere dienst toe." : lang === "es" ? "Este es el único tratamiento — añade otro primero." : "This is the only service — add another one first.", "error"); return; }
+                                          const { error } = await supabase.from("staff_services").insert(anderen);
+                                          if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                          update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, service_ids: anderen.map(a => a.service_id) } : x); return d; });
+                                        } else {
+                                          const { error } = await supabase.from("staff_services").delete().eq("staff_id", m.id).eq("service_id", s.id);
+                                          if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                          update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, service_ids: (x.service_ids || []).filter(id => id !== s.id) } : x); return d; });
+                                        }
+                                      } else {
+                                        const { error } = await supabase.from("staff_services").insert({ staff_id: m.id, service_id: s.id });
+                                        if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                        update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, service_ids: [...(x.service_ids || []), s.id] } : x); return d; });
+                                      }
+                                    };
+                                    return (
+                                      <div key={m.id} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12, opacity: doetDienst ? 1 : 0.6 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${accent}22`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{(m.name || "?").trim().slice(0, 1).toUpperCase()}</div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{m.name}</div>
+                                            {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                                          </div>
+                                          <div role="switch" aria-checked={doetDienst} tabIndex={0} onClick={toggleDoet}
+                                            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDoet(); } }}
+                                            title={doetDienst ? (lang === "nl" ? "Voert deze dienst uit" : lang === "es" ? "Realiza este tratamiento" : "Performs this service") : (lang === "nl" ? "Doet deze dienst niet" : lang === "es" ? "No realiza este tratamiento" : "Doesn't do this service")}
+                                            style={{ width: 38, height: 22, borderRadius: 100, background: doetDienst ? accent : c.inputBorder, position: "relative", cursor: "pointer", flexShrink: 0, transition: "background 0.15s" }}>
+                                            <div style={{ position: "absolute", top: 3, left: doetDienst ? 19 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.15s" }} />
+                                          </div>
+                                        </div>
+                                        {!doetDienst && (
+                                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>
+                                            {lang === "nl" ? `Klanten kunnen ${m.name} niet kiezen voor deze dienst.` : lang === "es" ? `Los clientes no pueden elegir a ${m.name} para este tratamiento.` : `Clients can't pick ${m.name} for this service.`}
+                                          </div>
+                                        )}
+                                        {doetDienst && (s.variants || []).length === 0 && (
+                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${c.border}` }}>
+                                            <div style={{ fontSize: 11, color: c.textSub }}>{lang === "nl" ? "Prijs" : lang === "es" ? "Precio" : "Price"}</div>
                                             <input className="input-field" type="number" min="0" step="0.01"
                                               key={`${m.id}:${s.id}:${ovRow ? ovRow.price : "std"}`}
                                               defaultValue={ovRow ? ovRow.price : ""}
@@ -12683,20 +12779,57 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && !o.variant_id)), { service_id: s.id, variant_id: null, price: val }] } : x); return d; });
                                                 toast.show(lang === "nl" ? `${m.name}: ${cur}${val.toFixed(2)} voor deze dienst` : lang === "es" ? `${m.name}: ${cur}${val.toFixed(2)} para este tratamiento` : `${m.name}: ${cur}${val.toFixed(2)} for this service`);
                                               }}
-                                              style={{ width: 130, fontSize: 12, padding: "8px 10px", textAlign: "right" }} />
+                                              style={{ width: 120, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
                                           </div>
-                                        );
-                                      })}
-                                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
-                                        {lang === "nl" ? "Leeg = standaardprijs. De klant ziet de prijs van de gekozen medewerker op de boekingspagina." : lang === "es" ? "Vacío = precio estándar. El cliente ve el precio del profesional elegido." : "Empty = default price. Clients see the chosen staff member's price on the booking page."}
+                                        )}
+                                        {doetDienst && (s.variants || []).length > 0 && (
+                                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8 }}>
+                                            {lang === "nl" ? "Prijzen per variant stel je in onder het tabje Prijzen." : lang === "es" ? "Los precios por variante se ajustan en la pestaña Precios." : "Per-variant prices live under the Prices tab."}
+                                          </div>
+                                        )}
+                                        {doetDienst && (s.extras || []).length > 0 && (
+                                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${c.border}` }}>
+                                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
+                                              {lang === "nl" ? "Extra's die zij doet" : lang === "es" ? "Extras que realiza" : "Extras they perform"}
+                                            </div>
+                                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                              {(s.extras || []).map(ex => {
+                                                const uit = (ex.excluded_staff_ids || []).includes(m.id);
+                                                const naam = lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl);
+                                                return (
+                                                  <div key={ex.id} onClick={async () => {
+                                                    if (uit) {
+                                                      const { error } = await supabase.from("staff_extra_exclusions").delete().eq("staff_id", m.id).eq("extra_id", ex.id);
+                                                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                    } else {
+                                                      const { error } = await supabase.from("staff_extra_exclusions").insert({ staff_id: m.id, extra_id: ex.id });
+                                                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                    }
+                                                    update(d => { d.services = d.services.map(svc => svc.id === s.id ? { ...svc, extras: svc.extras.map(x => x.id === ex.id ? { ...x, excluded_staff_ids: uit ? (x.excluded_staff_ids || []).filter(id => id !== m.id) : [...(x.excluded_staff_ids || []), m.id] } : x) } : svc); return d; });
+                                                  }}
+                                                    style={{ padding: "5px 11px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 500,
+                                                      border: `1px solid ${uit ? c.border : accent}`,
+                                                      background: uit ? "transparent" : `${accent}14`,
+                                                      color: uit ? c.textMuted : accent,
+                                                      textDecoration: uit ? "line-through" : "none", transition: "all 0.15s" }}>
+                                                    {naam}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                    </div>
-                                  )}
+                                    );
+                                  })}
+                                  <div style={{ fontSize: 10, color: c.textMuted }}>
+                                    {lang === "nl" ? "Doorgestreepte extra's doet dit teamlid niet; een lege prijs = standaardprijs." : lang === "es" ? "Los extras tachados no los realiza; precio vacío = precio estándar." : "Struck-through extras aren't performed by this member; empty price = default price."}
+                                  </div>
                                 </div>
                               )}
 
                               {/* EXTRAS */}
-                              <div style={{ marginTop: 20 }}>
+                              <div style={{ marginTop: 20, display: svcSeg === "extras" ? undefined : "none" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{t.extras}</div>
                                   <div style={{ fontSize: 10, color: c.textMuted }}>{extrasCount}</div>
@@ -12845,7 +12978,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </div>
 
                               {/* PHOTOS */}
-                              <div style={{ marginTop: 20 }}>
+                              <div style={{ marginTop: 20, display: svcSeg === "fotos" ? undefined : "none" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>{lang === "nl" ? "Foto's" : lang === "es" ? "Fotos" : "Photos"}</div>
                                   <div style={{ fontSize: 10, color: c.textMuted }}>{photoCount}</div>
@@ -12897,6 +13030,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   };
                   return (
                     <div>
+                      {/* Categorie-filterchips — sneller navigeren dan accordeons
+                          openklappen; "Alles" toont de vertrouwde groepsweergave. */}
+                      {(salonData.categories || []).length > 0 && (
+                        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                          {[{ id: "all", label: lang === "nl" ? "Alles" : lang === "es" ? "Todo" : "All" },
+                            ...(salonData.categories || []).map(cat => ({ id: cat.id, label: lang === "nl" ? (cat.name_nl || cat.name_en) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl) })),
+                            ...(salonData.services.some(sv => !sv.category_id) ? [{ id: "__uncat", label: lang === "nl" ? "Zonder categorie" : lang === "es" ? "Sin categoría" : "Uncategorised" }] : [])
+                          ].map(chp => {
+                            const actief = svcCatFilter === chp.id;
+                            return (
+                              <button key={chp.id} type="button" onClick={() => setSvcCatFilter(actief && chp.id !== "all" ? "all" : chp.id)}
+                                style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'Jost',sans-serif", whiteSpace: "nowrap",
+                                  background: actief ? accent : "transparent", color: actief ? c.btnOnDark : c.textSub,
+                                  border: `1px solid ${actief ? accent : c.border}`, transition: "all 0.15s" }}>
+                                {chp.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       {groups.map((g) => {
                         const isCollapsed = collapsedGroups.has(g.key);
                         return (
