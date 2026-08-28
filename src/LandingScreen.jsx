@@ -345,7 +345,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               <div className="bento-card vl-glow" onMouseMove={glowMove} style={{ padding: "24px 22px", background: `linear-gradient(160deg, ${ACCENT}14, transparent 70%)`, border: `1px solid ${ACCENT}33`, borderRadius: 20, display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", boxSizing: "border-box" }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 64, fontWeight: 300, color: ACCENT, lineHeight: 1 }}>0%</div>
                 <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>{lang === "nl" ? "Commissie" : lang === "es" ? "Comisión" : "Commission"}</div>
-                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke euro van elke boeking blijft van jou." : lang === "es" ? "Tarifa mensual fija. Cada euro de cada reserva es tuyo." : "Flat monthly fee. Every euro of every booking stays yours."}</div>
+                <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.6 }}>{lang === "nl" ? "Vast maandtarief. Elke cent van elke boeking blijft van jou." : lang === "es" ? "Tarifa mensual fija. Cada centavo de cada reserva es tuyo." : "Flat monthly fee. Every cent of every booking stays yours."}</div>
               </div>
               </Reveal>
               {/* Supporting tiles */}
