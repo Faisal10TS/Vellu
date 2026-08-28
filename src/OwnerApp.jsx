@@ -3629,9 +3629,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [svcSeg, setSvcSeg] = useState("prijzen");
   const [svcCatFilter, setSvcCatFilter] = useState("all");
   const [variantPriceFold, setVariantPriceFold] = useState(null);
-  // Categoriebeheer standaard ingeklapt: de filterchips zijn de dagelijkse
-  // navigatie; hernoemen/ordenen is uitzondering en duwde de lijst omlaag.
-  const [catMgrOpen, setCatMgrOpen] = useState(false);
   useEffect(() => { setSvcSeg("prijzen"); setVariantPriceFold(null); }, [expandedServiceId]);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
@@ -12089,136 +12086,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 return true;
               }} />
 
-              {/* ── CATEGORIES ── compact CRUD; used to group services on the public page */}
-              <div style={{ marginBottom: 20 }}>
-                <button type="button" onClick={() => setCatMgrOpen(o => !o)}
-                  style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, background: "transparent", border: "none", cursor: "pointer", padding: 0, fontFamily: "'Jost',sans-serif" }}>
-                  <span style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>
-                    {lang === "nl" ? "Categorieën beheren" : lang === "es" ? "Gestionar categorías" : "Manage categories"}
-                  </span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, color: c.textMuted }}>
-                    {(salonData.categories || []).length}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: catMgrOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><polyline points="6 9 12 15 18 9" /></svg>
-                  </span>
-                </button>
-                <div style={{ display: (catMgrOpen || (salonData.categories || []).length === 0) ? undefined : "none" }}>
-                {(salonData.categories || []).length === 0 && !showNewCategoryForm && (
-                  <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic", padding: "6px 2px 10px" }}>
-                    {lang === "nl" ? "Nog geen categorieën. Groepeer je diensten (bv. Nagels, Brows) zodat klanten makkelijker kunnen kiezen." : lang === "es" ? "Aún no hay categorías. Agrupa tus servicios (p. ej. Uñas, Cejas) para que los clientes puedan explorar más rápido." : "No categories yet. Group your services (e.g. Nails, Brows) so clients can browse faster."}
-                  </div>
-                )}
-                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
-                <SortableContext items={(salonData.categories || []).map(x => x.id)} strategy={verticalListSortingStrategy}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
-                  {(salonData.categories || []).map(cat => (
-                    <SortableService key={cat.id} id={cat.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
-                    <div ref={setNodeRef} style={sortStyle}>
-                      {editingCategoryId === cat.id ? (
-                        <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
-                          <div style={{ marginBottom: 8 }}>
-                            <AutoTranslateField
-                              nlValue={editCategoryForm.name_nl}
-                              enValue={editCategoryForm.name_en}
-                              setNl={v => setEditCategoryForm(f => ({...f, name_nl: v}))}
-                              setEn={v => setEditCategoryForm(f => ({...f, name_en: v}))}
-                              lang={lang} accent={accent}
-                              placeholder={lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}
-                            />
-                          </div>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                              const primary = lang === "nl" ? editCategoryForm.name_nl : editCategoryForm.name_en;
-                              if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : lang === "es" ? "El nombre es obligatorio" : "Name is required", "error"); return; }
-                              const filled = await autoFillTranslations(editCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
-                              const nlName = (filled.name_nl || filled.name_en || "").trim();
-                              const enName = (filled.name_en || "").trim();
-                              const esName = (filled.name_es || "").trim();
-                              const { error } = await supabase.from("service_categories").update({ name_nl: nlName, name_en: enName || null, name_es: esName || null }).eq("id", cat.id);
-                              if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: nlName, name_en: enName || null, name_es: esName || null} : x); return d; });
-                              setEditingCategoryId(null);
-                            }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
-                            <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingCategoryId(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
-                          {(salonData.categories || []).length > 1 && (
-                            <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? (cat.name_nl || cat.name_en) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl) : (cat.name_en || cat.name_nl)}</div>
-                          </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => { setEditingCategoryId(cat.id); setEditCategoryForm({ name_nl: cat.name_nl, name_en: cat.name_en || "" }); }}
-                              style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                              title={lang === "nl" ? "Bewerken" : lang === "es" ? "Editar" : "Edit"}>
-                              <NavIcon name="edit" size={11} color="currentColor" />
-                            </button>
-                            <button onClick={async () => {
-                              const used = (salonData.services || []).some(sv => sv.category_id === cat.id);
-                              const msg = used
-                                ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : lang === "es" ? `La categoría "${cat.name_es || cat.name_en || cat.name_nl}" está en uso. Los servicios quedarán sin agrupar. ¿Continuar?` : `Category "${cat.name_en || cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
-                                : (lang === "nl" ? "Categorie verwijderen?" : lang === "es" ? "¿Eliminar categoría?" : "Delete category?");
-                              if (!(await showConfirm(msg))) return;
-                              const { error } = await supabase.from("service_categories").delete().eq("id", cat.id);
-                              if (error) { toast.show(t.somethingWrong, "error"); return; }
-                              update(d => {
-                                d.categories = (d.categories || []).filter(x => x.id !== cat.id);
-                                d.services = (d.services || []).map(sv => sv.category_id === cat.id ? {...sv, category_id: null} : sv);
-                                return d;
-                              });
-                            }} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                              title={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}>
-                              <NavIcon name="xmark" size={11} color="currentColor" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    )}</SortableService>
-                  ))}
-                </div>
-                </SortableContext>
-                </DndContext>
-                {showNewCategoryForm ? (
-                  <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10 }}>
-                    <div style={{ marginBottom: 8 }}>
-                      <AutoTranslateField
-                        nlValue={newCategoryForm.name_nl}
-                        enValue={newCategoryForm.name_en}
-                        setNl={v => setNewCategoryForm(f => ({...f, name_nl: v}))}
-                        setEn={v => setNewCategoryForm(f => ({...f, name_en: v}))}
-                        lang={lang} accent={accent}
-                        placeholder={lang === "nl" ? "bijv. Nagels" : lang === "es" ? "p. ej. Uñas" : "e.g. Nails"}
-                      />
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                        const primary = lang === "nl" ? newCategoryForm.name_nl : newCategoryForm.name_en;
-                        if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : lang === "es" ? "El nombre es obligatorio" : "Name is required", "error"); return; }
-                        const filled = await autoFillTranslations(newCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
-                        const nlName = (filled.name_nl || filled.name_en || "").trim();
-                        const enName = (filled.name_en || "").trim();
-                        const esName = (filled.name_es || "").trim();
-                        const nextPos = ((salonData.categories || []).reduce((m, x) => Math.max(m, x.position || 0), 0)) + 1;
-                        const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: nlName, name_en: enName || null, name_es: esName || null, position: nextPos }).select().single();
-                        if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
-                        update(d => { d.categories = [...(d.categories || []), data]; return d; });
-                        setNewCategoryForm({ name_nl: "", name_en: "" });
-                        setShowNewCategoryForm(false);
-                      }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Toevoegen" : lang === "es" ? "Añadir" : "Add"}</button>
-                      <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => { setShowNewCategoryForm(false); setNewCategoryForm({ name_nl: "", name_en: "" }); }}><NavIcon name="xmark" size={12} color="currentColor" /></button>
-                    </div>
-                  </div>
-                ) : (
-                  <button className="btn-ghost" style={{ width: "100%", padding: "10px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", fontSize: 12 }} onClick={() => setShowNewCategoryForm(true)}>
-                    + {lang === "nl" ? "Categorie toevoegen" : lang === "es" ? "Añadir categoría" : "Add category"}
-                  </button>
-                )}
-                </div>
-              </div>
-
               {/* Services list — collapsible cards */}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
@@ -13104,43 +12971,98 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           })}
                         </div>
                       )}
+                      {/* Eén samengevoegde lijst (28-08): de categoriekop ís het
+                          beheer — klik = open/dicht met de diensten eronder,
+                          sleep = volgorde, potlood = hernoemen, × = verwijderen.
+                          Het losse "Categorieën"-CRUD-blok erboven is hiermee weg. */}
+                      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                      <SortableContext items={groups.filter(gg => !gg.isUncat).map(gg => gg.key)} strategy={verticalListSortingStrategy}>
                       {groups.map((g) => {
                         const isCollapsed = collapsedGroups.has(g.key);
-                        return (
-                          <div key={g.key} style={{ marginBottom: 14 }}>
-                            <button
-                              onClick={() => {
-                                setCollapsedGroups(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(g.key)) next.delete(g.key);
-                                  else next.add(g.key);
-                                  return next;
-                                });
-                              }}
-                              style={{
-                                width: "100%",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                padding: "10px 14px",
-                                background: c.bgCard,
-                                border: `1px solid ${c.border}`,
-                                borderRadius: 12,
-                                cursor: "pointer",
-                                marginBottom: isCollapsed ? 0 : 8,
-                                color: c.text,
-                                textAlign: "left",
-                              }}
-                            >
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-                                style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", color: c.textMuted, flexShrink: 0 }}>
-                                <polyline points="6 9 12 15 18 9" />
-                              </svg>
-                              <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, fontStyle: g.isUncat ? "italic" : "normal", color: g.isUncat ? c.textMuted : c.text }}>
-                                {g.label}
-                              </span>
-                              <span style={{ fontSize: 10, color: c.textMuted, marginLeft: "auto" }}>{g.services.length}</span>
-                            </button>
+                        const cat = g.isUncat ? null : (salonData.categories || []).find(x => x.id === g.key);
+                        const kopEnInhoud = (drag) => (
+                          <div ref={drag.setNodeRef} style={{ ...(drag.sortStyle || {}), marginBottom: 14 }}>
+                            {cat && editingCategoryId === cat.id ? (
+                              <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                                <div style={{ marginBottom: 8 }}>
+                                  <AutoTranslateField
+                                    nlValue={editCategoryForm.name_nl}
+                                    enValue={editCategoryForm.name_en}
+                                    setNl={v => setEditCategoryForm(f => ({...f, name_nl: v}))}
+                                    setEn={v => setEditCategoryForm(f => ({...f, name_en: v}))}
+                                    lang={lang} accent={accent}
+                                    placeholder={lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}
+                                  />
+                                </div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                                    const primary = lang === "nl" ? editCategoryForm.name_nl : editCategoryForm.name_en;
+                                    if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : lang === "es" ? "El nombre es obligatorio" : "Name is required", "error"); return; }
+                                    const filled = await autoFillTranslations(editCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
+                                    const nlName = (filled.name_nl || filled.name_en || "").trim();
+                                    const enName = (filled.name_en || "").trim();
+                                    const esName = (filled.name_es || "").trim();
+                                    const { error } = await supabase.from("service_categories").update({ name_nl: nlName, name_en: enName || null, name_es: esName || null }).eq("id", cat.id);
+                                    if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                    update(d => { d.categories = (d.categories || []).map(x => x.id === cat.id ? {...x, name_nl: nlName, name_en: enName || null, name_es: esName || null} : x); return d; });
+                                    setEditingCategoryId(null);
+                                  }}><NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}</button>
+                                  <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingCategoryId(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                                </div>
+                              </div>
+                            ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 6px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: isCollapsed ? 0 : 8 }}>
+                              {cat && groups.filter(gg => !gg.isUncat).length > 1 && (
+                                <DragHandle listeners={drag.listeners} attributes={drag.attributes} color={c.textMuted} />
+                              )}
+                              <button
+                                onClick={() => {
+                                  setCollapsedGroups(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(g.key)) next.delete(g.key);
+                                    else next.add(g.key);
+                                    return next;
+                                  });
+                                }}
+                                style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", background: "transparent", border: "none", cursor: "pointer", color: c.text, textAlign: "left", fontFamily: "'Jost',sans-serif" }}
+                              >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                                  style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", color: c.textMuted, flexShrink: 0 }}>
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                                <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, fontStyle: g.isUncat ? "italic" : "normal", color: g.isUncat ? c.textMuted : c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {g.label}
+                                </span>
+                                <span style={{ fontSize: 10, color: c.textMuted, marginLeft: "auto" }}>{g.services.length}</span>
+                              </button>
+                              {cat && (
+                                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                                  <button onClick={() => { setEditingCategoryId(cat.id); setEditCategoryForm({ name_nl: cat.name_nl, name_en: cat.name_en || "" }); }}
+                                    style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    title={lang === "nl" ? "Categorie hernoemen" : lang === "es" ? "Renombrar categoría" : "Rename category"}>
+                                    <NavIcon name="edit" size={11} color="currentColor" />
+                                  </button>
+                                  <button onClick={async () => {
+                                    const used = (salonData.services || []).some(sv => sv.category_id === cat.id);
+                                    const msg = used
+                                      ? (lang === "nl" ? `Categorie "${cat.name_nl}" is in gebruik. Diensten worden ongegroepeerd. Doorgaan?` : lang === "es" ? `La categoría "${cat.name_es || cat.name_en || cat.name_nl}" está en uso. Los servicios quedarán sin agrupar. ¿Continuar?` : `Category "${cat.name_en || cat.name_nl}" is in use. Services will be ungrouped. Continue?`)
+                                      : (lang === "nl" ? "Categorie verwijderen?" : lang === "es" ? "¿Eliminar categoría?" : "Delete category?");
+                                    if (!(await showConfirm(msg))) return;
+                                    const { error } = await supabase.from("service_categories").delete().eq("id", cat.id);
+                                    if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                    update(d => {
+                                      d.categories = (d.categories || []).filter(x => x.id !== cat.id);
+                                      d.services = (d.services || []).map(sv => sv.category_id === cat.id ? {...sv, category_id: null} : sv);
+                                      return d;
+                                    });
+                                  }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    title={lang === "nl" ? "Categorie verwijderen" : lang === "es" ? "Eliminar categoría" : "Delete category"}>
+                                    <NavIcon name="xmark" size={11} color="currentColor" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            )}
                             {!isCollapsed && (
                               <DndContext
                                 sensors={dndSensors}
@@ -13154,7 +13076,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             )}
                           </div>
                         );
+                        return g.isUncat
+                          ? <div key={g.key}>{kopEnInhoud({ setNodeRef: undefined, sortStyle: undefined, attributes: undefined, listeners: undefined })}</div>
+                          : (
+                            <SortableService key={g.key} id={g.key}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
+                              kopEnInhoud({ setNodeRef, sortStyle, attributes, listeners })
+                            )}</SortableService>
+                          );
                       })}
+                      </SortableContext>
+                      </DndContext>
+                      {/* Nieuwe categorie — onder de lijst, in dezelfde flow */}
+                      {showNewCategoryForm ? (
+                        <div style={{ background: c.bgCard, border: `1px solid ${accent}44`, borderRadius: 12, padding: 10, marginBottom: 10 }}>
+                          <div style={{ marginBottom: 8 }}>
+                            <AutoTranslateField
+                              nlValue={newCategoryForm.name_nl}
+                              enValue={newCategoryForm.name_en}
+                              setNl={v => setNewCategoryForm(f => ({...f, name_nl: v}))}
+                              setEn={v => setNewCategoryForm(f => ({...f, name_en: v}))}
+                              lang={lang} accent={accent}
+                              placeholder={lang === "nl" ? "bijv. Nagels" : lang === "es" ? "p. ej. Uñas" : "e.g. Nails"}
+                            />
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
+                              const primary = lang === "nl" ? newCategoryForm.name_nl : newCategoryForm.name_en;
+                              if (!(primary || "").trim()) { toast.show(lang === "nl" ? "Naam is verplicht" : lang === "es" ? "El nombre es obligatorio" : "Name is required", "error"); return; }
+                              const filled = await autoFillTranslations(newCategoryForm, [{ nl: "name_nl", en: "name_en" }], lang);
+                              const nlName = (filled.name_nl || filled.name_en || "").trim();
+                              const enName = (filled.name_en || "").trim();
+                              const esName = (filled.name_es || "").trim();
+                              const nextPos = ((salonData.categories || []).reduce((m, x) => Math.max(m, x.position || 0), 0)) + 1;
+                              const { data, error } = await supabase.from("service_categories").insert({ owner_id: salonData.owner_id, name_nl: nlName, name_en: enName || null, name_es: esName || null, position: nextPos }).select().single();
+                              if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
+                              update(d => { d.categories = [...(d.categories || []), data]; return d; });
+                              setNewCategoryForm({ name_nl: "", name_en: "" });
+                              setShowNewCategoryForm(false);
+                            }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Toevoegen" : lang === "es" ? "Añadir" : "Add"}</button>
+                            <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => { setShowNewCategoryForm(false); setNewCategoryForm({ name_nl: "", name_en: "" }); }}><NavIcon name="xmark" size={12} color="currentColor" /></button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button className="btn-ghost" style={{ width: "100%", padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", fontSize: 11, marginBottom: 10, borderStyle: "dashed" }} onClick={() => setShowNewCategoryForm(true)}>
+                          + {lang === "nl" ? "Categorie toevoegen" : lang === "es" ? "Añadir categoría" : "Add category"}
+                        </button>
+                      )}
                     </div>
                   );
                 })()}
