@@ -12345,11 +12345,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <>
                           {/* ── HEADER ROW — always visible ── */}
                           <div style={{
-                            display: "flex", alignItems: "center", gap: 10,
-                            padding: 16, cursor: "pointer",
+                            display: "flex", flexDirection: isMobile ? "column" : "row",
+                            alignItems: isMobile ? "stretch" : "center", gap: 10,
+                            padding: isMobile ? 12 : 16, cursor: "pointer",
                             background: isExpanded ? `${accent}08` : "transparent",
                             transition: "background 0.15s"
                           }} onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}>
+                          {/* Op smalle schermen drukten prijs + vier knoppen de
+                              naamkolom naar 0px (naam onzichtbaar, meta verticaal
+                              gestapeld) — vandaar deze twee-regel-layout op mobiel:
+                              regel 1 = foto + naam + meta, regel 2 = prijs + acties.
+                              Desktop houdt de oude één-regel-indeling. */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                             {/* Drag handle — only renders when there's more than one
                                 service to reorder; single-service salons don't need it. */}
                             {salonData.services.length > 1 && (
@@ -12404,8 +12411,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 )}
                               </div>
                             </div>
-                            {/* Price */}
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
+                            {isMobile && (
+                              <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                              </div>
+                            )}
+                          </div>
+                          {/* Regel 2 (mobiel) / rechterdeel (desktop): prijs + acties */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 19 : 24, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1 }}>{displayPrice}</div>
                             {/* Actions */}
                             <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                               {/* Zichtbaarheid — "on hold" zonder de dienst kwijt te
@@ -12442,6 +12456,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 title={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}>
                                 <NavIcon name="xmark" size={13} color="currentColor" />
                               </button>
+                              {!isMobile && (
                               <div role="button" tabIndex={0}
                                 onClick={() => setExpandedServiceId(isExpanded ? null : s.id)}
                                 onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedServiceId(isExpanded ? null : s.id); } }}
@@ -12449,7 +12464,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 style={{ width: 32, height: 32, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: c.textMuted, cursor: "pointer", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                               </div>
+                              )}
                             </div>
+                          </div>
                           </div>
 
                           {/* ── EXPANDED CONTENT ── */}
