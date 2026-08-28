@@ -5297,18 +5297,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Open the quick-block modal from the agenda. Prefills the "from" date to
   // whichever day is currently in focus in the calendar so a single tap on
   // a day + this button gets the owner most of the way there.
-  const openBlockModal = () => {
+  const openBlockModal = (opts) => {
     const seed = calDate || fmt(getToday());
     setBlockEditId(null);
-    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
+    setBlockForm({ mode: (opts && opts.mode) || "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
     setBlockModalOpen(true);
   };
 
-  // Open the modal to edit an existing staff_day_overrides time-block row.
+  // Open the modal to edit an existing staff_day_overrides block row. Rijen
+  // zonder tijden (hele-dag- of dienst-blokkades) openen in dag-modus zodat
+  // opslaan er geen tijdvak aan vastplakt.
   const openBlockEdit = (b) => {
     setBlockEditId(b.id);
     setBlockForm({
-      mode: "time",
+      mode: b.block_time_start ? "time" : "day",
       from: b.date,
       to: "",
       time_start: b.block_time_start || "09:00",
@@ -5343,9 +5345,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // Wekelijkse herhaling: weekday van de gekozen (start)datum; NULL = eenmalig.
     const repeatWeekday = blockForm.repeat && from ? parseDate(from).getDay() : null;
     if (blockEditId) {
+      // Dag-modus (hele-dag- of dienst-blokkade zonder tijden) mag bij
+      // bewerken geen tijdvak aan de rij vastplakken.
       const { data: updated, error } = await supabase
         .from("staff_day_overrides")
-        .update({ staff_id: staffId, service_id: serviceId, weekday: repeatWeekday, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
+        .update({ staff_id: staffId, service_id: serviceId, weekday: repeatWeekday, date: from, block_time_start: blockForm.mode === "time" ? blockForm.time_start : null, block_time_end: blockForm.mode === "time" ? blockForm.time_end : null, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
         .eq("id", blockEditId).eq("owner_id", salonData.owner_id)
         .select("*").single();
       setBlockSaving(false);
@@ -9056,7 +9060,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       writes to profile.day_overrides straight away — no need
                       to bounce to the Planning settings screen. */}
                   <button
-                    onClick={openBlockModal}
+                    onClick={() => openBlockModal()}
                     style={{
                       padding: "8px 14px", borderRadius: 100, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
@@ -9070,6 +9074,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <NavIcon name="ban" size={12} color="currentColor" />
                     {lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time"}
                   </button>
+                  {/* Aparte, vindbare ingang voor het dienst-blokkeren ("elke
+                      vrijdag geen manicure bij Lady") — zelfde modal, maar
+                      start in hele-dag-modus met de behandeling-keuze in zicht. */}
+                  {(salonData.services || []).length > 0 && (
+                  <button
+                    onClick={() => openBlockModal({ mode: "day" })}
+                    style={{
+                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                      fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: `${c.danger}10`, color: c.danger,
+                      border: `1px solid ${c.danger}33`,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      fontFamily: "'Jost', sans-serif",
+                    }}
+                    title={lang === "nl" ? "Blokkeer één behandeling op een dag (evt. wekelijks) voor een medewerker of de hele salon" : lang === "es" ? "Bloquear un tratamiento en un día (o cada semana) para un miembro o todo el salón" : "Block one treatment on a day (optionally weekly) for a staff member or the whole salon"}
+                  >
+                    <NavIcon name="scissors" size={12} color="currentColor" />
+                    {lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment"}
+                  </button>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   {/* Prev/next either shift calWeekOffset (week/month/year)
@@ -9546,6 +9570,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const staffNameById = (id) => (salonData.staff || []).find(sm => sm.id === id)?.name || "";
                       const staffFullDayBlock = staffBlocksHere.find(b => !b.block_time_start);
                       const staffTimeBlocks = staffBlocksHere.filter(b => b.block_time_start);
+                      // Dienst-blokkade ("geen manicure vandaag/elke vrijdag"): klein
+                      // schaartje in de dagkop zodat hij vindbaar is; klik op de dag
+                      // opent de banner met bewerken/deblokkeren.
+                      const dienstBlokHier = (salonData.staff_blocks || []).some(b => blockAppliesOn(b, ds) && b.service_id && (!agendaStaff || !b.staff_id || b.staff_id === agendaStaff));
                       const isFullDayBlocked = (blockMatchesStaff && !ov.block_time_start) || !!staffFullDayBlock;
                       const isTimeBlocked = blockMatchesStaff && !!ov.block_time_start;
                       return (
@@ -9562,6 +9590,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}`, position: "relative" }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
                             <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                            {dienstBlokHier && (
+                              <div title={lang === "nl" ? "Behandeling geblokkeerd op deze dag — klik voor details" : lang === "es" ? "Tratamiento bloqueado este día" : "A treatment is blocked this day — click for details"} style={{ position: "absolute", top: 4, right: 4, display: "flex" }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" /></svg>
+                              </div>
+                            )}
                           </div>
                           {/* Day content */}
                           <div style={{ flex: 1, minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
@@ -9721,16 +9754,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {(() => {
                               if (cell.muted) return null;
                               const ov = salonData.day_overrides?.[ds];
-                              if (!ov || ov.type !== "blocked") return null;
-                              if (agendaStaff && ov.staff_id && ov.staff_id !== agendaStaff) return null;
-                              const isFull = !ov.block_time_start;
+                              const legacy = ov && ov.type === "blocked" && (!agendaStaff || !ov.staff_id || ov.staff_id === agendaStaff) ? ov : null;
+                              // Rij-gebaseerde blokkades (incl. wekelijkse en
+                              // dienst-blokkades) horen óók zichtbaar te zijn in
+                              // de maand — anders is "elke donderdag geen manicure
+                              // bij Lady" onvindbaar en onbewerkbaar (28-08).
+                              const rijen = (salonData.staff_blocks || []).filter(b => blockAppliesOn(b, ds) && (!agendaStaff || !b.staff_id || b.staff_id === agendaStaff));
+                              const dienstBlok = rijen.some(b => b.service_id);
+                              const heleDagRij = rijen.some(b => !b.service_id && !b.block_time_start);
+                              const tijdRij = rijen.some(b => !b.service_id && b.block_time_start);
+                              if (!legacy && rijen.length === 0) return null;
+                              const isFull = (legacy && !legacy.block_time_start) || heleDagRij;
                               return (
                                 <>
                                   {isFull && (
                                     <div aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", background: `repeating-linear-gradient(45deg, transparent 0 6px, ${c.danger}18 6px 7px)` }} />
                                   )}
                                   <div style={{ position: "absolute", top: 4, right: 4, display: "flex", alignItems: "center", gap: 2 }}>
-                                    <svg width={isMobile ? 9 : 11} height={isMobile ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                    {(legacy || heleDagRij || tijdRij) && (
+                                      <svg width={isMobile ? 9 : 11} height={isMobile ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+                                    )}
+                                    {dienstBlok && (
+                                      <svg width={isMobile ? 9 : 11} height={isMobile ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" /></svg>
+                                    )}
                                   </div>
                                 </>
                               );
@@ -9932,12 +9978,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
-                        {isTimeBlock && (
-                          <button className="btn-ghost" onClick={() => openBlockEdit(b)}
-                            style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
-                            {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
-                          </button>
-                        )}
+                        <button className="btn-ghost" onClick={() => openBlockEdit(b)}
+                          style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
+                          {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
+                        </button>
                         <button className="btn-ghost" onClick={removeBlock}
                           style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
                           {lang === "nl" ? "Deblokkeer" : lang === "es" ? "Desbloquear" : "Unblock"}
