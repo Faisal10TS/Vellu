@@ -7116,9 +7116,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 </>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: blockForm.repeat ? "1fr" : "1fr 1fr", gap: 10 }}>
+                <div className={"vl-datepair" + (blockForm.repeat ? " single" : "")}>
                   <div><label style={lbl}>{blockForm.repeat ? (lang === "nl" ? "Vanaf" : lang === "es" ? "Desde" : "Starting") : (lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From")}</label>
-                    <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                    <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} />
                   </div>
                   {!blockForm.repeat && (
                   <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>

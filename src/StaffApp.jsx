@@ -2713,9 +2713,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: blockForm.repeat ? "1fr" : "1fr 1fr", gap: 10 }}>
+                  <div className={"vl-datepair" + (blockForm.repeat ? " single" : "")}>
                     <div><label style={lbl}>{blockForm.repeat ? (lang === "nl" ? "Vanaf" : lang === "es" ? "Desde" : "Starting") : (lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From")}</label>
-                      <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                      <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} />
                     </div>
                     {!blockForm.repeat && (
                     <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
@@ -2796,7 +2796,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
                 <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label>
-                  <input className="input-field" type="date" value={excForm.date} onChange={e => setExcForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%" }} autoFocus />
+                  <input className="input-field" type="date" value={excForm.date} onChange={e => setExcForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%" }} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>

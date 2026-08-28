@@ -1881,6 +1881,20 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .input-field:focus { border-color: ${accent}88; background: ${c.bgCardHover}; box-shadow: 0 0 0 3px ${accent}18; }
   .input-field::placeholder { color: ${c.textMuted}; }
+  /* iOS Safari negeert width/flex op datumvelden zolang appearance native is:
+     in een Van/Tot-grid knalt het gevulde veld dan uit zijn kolom en krimpt
+     het lege veld tot een pilletje dat eroverheen valt. Appearance uitzetten
+     laat iOS de opgegeven breedte respecteren; de min-height compenseert dat
+     een leeg veld (iOS toont geen placeholder) anders dichtklapt. */
+  .input-field[type="date"] {
+    -webkit-appearance: none; appearance: none;
+    min-width: 0; min-height: 47px; text-align: left;
+  }
+  .input-field[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+  /* Van/Tot-datumpaar: naast elkaar op desktop, gestapeld op telefoons. */
+  .vl-datepair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .vl-datepair.single { grid-template-columns: 1fr; }
+  .vl-datepair > div { min-width: 0; }
 
   .service-card {
     background: ${c.bgCard}; border: 1px solid ${c.border};
@@ -1977,6 +1991,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
        often leaves the page stuck zoomed-in. Force 16px on mobile regardless
        of inline overrides. */
     .input-field { padding: 14px 14px; font-size: 16px !important; }
+    .vl-datepair { grid-template-columns: 1fr; }
     /* Safety net: catch any raw inputs / textareas / selects that aren't
        using the .input-field class (e.g. future code). Covers the input
        types where iOS actually auto-zooms. */
