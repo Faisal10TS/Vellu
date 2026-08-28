@@ -477,6 +477,27 @@ function SalonRoute({ lang, setLang }) {
   const [salon, setSalon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // "owner" | "staff" | null — is de ingelogde bezoeker de eigenaar of een
+  // medewerker van DIT salon? Bepaalt of de terug-naar-dashboard-pill toont.
+  const [previewRole, setPreviewRole] = useState(null);
+
+  useEffect(() => {
+    if (!salon?.owner_id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
+        if (uid === salon.owner_id) { if (alive) setPreviewRole("owner"); return; }
+        // Medewerker? Eigen staff-rij lezen mag via de self-select-RLS; de
+        // publieke views exposen user_id bewust niet, dus dit is de enige route.
+        const { data: st } = await supabase.from("staff_members").select("owner_id").eq("user_id", uid).maybeSingle();
+        if (st && st.owner_id === salon.owner_id && alive) setPreviewRole("staff");
+      } catch { /* geen (geldige) sessie = gewone bezoeker, geen pill */ }
+    })();
+    return () => { alive = false; };
+  }, [salon?.owner_id]);
 
   useEffect(() => {
     const load = async () => {
@@ -641,7 +662,39 @@ function SalonRoute({ lang, setLang }) {
   // ClientApp zelf uit de URL leest en aan submit_review geeft; de prop
   // reviewEmail bestond daar niet meer en is daarom hier ook weg. reviewMode
   // blijft alleen voor de oude ?review=true-links uit al verstuurde mails.
-  return <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} />;
+  return (<>
+    <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => navigate("/")} reviewMode={new URLSearchParams(window.location.search).get("review") === "true"} />
+    {/* Preview-ontsnapping: wie ingelogd is als eigenaar of medewerker van DIT
+        salon en de eigen publieke pagina bekijkt (Preview page in de PWA opent
+        in hetzelfde venster — terug kán dan niet), krijgt een vaste pill terug
+        naar het dashboard. Klanten hebben geen sessie en zien dus nooit iets;
+        de detectie is puur sessie-gebaseerd, geen URL-param die kan lekken.
+        Bewust een los <style>-blok en neutrale donkere kleuren: dit is een
+        app-control bóven de salonpagina, geen onderdeel van de salon-huisstijl. */}
+    {previewRole && (<>
+      <style>{`
+        .vl-preview-back {
+          position: fixed; left: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 360;
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 11px 16px; border-radius: 100px; text-decoration: none;
+          background: rgba(22,19,16,0.92); color: #f6f2ec;
+          border: 1px solid rgba(255,255,255,0.18);
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+          font-family: 'Jost', sans-serif; font-size: 11px; font-weight: 600;
+          letter-spacing: 0.06em; text-transform: uppercase;
+          box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+        }
+        /* Op telefoons zit bottom-center de "View & book"-pill en tijdens het
+           boeken een sticky doorgaan-balk — til de terugknop daarboven uit. */
+        @media (max-width: 640px) {
+          .vl-preview-back { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+        }
+      `}</style>
+      <a className="vl-preview-back" href="/owner">
+        ← {lang === "nl" ? "Terug naar dashboard" : lang === "es" ? "Volver al panel" : "Back to dashboard"}
+      </a>
+    </>)}
+  </>);
 }
 
 // ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────
