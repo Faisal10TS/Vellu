@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
-  AT, AT_COLORS, AtelierSkin
+  AT, AT_COLORS, AtelierSkin, readableAccent, accentEdge
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -744,6 +744,12 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
           <div className="salon-strip">
             {list.map(s => {
               const acc = s.accent_color || accent;
+              // Zelfde leesbaarheid als op de boekingspagina (27-08): tekst in
+              // leesbare inkt en een outline zodra het salon-accent tegen de
+              // lichte kaart wegvalt (Honeysets koos wit → wit-op-wit-pill).
+              // De landing rendert altijd licht (Atelier), dus "light" is vast.
+              const accInk = readableAccent(acc, "light");
+              const accPillEdge = accentEdge(acc, "light");
               return (
                 <button key={s.slug} className="salon-card" onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
@@ -764,7 +770,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
                         {s.cats.map(cat => catLabel(cat, lang)).filter(Boolean).join(" · ")}
                       </div>
                     )}
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: 100, border: `1px solid ${acc}55`, fontSize: 10, color: acc, fontWeight: 600 }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: 100, border: `1px solid ${accPillEdge !== "transparent" ? accPillEdge : `${accInk}55`}`, fontSize: 10, color: accInk, fontWeight: 600 }}>
                       {t.findSalonBook} →
                     </div>
                   </div>
