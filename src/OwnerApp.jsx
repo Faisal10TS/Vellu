@@ -5300,7 +5300,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const openBlockModal = (opts) => {
     const seed = calDate || fmt(getToday());
     setBlockEditId(null);
-    setBlockForm({ mode: (opts && opts.mode) || "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
+    setBlockForm({ mode: (opts && opts.mode) || "time", variant: (opts && opts.variant) || "generic", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
     setBlockModalOpen(true);
   };
 
@@ -5311,6 +5311,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setBlockEditId(b.id);
     setBlockForm({
       mode: b.block_time_start ? "time" : "day",
+      variant: b.service_id ? "service" : "generic",
       from: b.date,
       to: "",
       time_start: b.block_time_start || "09:00",
@@ -5333,6 +5334,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error");
       return;
     }
+    // Behandeling-variant zonder gekozen behandeling zou stilletjes een
+    // gewone (alles-)blokkade opslaan — dat is nooit wat de knop belooft.
+    if (blockForm.variant === "service" && !blockForm.service_id) {
+      toast.show(lang === "nl" ? "Kies eerst een behandeling" : lang === "es" ? "Elige primero un tratamiento" : "Choose a treatment first", "error");
+      return;
+    }
     setBlockSaving(true);
     // Denormalise staff name so the block card can show it without a
     // separate lookup, and future-proof against a rename (we snapshot).
@@ -5341,7 +5348,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       ? ((salonData.staff || []).find(s => s.id === staffId)?.name || "")
       : "";
     // Editing an existing time-block row → UPDATE in place.
-    const serviceId = blockForm.service_id || null;
+    const serviceId = blockForm.variant === "service" ? (blockForm.service_id || null) : null;
     // Wekelijkse herhaling: weekday van de gekozen (start)datum; NULL = eenmalig.
     const repeatWeekday = blockForm.repeat && from ? parseDate(from).getDay() : null;
     if (blockEditId) {
@@ -7044,14 +7051,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div onClick={(e) => e.stopPropagation()}
                style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-              {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : lang === "es" ? "Bloquear horario o día" : "Block time or day")}
+              {blockEditId
+                ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block")
+                : blockForm.variant === "service"
+                ? (lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment")
+                : (lang === "nl" ? "Blokkeer tijd of dag" : lang === "es" ? "Bloquear horario o día" : "Block time or day")}
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
-              {lang === "nl"
-                ? "Klanten kunnen dan geen afspraak boeken in dit tijdvak of op deze dag."
-                : lang === "es"
-                ? "Tus clientes no podrán reservar en ese intervalo ni ese día."
-                : "Clients won't be able to book during this window or on this day."}
+              {blockForm.variant === "service"
+                ? (lang === "nl"
+                  ? "Eén behandeling is dan tijdelijk niet boekbaar — de rest van de agenda gaat gewoon door."
+                  : lang === "es"
+                  ? "Un tratamiento deja de ser reservable temporalmente — el resto de la agenda sigue abierta."
+                  : "One treatment becomes temporarily unbookable — the rest of the agenda stays open.")
+                : (lang === "nl"
+                  ? "Klanten kunnen dan geen afspraak boeken in dit tijdvak of op deze dag."
+                  : lang === "es"
+                  ? "Tus clientes no podrán reservar en ese intervalo ni ese día."
+                  : "Clients won't be able to book during this window or on this day.")}
             </div>
             {/* Mode toggle hidden while editing a time-block row — switching to
                 "whole day" would write to a different store and orphan the row. */}
@@ -7143,16 +7160,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     ))}
                   </select>
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
-                    {blockForm.staff_id
-                      ? (lang === "nl" ? "Alleen deze medewerker is dan niet boekbaar; anderen blijven beschikbaar." : lang === "es" ? "Solo se bloquea a este miembro del equipo; el resto sigue disponible para reservas." : "Only this staff member is blocked; the rest stays bookable.")
-                      : (lang === "nl" ? "De hele salon is dicht in dit tijdvak." : lang === "es" ? "Todo el salón está cerrado durante este periodo." : "The whole salon is closed during this window.")}
+                    {blockForm.variant === "service"
+                      ? (blockForm.staff_id
+                        ? (lang === "nl" ? "Alleen bij deze medewerker — collega's blijven de behandeling gewoon doen." : lang === "es" ? "Solo para este miembro del equipo — el resto sigue ofreciendo el tratamiento." : "Only for this staff member — teammates keep offering the treatment.")
+                        : (lang === "nl" ? "Geldt voor het hele team." : lang === "es" ? "Se aplica a todo el equipo." : "Applies to the whole team."))
+                      : (blockForm.staff_id
+                        ? (lang === "nl" ? "Alleen deze medewerker is dan niet boekbaar; anderen blijven beschikbaar." : lang === "es" ? "Solo se bloquea a este miembro del equipo; el resto sigue disponible para reservas." : "Only this staff member is blocked; the rest stays bookable.")
+                        : (lang === "nl" ? "De hele salon is dicht in dit tijdvak." : lang === "es" ? "Todo el salón está cerrado durante este periodo." : "The whole salon is closed during this window."))}
                   </div>
                 </div>
               )}
-              {(salonData.services || []).length > 0 && (
+              {blockForm.variant === "service" && (salonData.services || []).length > 0 && (
                 <div><label style={lbl}>{lang === "nl" ? "Welke behandeling?" : lang === "es" ? "¿Qué tratamiento?" : "Which treatment?"}</label>
                   <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                    <option value="">{lang === "nl" ? "Alles (hele agenda)" : lang === "es" ? "Todo (toda la agenda)" : "Everything (whole agenda)"}</option>
+                    <option value="">{lang === "nl" ? "Kies een behandeling…" : lang === "es" ? "Elige un tratamiento…" : "Choose a treatment…"}</option>
                     {(salonData.services || []).map(sv => (
                       <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
                     ))}
@@ -9079,7 +9100,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       start in hele-dag-modus met de behandeling-keuze in zicht. */}
                   {(salonData.services || []).length > 0 && (
                   <button
-                    onClick={() => openBlockModal({ mode: "day" })}
+                    onClick={() => openBlockModal({ mode: "day", variant: "service" })}
                     style={{
                       padding: "8px 14px", borderRadius: 100, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",

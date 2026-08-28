@@ -555,7 +555,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Open the block modal to edit an existing time-block row.
   const openBlockEdit = (b) => {
     setBlockEditId(b.id);
-    setBlockForm({ mode: "time", from: b.date, to: "", time_start: b.block_time_start || "09:00", time_end: b.block_time_end || "17:00", reason: b.reason || "", service_id: b.service_id || "", repeat: b.weekday != null });
+    // Rijen zonder tijden (hele-dag- of dienst-blokkades) openen in dag-modus
+    // zodat opslaan er geen tijdvak aan vastplakt.
+    setBlockForm({ mode: b.block_time_start ? "time" : "day", variant: b.service_id ? "service" : "generic", from: b.date, to: "", time_start: b.block_time_start || "09:00", time_end: b.block_time_end || "17:00", reason: b.reason || "", service_id: b.service_id || "", repeat: b.weekday != null });
     setBlockModalOpen(true);
   };
 
@@ -568,6 +570,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       toast.show(lang === "nl" ? "Eindtijd moet ná starttijd zijn" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error");
       return;
     }
+    // Behandeling-variant zonder keuze zou stilletjes alles blokkeren.
+    if (blockForm.variant === "service" && !blockForm.service_id) {
+      toast.show(lang === "nl" ? "Kies eerst een behandeling" : lang === "es" ? "Elige primero un tratamiento" : "Choose a treatment first", "error");
+      return;
+    }
     setBlockSaving(true);
     try {
       const reason = blockForm.reason?.trim() || null;
@@ -575,8 +582,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       const repeatWeekday = blockForm.repeat && blockForm.from ? parseDate(blockForm.from).getDay() : null;
       // Editing an existing time-block row → UPDATE in place.
       if (blockEditId) {
+        // Dag-modus (rij zonder tijden) mag bij bewerken geen tijdvak krijgen.
         const { data: updated, error } = await supabase.from("staff_day_overrides")
-          .update({ date: blockForm.from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason, service_id: blockForm.service_id || null, weekday: repeatWeekday })
+          .update({ date: blockForm.from, block_time_start: blockForm.mode === "time" ? blockForm.time_start : null, block_time_end: blockForm.mode === "time" ? blockForm.time_end : null, reason, service_id: blockForm.variant === "service" ? (blockForm.service_id || null) : null, weekday: repeatWeekday })
           .eq("id", blockEditId).eq("staff_id", staffMember.id).select("*").single();
         if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
         setStaffBlocks(prev => prev.map(x => x.id === blockEditId ? updated : x));
@@ -586,9 +594,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         return;
       }
       const rows = [];
-      // Dienst-specifiek ("maandag geen brows, pedicures wél"): de medewerker
-      // kiest optioneel één behandeling; de blokkade raakt dan alleen die.
-      const svcId = blockForm.service_id || null;
+      // Dienst-specifiek ("maandag geen brows, pedicures wél"): alleen in de
+      // behandeling-variant; de gewone blokkade raakt altijd de hele agenda.
+      const svcId = blockForm.variant === "service" ? (blockForm.service_id || null) : null;
       if (blockForm.mode === "time") {
         rows.push({
           owner_id: salonProfile.id, staff_id: staffMember.id, date: blockForm.from,
@@ -1294,7 +1302,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <button
                     onClick={() => {
                       setBlockEditId(null);
-                      setBlockForm({ mode: "time", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
+                      setBlockForm({ mode: "time", variant: "generic", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
                       setBlockModalOpen(true);
                     }}
                     style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
@@ -1303,6 +1311,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
                     {lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time"}
                   </button>
+                  {/* Eigen ingang voor "die dag doe ik geen <behandeling>" —
+                      zelfde modal, maar in de behandeling-variant. */}
+                  {(services || []).length > 0 && (
+                  <button
+                    onClick={() => {
+                      setBlockEditId(null);
+                      setBlockForm({ mode: "day", variant: "service", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
+                      setBlockModalOpen(true);
+                    }}
+                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    title={lang === "nl" ? "Blokkeer één behandeling op een dag, evt. elke week" : lang === "es" ? "Bloquear un tratamiento en un día, o cada semana" : "Block one treatment on a day, optionally weekly"}
+                  >
+                    <NavIcon name="scissors" size={11} color="currentColor" />
+                    {lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment"}
+                  </button>
+                  )}
                   <button
                     onClick={() => {
                       setExcForm({ date: calDate || todayFmt, open: "09:00", close: "17:00" });
@@ -1619,12 +1643,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
-                        {isTimeBlock && (
-                          <button className="btn-ghost" onClick={() => openBlockEdit(b)}
-                            style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
-                            {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
-                          </button>
-                        )}
+                        <button className="btn-ghost" onClick={() => openBlockEdit(b)}
+                          style={{ fontSize: 10, padding: "8px 12px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: accent, borderColor: `${accent}55` }}>
+                          {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
+                        </button>
                         <button className="btn-ghost" onClick={() => removeStaffBlock(b.id)}
                           style={{ fontSize: 10, padding: "8px 14px", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: c.danger, borderColor: `${c.danger}55` }}>
                           {lang === "nl" ? "Deblokkeer" : lang === "es" ? "Desbloquear" : "Unblock"}
@@ -2630,12 +2652,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             <div onClick={e => e.stopPropagation()}
                  style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
-                {blockEditId ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block") : (lang === "nl" ? "Blokkeer tijd of dag" : lang === "es" ? "Bloquear horario o día" : "Block time or day")}
+                {blockEditId
+                  ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block")
+                  : blockForm.variant === "service"
+                  ? (lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment")
+                  : (lang === "nl" ? "Blokkeer tijd of dag" : lang === "es" ? "Bloquear horario o día" : "Block time or day")}
               </div>
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
-                {lang === "nl"
-                  ? "Klanten kunnen dan geen afspraak bij jou boeken in dit tijdvak of op deze dag."
-                  : "Clients won't be able to book you during this window or on this day."}
+                {blockForm.variant === "service"
+                  ? (lang === "nl"
+                    ? "Eén behandeling is dan tijdelijk niet bij jou boekbaar — de rest van je agenda gaat gewoon door."
+                    : lang === "es"
+                    ? "Un tratamiento deja de ser reservable contigo temporalmente — el resto de tu agenda sigue abierta."
+                    : "One treatment becomes temporarily unbookable with you — the rest of your agenda stays open.")
+                  : (lang === "nl"
+                    ? "Klanten kunnen dan geen afspraak bij jou boeken in dit tijdvak of op deze dag."
+                    : "Clients won't be able to book you during this window or on this day.")}
               </div>
               {!blockEditId && (
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -2681,13 +2713,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
+                  <div style={{ display: "grid", gridTemplateColumns: blockForm.repeat ? "1fr" : "1fr 1fr", gap: 10 }}>
+                    <div><label style={lbl}>{blockForm.repeat ? (lang === "nl" ? "Vanaf" : lang === "es" ? "Desde" : "Starting") : (lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From")}</label>
                       <input className="input-field" type="date" value={blockForm.from} onChange={e => setBlockForm(f => ({ ...f, from: e.target.value }))} style={{ width: "100%" }} autoFocus />
                     </div>
+                    {!blockForm.repeat && (
                     <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
                       <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
                     </div>
+                    )}
                   </div>
                 )}
                 {(() => {
@@ -2711,10 +2745,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   );
                 })()}
-                {(services || []).length > 0 && (
+                {blockForm.variant === "service" && (services || []).length > 0 && (
                   <div><label style={lbl}>{lang === "nl" ? "Welke behandeling?" : lang === "es" ? "¿Qué tratamiento?" : "Which treatment?"}</label>
                     <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                      <option value="">{lang === "nl" ? "Alles (hele agenda)" : lang === "es" ? "Todo (toda la agenda)" : "Everything (whole agenda)"}</option>
+                      <option value="">{lang === "nl" ? "Kies een behandeling…" : lang === "es" ? "Elige un tratamiento…" : "Choose a treatment…"}</option>
                       {(services || []).map(sv => (
                         <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
                       ))}
