@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -3629,6 +3629,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [svcSeg, setSvcSeg] = useState("prijzen");
   const [svcCatFilter, setSvcCatFilter] = useState("all");
   const [variantPriceFold, setVariantPriceFold] = useState(null);
+  // Categoriebeheer standaard ingeklapt: de filterchips zijn de dagelijkse
+  // navigatie; hernoemen/ordenen is uitzondering en duwde de lijst omlaag.
+  const [catMgrOpen, setCatMgrOpen] = useState(false);
   useEffect(() => { setSvcSeg("prijzen"); setVariantPriceFold(null); }, [expandedServiceId]);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
@@ -6975,6 +6978,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   if (!dataLoaded) {
     return (
       <Layout accent={accent} rawAccent={salonData.accent}>
+      <PullToRefresh />
         <div style={{ background: c.bg, height: "100dvh", display: "flex", fontFamily: "'Jost',sans-serif", color: c.text }}>
     
           <DashboardSkeleton />
@@ -6997,6 +7001,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   return (
     <Layout accent={accent} rawAccent={salonData.accent}>
+      <PullToRefresh />
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
 
@@ -12086,10 +12091,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* ── CATEGORIES ── compact CRUD; used to group services on the public page */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Categorieën" : lang === "es" ? "Categorías" : "Categories"}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.categories || []).length}</div>
-                </div>
+                <button type="button" onClick={() => setCatMgrOpen(o => !o)}
+                  style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, background: "transparent", border: "none", cursor: "pointer", padding: 0, fontFamily: "'Jost',sans-serif" }}>
+                  <span style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600 }}>
+                    {lang === "nl" ? "Categorieën beheren" : lang === "es" ? "Gestionar categorías" : "Manage categories"}
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, color: c.textMuted }}>
+                    {(salonData.categories || []).length}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: catMgrOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><polyline points="6 9 12 15 18 9" /></svg>
+                  </span>
+                </button>
+                <div style={{ display: (catMgrOpen || (salonData.categories || []).length === 0) ? undefined : "none" }}>
                 {(salonData.categories || []).length === 0 && !showNewCategoryForm && (
                   <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic", padding: "6px 2px 10px" }}>
                     {lang === "nl" ? "Nog geen categorieën. Groepeer je diensten (bv. Nagels, Brows) zodat klanten makkelijker kunnen kiezen." : lang === "es" ? "Aún no hay categorías. Agrupa tus servicios (p. ej. Uñas, Cejas) para que los clientes puedan explorar más rápido." : "No categories yet. Group your services (e.g. Nails, Brows) so clients can browse faster."}
@@ -12204,6 +12216,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     + {lang === "nl" ? "Categorie toevoegen" : lang === "es" ? "Añadir categoría" : "Add category"}
                   </button>
                 )}
+                </div>
               </div>
 
               {/* Services list — collapsible cards */}
@@ -12783,8 +12796,49 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         )}
                                         {doetDienst && (s.variants || []).length > 0 && (
-                                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8 }}>
-                                            {lang === "nl" ? "Prijzen per variant stel je in onder het tabje Prijzen." : lang === "es" ? "Los precios por variante se ajustan en la pestaña Precios." : "Per-variant prices live under the Prices tab."}
+                                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${c.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+                                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>
+                                              {lang === "nl" ? `Prijzen van ${m.name}` : lang === "es" ? `Precios de ${m.name}` : `${m.name}'s prices`}
+                                            </div>
+                                            {(s.variants || []).map(v => {
+                                              const vOv = (m.price_overrides || []).find(o => o.service_id === s.id && o.variant_id === v.id);
+                                              const vNaam = lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
+                                              return (
+                                                <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                  <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vNaam}</div>
+                                                  <input className="input-field" type="number" min="0" step="0.01"
+                                                    key={`${m.id}:${v.id}:${vOv ? vOv.price : "std"}`}
+                                                    defaultValue={vOv ? vOv.price : ""}
+                                                    placeholder={`${cur}${parseFloat(v.price || 0).toFixed(2)}`}
+                                                    onBlur={async ev => {
+                                                      const raw = ev.target.value.trim();
+                                                      const had = vOv ? parseFloat(vOv.price) : null;
+                                                      if (raw === "") {
+                                                        if (had == null) return;
+                                                        const { error } = await supabase.from("staff_service_prices").delete().eq("staff_id", m.id).eq("service_id", s.id).eq("variant_id", v.id);
+                                                        if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                        update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: (x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)) } : x); return d; });
+                                                        toast.show(lang === "nl" ? `${m.name} rekent weer de variantprijs` : lang === "es" ? `${m.name} vuelve al precio de la variante` : `${m.name} is back on the variant price`);
+                                                        return;
+                                                      }
+                                                      const val = parseFloat(raw);
+                                                      if (!Number.isFinite(val) || val < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+                                                      if (had != null && Math.abs(val - had) < 0.005) return;
+                                                      const { error } = await supabase.from("staff_service_prices").upsert(
+                                                        { staff_id: m.id, service_id: s.id, variant_id: v.id, price: val },
+                                                        { onConflict: "staff_id,service_id,variant_id" }
+                                                      );
+                                                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                      update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)), { service_id: s.id, variant_id: v.id, price: val }] } : x); return d; });
+                                                      toast.show(lang === "nl" ? `${m.name}: ${cur}${val.toFixed(2)} voor ${vNaam}` : lang === "es" ? `${m.name}: ${cur}${val.toFixed(2)} para ${vNaam}` : `${m.name}: ${cur}${val.toFixed(2)} for ${vNaam}`);
+                                                    }}
+                                                    style={{ width: 110, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
+                                                </div>
+                                              );
+                                            })}
+                                            <div style={{ fontSize: 10, color: c.textMuted }}>
+                                              {lang === "nl" ? "Leeg = de gewone variantprijs." : lang === "es" ? "Vacío = precio normal de la variante." : "Empty = the regular variant price."}
+                                            </div>
                                           </div>
                                         )}
                                         {doetDienst && (s.extras || []).length > 0 && (

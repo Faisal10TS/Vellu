@@ -1729,6 +1729,96 @@ export const accentEdge = (raw, themeName) => {
   return "transparent";
 };
 
+// Pull-to-refresh voor de eigen app (verzoek 28-08): bovenaan de pagina
+// omhoog trekken toont een pijl die volloopt; voorbij de drempel loslaten
+// herlaadt de pagina — mét verse data én, na een deploy, de nieuwste versie.
+// Alleen op touch-apparaten; luisteraars zijn passive en de indicator is
+// pointer-events:none, dus scrollen/vegen blijft exact zoals het was. Houdt
+// rekening met geneste scroll-containers (Instellingen): een voorouder die
+// zelf nog gescrold staat blokkeert het gebaar.
+export function PullToRefresh() {
+  const { colors: c } = useTheme();
+  const boxRef = useRef(null);
+  const arrowRef = useRef(null);
+  useEffect(() => {
+    if (typeof window === "undefined" || !("ontouchstart" in window)) return;
+    const box = boxRef.current;
+    const arrow = arrowRef.current;
+    if (!box || !arrow) return;
+    const st = { startY: 0, startX: 0, armed: false, pull: 0, busy: false };
+    const TRIGGER = 46; // gedempte trekafstand (≈110px vinger)
+    const scrolledAncestor = (el) => {
+      let n = el;
+      while (n && n !== document.body) {
+        if (n.scrollHeight > n.clientHeight + 4) {
+          const oy = getComputedStyle(n).overflowY;
+          if ((oy === "auto" || oy === "scroll") && n.scrollTop > 0) return true;
+        }
+        n = n.parentElement;
+      }
+      return false;
+    };
+    const draw = (p) => {
+      box.style.opacity = p <= 0 ? "0" : String(Math.min(1, p / 26));
+      box.style.transform = `translate(-50%, ${Math.min(p, 64) - 8}px)`;
+      arrow.style.transform = `rotate(${Math.min(1, p / TRIGGER) * 180}deg)`;
+    };
+    const reset = () => { st.armed = false; st.pull = 0; draw(0); };
+    const onStart = (e) => {
+      if (st.busy) return;
+      if (window.scrollY > 0 || scrolledAncestor(e.target)) { st.armed = false; return; }
+      const t = e.touches[0];
+      st.startY = t.clientY; st.startX = t.clientX; st.armed = true; st.pull = 0;
+    };
+    const onMove = (e) => {
+      if (!st.armed || st.busy) return;
+      const t = e.touches[0];
+      const dy = t.clientY - st.startY;
+      const dx = Math.abs(t.clientX - st.startX);
+      if (dy <= 0 || window.scrollY > 0 || dx > Math.abs(dy)) { reset(); return; }
+      st.pull = dy * 0.42;
+      draw(st.pull);
+    };
+    const onEnd = () => {
+      if (!st.armed || st.busy) return;
+      if (st.pull >= TRIGGER) {
+        st.busy = true;
+        draw(TRIGGER + 10);
+        arrow.style.animation = "vlPtrSpin 0.7s linear infinite";
+        window.location.reload();
+      } else {
+        reset();
+      }
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onEnd, { passive: true });
+    window.addEventListener("touchcancel", reset, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+      window.removeEventListener("touchcancel", reset);
+    };
+  }, []);
+  return (
+    <div ref={boxRef} aria-hidden="true" style={{
+      position: "fixed", top: "env(safe-area-inset-top, 0px)", left: "50%",
+      transform: "translate(-50%, -8px)", opacity: 0, zIndex: 420,
+      width: 40, height: 40, borderRadius: "50%",
+      background: c.bgCard, border: `1px solid ${c.border}`,
+      boxShadow: "0 6px 20px rgba(0,0,0,0.14)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      pointerEvents: "none", transition: "opacity 0.15s",
+    }}>
+      <style>{`@keyframes vlPtrSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <svg ref={arrowRef} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c.text} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "transform 0.05s linear" }}>
+        <line x1="12" y1="4" x2="12" y2="20" /><polyline points="5 13 12 20 19 13" />
+      </svg>
+    </div>
+  );
+}
+
 // Geldt deze blokkade-rij (staff_day_overrides) op deze datum? Eenmalige
 // rijen matchen exact op hun datum; terugkerende rijen (weekday 0-6 gezet,
 // "elke zondag") gelden elke week op die weekdag VANAF hun ankerdatum.
