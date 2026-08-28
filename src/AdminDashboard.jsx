@@ -451,25 +451,36 @@ export default function AdminDashboard({ onLogout }) {
               <div style={{ color: c.textMuted, fontSize: 12, padding: 20, textAlign: "center" }}>No cron runs logged yet.</div>
             )}
             {cron.map(j => {
-              const healthy = j.last_status === "success" && j.errors_last_7d === 0;
+              // Drie standen i.p.v. twee: rood = de LAATSTE run faalde (nu
+              // stuk), oranje = laatste run geslaagd maar eerder in het
+              // 7-dagen-venster zat een fout (hersteld), groen = schoon.
+              const lastOk = j.last_status === "success";
+              const dotColor = !lastOk ? c.danger : j.errors_last_7d > 0 ? c.warning : c.success;
               return (
                 <div key={j.job_name} style={{ padding: "14px 0", borderBottom: `1px solid ${c.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: healthy ? c.success : c.danger, display: "inline-block" }} />
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block" }} />
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 500 }}>{j.job_name}</span>
                     </div>
                     <span style={{ fontSize: 11, color: c.textMuted }}>last ran {relTime(j.last_ran_at)}</span>
                   </div>
                   <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textSub, marginTop: 8, flexWrap: "wrap" }}>
                     <span>{j.runs_last_7d} runs</span>
-                    <span style={{ color: j.errors_last_7d > 0 ? c.danger : c.textMuted }}>{j.errors_last_7d} errors</span>
+                    <span style={{ color: j.errors_last_7d > 0 ? (lastOk ? c.warning : c.danger) : c.textMuted }}>{j.errors_last_7d} errors</span>
                     <span>{j.total_items_processed_7d} items processed</span>
-                    <span style={{ color: healthy ? c.success : c.danger }}>last: {j.last_status}</span>
+                    <span style={{ color: lastOk ? c.success : c.danger }}>last: {j.last_status}</span>
                   </div>
-                  {j.last_error && (
+                  {!lastOk && j.last_error && (
                     <div style={{ marginTop: 8, fontSize: 10, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
                       {j.last_error}
+                    </div>
+                  )}
+                  {/* Hersteld: toon wél wat er mis was (en wanneer), zodat een
+                      oranje stip zichzelf verklaart zonder database-duik. */}
+                  {lastOk && j.errors_last_7d > 0 && j.last_error_7d && (
+                    <div style={{ marginTop: 8, fontSize: 10, color: c.warning, background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
+                      recovered — latest run succeeded · last error {relTime(j.last_error_at_7d)}: {j.last_error_7d}
                     </div>
                   )}
                 </div>
