@@ -392,6 +392,25 @@ serve(async (req) => {
     }
   }
 
+  // ---------- 5c. Per-medewerker prijzen ----------
+  // Een salon kan per medewerker een afwijkende prijs zetten voor dezelfde
+  // dienst (staff_service_prices; variant_id NULL = prijs op de dienst).
+  // Geen rij = standaardprijs. "Geen voorkeur" (geen medewerker) rekent
+  // altijd de standaardprijs.
+  const priceOverrides: Record<string, number> = {};
+  if (staffIdsFlat.length > 0) {
+    const { data: spRows, error: spErr } = await supabase
+      .from("staff_service_prices")
+      .select("staff_id, service_id, variant_id, price")
+      .in("staff_id", staffIdsFlat)
+      .in("service_id", service_ids);
+    if (spErr) return err(500, "db_error_staff_prices", origin);
+    for (const r of spRows || []) {
+      const p = parseFloat(r.price);
+      if (Number.isFinite(p)) priceOverrides[`${r.staff_id}:${r.service_id}:${r.variant_id || ""}`] = p;
+    }
+  }
+
   // ---------- 6. Recalculate price + duration server-side ----------
   let totalPrice = 0;
   let totalDuration = 0;
@@ -415,7 +434,17 @@ serve(async (req) => {
     const variantId = variant_ids?.[svc.id];
     const svcExtras = (extra_ids?.[svc.id] || []).map((eid: string) => extrasById[eid]).filter(Boolean);
     const variant = variantId ? variantsById[variantId] : null;
-    const price = variant ? parseFloat(variant.price) * variantQty(variant) : parseFloat(svc.price);
+    const staffId = staff_ids_per_service?.[svc.id];
+    // Prijs: eerst de eventuele per-medewerker-prijs (variant-specifiek gaat
+    // vóór dienst-breed), anders de standaard variant-/dienstprijs.
+    const unitPrice = variant
+      ? (staffId && priceOverrides[`${staffId}:${svc.id}:${variant.id}`] !== undefined
+          ? priceOverrides[`${staffId}:${svc.id}:${variant.id}`]
+          : parseFloat(variant.price))
+      : (staffId && priceOverrides[`${staffId}:${svc.id}:`] !== undefined
+          ? priceOverrides[`${staffId}:${svc.id}:`]
+          : parseFloat(svc.price));
+    const price = variant ? unitPrice * variantQty(variant) : unitPrice;
     // Extras can carry their own time (removal / intricate design = +30 min);
     // per-unit extras count × quantity. No duration set = 0, old behaviour.
     const extrasDur = svcExtras.reduce((s: number, e: any) => s + (parseInt(e.duration) || 0) * extraQty(e), 0);
@@ -427,7 +456,6 @@ serve(async (req) => {
     // Build display name
     let label = nmOf(svc);
     if (variant) label += " — " + nmOf(variant) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
-    const staffId = staff_ids_per_service?.[svc.id];
     if (staffId && staffById[staffId]) label += ` (${staffById[staffId].name})`;
     if (svcExtras.length > 0) {
       label += " + " + svcExtras.map((e: any) => {
@@ -703,7 +731,7 @@ serve(async (req) => {
   if (staffIdsFlat.length > 0) {
     const { data: staffBlocks, error: sbErr } = await supabase
       .from("staff_day_overrides")
-      .select("staff_id, block_time_start, block_time_end")
+      .select("staff_id, service_id, block_time_start, block_time_end")
       .in("staff_id", staffIdsFlat)
       .eq("date", date)
       // kind='exception' rows are EXTRA availability, not blocks — without
@@ -711,6 +739,19 @@ serve(async (req) => {
       .eq("kind", "block");
     if (sbErr) return err(500, "db_error_staff_blocks", origin);
     for (const b of staffBlocks || []) {
+      if (b.service_id) {
+        // Dienst-specifieke blokkade ("maandag geen brows voor Demi"): alleen
+        // relevant als deze medewerker déze dienst in deze boeking doet, en
+        // dan getoetst tegen het deelvenster van die dienst — andere diensten
+        // van dezelfde medewerker gaan die dag gewoon door.
+        const part = serviceBreakdown.find((p: any) => p.service_id === b.service_id && p.staff_id === b.staff_id);
+        if (!part) continue;
+        const ps = apptStartMin + part.offset_min;
+        const pe = ps + part.duration;
+        if (!b.block_time_start || !b.block_time_end) return err(400, "staff_service_day_blocked", origin);
+        if (ps < toMinutes(b.block_time_end) && pe > toMinutes(b.block_time_start)) return err(400, "staff_service_day_blocked", origin);
+        continue;
+      }
       if (!b.block_time_start) return err(400, "staff_day_blocked", origin);
       const blockStart = toMinutes(b.block_time_start);
       const blockEnd = toMinutes(b.block_time_end);
@@ -722,13 +763,24 @@ serve(async (req) => {
   // several unavailable windows (e.g. 10-11 AND 14-15).
   const { data: salonBlocks, error: sbErrAll } = await supabase
     .from("staff_day_overrides")
-    .select("block_time_start, block_time_end")
+    .select("service_id, block_time_start, block_time_end")
     .is("staff_id", null)
     .eq("owner_id", salon.id)
     .eq("date", date)
     .eq("kind", "block");
   if (sbErrAll) return err(500, "db_error_salon_blocks", origin);
   for (const b of salonBlocks || []) {
+    if (b.service_id) {
+      // Salonbrede dienst-blokkade (staff_id NULL + service_id): niemand
+      // doet die dienst die dag/dat venster — de behandelkamer is bezet.
+      const part = serviceBreakdown.find((p: any) => p.service_id === b.service_id);
+      if (!part) continue;
+      const ps = apptStartMin + part.offset_min;
+      const pe = ps + part.duration;
+      if (!b.block_time_start || !b.block_time_end) return err(400, "service_day_blocked", origin);
+      if (ps < toMinutes(b.block_time_end) && pe > toMinutes(b.block_time_start)) return err(400, "service_day_blocked", origin);
+      continue;
+    }
     if (!b.block_time_start || !b.block_time_end) continue;
     const blockStart = toMinutes(b.block_time_start);
     const blockEnd = toMinutes(b.block_time_end);

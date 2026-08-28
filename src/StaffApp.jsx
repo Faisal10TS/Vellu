@@ -555,7 +555,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Open the block modal to edit an existing time-block row.
   const openBlockEdit = (b) => {
     setBlockEditId(b.id);
-    setBlockForm({ mode: "time", from: b.date, to: "", time_start: b.block_time_start || "09:00", time_end: b.block_time_end || "17:00", reason: b.reason || "" });
+    setBlockForm({ mode: "time", from: b.date, to: "", time_start: b.block_time_start || "09:00", time_end: b.block_time_end || "17:00", reason: b.reason || "", service_id: b.service_id || "" });
     setBlockModalOpen(true);
   };
 
@@ -574,7 +574,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // Editing an existing time-block row → UPDATE in place.
       if (blockEditId) {
         const { data: updated, error } = await supabase.from("staff_day_overrides")
-          .update({ date: blockForm.from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason })
+          .update({ date: blockForm.from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason, service_id: blockForm.service_id || null })
           .eq("id", blockEditId).eq("staff_id", staffMember.id).select("*").single();
         if (error || !updated) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
         setStaffBlocks(prev => prev.map(x => x.id === blockEditId ? updated : x));
@@ -584,9 +584,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         return;
       }
       const rows = [];
+      // Dienst-specifiek ("maandag geen brows, pedicures wél"): de medewerker
+      // kiest optioneel één behandeling; de blokkade raakt dan alleen die.
+      const svcId = blockForm.service_id || null;
       if (blockForm.mode === "time") {
         rows.push({
           owner_id: salonProfile.id, staff_id: staffMember.id, date: blockForm.from,
+          service_id: svcId,
           block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason
         });
       } else {
@@ -600,6 +604,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         while (cur <= end) {
           rows.push({
             owner_id: salonProfile.id, staff_id: staffMember.id, date: fmt(cur),
+            service_id: svcId,
             block_time_start: null, block_time_end: null, reason
           });
           cur.setDate(cur.getDate() + 1);
@@ -1275,7 +1280,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   <button
                     onClick={() => {
                       setBlockEditId(null);
-                      setBlockForm({ mode: "time", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "" });
+                      setBlockForm({ mode: "time", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "" });
                       setBlockModalOpen(true);
                     }}
                     style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
@@ -1351,7 +1356,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 4);
                       const moreCount = dayAppts.length - visibleAppts.length;
                       const dayBlocks = staffBlocks.filter(b => b.date === ds);
-                      const fullDayBlock = dayBlocks.find(b => !b.block_time_start);
+                      // Dienst-specifieke blokkade = niet de hele dag dicht;
+                      // die krijgt geen rode streep-overlay in het weekrooster.
+                      const fullDayBlock = dayBlocks.find(b => !b.block_time_start && !b.service_id);
                       const timeBlocks = dayBlocks.filter(b => b.block_time_start);
                       return (
                         <div key={i} onClick={() => setCalDate(ds)} style={{
@@ -1571,6 +1578,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 .filter(b => b.date === calDate)
                 .map(b => {
                   const isTimeBlock = !!b.block_time_start;
+                  const svcRow = b.service_id ? (services || []).find(sv => sv.id === b.service_id) : null;
+                  const svcLabel = svcRow ? (lang === "nl" ? (svcRow.name_nl || svcRow.name) : (svcRow.name_en || svcRow.name_nl || svcRow.name)) : null;
                   return (
                     <div key={b.id} style={{ marginBottom: 12, padding: "12px 14px", background: `${c.danger}0f`, border: `1px solid ${c.danger}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${c.danger}22`, flexShrink: 0 }}>
@@ -1578,7 +1587,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                       <div style={{ flex: 1, minWidth: 180 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
-                          {isTimeBlock
+                          {svcLabel
+                            ? (isTimeBlock
+                                ? (lang === "nl" ? `Geen ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Sin ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : `No ${svcLabel} ${b.block_time_start}–${b.block_time_end}`)
+                                : (lang === "nl" ? `Geen ${svcLabel} vandaag` : lang === "es" ? `Sin ${svcLabel} hoy` : `No ${svcLabel} today`))
+                            : isTimeBlock
                             ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Bloqueado ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
                             : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                         </div>
@@ -2656,6 +2669,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
                       <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
                     </div>
+                  </div>
+                )}
+                {(services || []).length > 0 && (
+                  <div><label style={lbl}>{lang === "nl" ? "Welke behandeling?" : lang === "es" ? "¿Qué tratamiento?" : "Which treatment?"}</label>
+                    <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                      <option value="">{lang === "nl" ? "Alles (hele agenda)" : lang === "es" ? "Todo (toda la agenda)" : "Everything (whole agenda)"}</option>
+                      {(services || []).map(sv => (
+                        <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
+                      ))}
+                    </select>
+                    {blockForm.service_id && (
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                        {lang === "nl" ? "Alleen déze behandeling wordt dan geblokkeerd — je andere behandelingen blijven gewoon boekbaar." : lang === "es" ? "Solo se bloquea este tratamiento — tus demás tratamientos siguen disponibles." : "Only this treatment gets blocked — your other treatments stay bookable."}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : lang === "es" ? "Motivo (opcional)" : "Reason (optional)"}</label>

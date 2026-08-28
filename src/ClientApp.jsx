@@ -493,6 +493,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     for (const b of initialSalon.staff_blocks || []) {
       if (b.date !== dateStr) continue;
       if (b.staff_id) continue;
+      // Dienst-specifieke blokkades gelden niet salon-breed — die worden per
+      // dienst in de slot-berekening getoetst (getAvailableTimes).
+      if (b.service_id) continue;
       if (!b.block_time_start || !b.block_time_end) continue;
       if (timeStr >= b.block_time_start && timeStr < b.block_time_end) return true;
     }
@@ -1232,8 +1235,21 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // CHEAPEST variant instead of the (often 0) parent price, so step 1 shows
   // "Vanaf €30.00" rather than a misleading €0.00. Once every variant-service
   // has a variant picked (enforced before step 2) these equal the exact values.
+  // Per-medewerker prijs (staff_service_prices): gekozen medewerker met een
+  // afwijkende prijs voor deze dienst/variant → die prijs; anders standaard.
+  // "Geen voorkeur" rekent altijd de standaardprijs (spiegelt de server).
+  const staffPriceFor = (staff, serviceId, variantId) => {
+    const row = (staff?.price_overrides || []).find(o => o.service_id === serviceId && (o.variant_id || null) === (variantId || null));
+    const p = row ? parseFloat(row.price) : NaN;
+    return Number.isFinite(p) ? p : null;
+  };
   const itemBasePrice = (item) => {
-    if (item.variant) return parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1);
+    if (item.variant) {
+      const ov = item.staff ? staffPriceFor(item.staff, item.service.id, item.variant.id) : null;
+      return (ov ?? parseFloat(item.variant.price)) * (item.variant.per_unit ? (item.variantQty || 1) : 1);
+    }
+    const ov = item.staff ? staffPriceFor(item.staff, item.service.id, null) : null;
+    if (ov != null) return ov;
     const vs = item.service.variants || [];
     if (vs.length > 0) return Math.min(...vs.map(v => parseFloat(v.price)));
     return parseFloat(item.service.price || 0);
@@ -1589,7 +1605,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             (!s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id))
             && (item.extras || []).every(e => extraAllowedFor(e, s.id))
           );
-      return { duration, eligible };
+      return { duration, eligible, serviceId: item.service.id };
     });
 
     // If any service has zero eligible staff at all (misconfigured salon), bail.
@@ -1623,14 +1639,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // per staff_id so multiple stylists can each have their own block on the
     // same date without stepping on each other.
     const staffBlocksById = {};
+    // Dienst-specifieke blokkades ("maandag geen brows voor Demi, pedicures
+    // wél"): apart bijgehouden en per dienst-deelvenster getoetst. staff_id
+    // NULL = niemand doet die dienst dan (één behandelkamer, bezet).
+    const svcBlocks = [];
     for (const b of initialSalon.staff_blocks || []) {
       if (b.date !== forDate) continue;
+      if (b.service_id) {
+        svcBlocks.push({
+          staffId: b.staff_id || null,
+          serviceId: b.service_id,
+          wholeDay: !b.block_time_start,
+          start: b.block_time_start ? toMin(b.block_time_start) : 0,
+          end: b.block_time_end ? toMin(b.block_time_end) : 24 * 60,
+        });
+        continue;
+      }
       (staffBlocksById[b.staff_id] = staffBlocksById[b.staff_id] || []).push({
         wholeDay: !b.block_time_start,
         start: b.block_time_start ? toMin(b.block_time_start) : 0,
         end: b.block_time_end ? toMin(b.block_time_end) : 24 * 60,
       });
     }
+    const svcBlockHits = (serviceId, staffId, startMin, endMin) => svcBlocks.some(b =>
+      b.serviceId === serviceId
+      && (b.staffId === null || b.staffId === staffId)
+      && (b.wholeDay || (startMin < b.end && endMin > b.start)));
     // Exceptions on this date (merged legacy JSON + staff_day_overrides
     // rows via getExceptionsFor). When a stylist has one or more exception
     // windows they REPLACE the weekly schedule for this date: the slot must
@@ -1704,8 +1738,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       for (const s of serviceSlots) {
         const end = cur + s.duration;
         const covered = s.eligible.length === 0
-          ? true // no staff configured for salon → fall back to salon hours (already checked)
-          : s.eligible.some(sm => staffCoversWindow(sm, cur, end));
+          ? !svcBlockHits(s.serviceId, null, cur, end) // solo salon: alleen de dienst-blokkade kan het venster sluiten
+          : s.eligible.some(sm => staffCoversWindow(sm, cur, end) && !svcBlockHits(s.serviceId, sm.id, cur, end));
         if (!covered) return false;
         cur = end;
       }
@@ -2048,6 +2082,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         staff_extra_excluded: lang === "es" ? "Este estilista no realiza uno de los extras elegidos — ajusta tu selección." : isNl ? "Deze medewerker voert een van de gekozen extra's niet uit — pas je keuze aan." : "This staff member doesn't perform one of the chosen extras — please adjust your selection.",
         staff_required: lang === "es" ? "Elige un estilista para cada tratamiento." : isNl ? "Kies een medewerker voor elke behandeling." : "Pick a stylist for each treatment.",
         staff_day_blocked: lang === "es" ? "Este estilista no está disponible este día." : isNl ? "Deze medewerker is niet beschikbaar op deze dag." : "This stylist isn't available on this day.",
+        staff_service_day_blocked: lang === "es" ? "Este estilista no realiza este tratamiento ese día — elige otro día u otro estilista." : isNl ? "Deze medewerker doet deze behandeling niet op deze dag — kies een andere dag of medewerker." : "This stylist doesn't take this treatment on that day — pick another day or stylist.",
+        service_day_blocked: lang === "es" ? "Este tratamiento no está disponible ese día." : isNl ? "Deze behandeling is niet beschikbaar op deze dag." : "This treatment isn't available on that day.",
         staff_time_blocked: lang === "es" ? "Este estilista no está disponible en esta franja horaria." : isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
         staff_not_available: lang === "es" ? "Este estilista no trabaja a esta hora." : isNl ? "Deze medewerker werkt niet op dit tijdstip." : "This stylist doesn't work at this time.",
       };
@@ -3339,7 +3375,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                     transition: "all 0.15s"
                                   }}>{t.anyStaff}</div>
                               )}
-                              {staffPickable.map(m => (
+                              {staffPickable.map(m => {
+                                // Afwijkende prijs per medewerker: toon de prijs op de
+                                // chip zodra minstens één collega afwijkt voor deze
+                                // dienst/variant — de klant ziet het verschil vóór de keuze.
+                                const anyDiff = staffPickable.some(x => staffPriceFor(x, s.id, item?.variant?.id || null) != null);
+                                const chipPrice = anyDiff
+                                  ? (staffPriceFor(m, s.id, item?.variant?.id || null)
+                                     ?? (item?.variant ? parseFloat(item.variant.price) : (s.variants?.length > 0 ? null : parseFloat(s.price))))
+                                  : null;
+                                return (
                                 <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
                                   style={{
                                     padding: "8px 16px", borderRadius: 10, cursor: "pointer",
@@ -3349,8 +3394,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   }}>
                                   <div style={{ fontSize: 12, fontWeight: 500, color: item?.staff?.id === m.id ? accent : c.text }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
+                                  {chipPrice != null && Number.isFinite(chipPrice) && (
+                                    <div style={{ fontSize: 10, color: item?.staff?.id === m.id ? accent : c.textSub, fontWeight: 600, marginTop: 2 }}>{cur}{chipPrice.toFixed(2)}</div>
+                                  )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                             {staffPickable.length === 0 && (item?.extras || []).length > 0 && (
                               <div style={{ fontSize: 11, color: c.danger, marginTop: 6 }}>
@@ -4165,12 +4214,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
                                 </div>
                               )}
-                              {staffPickable.map(m => (
+                              {staffPickable.map(m => {
+                                const anyDiff = staffPickable.some(x => staffPriceFor(x, s.id, item?.variant?.id || null) != null);
+                                const chipPrice = anyDiff
+                                  ? (staffPriceFor(m, s.id, item?.variant?.id || null)
+                                     ?? (item?.variant ? parseFloat(item.variant.price) : (s.variants?.length > 0 ? null : parseFloat(s.price))))
+                                  : null;
+                                return (
                                 <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
+                                  {chipPrice != null && Number.isFinite(chipPrice) && (
+                                    <div style={{ fontSize: 10, color: c.textSub, fontWeight: 600, marginTop: 2 }}>{cur}{chipPrice.toFixed(2)}</div>
+                                  )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                             {staffPickable.length === 0 && (item?.extras || []).length > 0 && (
                               <div style={{ fontSize: 11, color: c.danger, marginTop: 6 }}>

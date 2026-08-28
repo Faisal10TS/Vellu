@@ -514,7 +514,7 @@ function SalonRoute({ lang, setLang }) {
         supabase.from("public_reviews").select("id, client_name, rating, comment, created_at").eq("owner_id", data.id).order("created_at", { ascending: false }),
         // public_staff view: name/role/bio/avatar/hours only — freelancer
         // billing data and emails never reach the anon wire.
-        supabase.from("public_staff").select("*, staff_services(service_id)").eq("owner_id", data.id).eq("active", true).order("position"),
+        supabase.from("public_staff").select("*, staff_services(service_id), staff_service_prices(service_id, variant_id, price)").eq("owner_id", data.id).eq("active", true).order("position"),
         supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
         supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position"),
         // fmt = LOCAL date. toISOString() is UTC: late-evening in a UTC-negative
@@ -596,7 +596,7 @@ function SalonRoute({ lang, setLang }) {
         staff: (staffData || [])
           .slice()
           .sort((a, b) => ((b.is_owner === true) - (a.is_owner === true)) || ((a.position ?? 0) - (b.position ?? 0)))
-          .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
+          .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), price_overrides: s.staff_service_prices || [], working_hours: s.working_hours || null })),
         // One table, two meanings: kind='block' rows make a stylist (or the
         // whole salon) unavailable; kind='exception' rows are EXTRA open
         // windows (block_time_start/end double as open/close). Split here so

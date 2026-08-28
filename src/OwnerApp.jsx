@@ -3931,7 +3931,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // in het geheugen?"-controles verderop — daarom één gedeelde helper.
           supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", loadedWindowFrom()).order("date", { ascending: false }),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
-          supabase.from("staff_members").select("*, staff_services(service_id)").eq("owner_id", data.id).order("position"),
+          supabase.from("staff_members").select("*, staff_services(service_id), staff_service_prices(service_id, variant_id, price)").eq("owner_id", data.id).order("position"),
           supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
           supabase.from("locations").select("*").eq("owner_id", data.id).order("position"),
           supabase.from("client_no_shows").select("client_email, no_show_count, blocked").eq("owner_id", data.id),
@@ -4079,7 +4079,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           staff: (staffData || [])
             .slice()
             .sort((a, b) => ((b.user_id === data.id) - (a.user_id === data.id)) || ((a.position ?? 0) - (b.position ?? 0)))
-            .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), working_hours: s.working_hours || null })),
+            .map(s => ({ ...s, service_ids: (s.staff_services || []).map(ss => ss.service_id), price_overrides: s.staff_service_prices || [], working_hours: s.working_hours || null })),
           categories: catData || [],
           locations: locData || []
         }));
@@ -5209,6 +5209,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // anders krijgt een team-salon bij elke boeking ruis van collega's.
     for (const b of (salonData.staff_blocks || [])) {
       if (b.date !== date) continue;
+      // Dienst-specifieke blokkades hebben hier geen dienst-context om tegen
+      // te toetsen; de eigenaar mag handmatig altijd om zo'n blokkade heen.
+      if (b.service_id) continue;
       if (staffIds.length && b.staff_id && !staffIds.includes(b.staff_id)) continue;
       const bStart = b.block_time_start ? toMinutes(b.block_time_start) : null;
       const bEnd = b.block_time_end ? toMinutes(b.block_time_end) : null;
@@ -5289,7 +5292,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const openBlockModal = () => {
     const seed = calDate || fmt(getToday());
     setBlockEditId(null);
-    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "" });
+    setBlockForm({ mode: "time", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "" });
     setBlockModalOpen(true);
   };
 
@@ -5305,6 +5308,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       reason: b.reason || "",
       staff_id: b.staff_id || "",
       staff_name: (salonData.staff || []).find(s => s.id === b.staff_id)?.name || "",
+      service_id: b.service_id || "",
     });
     setBlockModalOpen(true);
   };
@@ -5326,10 +5330,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       ? ((salonData.staff || []).find(s => s.id === staffId)?.name || "")
       : "";
     // Editing an existing time-block row → UPDATE in place.
+    const serviceId = blockForm.service_id || null;
     if (blockEditId) {
       const { data: updated, error } = await supabase
         .from("staff_day_overrides")
-        .update({ staff_id: staffId, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
+        .update({ staff_id: staffId, service_id: serviceId, date: from, block_time_start: blockForm.time_start, block_time_end: blockForm.time_end, reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked") })
         .eq("id", blockEditId).eq("owner_id", salonData.owner_id)
         .select("*").single();
       setBlockSaving(false);
@@ -5350,6 +5355,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         .insert({
           owner_id: salonData.owner_id,
           staff_id: staffId,
+          service_id: serviceId,
           date: from,
           block_time_start: blockForm.time_start,
           block_time_end: blockForm.time_end,
@@ -5365,6 +5371,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.staff_blocks = [...(d.staff_blocks || []), inserted]; return d; });
       setBlockModalOpen(false);
       toast.show(lang === "nl" ? "Tijdvak geblokkeerd" : lang === "es" ? "Franja horaria bloqueada" : "Time window blocked");
+      return;
+    }
+    // Hele dag(en) mét dienst: het legacy-JSON-model kent geen service_id,
+    // dus dit wordt één rij per dag in staff_day_overrides zonder tijden
+    // (= hele dag, alleen die dienst — "maandag geen brows, pedicures wél").
+    if (serviceId) {
+      const rows = [];
+      let curD = parseDate(from);
+      const endD = parseDate(blockForm.to || from);
+      while (curD <= endD) {
+        rows.push({
+          owner_id: salonData.owner_id,
+          staff_id: staffId,
+          service_id: serviceId,
+          date: fmt(curD),
+          kind: "block",
+          reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked"),
+        });
+        curD.setDate(curD.getDate() + 1);
+      }
+      const { data: insertedRows, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
+      setBlockSaving(false);
+      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+      update(d => { d.staff_blocks = [...(d.staff_blocks || []), ...(insertedRows || [])]; return d; });
+      setBlockModalOpen(false);
+      toast.show(lang === "nl" ? "Dienst geblokkeerd voor die dag(en)" : lang === "es" ? "Tratamiento bloqueado para ese día" : "Treatment blocked for that day");
       return;
     }
     // Full-day / date-range block path — untouched.
@@ -7054,6 +7086,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ? (lang === "nl" ? "Alleen deze medewerker is dan niet boekbaar; anderen blijven beschikbaar." : lang === "es" ? "Solo se bloquea a este miembro del equipo; el resto sigue disponible para reservas." : "Only this staff member is blocked; the rest stays bookable.")
                       : (lang === "nl" ? "De hele salon is dicht in dit tijdvak." : lang === "es" ? "Todo el salón está cerrado durante este periodo." : "The whole salon is closed during this window.")}
                   </div>
+                </div>
+              )}
+              {(salonData.services || []).length > 0 && (
+                <div><label style={lbl}>{lang === "nl" ? "Welke behandeling?" : lang === "es" ? "¿Qué tratamiento?" : "Which treatment?"}</label>
+                  <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
+                    <option value="">{lang === "nl" ? "Alles (hele agenda)" : lang === "es" ? "Todo (toda la agenda)" : "Everything (whole agenda)"}</option>
+                    {(salonData.services || []).map(sv => (
+                      <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
+                    ))}
+                  </select>
+                  {blockForm.service_id && (
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                      {blockForm.staff_id
+                        ? (lang === "nl" ? "Alleen déze behandeling is dan niet boekbaar bij deze medewerker — andere behandelingen gaan gewoon door." : lang === "es" ? "Solo este tratamiento queda bloqueado para esta persona — los demás siguen disponibles." : "Only this treatment is blocked for this staff member — their other treatments stay bookable.")
+                        : (lang === "nl" ? "Niemand kan déze behandeling dan aannemen (bijv. de behandelkamer is bezet) — andere behandelingen gaan gewoon door." : lang === "es" ? "Nadie puede tomar este tratamiento entonces (p. ej. la sala está ocupada) — el resto sigue disponible." : "Nobody can take this treatment then (e.g. the treatment room is in use) — everything else stays bookable.")}
+                    </div>
+                  )}
                 </div>
               )}
               <div><label style={lbl}>{lang === "nl" ? "Reden (optioneel)" : lang === "es" ? "Motivo (opcional)" : "Reason (optional)"}</label>
@@ -9433,7 +9482,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       // Staff-authored blocks (staff_day_overrides). Owner sees
                       // them so they know why a stylist isn't bookable.
                       const staffBlocksHere = (salonData.staff_blocks || [])
-                        .filter(b => b.date === ds && (!agendaStaff || b.staff_id === agendaStaff));
+                        // Dienst-specifieke blokkades ("geen brows vandaag") blokkeren
+                        // de dag/medewerker niet als geheel — die tonen we alleen als
+                        // banner in de dagweergave, niet als rood gestreepte dag.
+                        .filter(b => b.date === ds && !b.service_id && (!agendaStaff || b.staff_id === agendaStaff));
                       const staffNameById = (id) => (salonData.staff || []).find(sm => sm.id === id)?.name || "";
                       const staffFullDayBlock = staffBlocksHere.find(b => !b.block_time_start);
                       const staffTimeBlocks = staffBlocksHere.filter(b => b.block_time_start);
@@ -9785,6 +9837,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 .map(b => {
                   const isTimeBlock = !!b.block_time_start;
                   const staffName = (salonData.staff || []).find(sm => sm.id === b.staff_id)?.name || "";
+                  // Dienst-specifieke blokkade: benoem de dienst in de banner.
+                  const svcRow = b.service_id ? (salonData.services || []).find(sv => sv.id === b.service_id) : null;
+                  const svcLabel = svcRow ? (lang === "nl" ? (svcRow.name_nl || svcRow.name) : (svcRow.name_en || svcRow.name_nl || svcRow.name)) : null;
                   const removeBlock = async () => {
                     if (!window.confirm(lang === "nl" ? `Deblokkade van ${staffName} verwijderen?` : lang === "es" ? `¿Quitar el bloqueo de ${staffName}?` : `Remove ${staffName}'s block?`)) return;
                     const { error } = await supabase.from("staff_day_overrides").delete().eq("id", b.id);
@@ -9799,7 +9854,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                       <div style={{ flex: 1, minWidth: 180 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
-                          {isTimeBlock
+                          {svcLabel
+                            ? (isTimeBlock
+                                ? (lang === "nl" ? `Geen ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` bij ${staffName}` : ""}` : lang === "es" ? `Sin ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` con ${staffName}` : ""}` : `No ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` with ${staffName}` : ""}`)
+                                : (lang === "nl" ? `Geen ${svcLabel} vandaag${staffName ? ` bij ${staffName}` : ""}` : lang === "es" ? `Sin ${svcLabel} hoy${staffName ? ` con ${staffName}` : ""}` : `No ${svcLabel} today${staffName ? ` with ${staffName}` : ""}`))
+                            : isTimeBlock
                             ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `${staffName} bloqueó ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
                             : (lang === "nl" ? `${staffName} is vrij` : lang === "es" ? `${staffName} está libre` : `${staffName} is off`)}
                         </div>
@@ -12505,6 +12564,64 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   }} />
                                 </div>
                               </div>
+
+                              {/* PRIJS PER MEDEWERKER — afwijkende prijs voor dezelfde
+                                  dienst per teamlid ("collega 1 doet manicure voor 55,
+                                  collega 2 voor 45"). Leeg veld = standaardprijs; opslaan
+                                  gebeurt direct bij het verlaten van het veld. */}
+                              {(salonData.staff || []).filter(m => m.active !== false).length > 0 && (
+                                <div style={{ marginTop: 20 }}>
+                                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, fontWeight: 600, marginBottom: 10 }}>
+                                    {lang === "nl" ? "Prijs per medewerker" : lang === "es" ? "Precio por profesional" : "Price per staff member"}
+                                  </div>
+                                  {(s.variants || []).length > 0 ? (
+                                    <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>
+                                      {lang === "nl" ? "Deze dienst gebruikt varianten — de variantprijs geldt voor iedereen." : lang === "es" ? "Este tratamiento usa variantes — el precio de la variante aplica a todos." : "This service uses variants — the variant price applies to everyone."}
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                      {(salonData.staff || []).filter(m => m.active !== false).map(m => {
+                                        const ovRow = (m.price_overrides || []).find(o => o.service_id === s.id && !o.variant_id);
+                                        return (
+                                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                            <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                                            <input className="input-field" type="number" min="0" step="0.01"
+                                              key={`${m.id}:${s.id}:${ovRow ? ovRow.price : "std"}`}
+                                              defaultValue={ovRow ? ovRow.price : ""}
+                                              placeholder={`${cur}${parseFloat(s.price || 0).toFixed(2)}`}
+                                              onBlur={async ev => {
+                                                const raw = ev.target.value.trim();
+                                                const had = ovRow ? parseFloat(ovRow.price) : null;
+                                                if (raw === "") {
+                                                  if (had == null) return;
+                                                  const { error } = await supabase.from("staff_service_prices").delete().eq("staff_id", m.id).eq("service_id", s.id).is("variant_id", null);
+                                                  if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                  update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: (x.price_overrides || []).filter(o => !(o.service_id === s.id && !o.variant_id)) } : x); return d; });
+                                                  toast.show(lang === "nl" ? `${m.name} rekent weer de standaardprijs` : lang === "es" ? `${m.name} vuelve al precio estándar` : `${m.name} is back on the default price`);
+                                                  return;
+                                                }
+                                                const val = parseFloat(raw);
+                                                if (!Number.isFinite(val) || val < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+                                                if (had != null && Math.abs(val - had) < 0.005) return;
+                                                const { error } = await supabase.from("staff_service_prices").upsert(
+                                                  { staff_id: m.id, service_id: s.id, variant_id: null, price: val },
+                                                  { onConflict: "staff_id,service_id,variant_id" }
+                                                );
+                                                if (error) { toast.show(t.somethingWrong, "error"); return; }
+                                                update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && !o.variant_id)), { service_id: s.id, variant_id: null, price: val }] } : x); return d; });
+                                                toast.show(lang === "nl" ? `${m.name}: ${cur}${val.toFixed(2)} voor deze dienst` : lang === "es" ? `${m.name}: ${cur}${val.toFixed(2)} para este tratamiento` : `${m.name}: ${cur}${val.toFixed(2)} for this service`);
+                                              }}
+                                              style={{ width: 130, fontSize: 12, padding: "8px 10px", textAlign: "right" }} />
+                                          </div>
+                                        );
+                                      })}
+                                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                                        {lang === "nl" ? "Leeg = standaardprijs. De klant ziet de prijs van de gekozen medewerker op de boekingspagina." : lang === "es" ? "Vacío = precio estándar. El cliente ve el precio del profesional elegido." : "Empty = default price. Clients see the chosen staff member's price on the booking page."}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* EXTRAS */}
                               <div style={{ marginTop: 20 }}>
