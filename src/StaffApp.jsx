@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { supabase } from "./supabase.js";
+import { supabase, supabaseUrl } from "./supabase.js";
 import {
   useTheme, useToast, ToastContainer, useConfirm, ConfirmModal,
   Skeleton, DashboardSkeleton,
@@ -118,6 +118,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [blockForm, setBlockForm] = useState({ mode: "time", from: fmt(getToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" });
   // When set, the block modal edits an existing time-block row (UPDATE).
   const [blockEditId, setBlockEditId] = useState(null);
+  // Telefoon-agenda-abonnement (iCal-feed): eigen token per medewerker, de
+  // tegenhanger van de eigenaars-feed in OwnerApp → Instellingen → Planning.
+  const [calFeedBusy, setCalFeedBusy] = useState(false);
+  const [calFeedCopied, setCalFeedCopied] = useState(false);
+  const [calHelpOpen, setCalHelpOpen] = useState(false);
   // Own exception days (extra werkdagen) — kind='exception' rows in the same
   // table; block_time_start/end double as open/close. Each stylist manages
   // her own, so two teammates can add one for the SAME date independently.
@@ -436,6 +441,51 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const a = document.createElement("a");
     a.href = url; a.download = `vellu-${myStaff.name.toLowerCase().replace(/\s+/g, "-")}-agenda.ics`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  // Live telefoon-agenda: de feed-URL met het eigen token van deze medewerker.
+  // calendar-feed herkent een staff-token en filtert dan op staff_id, dus de
+  // feed bevat alleen haar eigen afspraken. https:// om te plakken
+  // (Google/Outlook), webcal:// voor de directe Apple-abonneer-prompt.
+  const calFeedHttpUrl = myStaff.calendar_feed_token
+    ? `${supabaseUrl}/functions/v1/calendar-feed?token=${myStaff.calendar_feed_token}`
+    : "";
+  const calFeedWebcalUrl = calFeedHttpUrl.replace(/^https?:\/\//, "webcal://");
+
+  // Lazily mint the feed token on first activation — the token is a bearer
+  // secret, so it's long and random; rotating invalidates old subscriptions.
+  const mintCalendarToken = async () => {
+    setCalFeedBusy(true);
+    try {
+      const rnd = () => (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "");
+      const token = (rnd() + rnd()).slice(0, 48);
+      const { error } = await supabase.from("staff_members").update({ calendar_feed_token: token }).eq("id", staffMember.id);
+      if (error) throw error;
+      setMyStaff(s => ({ ...s, calendar_feed_token: token }));
+      return true;
+    } catch {
+      toast.show(lang === "nl" ? "Kon de agenda-link niet aanmaken" : lang === "es" ? "No se pudo crear el enlace del calendario" : "Could not create the calendar link", "error");
+      return false;
+    } finally {
+      setCalFeedBusy(false);
+    }
+  };
+
+  const rotateCalendarToken = async () => {
+    if (!await showConfirm(lang === "nl"
+      ? "Nieuwe link maken? De oude agenda-link stopt dan met werken op alle apparaten."
+      : lang === "es"
+      ? "¿Crear un enlace nuevo? El enlace de agenda anterior dejará de funcionar en todos los dispositivos."
+      : "Create a new link? The old calendar link will stop working on all devices.")) return;
+    if (await mintCalendarToken()) {
+      toast.show(lang === "nl" ? "Nieuwe agenda-link aangemaakt" : lang === "es" ? "Nuevo enlace de calendario creado" : "New calendar link created");
+    }
+  };
+
+  const copyCalFeed = () => {
+    navigator.clipboard.writeText(calFeedHttpUrl).catch(() => {});
+    setCalFeedCopied(true);
+    setTimeout(() => setCalFeedCopied(false), 2000);
   };
 
   const [staffPhotoUploading, setStaffPhotoUploading] = useState(null);
@@ -2122,7 +2172,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               </div>
 
               {/* WERKTIJDEN TAB */}
-              {staffSettingsTab === "werktijden" && (
+              {staffSettingsTab === "werktijden" && (<>
                 <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
                   {[0,1,2,3,4,5,6].map(day => {
@@ -2169,7 +2219,99 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     {saved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : lang === "es" ? "Guardado" : "Saved"}</> : t.saveChanges}
                   </button>
                 </div>
-              )}
+
+                {/* Telefoon-agenda (iCal-abonnement) — de medewerkers-versie van
+                    de eigenaars-kaart: alleen haar eigen afspraken, en nieuwe
+                    of gewijzigde afspraken verschijnen vanzelf in de agenda-app. */}
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginTop: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                    {lang === "nl" ? "Agenda in je telefoon" : lang === "es" ? "Calendario en tu teléfono" : "Calendar on your phone"}
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "Abonneer je telefoon-agenda op jouw Vellu-afspraken. Nieuwe en gewijzigde afspraken verschijnen er vanzelf — alleen die van jou."
+                      : lang === "es"
+                      ? "Suscribe el calendario de tu teléfono a tus citas de Vellu. Las citas nuevas y modificadas aparecen solas — solo las tuyas."
+                      : "Subscribe your phone's calendar to your Vellu appointments. New and changed appointments appear automatically — only yours."}
+                  </div>
+                  {!myStaff.calendar_feed_token ? (
+                    <button className="btn-ghost" style={{ width: "100%", fontSize: 12, borderColor: `${accent}33`, color: accent }}
+                      disabled={calFeedBusy}
+                      onClick={mintCalendarToken}>
+                      <NavIcon name="calendar" size={14} color={accent} /> {calFeedBusy
+                        ? (lang === "nl" ? "Bezig..." : lang === "es" ? "Procesando..." : "Working...")
+                        : (lang === "nl" ? "Telefoon-agenda activeren" : lang === "es" ? "Activar calendario del teléfono" : "Enable phone calendar")}
+                    </button>
+                  ) : (
+                    <div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }}>
+                        <div style={{
+                          flex: 1, minWidth: 0, padding: "10px 12px", background: c.inputBg,
+                          border: `1px solid ${c.inputBorder}`, borderRadius: 12, fontSize: 11,
+                          fontFamily: "monospace", color: c.textSub, whiteSpace: "nowrap",
+                          overflow: "hidden", textOverflow: "ellipsis",
+                        }} title={calFeedHttpUrl}>{calFeedHttpUrl}</div>
+                        <button className="btn-ghost" style={{
+                          padding: "0 14px", fontSize: 11, whiteSpace: "nowrap",
+                          color: calFeedCopied ? c.success : accent,
+                          borderColor: calFeedCopied ? `${c.success}55` : `${accent}33`,
+                        }} onClick={copyCalFeed}>
+                          <NavIcon name="link" size={13} color={calFeedCopied ? c.success : accent} />{" "}
+                          {calFeedCopied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy")}
+                        </button>
+                      </div>
+                      <a href={calFeedWebcalUrl}
+                        style={{
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                          width: "100%", padding: "11px 14px", borderRadius: 12, boxSizing: "border-box",
+                          background: `${accent}14`, border: `1px solid ${accent}33`, color: accent,
+                          fontSize: 12, fontWeight: 600, textDecoration: "none", marginBottom: 8,
+                        }}>
+                        <NavIcon name="calendar" size={14} color={accent} />
+                        {lang === "nl" ? "Openen in Apple / iPhone agenda" : lang === "es" ? "Abrir en Calendario de Apple / iPhone" : "Open in Apple / iPhone Calendar"}
+                      </a>
+                      <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border }}
+                        onClick={() => setCalHelpOpen(o => !o)}>
+                        {calHelpOpen
+                          ? (lang === "nl" ? "Uitleg verbergen ▲" : lang === "es" ? "Ocultar instrucciones ▲" : "Hide instructions ▲")
+                          : (lang === "nl" ? "Hoe koppel ik dit? ▼" : lang === "es" ? "¿Cómo conecto esto? ▼" : "How do I connect this? ▼")}
+                      </button>
+                      {calHelpOpen && (
+                        <div style={{ marginTop: 12, fontSize: 11, color: c.textSub, lineHeight: 1.6 }}>
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>iPhone / iPad</div>
+                            {lang === "nl"
+                              ? "Tik hierboven op \"Openen in Apple / iPhone agenda\" en bevestig met Abonneren. Klaar."
+                              : lang === "es"
+                              ? "Pulsa arriba en «Abrir en Calendario de Apple / iPhone» y confirma con Suscribirse. Listo."
+                              : "Tap \"Open in Apple / iPhone Calendar\" above and confirm with Subscribe. Done."}
+                          </div>
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>Android</div>
+                            {lang === "nl"
+                              ? "Ga op een computer naar calendar.google.com → naast \"Andere agenda's\" op + → Via URL → plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
+                              : lang === "es"
+                              ? "Desde un ordenador entra en calendar.google.com → junto a «Otros calendarios» pulsa + → Desde una URL → pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
+                              : "On a computer go to calendar.google.com → next to \"Other calendars\" click + → From URL → paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
+                          </div>
+                          <div style={{ padding: "8px 10px", background: c.inputBg, borderRadius: 10, color: c.textMuted, fontSize: 10 }}>
+                            {lang === "nl"
+                              ? "Let op: dit is alleen-lezen en wordt meestal elk uur ververst. Deel deze link niet; iedereen met de link kan jouw afspraken zien."
+                              : lang === "es"
+                              ? "Ojo: esto es solo lectura y suele actualizarse cada hora. No compartas este enlace; cualquiera que lo tenga puede ver tus citas."
+                              : "Note: this is read-only and usually refreshes hourly. Don't share this link; anyone with it can see your appointments."}
+                          </div>
+                          <button className="btn-ghost" style={{ width: "100%", fontSize: 10, marginTop: 10, color: c.danger, borderColor: `${c.danger}33` }}
+                            disabled={calFeedBusy}
+                            onClick={rotateCalendarToken}>
+                            {lang === "nl" ? "Nieuwe link maken (oude stopt)" : lang === "es" ? "Crear un enlace nuevo (el anterior deja de funcionar)" : "Create a new link (old one stops)"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>)}
 
               {/* FACTURATIE TAB */}
               {staffSettingsTab === "facturatie" && canInvoice && (

@@ -8384,7 +8384,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Quick Actions — primary first, rest ghost */}
-              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""}`, gap: 8, marginBottom: 22 }}>
+              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""} 1fr`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
@@ -8412,6 +8412,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <NavIcon name="download" size={14} color={c.textSub} /> {t.exportCalendar}
                   </button>
                 )}
+                {/* Live telefoon-agenda: springt naar de abonnements-kaart in
+                    Instellingen → Planning. Anders dan de eenmalige export
+                    hierboven verschijnen nieuwe afspraken daar vanzelf. */}
+                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+                  title={lang === "nl" ? "Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf" : lang === "es" ? "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas" : "Subscribe your phone's calendar — new appointments appear automatically"}
+                  onClick={() => {
+                    setView("instellingen"); setSettingsTab("planning");
+                    setTimeout(() => { try { document.getElementById("cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400);
+                  }}>
+                  <NavIcon name="calendar" size={14} color={c.textSub} /> {lang === "nl" ? "Koppel telefoon-agenda" : lang === "es" ? "Vincular calendario del móvil" : "Link phone calendar"}
+                </button>
               </div>
 
               {/* Revenue Chart + Popular Services */}
@@ -14729,7 +14740,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   in Apple Calendar / iPhone, Android and Outlook, not just
                   Google. Backed by the public `calendar-feed` edge function
                   authenticated with a per-owner token (calendar_feed_token). */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div id="cal-feed-card" style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Agenda in je telefoon" : lang === "es" ? "Calendario en tu teléfono" : "Calendar on your phone"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"

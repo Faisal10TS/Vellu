@@ -2,8 +2,10 @@
 // Public, token-authenticated iCal (.ics) feed of a salon's appointments so
 // the owner/staff can subscribe their phone's native calendar (Apple
 // Calendar, Google Calendar, Outlook) to their Vellu agenda. The secret
-// token lives in the URL (profiles.calendar_feed_token) — unguessable, and
-// rotating it invalidates old subscriptions. Read-only: never mutates data.
+// token lives in the URL (profiles.calendar_feed_token for the owner's full
+// agenda, staff_members.calendar_feed_token for a staff member's own
+// appointments) — unguessable, and rotating it invalidates old
+// subscriptions. Read-only: never mutates data.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -151,11 +153,32 @@ serve(async (req) => {
   const token = url.searchParams.get("token") || "";
   if (!token || token.length < 16) return new Response("Missing or invalid token", { status: 400 });
 
-  const { data: salon } = await supabase
+  // Eén "token"-param voor twee soorten feeds: eerst als eigenaar-token
+  // proberen (profiles), dan als medewerker-token (staff_members). Een
+  // medewerker-feed toont alleen haar eigen afspraken; de salon-rij van de
+  // eigenaar levert de tijdzone en de privacy-instelling voor klantcontact.
+  let staff: { id: string; name: string } | null = null;
+  let { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, country_code")
+    .select("id, business_name, country_code, staff_view_client_contact")
     .eq("calendar_feed_token", token)
     .maybeSingle();
+  if (!salon) {
+    const { data: st } = await supabase
+      .from("staff_members")
+      .select("id, owner_id, name")
+      .eq("calendar_feed_token", token)
+      .maybeSingle();
+    if (st) {
+      staff = { id: st.id, name: st.name };
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("id, business_name, country_code, staff_view_client_contact")
+        .eq("id", st.owner_id)
+        .maybeSingle();
+      salon = ownerProfile;
+    }
+  }
   if (!salon) return new Response("Not found", { status: 404 });
 
   // Window: from 30 days ago to 180 days ahead. Skip cancelled/no-show.
@@ -165,7 +188,7 @@ serve(async (req) => {
   const from = new Date(now); from.setDate(from.getDate() - 30);
   const to = new Date(now); to.setDate(to.getDate() + 180);
 
-  const { data: appts } = await supabase
+  let apptQuery = supabase
     .from("appointments")
     .select("id, date, time, service_name, service_duration, client_name, client_phone, staff_name, status, is_sale, service_id, products")
     .eq("owner_id", salon.id)
@@ -175,8 +198,9 @@ serve(async (req) => {
     // Kassa-verkopen zijn geen afspraken: ze mogen niet in de telefoonagenda
     // van de eigenaar verschijnen (oude rijen missen de vlag, vandaar de
     // structurele check verderop).
-    .not("is_sale", "is", true)
-    .order("date", { ascending: true });
+    .not("is_sale", "is", true);
+  if (staff) apptQuery = apptQuery.eq("staff_id", staff.id);
+  const { data: appts } = await apptQuery.order("date", { ascending: true });
 
   // De tijdzone van de salon bepaalt zowel de TZID op elk event als het
   // VTIMEZONE-blok in de kop; die twee moeten per definitie hetzelfde zijn,
@@ -185,7 +209,9 @@ serve(async (req) => {
   const vtimezone = VTIMEZONE_BY_TZ[tz] || VTIMEZONE_BY_TZ["Europe/Amsterdam"];
 
   const stamp = `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;
-  const calName = `${salon.business_name || "Vellu"} — Vellu`;
+  const calName = staff
+    ? `${staff.name} · ${salon.business_name || "Vellu"} — Vellu`
+    : `${salon.business_name || "Vellu"} — Vellu`;
 
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -212,8 +238,10 @@ serve(async (req) => {
     const summary = summaryParts.join(" — ");
     const descParts: string[] = [];
     if (a.service_name) descParts.push(a.service_name);
-    if (a.staff_name) descParts.push(`Medewerker: ${a.staff_name}`);
-    if (a.client_phone) descParts.push(`Tel: ${a.client_phone}`);
+    // In een medewerker-feed is elke afspraak per definitie van haarzelf; het
+    // telefoonnummer volgt dezelfde privacy-instelling als in haar app.
+    if (a.staff_name && !staff) descParts.push(`Medewerker: ${a.staff_name}`);
+    if (a.client_phone && (!staff || salon.staff_view_client_contact !== false)) descParts.push(`Tel: ${a.client_phone}`);
     if (a.status === "completed") descParts.push("Status: voltooid");
     lines.push(
       "BEGIN:VEVENT",
