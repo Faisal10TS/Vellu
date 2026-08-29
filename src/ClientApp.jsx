@@ -987,7 +987,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const invalidReason = !form.firstName.trim() ? (lang === "nl" ? "Vul je voornaam in" : lang === "es" ? "Introduce tu nombre" : "Enter your first name")
     : !form.lastName.trim() ? (lang === "nl" ? "Vul je achternaam in" : lang === "es" ? "Introduce tus apellidos" : "Enter your last name")
     : !emailValid ? (lang === "nl" ? "Vul een geldig e-mailadres in" : lang === "es" ? "Introduce un correo electrónico válido" : "Enter a valid email address")
-    : !phoneValid ? (lang === "nl" ? "Vul een geldig telefoonnummer in" : lang === "es" ? "Introduce un número de teléfono válido" : "Enter a valid phone number")
+    : !phoneValid ? (!(form.phone || "").trim()
+        ? (lang === "nl" ? "Telefoonnummer is verplicht bij deze salon — vul het in om te boeken" : lang === "es" ? "El teléfono es obligatorio en este salón — introdúcelo para reservar" : "Phone number is required at this salon — fill it in to book")
+        : (lang === "nl" ? "Vul een geldig telefoonnummer in" : lang === "es" ? "Introduce un número de teléfono válido" : "Enter a valid phone number"))
     : !policyValid ? (lang === "nl" ? "Accepteer de voorwaarden" : lang === "es" ? "Acepta los términos" : "Please accept the terms")
     : "";
 
@@ -1849,6 +1851,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // Synchronous guard via ref — React state updates are batched, so a rapid
     // double-tap can fire confirmBooking twice before `submitting` flips to true.
     if (submittingRef.current || submitting) return;
+    // Verplicht telefoonnummer: normaal blokkeert stap 3 dit al, maar een
+    // verouderde bundle (Instagram-webview!) kan hier zonder nummer belanden.
+    // Dan zeggen we het op de Confirm-klik zélf en brengen we de klant terug
+    // naar het veld (Faisal 29-08: "als ze bevestigen moet het aangeven: nee,
+    // je moet ook je telefoonnummer invullen").
+    // Rode pop-up MET duidelijke uitleg (geen vage "er ging iets mis") én de
+    // klant wordt teruggebracht naar het telefoonveld, dat rood oplicht met
+    // dezelfde uitleg eronder.
+    if (initialSalon.phone_required && (form.phone || "").trim().length < 6) {
+      setErrorToast(lang === "nl"
+        ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak."
+        : lang === "es"
+        ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita."
+        : "You also need to fill in your phone number — this salon needs it for your appointment.");
+      setTimeout(() => setErrorToast(""), 6000);
+      setPhoneError(true);
+      goToStep(3);
+      setTimeout(() => {
+        try {
+          const el = document.getElementById("vl-booking-phone");
+          el?.scrollIntoView({ block: "center", behavior: "smooth" });
+          el?.focus();
+        } catch { /* focus is best-effort */ }
+      }, 300);
+      return;
+    }
     submittingRef.current = true;
     setSubmitting(true);
     try {
@@ -2067,7 +2095,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         rate_limited: lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
         invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
-        phone_required: lang === "es" ? "Este salón necesita tu número de teléfono." : isNl ? "Telefoonnummer is verplicht voor deze salon." : "Phone number is required for this salon.",
+        phone_required: lang === "es" ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita." : isNl ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak." : "You also need to fill in your phone number — this salon needs it for your appointment.",
         policy_not_agreed: lang === "es" ? "Tienes que aceptar las condiciones de reserva." : isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
         // De no-show-blokkade in book-appointment geeft 403 client_blocked. Zonder
         // regel hier viel dat terug op de generieke "er ging iets mis", waarna de
@@ -3919,6 +3947,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                   )}
                   {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                    ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                     [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
@@ -3926,6 +3955,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
                     </div>
                   ))}
+                  {initialSalon.phone_required && !(form.phone || "").trim() && (
+                    <div className="confirm-row">
+                      <span style={{ fontSize: 11, color: c.danger, letterSpacing: "0.04em" }}>{t.phone}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: c.danger }}>{lang === "nl" ? "Ontbreekt — vul je nummer in" : lang === "es" ? "Falta — introduce tu número" : "Missing — fill in your number"}</span>
+                    </div>
+                  )}
                   {appliedDiscount && (
                     <div className="confirm-row">
                       <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
@@ -4624,6 +4659,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </div>
                       )}
                       {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
+                        ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
                         [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
@@ -4631,6 +4667,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
                         </div>
                       ))}
+                      {initialSalon.phone_required && !(form.phone || "").trim() && (
+                        <div className="confirm-row">
+                          <span style={{ fontSize: 11, color: c.danger, letterSpacing: "0.04em" }}>{t.phone}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: c.danger }}>{lang === "nl" ? "Ontbreekt — vul je nummer in" : lang === "es" ? "Falta — introduce tu número" : "Missing — fill in your number"}</span>
+                        </div>
+                      )}
                       {appliedDiscount && (
                         <div className="confirm-row">
                           <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
