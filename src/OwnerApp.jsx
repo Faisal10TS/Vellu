@@ -3561,10 +3561,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Dashboard has its own staff scope (kept separate from the agenda's so
   // switching tabs doesn't silently re-filter the other view).
   const [dashStaff, setDashStaff] = useState(null);
-  // Mobiele onderbalk: vastgeklemd aan de zichtbare viewport-onderkant (iOS
-  // toetsenbord/adresbalk schuift anders alle fixed elementen mee omhoog).
+  // Mobiele onderbalk: na iOS-toetsenbord-dismiss een onzichtbare scroll-nudge
+  // zodat hangende fixed-lagen herankeren (zie shared.useVisualBottomLock —
+  // raakt bewust géén styling aan, kan dus nooit zelf misplaatsen).
   const mobileNavRef = useRef(null);
-  useVisualBottomLock(mobileNavRef);
+  useVisualBottomLock();
   const [calViewMode, setCalViewMode] = useState("week"); // "week" or "month"
   const [calWeekOffset, setCalWeekOffset] = useState(0); // offset in weeks from current
   const [salonData, setSalonData] = useState(() => {

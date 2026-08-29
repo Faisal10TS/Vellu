@@ -1746,36 +1746,49 @@ export const accentEdge = (raw, themeName) => {
 // pointer-events:none, dus scrollen/vegen blijft exact zoals het was. Houdt
 // rekening met geneste scroll-containers (Instellingen): een voorouder die
 // zelf nog gescrold staat blokkeert het gebaar.
-// iOS verschuift bij het toetsenbord — en Safari bij de adresbalk-transitie —
-// de VISUAL viewport terwijl position:fixed aan de LAYOUT viewport blijft
-// hangen: de onderbalk "komt omhoog" en zweeft midden in beeld (TTNB, 29-08;
-// de al-geportalde chatknop schoof identiek mee, dus géén ancestor-transform).
-// Deze hook klemt het element imperatief aan de zichtbare onderkant via de
-// visualViewport-API — bewust zónder React-state, zodat de continue
-// scroll/resize-events geen re-renders van de hele app veroorzaken.
-export function useVisualBottomLock(ref) {
+// iOS laat na het toetsenbord (soms) alle position:fixed-elementen op een
+// verschoven plek hangen tot de eerstvolgende scroll — de onderbalk "zweeft"
+// dan midden in beeld (TTNB, 29-08). EERSTE poging was een klem die
+// style.bottom actief op de visual-viewport-gap zette; die maakte het ERGER:
+// als iOS het keyboard-dismiss-event inslikte bleef ónze verschuiving staan
+// en zetten wij de balk zelf middenin het scherm. Nieuwe aanpak kan per
+// definitie niets verplaatsen: we raken de styling nooit aan en geven iOS
+// alleen een onzichtbaar 1px-scroll-duwtje ("nudge") op de momenten waarop
+// het OS hangende fixed-lagen opnieuw ankert — direct na keyboard-dismiss
+// (gap zakt van groot naar ~0) en na elke focusout uit een invoerveld.
+export function useVisualBottomLock() {
   useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-    let raf = 0;
-    const apply = () => {
-      raf = 0;
-      const el = ref.current;
-      if (!el) return;
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    let prevGap = 0;
+    let t = 0;
+    const nudge = () => {
+      try { window.scrollBy(0, 1); window.scrollBy(0, -1); } catch { /* stil */ }
+    };
+    const onChange = () => {
+      if (!vv) return;
       const gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      const next = gap > 1 ? `${Math.round(gap)}px` : "0px";
-      if (el.style.bottom !== next) el.style.bottom = next;
+      if (prevGap > 40 && gap < 8) {
+        clearTimeout(t);
+        t = setTimeout(nudge, 80);
+      }
+      prevGap = gap;
     };
-    const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
-    vv.addEventListener("resize", onChange);
-    vv.addEventListener("scroll", onChange);
-    apply();
+    const onFocusOut = () => { clearTimeout(t); t = setTimeout(nudge, 250); };
+    if (vv) {
+      vv.addEventListener("resize", onChange);
+      vv.addEventListener("scroll", onChange);
+    }
+    document.addEventListener("focusout", onFocusOut, true);
     return () => {
-      if (raf) cancelAnimationFrame(raf);
-      vv.removeEventListener("resize", onChange);
-      vv.removeEventListener("scroll", onChange);
+      clearTimeout(t);
+      if (vv) {
+        vv.removeEventListener("resize", onChange);
+        vv.removeEventListener("scroll", onChange);
+      }
+      document.removeEventListener("focusout", onFocusOut, true);
     };
-  }, [ref]);
+  }, []);
 }
 
 export function PullToRefresh() {

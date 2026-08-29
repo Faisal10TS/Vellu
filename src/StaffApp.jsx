@@ -61,10 +61,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const toast = useToast();
 
   const [view, setView] = useState("dashboard");
-  // Mobiele onderbalk vastklemmen aan de zichtbare viewport-onderkant (iOS
-  // toetsenbord/adresbalk schuift fixed elementen anders mee omhoog).
+  // Mobiele onderbalk: scroll-nudge na iOS-toetsenbord-dismiss (zie
+  // shared.useVisualBottomLock — raakt geen styling aan).
   const mobileNavRef = useRef(null);
-  useVisualBottomLock(mobileNavRef);
+  useVisualBottomLock();
   const [calDate, setCalDate] = useState(fmt(getToday()));
   const [staffWeekOffset, setStaffWeekOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
