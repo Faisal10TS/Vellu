@@ -2291,7 +2291,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           // die verliezen bij vullen nu eenmaal veel (TTNB, 27-08) — blijven
           // ALTIJD gewoon vullend, net als een cover die de eigenaar zelf
           // heeft gepositioneerd (zoom of verschoven focuspunt).
-          const heroH = initialSalon.cover_image_url ? (isMobile ? 200 : 300) : (isMobile ? 160 : 220);
+          // Desktop-hoogte schaalt mee met de schermbreedte richting de 3:1
+          // van de instellingen-preview ("aanbevolen 1200×400"). Vast 300px
+          // was op een 1920-scherm een 6,4:1-strook: de eigenaar zag in de
+          // preview een prima kader en op de computer maar een smalle band
+          // van de foto (TTNB, 29-08). Cap op 500 zodat de hero nooit meer
+          // dan ± de halve viewport opeist.
+          const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+          const heroH = initialSalon.cover_image_url
+            ? (isMobile ? 200 : Math.min(Math.max(300, Math.round(vw / 3)), 500))
+            : (isMobile ? 160 : 220);
           const coverTuned = (Number(initialSalon.cover_zoom) || 1) > 1.05
             || Math.abs((initialSalon.cover_focal_x ?? 50) - 50) > 6
             || Math.abs((initialSalon.cover_focal_y ?? 50) - 50) > 6;
