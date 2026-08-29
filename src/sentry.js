@@ -47,6 +47,15 @@ export function initSentry() {
       "ResizeObserver loop limit exceeded",
       "ResizeObserver loop completed with undelivered notifications",
       "Non-Error promise rejection captured",
+      // Instagram/Facebook in-app-browser (Android) injecteert een eigen
+      // bridge-script (iabjs://…) dat naar de native app postMessaget; als
+      // die referentie weg is gooit HUN code deze fout — niet de onze.
+      // Klanten boeken massaal via de IG-bio-link, dus dit is pure ruis.
+      "Java object is gone",
+      // supabase-js (gotrue) gebruikt navigator.locks met steal:true bij
+      // token-refresh; in een tweede open tab wordt de "gestolen" lock als
+      // AbortError geworpen. Bekend en onschuldig meertabs-gedrag.
+      "Lock broken by another request with the 'steal' option",
     ],
     beforeSend(event) {
       // Strip anything that smells like a token from the event before send.
