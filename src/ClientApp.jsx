@@ -2421,12 +2421,31 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
-                      {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}><Linkify text={svcDesc(s)} color={accent} /></div>}
+                      {(() => {
+                        // Paraplu-diensten (zoals Eydy: "Harsen" met 13 varianten)
+                        // toonden alleen de kaartnaam — het echte aanbod bleef
+                        // onzichtbaar tot in de boekingsflow. Geen eigen
+                        // beschrijving? Dan tonen we de variantnamen als regel.
+                        const desc = svcDesc(s);
+                        const descStijl = { fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
+                        if (desc) return <div style={descStijl}><Linkify text={desc} color={accent} /></div>;
+                        if (s.variants?.length > 1) {
+                          const vNaam = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
+                          const lijst = s.variants.map(vNaam).filter(Boolean).join(" · ");
+                          if (lijst) return <div style={descStijl}>{lijst}</div>;
+                        }
+                        return null;
+                      })()}
                       <div className="profile-service-meta">
                         <span className="profile-service-duration-pill">
                           <NavIcon name="clock" size={10} color={c.textSub} />
                           {svcDuration(s)}
                         </span>
+                        {s.variants?.length > 1 && (
+                          <span className="profile-service-duration-pill">
+                            {s.variants.length} {lang === "nl" ? "opties" : lang === "es" ? "opciones" : "options"}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="profile-service-price">
