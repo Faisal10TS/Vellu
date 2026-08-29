@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -61,6 +61,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const toast = useToast();
 
   const [view, setView] = useState("dashboard");
+  // Mobiele onderbalk vastklemmen aan de zichtbare viewport-onderkant (iOS
+  // toetsenbord/adresbalk schuift fixed elementen anders mee omhoog).
+  const mobileNavRef = useRef(null);
+  useVisualBottomLock(mobileNavRef);
   const [calDate, setCalDate] = useState(fmt(getToday()));
   const [staffWeekOffset, setStaffWeekOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
@@ -2966,8 +2970,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           </div>
         ), document.body)}
 
-        {isMobile && (
-          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100 }}>
+        {/* Geportald naar body + visual-viewport-klem — zie OwnerApp's onderbalk. */}
+        {isMobile && createPortal((
+          <div ref={mobileNavRef} style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))", zIndex: 100, transform: "translateZ(0)", WebkitTransform: "translateZ(0)", backfaceVisibility: "hidden" }}>
             {navItems.map(([k, icon, label]) => (
               <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3 }}>
                 <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
@@ -2975,7 +2980,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               </div>
             ))}
           </div>
-        )}
+        ), document.body)}
       </div>
     </Layout>
   );

@@ -1736,6 +1736,38 @@ export const accentEdge = (raw, themeName) => {
 // pointer-events:none, dus scrollen/vegen blijft exact zoals het was. Houdt
 // rekening met geneste scroll-containers (Instellingen): een voorouder die
 // zelf nog gescrold staat blokkeert het gebaar.
+// iOS verschuift bij het toetsenbord — en Safari bij de adresbalk-transitie —
+// de VISUAL viewport terwijl position:fixed aan de LAYOUT viewport blijft
+// hangen: de onderbalk "komt omhoog" en zweeft midden in beeld (TTNB, 29-08;
+// de al-geportalde chatknop schoof identiek mee, dus géén ancestor-transform).
+// Deze hook klemt het element imperatief aan de zichtbare onderkant via de
+// visualViewport-API — bewust zónder React-state, zodat de continue
+// scroll/resize-events geen re-renders van de hele app veroorzaken.
+export function useVisualBottomLock(ref) {
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const el = ref.current;
+      if (!el) return;
+      const gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      const next = gap > 1 ? `${Math.round(gap)}px` : "0px";
+      if (el.style.bottom !== next) el.style.bottom = next;
+    };
+    const onChange = () => { if (!raf) raf = requestAnimationFrame(apply); };
+    vv.addEventListener("resize", onChange);
+    vv.addEventListener("scroll", onChange);
+    apply();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", onChange);
+      vv.removeEventListener("scroll", onChange);
+    };
+  }, [ref]);
+}
+
 export function PullToRefresh() {
   const { colors: c } = useTheme();
   const boxRef = useRef(null);

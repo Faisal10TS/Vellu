@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -3561,6 +3561,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Dashboard has its own staff scope (kept separate from the agenda's so
   // switching tabs doesn't silently re-filter the other view).
   const [dashStaff, setDashStaff] = useState(null);
+  // Mobiele onderbalk: vastgeklemd aan de zichtbare viewport-onderkant (iOS
+  // toetsenbord/adresbalk schuift anders alle fixed elementen mee omhoog).
+  const mobileNavRef = useRef(null);
+  useVisualBottomLock(mobileNavRef);
   const [calViewMode, setCalViewMode] = useState("week"); // "week" or "month"
   const [calWeekOffset, setCalWeekOffset] = useState(0); // offset in weeks from current
   const [salonData, setSalonData] = useState(() => {
@@ -15998,9 +16002,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
           </div>
         )}
 
-        {/* Mobile Bottom Nav — must be OUTSIDE main (overflow:hidden breaks position:fixed on iOS) */}
-        {isMobile && (
-          <div style={{
+        {/* Mobile Bottom Nav — geportald naar body (zoals de modals) zodat geen
+            enkele app-wrapper ooit z'n anker kan worden, en met visual-viewport-
+            klem tegen het iOS omhoogschuiven (zie useVisualBottomLock). */}
+        {isMobile && createPortal((
+          <div ref={mobileNavRef} style={{
             position: "fixed",
             bottom: 0,
             left: 0,
@@ -16025,7 +16031,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
             ))}
           </div>
-        )}
+        ), document.body)}
 
         {/* Add Appointment Modal */}
         {showAddAppt && (
