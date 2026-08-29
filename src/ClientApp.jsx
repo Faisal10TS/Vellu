@@ -8,7 +8,7 @@ import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   compressImage, sendEmails, sendSMS, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
-  getToday, fmt, parseDate, getDays,
+  getToday as deviceNow, fmt, parseDate, getDays, salonNow,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
   getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
@@ -698,6 +698,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (latestStart >= earliestEnd) return { closed: true };
     return { open: latestStart, close: earliestEnd };
   };
+
+  // Alle "nu/vandaag" voor open-status, datumstrip en slotfilters rekent op de
+  // klok van de SALON (shared.salonNow): een bezoeker op Curaçao zag een
+  // Rijswijkse salon om 20:57 NL-tijd nog "Open" staan, en andersom verdween
+  // bij een Bonaire-salon de hele middag voor NL-avondkijkers. De lokale
+  // naam schaduwt bewust de oude import (hernoemd naar deviceNow), zodat
+  // álle bestaande aanroepen in dit component automatisch salon-tijd rekenen.
+  const getToday = () => salonNow(initialSalon.country_code);
+  void deviceNow; // bewust ongebruikt — zie shadow hierboven
 
   // Booking window helpers (min/max advance)
   const minAdvanceHours = initialSalon.min_advance_hours || 0;
@@ -2175,7 +2184,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"]
     : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   
-  const _nowDate = new Date();
+  // Salon-klok, niet de apparaatklok — zie de getToday-shadow hierboven.
+  const _nowDate = getToday();
   const todayDayIndex = _nowDate.getDay();
   // Recurring weekly hours per day index. For team accounts the source of
   // truth is the staff schedule — owners often leave the salon/location

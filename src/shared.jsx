@@ -514,6 +514,22 @@ function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, servi
 }
 
 const getToday = () => new Date();
+// Tijdzone per land — zelfde tabel als calendar-feed/send-reminders, bewust
+// letterlijk gelijk zodat de klok-logica nooit uiteenloopt.
+export const TZ_BY_COUNTRY = {
+  NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London",
+  AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
+};
+export const tzForCountry = (code) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// "Nu" op de klok van de SALON, waar de bezoeker ook zit. Een bezoeker op
+// Curaçao zag een Rijswijkse salon om 20:57 NL-tijd nog "Open · sluit 16:00"
+// staan, en vandaag-sloten klopten in beide richtingen niet (29-08). De
+// toLocaleString-round-trip projecteert de salon-wandklok in de lokale Date;
+// minuut-precies, en bij een exotische fout valt hij terug op de apparaatklok.
+export const salonNow = (countryCode) => {
+  try { return new Date(new Date().toLocaleString("en-US", { timeZone: tzForCountry(countryCode) })); }
+  catch { return new Date(); }
+};
 // IMPORTANT: use LOCAL date components. `d.toISOString()` converts to UTC which can
 // shift the date by a day for users east of UTC in the early hours and west of UTC
 // in the late hours — causing bookings to save on the wrong day.
