@@ -791,6 +791,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [reviewSort, setReviewSort] = useState("recent");
   const [expandedHours, setExpandedHours] = useState(false);
   const [galleryExpanded, setGalleryExpanded] = useState(false);
+  // Dienstenlijst toont er eerst 12 (6 per kolom op desktop) met een
+  // "Toon alle"-knop — zelfde patroon als de galerij (Faisal, 29-08).
+  const [servicesExpanded, setServicesExpanded] = useState(false);
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [expandedPolicy, setExpandedPolicy] = useState(false);
   // Share popover — only used on desktop / browsers without navigator.share.
@@ -2394,10 +2397,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     </button>
                     <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
                       <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
-                        onClick={() => setProfileCategory("all")}>{t.allCategories}</button>
+                        onClick={() => { setProfileCategory("all"); setServicesExpanded(false); }}>{t.allCategories}</button>
                       {usedCats.map(cat => (
                         <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
-                          onClick={() => setProfileCategory(cat.id)}>
+                          onClick={() => { setProfileCategory(cat.id); setServicesExpanded(false); }}>
                           {lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
                         </button>
                       ))}
@@ -2410,7 +2413,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               })()}
 
               <div className="profile-services-grid">
-                {profileFilteredServices.map(s => (
+                {(servicesExpanded ? profileFilteredServices : profileFilteredServices.slice(0, 12)).map(s => (
                   <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
                     <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
                       {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
@@ -2435,6 +2438,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 ))}
               </div>
+              {profileFilteredServices.length > 12 && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                  <button className="btn-ghost" onClick={() => setServicesExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
+                    {servicesExpanded
+                      ? t.showLess
+                      : (lang === "nl" ? `Toon alle ${profileFilteredServices.length} behandelingen` : lang === "es" ? `Ver los ${profileFilteredServices.length} tratamientos` : `Show all ${profileFilteredServices.length} treatments`)}
+                  </button>
+                </div>
+              )}
               {profileFilteredServices.length === 0 && (
                 <div style={{ textAlign: "center", padding: "40px 16px", color: c.textMuted, fontSize: 13 }}>
                   {t.noTreatments}
@@ -2665,9 +2677,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
               </div>
 
-              {/* Address */}
+              {/* Address — één locatie krijgt de volle breedte (Faisal, 29-08:
+                  "de brede maar met hoe mooi die van TTNB eruit ziet"); alleen
+                  bij 2+ locaties staan de kaartjes naast elkaar. */}
               {hasAnyLocation ? (
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile || (initialSalon.locations || []).length === 1 ? "1fr" : "1fr 1fr", gap: 10 }}>
                   {(initialSalon.locations || []).map(loc => {
                     const locAddr = (loc.address || "").trim();
                     const locCity = (loc.city || "").trim();
@@ -2686,7 +2700,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               title={`${loc.name} — map`}
                               src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&t=m&z=16&hl=${lang}&output=embed`}
                               width="100%"
-                              height={isMobile ? 180 : 220}
+                              height={isMobile ? 200 : ((initialSalon.locations || []).length === 1 ? 280 : 220)}
                               style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
                               loading="lazy"
                               referrerPolicy="no-referrer-when-downgrade"
@@ -2711,48 +2725,54 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   })}
                 </div>
               ) : (initialSalon.address || initialSalon.city) ? (
-                <>
-                  <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.6 }}>
-                    <span style={{ marginRight: 6 }}><NavIcon name="mappin" size={12} color={c.textSub} /></span>
-                    {initialSalon.address && <>{initialSalon.address}, </>}{initialSalon.city}
-                  </div>
-                  {(() => {
-                    // If the address already contains the city name, don't append it
-                    // again — double "Amsterdam, Amsterdam" makes Google zoom out to
-                    // the whole city instead of the exact street.
-                    const addr = (initialSalon.address || "").trim();
-                    const city = (initialSalon.city || "").trim();
-                    const mainQuery = addr
-                      ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr)
-                      : city;
-                    if (!mainQuery) return null;
-                    const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mainQuery)}`;
-                    return (
-                      <div style={{ marginTop: 14, borderRadius: 14, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
-                        <iframe
-                          title={`${initialSalon.name} — map`}
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&hl=${lang}&output=embed`}
-                          width="100%"
-                          height={isMobile ? 220 : 280}
-                          style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                        />
-                        <a href={mapsHref} target="_blank" rel="noopener noreferrer"
-                          style={{
-                            position: "absolute", top: 10, right: 10,
-                            background: c.bg, color: c.text, fontSize: 11, fontWeight: 500,
-                            padding: "6px 12px", borderRadius: 100,
-                            textDecoration: "none",
-                            border: `1px solid ${c.border}`,
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
-                          }}>
-                          {lang === "nl" ? "Open in Maps ↗" : lang === "es" ? "Abrir en Maps ↗" : "Open in Maps ↗"}
-                        </a>
+                (() => {
+                  // Zelfde kaartstijl als de locatie-kaartjes hierboven, maar dan
+                  // op profiel-adres (salons zonder locations-rijen, zoals Rioghna):
+                  // naam + adres + kaart in één brede card i.p.v. een kale embed.
+                  // If the address already contains the city name, don't append it
+                  // again — double "Amsterdam, Amsterdam" makes Google zoom out to
+                  // the whole city instead of the exact street.
+                  const addr = (initialSalon.address || "").trim();
+                  const city = (initialSalon.city || "").trim();
+                  const mainQuery = addr
+                    ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr)
+                    : city;
+                  const mapsHref = mainQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mainQuery)}` : null;
+                  return (
+                    <div style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                      <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{initialSalon.name}</div>
+                      <div style={{ fontSize: 13, color: c.textSub }}>
+                        {initialSalon.address && <>{initialSalon.address}{initialSalon.city ? ", " : ""}</>}{initialSalon.city}
                       </div>
-                    );
-                  })()}
-                </>
+                      {mainQuery && (
+                        <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
+                          <iframe
+                            title={`${initialSalon.name} — map`}
+                            src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&hl=${lang}&output=embed`}
+                            width="100%"
+                            height={isMobile ? 200 : 280}
+                            style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                          {mapsHref && (
+                            <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+                              style={{
+                                position: "absolute", top: 10, right: 10,
+                                background: c.bg, color: c.text, fontSize: 11, fontWeight: 500,
+                                padding: "6px 12px", borderRadius: 100,
+                                textDecoration: "none",
+                                border: `1px solid ${c.border}`,
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                              }}>
+                              {lang === "nl" ? "Open in Maps ↗" : lang === "es" ? "Abrir en Maps ↗" : "Open in Maps ↗"}
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : null}
             </section>
 
