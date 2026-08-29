@@ -4107,7 +4107,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
                     {" "}{t.bookingLegalNoticeRefund}
                   </div>
-                  <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+                  <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                 </>
               )}
             </div>
@@ -4694,7 +4694,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
                       {" "}{t.bookingLegalNoticeRefund}
                     </div>
-                    <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? "..." : t.confirm}</button>
+                    <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                   </>}
 
                   {/* Reviews on mobile step 1 */}
@@ -4790,7 +4790,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
                 {step === 4 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
-                    disabled={submitting} onClick={confirmBooking}>{submitting ? "..." : t.confirm}</button>
+                    disabled={submitting} onClick={confirmBooking}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                 )}
               </div>
             )}

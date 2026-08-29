@@ -1891,6 +1891,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 100px;
     padding: 15px 28px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; width: 100%;
+    /* iOS: lang indrukken van een knop selecteerde de tekst ernaast en zette
+       er een accent-gekleurde selectie-cursor bij ("het o'tje", TTNB 29-08). */
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
     transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
   }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px ${accent}55; }
