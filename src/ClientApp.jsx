@@ -742,6 +742,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // blindly populate every input on a page. If the server receives a non-empty
   // value, it rejects the booking. See also book-appointment edge fn.
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" });
+  // Server zei phone_required (kan alleen via een verouderde/gemanipuleerde
+  // pagina voorbij de client-check komen): we springen dan terug naar de
+  // gegevens-stap en markeren het telefoonveld — een toast alleen verdwijnt
+  // en laat de klant raden wat ze moet doen (TTNB-klant, 29-08).
+  const [phoneError, setPhoneError] = useState(false);
   const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -2115,6 +2120,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         } else {
           msg = t.bookingError + (code && code !== "booking_failed" ? ` (${code})` : "");
         }
+      }
+      // Niet alleen vertellen wat er mis is, maar de klant er ook heenbrengen:
+      // terug naar de gegevens-stap met het telefoonveld gemarkeerd en gefocust.
+      if (code === "phone_required") {
+        setPhoneError(true);
+        goToStep(3);
+        setTimeout(() => {
+          try {
+            const el = document.getElementById("vl-booking-phone");
+            el?.scrollIntoView({ block: "center", behavior: "smooth" });
+            el?.focus();
+          } catch { /* focus is best-effort */ }
+        }, 300);
       }
       setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
@@ -3787,7 +3805,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
                     <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
-                  <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                  <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
+                  {phoneError && (
+                    <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
+                      {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
+                    </div>
+                  )}
                   <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                   {/* Honeypot — invisible to real users, bots fill it. Offscreen
@@ -4496,7 +4519,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
                         <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
-                      <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
+                      <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
+                  {phoneError && (
+                    <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
+                      {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
+                    </div>
+                  )}
                       <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                       {/* Honeypot — kept LAST so it can't disturb autofill. */}
