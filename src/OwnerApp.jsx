@@ -9621,20 +9621,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {/* Day header */}
                           <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}`, position: "relative" }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
-                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                            {/* Vaste hoogte 24 óók zonder vandaag-cirkel: anders is de
+                                vandaag-kolomkop hoger en zakken de pills in die ene
+                                kolom scheef t.o.v. de rest van de week. */}
+                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: 24, borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
                             {dienstBlokHier && (
                               <div title={lang === "nl" ? "Behandeling geblokkeerd op deze dag — klik voor details" : lang === "es" ? "Tratamiento bloqueado este día" : "A treatment is blocked this day — click for details"} style={{ position: "absolute", top: 4, right: 4, display: "flex" }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" /></svg>
                               </div>
                             )}
                           </div>
-                          {/* Day content */}
-                          <div style={{ flex: 1, minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
+                          {/* Day content — minWidth 0 + overflow hidden zodat op smalle
+                              telefoonkolommen niets over de kolomranden heen bloedt. */}
+                          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", minHeight: isMobile ? 80 : 160, padding: isMobile ? "6px 3px 8px" : "8px 8px 10px", display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
                             {isFullDayBlocked && (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: isMobile ? "6px 2px" : "8px 4px", background: `${c.danger}18`, border: `1px solid ${c.danger}44`, borderRadius: 6 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                                  <svg width={isMobile ? 10 : 12} height={isMobile ? 10 : 12} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                  <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: isMobile ? "5px 2px" : "8px 4px", background: `${c.danger}18`, border: `1px solid ${c.danger}44`, borderRadius: 6, maxWidth: "100%" }}>
+                                {/* Op mobiel geen icoon: 7 kolommen op een telefoon zijn
+                                    ~50px breed en icoon+tekst prangt dan tegen de randen. */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 3, maxWidth: "100%" }}>
+                                  {!isMobile && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>}
+                                  <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
                                     {lang === "nl" ? "Gesloten" : lang === "es" ? "Cerrado" : "Closed"}
                                   </div>
                                 </div>
