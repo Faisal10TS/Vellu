@@ -2096,8 +2096,26 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         service_day_blocked: lang === "es" ? "Este tratamiento no está disponible ese día." : isNl ? "Deze behandeling is niet beschikbaar op deze dag." : "This treatment isn't available on that day.",
         staff_time_blocked: lang === "es" ? "Este estilista no está disponible en esta franja horaria." : isNl ? "Deze medewerker is niet beschikbaar in dit tijdvak." : "This stylist isn't available in this time window.",
         staff_not_available: lang === "es" ? "Este estilista no trabaja a esta hora." : isNl ? "Deze medewerker werkt niet op dit tijdstip." : "This stylist doesn't work at this time.",
+        products_not_available: lang === "es" ? "Los productos no están disponibles ahora mismo — quítalos de tu reserva." : isNl ? "Producten zijn nu even niet beschikbaar — haal ze uit je boeking." : "Products aren't available right now — please remove them from your booking.",
+        too_many_products: lang === "es" ? "Demasiados productos en una sola reserva — reduce la cantidad." : isNl ? "Te veel producten in één boeking — verklein je aantal." : "Too many products in one booking — please reduce the quantity.",
       };
-      const msg = MAP[code] || t.bookingError;
+      // Drie fallback-lagen vóór de generieke tekst (Faisal 29-08: "zeg WAAROM"):
+      // 1. db_error_*/create_failed = onze kant → "probeer zo opnieuw";
+      // 2. malformed/verouderde payloads (oude gecachte bundle, m.n. de
+      //    Instagram-webview) → expliciet "je pagina lijkt verouderd";
+      // 3. écht onbekend → generieke tekst MET de servercode erbij, zodat de
+      //    salon bij een supportvraag meteen kan doorgeven wat er stond.
+      const STALE_CODES = ["invalid_json", "missing_salon_slug", "missing_services", "too_many_services", "invalid_date", "invalid_time", "missing_client", "invalid_request", "invalid_datetime", "variant_service_mismatch", "extra_service_mismatch"];
+      let msg = MAP[code];
+      if (!msg) {
+        if (code.startsWith("db_error") || code === "client_create_failed" || code === "appointment_create_failed") {
+          msg = lang === "es" ? "Algo salió mal por nuestra parte. Inténtalo de nuevo en un momento." : isNl ? "Er ging iets mis aan onze kant. Probeer het over een minuutje opnieuw." : "Something went wrong on our side. Please try again in a minute.";
+        } else if (STALE_CODES.includes(code)) {
+          msg = lang === "es" ? "Tu página parece desactualizada — recárgala e inténtalo de nuevo." : isNl ? "Je pagina lijkt verouderd — ververs de pagina en probeer het opnieuw." : "Your page looks out of date — please refresh the page and try again.";
+        } else {
+          msg = t.bookingError + (code && code !== "booking_failed" ? ` (${code})` : "");
+        }
+      }
       setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
       setSubmitting(false);
