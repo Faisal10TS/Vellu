@@ -967,8 +967,8 @@ function Marquee({ items, c, accent = ACCENT }) {
     </div>
   );
   return (
-    {/* Bewust GEEN mask-image/randvervaging: Faisal vond het "infadende licht"
-        aan de randen niks — de woorden lopen nu op volle sterkte de rand in en uit. */}
+    // Bewust GEEN mask-image/randvervaging: Faisal vond het "infadende licht"
+    // aan de randen niks — de woorden lopen op volle sterkte de rand in en uit.
     <div aria-hidden="true" className="vl-marquee" style={{ overflow: "hidden", padding: "26px 0", borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}` }}>
       <div className="vl-marquee-track" style={{ display: "flex", width: "max-content" }}>
         {half(0)}{half(1)}
