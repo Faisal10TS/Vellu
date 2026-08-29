@@ -9606,8 +9606,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       // schaartje in de dagkop zodat hij vindbaar is; klik op de dag
                       // opent de banner met bewerken/deblokkeren.
                       const dienstBlokHier = (salonData.staff_blocks || []).some(b => blockAppliesOn(b, ds) && b.service_id && (!agendaStaff || !b.staff_id || b.staff_id === agendaStaff));
-                      const isFullDayBlocked = (blockMatchesStaff && !ov.block_time_start) || !!staffFullDayBlock;
-                      const isTimeBlocked = blockMatchesStaff && !!ov.block_time_start;
+                      // ov?.: een hele-dag-blokkade kan óók puur uit een
+                      // staff_day_overrides-rij komen (medewerker blokkeerde zelf,
+                      // wekelijkse herhaling, salonbrede rij) — dan is ov undefined.
+                      const isFullDayBlocked = (blockMatchesStaff && !ov?.block_time_start) || !!staffFullDayBlock;
+                      const isTimeBlocked = blockMatchesStaff && !!ov?.block_time_start;
                       return (
                         <div key={i} role="button" tabIndex={0}
                           onClick={() => { setCalDate(ds); setCalViewMode("day"); }}
@@ -9644,9 +9647,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     {lang === "nl" ? "Gesloten" : lang === "es" ? "Cerrado" : "Closed"}
                                   </div>
                                 </div>
-                                {ov.staff_name && (
-                                  <div style={{ fontSize: isMobile ? 7 : 9, color: c.danger, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{ov.staff_name}</div>
-                                )}
+                                {/* Naam uit de legacy-JSON-blokkade óf uit de rij-blokkade;
+                                    ov.staff_name zonder ?. crashte hier de hele agenda zodra
+                                    de blokkade alleen als rij bestond (o.a. medewerker-
+                                    blokkades en wekelijkse hele-dag-herhalingen). */}
+                                {(() => {
+                                  const wie = ov?.staff_name || (staffFullDayBlock ? staffNameById(staffFullDayBlock.staff_id) : "");
+                                  return wie ? (
+                                    <div style={{ fontSize: isMobile ? 7 : 9, color: c.danger, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{wie}</div>
+                                  ) : null;
+                                })()}
                               </div>
                             )}
                             {isTimeBlocked && (
