@@ -2904,18 +2904,53 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         )}
 
         {/* Gallery overlay */}
-        {gallery && (
-          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
+        {gallery && (() => {
+          // Bladeren met wrap-around — gedeeld door de pijlknoppen en de
+          // pijltjestoetsen. De overlay krijgt focus bij openen (tabIndex +
+          // ref-focus), anders komt er nooit een keydown aan.
+          const stap = (richting) => setGallery(g => {
+            if (!g || g.photos.length < 2) return g;
+            return { ...g, idx: (g.idx + richting + g.photos.length) % g.photos.length };
+          });
+          const pijlStijl = (kant) => ({
+            position: "absolute", [kant]: 14, top: "50%", transform: "translateY(-50%)",
+            background: "rgba(0,0,0,0.5)", border: "none", color: "#fff",
+            width: 44, height: 44, borderRadius: "50%", fontSize: 26, lineHeight: 1,
+            cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center",
+          });
+          return (
+          <div className="gallery-overlay" tabIndex={-1} style={{ outline: "none" }}
+            ref={el => { if (el && !el.contains(document.activeElement)) el.focus(); }}
+            onClick={() => setGallery(null)}
+            onKeyDown={e => {
+              if (e.key === "Escape") setGallery(null);
+              else if (e.key === "ArrowLeft") { e.preventDefault(); stap(-1); }
+              else if (e.key === "ArrowRight") { e.preventDefault(); stap(1); }
+            }}>
             <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 40, height: 40, borderRadius: "50%", fontSize: 20, cursor: "pointer", zIndex: 10 }}>&times;</button>
+            {gallery.photos.length > 1 && (
+              <>
+                <button onClick={e => { e.stopPropagation(); stap(-1); }} aria-label={lang === "nl" ? "Vorige foto" : lang === "es" ? "Foto anterior" : "Previous photo"} style={pijlStijl("left")}>&#8249;</button>
+                <button onClick={e => { e.stopPropagation(); stap(1); }} aria-label={lang === "nl" ? "Volgende foto" : lang === "es" ? "Foto siguiente" : "Next photo"} style={pijlStijl("right")}>&#8250;</button>
+              </>
+            )}
             <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={t.galleryPhoto} />
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            {gallery.photos.length > 1 && (
+              <div style={{ color: "#fff", opacity: 0.75, fontSize: 11, marginTop: 10, letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums" }} onClick={e => e.stopPropagation()}>
+                {gallery.idx + 1} / {gallery.photos.length}
+              </div>
+            )}
+            {/* Wrap i.p.v. één oneindige rij: bij 15+ foto's liep de strip op
+                telefoons de viewport uit zonder scroll. */}
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 12, maxWidth: "min(92vw, 700px)", maxHeight: 128, overflowY: "auto" }} onClick={e => e.stopPropagation()}>
               {gallery.photos.map((p, i) => (
                 <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
                   style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5 }} loading="lazy" alt="" />
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Review overlay */}
         {showReviewForm && (
