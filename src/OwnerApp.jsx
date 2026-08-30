@@ -12212,6 +12212,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* ═══ DIENSTEN TAB ═══ */}
               {settingsTab === "diensten" && <>
 
+              {/* Diensten in hun eigen kader — zelfde boxstijl als de kaarten op
+                  de Salon-tab (Faisal 30-08: "services in een box en products
+                  in een box"). */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+
               {/* AI proofreader for the salon's own service names (NL + EN). */}
               <TranslationChecker lang={lang} accent={accent} onApply={async (issue) => {
                 const patch = { [issue.field]: issue.suggestion };
@@ -12224,7 +12229,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               }} />
 
               {/* Services list — collapsible cards */}
-              <div style={{ marginBottom: 14 }}>
+              <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.services}</div>
                   <div style={{ fontSize: 10, color: c.textMuted }}>{salonData.services.length} {salonData.services.length === 1 ? (lang === "nl" ? "dienst" : lang === "es" ? "servicio" : "service") : (lang === "nl" ? "diensten" : lang === "es" ? "servicios" : "services")}</div>
@@ -13325,15 +13330,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 )}
               </div>
 
+              </div>{/* /diensten-box */}
+
               {/* ═══ PRODUCTEN (Professional) ═══
                   Retail products the salon sells alongside treatments. Clients
                   can add them while booking; the owner can ring them up on an
                   appointment (sale button on the agenda card); both end up on the
                   invoice automatically because price + label live on the
-                  appointment row. */}
-              <div className="glass-card" style={{ padding: 24, marginTop: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400 }}>{lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products"}</div>
+                  appointment row. Eigen kader in Salon-tab-stijl. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products"}</div>
                   {salonData.plan === "professional" && <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.products || []).length}</div>}
                 </div>
                 <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
@@ -13350,7 +13357,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       (over stock-tracked products only). */}
                   {(salonData.products || []).length > 0 && (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                      <input className="input-field" placeholder={lang === "nl" ? "Zoeken…" : lang === "es" ? "Buscar…" : "Search…"} value={productSearch} onChange={e => setProductSearch(e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px" }} />
+                      {/* Mobiel: zoekveld op z'n eigen regel; de waarde-kaartjes
+                          komen er dan netjes als paar onder i.p.v. rommelig
+                          eromheen te wrappen. */}
+                      <input className="input-field" placeholder={lang === "nl" ? "Zoeken…" : lang === "es" ? "Buscar…" : "Search…"} value={productSearch} onChange={e => setProductSearch(e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px", ...(isMobile ? { flexBasis: "100%" } : {}) }} />
                       {(() => {
                         const tracked = (salonData.products || []).filter(p => p.stock != null);
                         if (!tracked.length) return null;
