@@ -10263,7 +10263,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div key={key} onClick={() => setInvoiceFilter(key)} style={{
                         padding: isMobile ? "8px 10px" : "6px 14px", borderRadius: isMobile ? 12 : 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
-                        background: invoiceFilter === key ? accent : "transparent",
+                        background: invoiceFilter === key ? accent : (isMobile ? c.bgCard : "transparent"),
+                        // Mobiel: elk vak z'n eigen omlijning zodat het raster als
+                        // vier gelijke knoppen leest i.p.v. losse tekst in een bak.
+                        border: isMobile ? `1px solid ${invoiceFilter === key ? accent : c.inputBorder}` : "1px solid transparent",
                         color: invoiceFilter === key ? c.btnOnDark : c.textSub,
                         display: "inline-flex", alignItems: "center", gap: 6,
                         justifyContent: isMobile ? "space-between" : "flex-start", minWidth: 0
@@ -10342,12 +10345,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <span>{formatDate(a.date)}</span>
-                            <span>·</span>
-                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>
-                            {a.staff_name && <><span>·</span><span>{a.staff_name}</span></>}
+                          {/* Eén nette regel "datum · dienst…" met echte ellipsis
+                              (flexWrap liet losse ·'s en halve zinnen op eigen
+                              regels vallen) + staff apart eronder, ontdubbeld
+                              ("Lady, Lady" bij twee diensten van dezelfde persoon). */}
+                          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+                            <span style={{ flexShrink: 0 }}>{formatDate(a.date)}</span>
+                            <span style={{ flexShrink: 0 }}>·</span>
+                            <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>
                           </div>
+                          {(() => {
+                            const wie = a.staff_name ? [...new Set(String(a.staff_name).split(",").map(s => s.trim()).filter(Boolean))].join(", ") : "";
+                            return wie ? (
+                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                <NavIcon name="user" size={9} color={c.textMuted} /> {wie}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                         </div>
 
