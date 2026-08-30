@@ -10399,11 +10399,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           ) : (
                             <>
                               {a.invoice_sent ? (
-                                <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: isMobile ? 4 : 5, padding: isMobile ? "6px 9px" : "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
                                   <NavIcon name="check" size={10} color={c.success} /> {t.sent}
                                 </span>
                               ) : (
-                                <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
+                                <button className="btn-ghost" style={{ padding: isMobile ? "8px 12px" : "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1, flexShrink: 0 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
                                   {isSending ? (
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
                                       <path d="M21 12a9 9 0 11-6.219-8.56" />
@@ -10418,10 +10418,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <button
                                 aria-label={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : lang === "es" ? "Pagada — haz clic para deshacer" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : lang === "es" ? "Marcar como pagada" : "Mark as paid")}
                                 onClick={() => togglePaid(a)}
-                                style={{ height: 30, minWidth: 30, padding: a.paid_at ? "0 10px" : 0, borderRadius: 8, border: `1px solid ${a.paid_at ? `${c.success}44` : c.inputBorder}`, background: a.paid_at ? `${c.success}14` : "transparent", color: a.paid_at ? c.success : c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif" }}
+                                style={{ height: 30, minWidth: 30, padding: a.paid_at && !isMobile ? "0 10px" : 0, borderRadius: 8, border: `1px solid ${a.paid_at ? `${c.success}44` : c.inputBorder}`, background: a.paid_at ? `${c.success}14` : "transparent", color: a.paid_at ? c.success : c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif", flexShrink: 0 }}
                                 title={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : lang === "es" ? "Pagada — haz clic para deshacer" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : lang === "es" ? "Marcar como pagada" : "Mark as paid")}
                               >
-                                {cur}{a.paid_at ? (lang === "nl" ? " Betaald" : lang === "es" ? " Pagada" : " Paid") : ""}
+                                {/* Mobiel: alleen het €-teken — groen gevuld = betaald;
+                                    het "Paid"-label at de ruimte van de medewerker-chip op. */}
+                                {cur}{a.paid_at && !isMobile ? (lang === "nl" ? " Betaald" : lang === "es" ? " Pagada" : " Paid") : ""}
                               </button>
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:
