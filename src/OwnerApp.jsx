@@ -14444,15 +14444,18 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.reminderTiming}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.reminderTimingDesc}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* Zelfde symmetrie als Boekingsvenster: mobiel 3 kolommen,
+                    7 chips = 3+3+1 met de wees links. */}
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[0, 1, 2, 4, 12, 24, 48].map(hrs => (
                     <div key={hrs} onClick={() => update(d => { d.reminder_hours = hrs; return d; })}
                       style={{
-                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        padding: isMobile ? "10px 4px" : "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.reminder_hours ?? 24) === hrs ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.reminder_hours ?? 24) === hrs ? accent : c.inputBorder}`,
                         color: (salonData.reminder_hours ?? 24) === hrs ? accent : c.textSub,
-                        fontSize: 12, fontWeight: 500
+                        fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
                     >{hrs === 0 ? t.reminderNone : `${hrs}${lang === "nl" ? "u" : "h"} ${t.reminderBefore}`}</div>
                   ))}
@@ -14475,17 +14478,18 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.rebookNudge}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.rebookNudgeDesc}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[0, 7, 14, 21, 28, 42, 56].map(days => (
                     <div key={days} onClick={() => update(d => { d.rebook_nudge_days = days; return d; })}
                       style={{
-                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        padding: isMobile ? "10px 4px" : "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.rebook_nudge_days ?? 28) === days ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.rebook_nudge_days ?? 28) === days ? accent : c.inputBorder}`,
                         color: (salonData.rebook_nudge_days ?? 28) === days ? accent : c.textSub,
-                        fontSize: 12, fontWeight: 500
+                        fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
-                    >{days === 0 ? t.rebookNudgeOff : `${days / 7} ${t.rebookNudgeWeeks}`}</div>
+                    >{days === 0 ? t.rebookNudgeOff : days === 7 ? (lang === "nl" ? "1 week" : lang === "es" ? "1 semana" : "1 week") : `${days / 7} ${t.rebookNudgeWeeks}`}</div>
                   ))}
                 </div>
               </div>

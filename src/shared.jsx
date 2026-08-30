@@ -965,7 +965,7 @@ const _T_RAW = {
     // Reminder timing
     reminderTiming:"Herinnering timing", reminderTimingDesc:"Wanneer krijgen klanten een herinnering voor hun afspraak?",
     rebookNudge:"Herboek herinnering", rebookNudgeDesc:"Na hoeveel weken krijgen klanten een 'we missen je' e-mail?", rebookNudgeOff:"Uit", rebookNudgeWeeks:"weken",
-    reminderBefore:"voor de afspraak", reminderNone:"Geen herinnering",
+    reminderBefore:"vooraf", reminderNone:"Geen herinnering",
     // Onboarding
     onboardingWelcome:"Welkom bij Vellu!", onboardingWelcomeSub:"Laten we je salon instellen. Dit duurt maar 2 minuten.",
     onboardingStep1:"Salon gegevens", onboardingStep1Sub:"Hoe heet je salon?",
@@ -1251,7 +1251,7 @@ const _T_RAW = {
     // Reminder timing
     reminderTiming:"Reminder timing", reminderTimingDesc:"When should clients receive a reminder for their appointment?",
     rebookNudge:"Rebook reminder", rebookNudgeDesc:"After how many weeks should clients get a 'we miss you' email?", rebookNudgeOff:"Off", rebookNudgeWeeks:"weeks",
-    reminderBefore:"before the appointment", reminderNone:"No reminder",
+    reminderBefore:"before", reminderNone:"No reminder",
     // Onboarding
     onboardingWelcome:"Welcome to Vellu!", onboardingWelcomeSub:"Let's set up your salon. This only takes 2 minutes.",
     onboardingStep1:"Salon details", onboardingStep1Sub:"What's your salon called?",
@@ -1537,7 +1537,7 @@ const _T_RAW = {
     // Reminder timing
     reminderTiming:"Momento del recordatorio", reminderTimingDesc:"¿Cuándo deben recibir los clientes un recordatorio de su cita?",
     rebookNudge:"Recordatorio para volver a reservar", rebookNudgeDesc:"¿Después de cuántas semanas deben recibir los clientes un correo de '¡te extrañamos!'?", rebookNudgeOff:"Desactivado", rebookNudgeWeeks:"semanas",
-    reminderBefore:"antes de la cita", reminderNone:"Sin recordatorio",
+    reminderBefore:"antes", reminderNone:"Sin recordatorio",
     // Onboarding
     onboardingWelcome:"¡Bienvenida a Vellu!", onboardingWelcomeSub:"Configuremos tu salón. Solo toma 2 minutos.",
     onboardingStep1:"Datos del salón", onboardingStep1Sub:"¿Cómo se llama tu salón?",
