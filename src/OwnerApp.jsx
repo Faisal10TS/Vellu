@@ -14342,7 +14342,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         color: (salonData.cancel_deadline_hours || 0) === hrs ? accent : c.textSub,
                         fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
-                    >{hrs === 0 ? (lang === "nl" ? "Altijd" : lang === "es" ? "Siempre" : "Always") : (lang === "nl" ? `Tot ${hrs}u vooraf` : lang === "es" ? `Hasta ${hrs}h antes` : `Up to ${hrs}h before`)}</div>
+                    >{hrs === 0 ? (lang === "nl" ? "Altijd" : lang === "es" ? "Siempre" : "Anytime") : (lang === "nl" ? `Tot ${hrs}u vooraf` : lang === "es" ? `Hasta ${hrs}h antes` : `Up to ${hrs}h before`)}</div>
                   ))}
                 </div>
                 {(salonData.cancel_deadline_hours || 0) > 0 && (
