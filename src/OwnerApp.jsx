@@ -10357,8 +10357,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {(() => {
                             const wie = a.staff_name ? [...new Set(String(a.staff_name).split(",").map(s => s.trim()).filter(Boolean))].join(", ") : "";
                             return wie ? (
-                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                <NavIcon name="user" size={9} color={c.textMuted} /> {wie}
+                              // Zelfde medewerker-chip als op de afspraakkaarten
+                              // van het dashboard (accent-pill met poppetje).
+                              <div style={{ marginTop: 4 }}>
+                                <div style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600, maxWidth: "100%" }}>
+                                  <NavIcon name="user" size={9} color={accent} />
+                                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wie}</span>
+                                </div>
                               </div>
                             ) : null;
                           })()}
