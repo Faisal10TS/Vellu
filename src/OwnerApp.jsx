@@ -10345,34 +10345,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </span>
                             )}
                           </div>
-                          {/* Eén nette regel "datum · dienst…" met echte ellipsis
-                              (flexWrap liet losse ·'s en halve zinnen op eigen
-                              regels vallen) + staff apart eronder, ontdubbeld
-                              ("Lady, Lady" bij twee diensten van dezelfde persoon). */}
-                          <div style={{ fontSize: 11, color: c.textMuted, display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
-                            <span style={{ flexShrink: 0 }}>{formatDate(a.date)}</span>
-                            <span style={{ flexShrink: 0 }}>·</span>
-                            <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>
+                          {/* "datum · dienst" mag over maximaal TWEE regels lopen
+                              (de medewerker-chip staat sinds 30-08 in de
+                              onderregel tussen prijs en knoppen, dus hier is
+                              verticale ruimte) en kapt daarna af met "…". */}
+                          <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {formatDate(a.date)} · {a.service_name}
                           </div>
-                          {(() => {
-                            const wie = a.staff_name ? [...new Set(String(a.staff_name).split(",").map(s => s.trim()).filter(Boolean))].join(", ") : "";
-                            return wie ? (
-                              // Zelfde medewerker-chip als op de afspraakkaarten
-                              // van het dashboard (accent-pill met poppetje).
-                              <div style={{ marginTop: 4 }}>
-                                <div style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600, maxWidth: "100%" }}>
-                                  <NavIcon name="user" size={9} color={accent} />
-                                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wie}</span>
-                                </div>
-                              </div>
-                            ) : null;
-                          })()}
                         </div>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
                         {/* Price */}
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
+
+                        {/* Medewerker-chip tussen prijs en knoppen (Faisal 30-08) —
+                            zelfde accent-pill als de dashboard-afspraakkaart,
+                            namen ontdubbeld ("Lady, Lady" → "Lady"). */}
+                        {(() => {
+                          const wie = a.staff_name ? [...new Set(String(a.staff_name).split(",").map(s => s.trim()).filter(Boolean))].join(", ") : "";
+                          return wie ? (
+                            <div style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600, minWidth: 0, flexShrink: 1 }}>
+                              <NavIcon name="user" size={9} color={accent} />
+                              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wie}</span>
+                            </div>
+                          ) : null;
+                        })()}
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
