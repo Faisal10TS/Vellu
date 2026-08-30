@@ -10253,7 +10253,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                   {/* Mobiel: 2×2-raster met gelijke vakken — de losse pill-rij
                       wrapte daar ongelijk (3 chips boven, 1 zwevend eronder). */}
-                  <div style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined, gap: 4, padding: 3, background: c.inputBg, borderRadius: isMobile ? 16 : 100, border: `1px solid ${c.inputBorder}`, flexWrap: isMobile ? undefined : "wrap" }}>
+                  <div style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined, width: isMobile ? "100%" : undefined, gap: 4, padding: 3, background: c.inputBg, borderRadius: isMobile ? 16 : 100, border: `1px solid ${c.inputBorder}`, flexWrap: isMobile ? undefined : "wrap" }}>
                     {[
                       ["all", lang === "nl" ? "Alles" : lang === "es" ? "Todos" : "All", visibleCompleted.length],
                       ["unsent", lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length],
