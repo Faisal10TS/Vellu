@@ -6761,16 +6761,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       )}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize:10, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+          {/* Alle pillen in deze rij delen 8px verticale padding: de
+              btn-ghost-default (11px) maakte Afronden een dikke oval die
+              over twee regels wrapte, terwijl "0 14px" de rest platsloeg. */}
+          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
           {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
-            <button className="btn-ghost" style={{ fontSize:10, padding: "0 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
+            <button className="btn-ghost" style={{ fontSize:10, padding: "8px 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
           )}
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
           {/* Annuleren: klant krijgt bericht, rij blijft uitgegrijsd staan.
               Verwijderen (de X hiernaast) is voor foutieve invoer. */}
-          <button className="btn-ghost" style={{ fontSize:10, padding: "0 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId}
+          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId}
             title={lang === "nl" ? "Afspraak annuleren — de klant krijgt bericht" : lang === "es" ? "Cancelar la cita — se avisa al cliente" : "Cancel the appointment — the client is notified"}
             onClick={() => cancelAppt(a)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
@@ -6802,7 +6805,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {/* Quick actions: Google Calendar + WhatsApp */}
       {a.status === "confirmed" && (
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", color: c.textLabel }} onClick={() => {
+          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 8px", color: c.textLabel }} onClick={() => {
             const dur = parseInt(a.service_duration || a.duration || 60);
             window.open(getGoogleCalUrl({
               title: `${a.client_name} — ${a.service_name}`,
@@ -6815,7 +6818,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               NOT the salon's own whatsapp_number (that's for clients messaging
               the salon). Opens WhatsApp with a pre-filled confirmation. */}
           {a.client_phone && (
-            <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 10px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 10px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
               const msg = getWhatsAppBookingMsg(lang, {
                 clientName: a.client_name, salonName: salonData.name,
                 date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
