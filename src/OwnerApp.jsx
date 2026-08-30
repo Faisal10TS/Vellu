@@ -8992,7 +8992,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 border: `1px solid ${kassaDiscountPct === pct ? accent : c.inputBorder}`,
                                 color: kassaDiscountPct === pct ? accent : c.textMuted }}>{sym}</span>
                           ))}
-                          <input className="input-field" type="number" min="0" step="0.01" max={kassaDiscountPct ? 100 : undefined} value={kassaDiscount} onChange={e => setKassaDiscount(e.target.value)} placeholder="0" style={{ width: 84, fontSize: 12, textAlign: "right" }} />
+                          {/* Inline padding wint van de mobiele .input-field-regel
+                              (14px padding maakte dit veldje onnodig log); de
+                              16px-font blijft — dat is de iOS-zoomrem. */}
+                          <input className="input-field" type="number" min="0" step="0.01" max={kassaDiscountPct ? 100 : undefined} value={kassaDiscount} onChange={e => setKassaDiscount(e.target.value)} placeholder="0" style={{ width: 74, fontSize: 12, padding: "7px 10px", borderRadius: 10, textAlign: "right" }} />
                         </div>
                       )}
                       {(redeemPreview > 0 || discountPreview > 0) && (
