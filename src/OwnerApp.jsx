@@ -14128,11 +14128,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   const hours = salonData.business_hours?.[day] || DEFAULT_HOURS[day];
                   const isClosed = hours.closed;
                   return (
-                    <div key={day} style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: 10, 
-                      marginBottom: 10, 
+                    <div key={day} style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      // Mobiel: dag+schakelaar op regel 1, tijden als volle-breedte
+                      // regel 2 (flexBasis 100% hieronder) — naast elkaar past
+                      // niet op 390px en wrapte half, wat er gestapeld uitzag.
+                      flexWrap: isMobile ? "wrap" : "nowrap",
+                      marginBottom: 10,
                       padding: "10px 12px",
                       background: isClosed ? c.bgCard : `${accent}08`,
                       border: `1px solid ${isClosed ? c.border : `${accent}22`}`,
@@ -14205,7 +14209,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           setDay({ break_start: bs, break_end: be });
                         };
                         return (
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ flex: 1, minWidth: 0, ...(isMobile ? { flexBasis: "100%" } : {}) }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             <select value={hours.open} onChange={e => setDay({ open: e.target.value })} style={selStyle}>
                               {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
@@ -14229,9 +14233,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <select value={hours.break_end} onChange={e => setDay({ break_end: e.target.value })} style={selStyle}>
                                 {TIMES.filter(x => x > (hours.break_start || hours.open) && x < hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                               </select>
-                              <span style={{ fontSize: 10, color: c.textMuted }}>
+                              {!isMobile && <span style={{ fontSize: 10, color: c.textMuted }}>
                                 {lang === "nl" ? "dicht tussen deze tijden" : lang === "es" ? "cerrado entre estas horas" : "closed between these times"}
-                              </span>
+                              </span>}
                             </div>
                           )}
                         </div>
