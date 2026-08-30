@@ -4467,6 +4467,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Kassa: hoe er is afgerekend. "request" wordt payment_method "online"
   // zodat de factuur-mail het betaalverzoek-blok meestuurt.
   const [walkinPay, setWalkinPay] = useState("pin");
+  // Kassakorting: alleen op het productdeel (kadobon = betaalmiddel). De
+  // %-stand is een invoerhulp; geboekt wordt altijd een bedrag, als negatieve
+  // productregel zodat bon én belastinggrondslag vanzelf kloppen.
+  const [kassaDiscount, setKassaDiscount] = useState("");
+  const [kassaDiscountPct, setKassaDiscountPct] = useState(false);
   // Reschedule modal state — holds the appointment being moved, or null.
   const [rescheduling, setRescheduling] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -5876,6 +5881,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       createdVoucherId = vRow ? vRow.id : null;
       items.push({ id: "giftcard", kind: "voucher_sale", voucher_id: vRow ? vRow.id : null, name: `${lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"} ${voucherCode}`, price: voucherAmt, qty: 1 });
     }
+    // Korting: % rekent over het productsubtotaal (zonder kadobonverkoop),
+    // een bedrag is erop gemaximeerd. Als negatieve regel in items zodat de
+    // bon 'm toont en linesFromSale → computeTax de grondslag mee verlaagt.
+    const prodSubtotal = items.filter(it => it.kind !== "voucher_sale").reduce((s, it) => s + it.price * it.qty, 0);
+    const rawKorting = parseFloat(kassaDiscount) || 0;
+    let kortingAmt = kassaDiscountPct ? Math.round(prodSubtotal * rawKorting) / 100 : rawKorting;
+    kortingAmt = +Math.min(Math.max(0, kortingAmt), prodSubtotal).toFixed(2);
+    if (kortingAmt > 0) {
+      items.push({ id: "discount", kind: "discount", name: lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount", price: -kortingAmt, qty: 1 });
+    }
     const saleTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
     // Kadobon inwisselen. De omzet is al geboekt toen de bon VERKOCHT werd, dus
     // dit deel mag niet nog een keer meetellen: het komt als negatieve regel in
@@ -5904,7 +5919,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       });
     }
     const netTotal = +(saleTotal - redeemAmt).toFixed(2);
-    const saleLabel = items.filter(it => it.kind !== "voucher_redeem").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    const saleLabel = items.filter(it => it.kind !== "voucher_redeem" && it.kind !== "discount").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
     {
       const now = new Date();
       const pad2 = (n) => String(n).padStart(2, "0");
@@ -5924,7 +5939,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
-        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${redeemAmt > 0 ? ` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${cur}${redeemAmt.toFixed(2)})` : ""}`,
+        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${kortingAmt > 0 ? ` (${lang === "nl" ? "korting" : lang === "es" ? "descuento" : "discount"} −${cur}${kortingAmt.toFixed(2)})` : ""}${redeemAmt > 0 ?` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${cur}${redeemAmt.toFixed(2)})` : ""}`,
         service_price: netTotal,
         service_duration: 0,
         date: fmt(getToday()),
@@ -5969,7 +5984,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.next_receipt_number = receiptNo + 1; return d; });
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode("");
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode(""); setKassaDiscount(""); setKassaDiscountPct(false);
       // Bevestiging in beeld houden: bedrag, betaalwijze en knoppen voor de bon.
       setLastSale(data);
       // Met auto-print aan rolt de bon direct uit de printer terwijl de
@@ -7414,10 +7429,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const lines = Array.isArray(sale.products) ? sale.products : [];
         const amt = (it) => (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
         const gross = lines.filter(it => amt(it) > 0).reduce((x, it) => x + amt(it), 0);
-        const redeemed = lines.filter(it => amt(it) < 0).reduce((x, it) => x + Math.abs(amt(it)), 0);
+        // Negatieve regels zijn kadobon-inwissel ÓF kassakorting — apart
+        // houden, anders heet korting hier "Kadobon ingewisseld".
+        const negSum = lines.filter(it => amt(it) < 0).reduce((x, it) => x + Math.abs(amt(it)), 0);
+        const redeemed = lines.filter(it => it.kind === "voucher_redeem").reduce((x, it) => x + Math.abs(amt(it)), 0);
+        const kortingLn = +(negSum - redeemed).toFixed(2);
         // Producten aangeslagen op een behandeling: die behandeling zit wel in
         // het totaal maar niet in products. Toon 'm dan als eigen regel.
-        const rest = Math.round(((parseFloat(sale.service_price) || 0) - (gross - redeemed)) * 100) / 100;
+        const rest = Math.round(((parseFloat(sale.service_price) || 0) - (gross - negSum)) * 100) / 100;
         const payTxt = sale.payment_method === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
           : sale.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request")
           : (lang === "es" ? "Tarjeta" : "Pin");
@@ -7468,7 +7487,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 ))}
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${c.border}` }}>
-                  {redeemed > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${cur}${(gross + Math.max(0, rest)).toFixed(2)}`} />}
+                  {negSum > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${cur}${(gross + Math.max(0, rest)).toFixed(2)}`} />}
+                  {kortingLn > 0 && <Row label={lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"} value={`−${cur}${kortingLn.toFixed(2)}`} tone={c.success} />}
                   {redeemed > 0 && <Row label={lang === "nl" ? "Kadobon ingewisseld" : lang === "es" ? "Tarjeta canjeada" : "Gift card redeemed"} value={`−${cur}${redeemed.toFixed(2)}`} tone={c.success} />}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal" : "Total"}</span>
@@ -8901,9 +8921,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const voucherAmt = parseFloat(kassaVoucher) || 0;
                     const items = sel.map(([pid, qty]) => { const p = (salonData.products || []).find(x => x.id === pid); return p ? { p, qty } : null; }).filter(Boolean);
                     const gross = items.reduce((s, it) => s + (parseFloat(it.p.price) || 0) * it.qty, 0) + voucherAmt;
-                    // Een ingewisselde kadobon betaalt hooguit het hele mandje.
-                    const redeemPreview = redeemVoucher ? Math.min(redeemVoucher.remaining, gross) : 0;
-                    const tot = +(gross - redeemPreview).toFixed(2);
+                    // Kortingpreview: zelfde regels als completeWalkinSaleInner —
+                    // alleen over het productdeel, % afgerond op centen, gemaximeerd.
+                    const prodSub = gross - voucherAmt;
+                    const rawK = parseFloat(kassaDiscount) || 0;
+                    const discountPreview = +Math.min(Math.max(0, kassaDiscountPct ? Math.round(prodSub * rawK) / 100 : rawK), prodSub).toFixed(2);
+                    // Een ingewisselde kadobon betaalt hooguit het hele (gekorte) mandje.
+                    const redeemPreview = redeemVoucher ? Math.min(redeemVoucher.remaining, gross - discountPreview) : 0;
+                    const tot = +(gross - discountPreview - redeemPreview).toFixed(2);
                     return (<>
                       {items.length === 0 && voucherAmt <= 0 && (
                         <div style={{ fontSize: 11, color: c.textMuted, padding: "10px 0" }}>{lang === "nl" ? "Tik producten aan of scan ze — ze verschijnen hier." : lang === "es" ? "Toca o escanea productos — aparecen aquí." : "Tap or scan products — they show up here."}</div>
@@ -8956,13 +8981,33 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           )}
                         </div>
                       )}
-                      {redeemPreview > 0 && (
+                      {/* Kassakorting — zelfde €/%-schakelaar als bij Bewerk afspraak. */}
+                      {items.length > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, flex: 1 }}>{lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"}</span>
+                          {[[false, cur], [true, "%"]].map(([pct, sym]) => (
+                            <span key={sym} onClick={() => setKassaDiscountPct(pct)}
+                              style={{ padding: "2px 9px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700,
+                                background: kassaDiscountPct === pct ? `${accent}18` : "transparent",
+                                border: `1px solid ${kassaDiscountPct === pct ? accent : c.inputBorder}`,
+                                color: kassaDiscountPct === pct ? accent : c.textMuted }}>{sym}</span>
+                          ))}
+                          <input className="input-field" type="number" min="0" step="0.01" max={kassaDiscountPct ? 100 : undefined} value={kassaDiscount} onChange={e => setKassaDiscount(e.target.value)} placeholder="0" style={{ width: 84, fontSize: 12, textAlign: "right" }} />
+                        </div>
+                      )}
+                      {(redeemPreview > 0 || discountPreview > 0) && (
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textMuted, marginTop: 12 }}>
                           <span>{lang === "nl" ? "Subtotaal" : "Subtotal"}</span>
                           <span style={{ fontVariantNumeric: "tabular-nums" }}>{cur}{gross.toFixed(2)}</span>
                         </div>
                       )}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: redeemPreview > 0 ? "2px 0 12px" : "12px 0" }}>
+                      {discountPreview > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                          <span>{lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"}{kassaDiscountPct && rawK > 0 ? ` (${rawK}%)` : ""}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>−{cur}{discountPreview.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: (redeemPreview > 0 || discountPreview > 0) ? "2px 0 12px" : "12px 0" }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{redeemPreview > 0 ? (lang === "nl" ? "Nog te betalen" : lang === "es" ? "A pagar" : "Left to pay") : (lang === "nl" ? "Totaal" : "Total")}</span>
                         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{cur}{tot.toFixed(2)}</span>
                       </div>
