@@ -3561,10 +3561,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Dashboard has its own staff scope (kept separate from the agenda's so
   // switching tabs doesn't silently re-filter the other view).
   const [dashStaff, setDashStaff] = useState(null);
-  // Mobiele onderbalk: na iOS-toetsenbord-dismiss een onzichtbare scroll-nudge
-  // zodat hangende fixed-lagen herankeren (zie shared.useVisualBottomLock —
-  // raakt bewust géén styling aan, kan dus nooit zelf misplaatsen).
-  const mobileNavRef = useRef(null);
+  // Scroll-nudge na iOS-toetsenbord-dismiss voor de overgebleven fixed
+  // elementen (chat-launcher, save-pill); de onderbalk zelf is sinds de
+  // app-shell-ombouw een flex-sibling en heeft dit niet meer nodig.
   useVisualBottomLock();
   const [calViewMode, setCalViewMode] = useState("week"); // "week" or "month"
   const [calWeekOffset, setCalWeekOffset] = useState(0); // offset in weeks from current
@@ -3862,7 +3861,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // accounts (plan == null) get the full Professional experience so they
   // feel what they'd lose by picking Starter at conversion time.
   const isStarter = salonData.plan === "starter";
-  const goUpgrade = () => { setView("instellingen"); setSettingsTab("billing"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
+  const goUpgrade = () => { setView("instellingen"); setSettingsTab("billing"); try { window.scrollTo({ top: 0, behavior: "smooth" }); document.querySelector(".vl-app-scroll")?.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
   const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
   // Account section state (Overig tab). Keep everything local so a dirty
   // change-email/change-password form never taints salonData or the main
@@ -7934,6 +7933,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <div style={{
         background: c.bg,
         minHeight: "100dvh",
+        // Mobiel = app-shell met vaste hoogte: de inhoud scrolt in een eigen
+        // gebied en de onderbalk is een gewone flex-sibling — GEEN
+        // position:fixed meer, dus iOS' zwevende-balk-bug (3e melding, 30-08)
+        // heeft letterlijk niets meer om verkeerd te ankeren.
+        ...(isMobile ? { height: "100dvh", overflow: "hidden" } : {}),
         display: "flex",
         fontFamily: "'Jost',sans-serif",
         color: c.text
@@ -8030,6 +8034,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
+          ...(isMobile ? { minHeight: 0, overflow: "hidden" } : {}),
           marginLeft: isMobile ? 0 : 260
         }}>
           {/* Mobile Header */}
@@ -8099,6 +8104,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
             </div>
           )}
+
+          {/* Mobiel: hét scrollgebied van de app-shell (desktop: neutrale div,
+              daar blijft de body gewoon scrollen zoals altijd). De onderbalk
+              staat als flex-sibling ONDER deze div — nooit meer fixed. */}
+          <div className="vl-app-scroll" style={isMobile ? { flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" } : undefined}>
 
           {/* Content — flows with natural body scroll (settings has its own structure below) */}
           {view !== "instellingen" ? (
@@ -15836,6 +15846,29 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
           </>
           )}
 
+          </div>{/* /vl-app-scroll */}
+
+          {/* Mobile Bottom Nav — gewone flex-sibling in de app-shell-kolom:
+              geen position:fixed meer, dus de iOS zwevende-balk-bug kan hem
+              per definitie niet meer raken (3e melding, 30-08). */}
+          {isMobile && (
+            <div style={{
+              flexShrink: 0,
+              background: c.bg,
+              borderTop: "1px solid " + c.border,
+              display: "flex",
+              padding: "10px 2px 8px",
+              paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
+            }}>
+              {navItems.map(([k, icon, label]) => (
+                <div key={k} data-tour={`nav-${k}`} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
+                  <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
+                  <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.01em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
         </main>
 
         {/* Floating save button -- position:fixed OUTSIDE main, like cookie banner */}
@@ -16003,36 +16036,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
           </div>
         )}
 
-        {/* Mobile Bottom Nav — geportald naar body (zoals de modals) zodat geen
-            enkele app-wrapper ooit z'n anker kan worden, en met visual-viewport-
-            klem tegen het iOS omhoogschuiven (zie useVisualBottomLock). */}
-        {isMobile && createPortal((
-          <div ref={mobileNavRef} style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: c.bg,
-            borderTop: "1px solid " + c.border,
-            display: "flex",
-            padding: "10px 2px 8px",
-            paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
-            zIndex: 100,
-            // Promote to its own GPU layer. Without this, iOS Safari/PWA can
-            // fail to repaint a position:fixed bar while the page scrolls,
-            // making page content "bleed through" beneath it.
-            transform: "translateZ(0)",
-            WebkitTransform: "translateZ(0)",
-            backfaceVisibility: "hidden"
-          }}>
-            {navItems.map(([k, icon, label]) => (
-              <div key={k} data-tour={`nav-${k}`} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
-                <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
-                <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.01em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
-              </div>
-            ))}
-          </div>
-        ), document.body)}
+        {/* Mobile Bottom Nav zit nu ALS FLEX-SIBLING in de app-shell-kolom
+            binnen <main> (zie vl-app-scroll) — niet meer fixed/geportald. */}
 
         {/* Add Appointment Modal */}
         {showAddAppt && (
