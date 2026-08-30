@@ -13914,10 +13914,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             </div>
                             {m.role && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2 }}>{m.role}</div>}
                             {m.email && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{m.email}</div>}
-                            {m.bio && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{m.bio}</div>}
+                            {m.bio && !isMobile && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{m.bio}</div>}
                           </>
                         )}
-                        {editingStaff !== m.id && (
+                        {editingStaff !== m.id && !isMobile && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 8 }}>
                             {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
                               const svc = salonData.services.find(s => s.id === sid);
@@ -13967,6 +13967,22 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         )}
                       </div>
                     </div>
+                    {/* Mobiel: bio + behandeling-chips onder de fotorij over de
+                        volle kaartbreedte — in de smalle kolom naast de foto
+                        oogde de lange tekst als een gecentreerde sliert. */}
+                    {editingStaff !== m.id && isMobile && (
+                      <div style={{ marginTop: 10 }}>
+                        {m.bio && <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5 }}>{m.bio}</div>}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: m.bio ? 8 : 0 }}>
+                          {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
+                            const svc = salonData.services.find(s => s.id === sid);
+                            return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
+                          }) : (
+                            <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : lang === "es" ? "Todos los servicios" : "All services"}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {/* Expanded edit section */}
                     {editingStaff === m.id && (
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid " + c.border }}>
