@@ -14307,17 +14307,20 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
                   {lang === "nl" ? "Tot hoe kort van tevoren kan een klant nog boeken?" : lang === "es" ? "¿Con cuánta antelación mínima puede reservar un cliente antes de la cita?" : "How close to the appointment can a client still book?"}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* Mobiel 3-koloms grid (3+3+1, wees links) — labels bewust
+                    kort ("vooraf"/"antes") zodat ze in ±100px-kolommen passen. */}
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[0, 1, 2, 4, 12, 24, 48].map(hrs => (
                     <div key={hrs} onClick={() => update(d => { d.min_advance_hours = hrs; return d; })}
                       style={{
-                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        padding: isMobile ? "10px 4px" : "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.min_advance_hours || 0) === hrs ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.min_advance_hours || 0) === hrs ? accent : c.inputBorder}`,
                         color: (salonData.min_advance_hours || 0) === hrs ? accent : c.textSub,
-                        fontSize: 12, fontWeight: 500
+                        fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
-                    >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : lang === "es" ? "Sin mínimo" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u van tevoren` : lang === "es" ? `Mín. ${hrs}h de antelación` : `Min. ${hrs}h ahead`)}</div>
+                    >{hrs === 0 ? (lang === "nl" ? "Geen minimum" : lang === "es" ? "Sin mínimo" : "No minimum") : (lang === "nl" ? `Min. ${hrs}u vooraf` : lang === "es" ? `Mín. ${hrs}h antes` : `Min. ${hrs}h ahead`)}</div>
                   ))}
                 </div>
                 {/* Annuleringstermijn (verzoek van salon Rioghna): tot dit aantal
@@ -14328,17 +14331,18 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
                   {lang === "nl" ? "Tot hoe kort van tevoren kan een klant online annuleren?" : lang === "es" ? "¿Hasta cuántas horas antes puede cancelar un cliente en línea?" : "How close to the appointment can a client still cancel online?"}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[0, 12, 24, 48, 72].map(hrs => (
                     <div key={hrs} onClick={() => update(d => { d.cancel_deadline_hours = hrs; return d; })}
                       style={{
-                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        padding: isMobile ? "10px 4px" : "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.cancel_deadline_hours || 0) === hrs ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.cancel_deadline_hours || 0) === hrs ? accent : c.inputBorder}`,
                         color: (salonData.cancel_deadline_hours || 0) === hrs ? accent : c.textSub,
-                        fontSize: 12, fontWeight: 500
+                        fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
-                    >{hrs === 0 ? (lang === "nl" ? "Altijd" : lang === "es" ? "Siempre" : "Always") : (lang === "nl" ? `Tot ${hrs}u van tevoren` : lang === "es" ? `Hasta ${hrs}h antes` : `Up to ${hrs}h before`)}</div>
+                    >{hrs === 0 ? (lang === "nl" ? "Altijd" : lang === "es" ? "Siempre" : "Always") : (lang === "nl" ? `Tot ${hrs}u vooraf` : lang === "es" ? `Hasta ${hrs}h antes` : `Up to ${hrs}h before`)}</div>
                   ))}
                 </div>
                 {(salonData.cancel_deadline_hours || 0) > 0 && (
@@ -14351,15 +14355,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 <div style={{ fontSize: 11, color: c.textLabel, margin: "16px 0 14px" }}>
                   {lang === "nl" ? "Hoe ver vooruit kunnen klanten boeken?" : lang === "es" ? "¿Con cuánta antelación pueden reservar los clientes?" : "How far ahead can clients book?"}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[[7, lang === "nl" ? "1 week" : lang === "es" ? "1 semana" : "1 week"], [14, lang === "nl" ? "2 weken" : lang === "es" ? "2 semanas" : "2 weeks"], [30, lang === "nl" ? "1 maand" : lang === "es" ? "1 mes" : "1 month"], [60, lang === "nl" ? "2 maanden" : lang === "es" ? "2 meses" : "2 months"], [90, lang === "nl" ? "3 maanden" : lang === "es" ? "3 meses" : "3 months"], [180, lang === "nl" ? "6 maanden" : lang === "es" ? "6 meses" : "6 months"]].map(([days, label]) => (
                     <div key={days} onClick={() => update(d => { d.max_advance_days = days; return d; })}
                       style={{
-                        padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        padding: isMobile ? "10px 4px" : "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.max_advance_days || 60) === days ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.max_advance_days || 60) === days ? accent : c.inputBorder}`,
                         color: (salonData.max_advance_days || 60) === days ? accent : c.textSub,
-                        fontSize: 12, fontWeight: 500
+                        fontSize: isMobile ? 11 : 12, fontWeight: 500, whiteSpace: "nowrap"
                       }}
                     >{label}</div>
                   ))}
