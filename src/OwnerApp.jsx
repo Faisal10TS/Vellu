@@ -13413,10 +13413,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <datalist id="vellu-suppliers">
                     {[...new Set((salonData.products || []).map(p => p.supplier).filter(Boolean))].map(s => <option key={s} value={s} />)}
                   </datalist>
-                  <div style={{ overflowX: "auto" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 540 }}>
+                  {/* Mobiel: kaart-rijen zonder tabelkop (de 540px-tabel werd
+                      een afgekapte scroll-strook op een telefoon); desktop
+                      behoudt de tabel-look met kolomkoppen. */}
+                  <div style={{ overflowX: isMobile ? "visible" : "auto" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: isMobile ? 0 : 540 }}>
                     {/* Column header — the professional table look. */}
-                    {(salonData.products || []).length > 0 && (
+                    {(salonData.products || []).length > 0 && !isMobile && (
                       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 14px", fontSize: 9, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel }}>
                         <div style={{ width: 40, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>{lang === "nl" ? "Product" : lang === "es" ? "Producto" : "Product"}</div>
@@ -13520,7 +13523,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                         </div>
                       ) : (
-                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
+                        <div key={p.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 8 : 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, opacity: p.active ? 1 : 0.55 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
                           <label style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", cursor: "pointer", position: "relative" }} title={lang === "nl" ? "Foto uploaden" : lang === "es" ? "Subir foto" : "Upload photo"}>
                             {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 13, display: "inline-flex" }}>{productPhotoUploading === p.id ? "…" : <NavIcon name="bag" size={15} color={c.textMuted} />}</span>}
                             <input type="file" accept="image/*" style={{ display: "none" }} onChange={ev => uploadProductPhoto(p.id, ev.target.files[0], ev)} />
@@ -13536,9 +13540,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 nergens konden bestellen. */}
                             {p.active && p.visible_online === false && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Alleen aan de balie — niet op je boekingspagina" : lang === "es" ? "Solo en el mostrador — no en tu página de reservas" : "Counter only — not on your booking page"}</div>}
                           </div>
-                          <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
-                          <div style={{ width: 62, textAlign: "right", flexShrink: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
-                          <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>
+                          </div>{/* /foto+naam */}
+                          {/* Mobiel: regel 2 van de kaart — prijzen/voorraad links,
+                              schakelaars en knoppen rechts (space-between). */}
+                          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, justifyContent: isMobile ? "space-between" : "flex-end", flexShrink: 0, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, minWidth: 0 }}>
+                          <div style={{ width: isMobile ? "auto" : 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
+                          <div style={{ width: isMobile ? "auto" : 62, textAlign: "right", flexShrink: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                          <div style={{ width: isMobile ? "auto" : 72, textAlign: "right", flexShrink: 0 }}>
                             {p.stock == null ? (
                               <span style={{ fontSize: 12, color: c.textMuted }}>—</span>
                             ) : (
@@ -13550,6 +13559,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </>
                             )}
                           </div>
+                          </div>{/* /prijzen+voorraad */}
+                          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 12, flexShrink: 0 }}>
                           {/* Online-zichtbaarheid: los van "actief". Actief=uit haalt
                               het product overal weg (ook kassa); dit oogje laat het
                               in de kassa staan maar houdt het van de boekingspagina —
@@ -13602,6 +13613,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <NavIcon name="xmark" size={11} color="currentColor" />
                             </button>
                           </div>
+                          </div>{/* /schakelaars+knoppen */}
+                          </div>{/* /regel 2 */}
                         </div>
                       )
                     ))}
