@@ -4490,7 +4490,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // original rows carry the stored breakdown label; replaced/new rows carry
   // an explicit service/variant/extras pick. This is what makes editing a
   // multi-treatment booking non-destructive.
-  const [editApptForm, setEditApptForm] = useState({ svcRows: [], date: "", time: "", price: "", duration: "", discount: "", discount_reason: "" });
+  const [editApptForm, setEditApptForm] = useState({ svcRows: [], date: "", time: "", price: "", duration: "", discount: "", discount_pct: false, discount_reason: "" });
   const [editApptSaving, setEditApptSaving] = useState(false);
 
   // Slug editor state. The pending slug is edited locally; availability
@@ -5294,6 +5294,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       price: finalPrice != null ? String(finalPrice + storedDiscount) : "",
       duration: a.service_duration != null ? String(a.service_duration) : "",
       discount: storedDiscount > 0 ? String(storedDiscount) : "",
+      // Opgeslagen korting is altijd een bedrag; % is puur een invoerstand.
+      discount_pct: false,
       discount_reason: a.discount_reason || "",
     });
   };
@@ -5480,7 +5482,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (!editingAppt || editApptSaving) return;
     const basePriceNum = parseFloat(editApptForm.price);
     const durationNum = parseInt(editApptForm.duration);
-    const discountNum = editApptForm.discount === "" ? 0 : parseFloat(editApptForm.discount);
+    const rawDiscount = editApptForm.discount === "" ? 0 : parseFloat(editApptForm.discount);
+    // %-stand: omrekenen naar een bedrag in centen — de database en alles
+    // erachter (facturen, omzet, mails) blijven op discount_amount rekenen.
+    const discountNum = editApptForm.discount_pct ? Math.round(basePriceNum * rawDiscount) / 100 : rawDiscount;
     if (!editApptForm.date) { toast.show(lang === "nl" ? "Datum is verplicht" : lang === "es" ? "La fecha es obligatoria" : "Date is required", "error"); return; }
     if (!editApptForm.time) { toast.show(lang === "nl" ? "Tijd is verplicht" : lang === "es" ? "La hora es obligatoria" : "Time is required", "error"); return; }
     if (!Number.isFinite(basePriceNum) || basePriceNum < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
@@ -7752,8 +7757,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               // have a large intrinsic width and otherwise overflow the modal.
               const cell = { minWidth: 0 };
               const inp = { width: "100%", minWidth: 0, boxSizing: "border-box" };
-              const discountNum = parseFloat(editApptForm.discount) || 0;
+              const rawDiscount = parseFloat(editApptForm.discount) || 0;
               const basePrice = parseFloat(editApptForm.price) || 0;
+              // Zelfde omrekening als saveEditAppt, zodat de preview toont
+              // wat er straks echt wordt opgeslagen.
+              const discountNum = editApptForm.discount_pct ? Math.round(basePrice * rawDiscount) / 100 : rawDiscount;
               const finalPrice = Math.max(0, basePrice - discountNum);
               return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
@@ -7884,8 +7892,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={cell}><label style={lbl}>{lang === "nl" ? `Prijs (${cur})` : lang === "es" ? `Precio (${cur})` : `Price (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" value={editApptForm.price} onChange={(e) => setEditApptForm((f) => ({ ...f, price: e.target.value }))} style={inp} /></div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Duur (min)" : lang === "es" ? "Duración (min)" : "Duration (min)"}</label><input className="input-field" type="number" step="5" min="5" value={editApptForm.duration} onChange={(e) => setEditApptForm((f) => ({ ...f, duration: e.target.value }))} style={inp} /></div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
-                <div style={cell}><label style={lbl}>{lang === "nl" ? `Korting (${cur})` : lang === "es" ? `Descuento (${cur})` : `Discount (${cur})`}</label><input className="input-field" type="number" step="0.01" min="0" placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 2fr", gap: 8 }}>
+                <div style={cell}>
+                  <label style={{ ...lbl, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>{lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"}</span>
+                    {/* Invoerstand: bedrag of percentage. Opslag blijft een
+                        bedrag — de schakelaar rekent alleen om. */}
+                    <span style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
+                      {[[false, cur], [true, "%"]].map(([pct, sym]) => (
+                        <span key={sym} onClick={() => setEditApptForm((f) => ({ ...f, discount_pct: pct }))}
+                          style={{ padding: "1px 8px", borderRadius: 100, cursor: "pointer", fontSize: 9, fontWeight: 700, letterSpacing: 0, textTransform: "none",
+                            background: editApptForm.discount_pct === pct ? `${accent}18` : "transparent",
+                            border: `1px solid ${editApptForm.discount_pct === pct ? accent : c.inputBorder}`,
+                            color: editApptForm.discount_pct === pct ? accent : c.textMuted }}>{sym}</span>
+                      ))}
+                    </span>
+                  </label>
+                  <input className="input-field" type="number" step="0.01" min="0" max={editApptForm.discount_pct ? 100 : undefined} placeholder="0" value={editApptForm.discount} onChange={(e) => setEditApptForm((f) => ({ ...f, discount: e.target.value }))} style={inp} />
+                </div>
                 <div style={cell}><label style={lbl}>{lang === "nl" ? "Reden korting (optioneel)" : lang === "es" ? "Motivo del descuento (opcional)" : "Discount reason (optional)"}</label><input className="input-field" value={editApptForm.discount_reason} onChange={(e) => setEditApptForm((f) => ({ ...f, discount_reason: e.target.value }))} placeholder={lang === "nl" ? "bijv. vaste klant" : lang === "es" ? "p. ej. cliente fiel" : "e.g. loyal client"} style={inp} /></div>
               </div>
               {discountNum > 0 && (
