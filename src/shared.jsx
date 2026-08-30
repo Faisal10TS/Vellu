@@ -555,7 +555,7 @@ const genTimes = (intervalMin = 30, startHour = 6, endHour = 22) => {
   }
   return out;
 };
-const SLOT_INTERVALS = [10, 15, 20, 30, 60];
+const SLOT_INTERVALS = [10, 15, 20, 30, 45, 60];
 const DAY_NL = ["zo","ma","di","wo","do","vr","za"];
 const DAY_EN = ["su","mo","tu","we","th","fr","sa"];
 const DAY_FULL_NL = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];

@@ -14255,11 +14255,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.breakMinutes}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.breakMinutesDesc}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* Mobiel als 2-koloms grid: 6 gelijke chips (flex-wrap gaf
+                    rommelige rijen van 3/2/1). 2 kolommen omdat het Spaanse
+                    "30 min de descanso" in 3 kolommen niet past. */}
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[0, 5, 10, 15, 20, 30].map(mins => (
                     <div key={mins} onClick={() => update(d => { d.break_minutes = mins; return d; })}
                       style={{
                         padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.break_minutes || 0) === mins ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.break_minutes || 0) === mins ? accent : c.inputBorder}`,
                         color: (salonData.break_minutes || 0) === mins ? accent : c.textSub,
@@ -14276,11 +14280,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <SL>{t.slotInterval}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.slotIntervalDesc}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* 6 opties (incl. 45) — mobiel als 3-koloms grid: 2 volle
+                    rijen i.p.v. een wees-chip onderaan. */}
+                <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {SLOT_INTERVALS.map(mins => (
                     <div key={mins} onClick={() => update(d => { d.slot_interval_minutes = mins; return d; })}
                       style={{
                         padding: "10px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+                        textAlign: isMobile ? "center" : undefined,
                         background: (salonData.slot_interval_minutes || 30) === mins ? `${accent}18` : c.inputBg,
                         border: `1px solid ${(salonData.slot_interval_minutes || 30) === mins ? accent : c.inputBorder}`,
                         color: (salonData.slot_interval_minutes || 30) === mins ? accent : c.textSub,
