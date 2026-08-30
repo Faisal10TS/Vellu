@@ -10310,11 +10310,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const isSending = processingApptId === a.id;
                     return (
                       <div key={a.id} style={{
-                        display: "flex", alignItems: "center", gap: 14,
+                        // Mobiel: twee regels (klant boven, prijs+acties onder) —
+                        // één rij met avatar+prijs+badge+3 knoppen plette de
+                        // naamkolom op een telefoon naar 0px (TTNB, 30-08).
+                        display: "flex", flexDirection: isMobile ? "column" : "row",
+                        alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 10 : 14,
                         padding: "14px 18px", background: c.bgCard,
                         border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
                         borderRadius: 14, transition: "border-color 0.15s"
                       }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
                         {/* Avatar */}
                         <div style={{
                           width: 42, height: 42, borderRadius: "50%",
@@ -10341,7 +10346,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {a.staff_name && <><span>·</span><span>{a.staff_name}</span></>}
                           </div>
                         </div>
+                        </div>
 
+                        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
                         {/* Price */}
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
 
@@ -10431,6 +10438,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                             </>
                           )}
+                        </div>
                         </div>
                       </div>
                     );
