@@ -2469,7 +2469,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                     </button>
-                    <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                    {/* contain:paint — zonder harde paint-clip schoof een pil
+                        visueel ónder het pijltje door (TTNB-screenshot 31-08). */}
+                    <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
                       <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
                         onClick={() => { setProfileCategory("all"); setServicesExpanded(false); }}>{t.allCategories}</button>
                       {usedCats.map(cat => (
@@ -3320,7 +3322,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                       </button>
-                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
                         <div
                           onClick={() => setActiveCategory("all")}
                           style={{
@@ -3666,7 +3668,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <button onClick={() => scrollBy(-1)} style={{ width: 32, height: 32, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                       </button>
-                      <div ref={el => scrollRef.current = el} onScroll={handleStripScroll} style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4 }}>
+                      <div ref={el => scrollRef.current = el} onScroll={handleStripScroll} style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4, contain: "paint" }}>
                         {days.map((d, i) => {
                           const ds = fmt(d);
                           const isSel = date === ds;
@@ -4227,7 +4229,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                           </button>
-                          <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                          <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
                             <div
                               onClick={() => setActiveCategory("all")}
                               style={{
