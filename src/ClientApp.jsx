@@ -3049,7 +3049,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               else if (e.key === "ArrowLeft") { e.preventDefault(); stap(-1); }
               else if (e.key === "ArrowRight") { e.preventDefault(); stap(1); }
             }}>
-            <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: 20, right: 20, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 40, height: 40, borderRadius: "50%", fontSize: 20, cursor: "pointer", zIndex: 10 }}>&times;</button>
+            {/* Onder de iOS-statusbalk uit blijven: tikken in die zone gaan
+                naar het systeem (scroll-naar-boven), niet naar de pagina —
+                daarom safe-area-inset erbij op de sluitknop. */}
+            <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 18px)", right: 18, background: "rgba(0,0,0,0.55)", border: "none", color: "#fff", width: 44, height: 44, borderRadius: "50%", fontSize: 22, cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>&times;</button>
             {gallery.photos.length > 1 && (
               <>
                 <button onClick={e => { e.stopPropagation(); stap(-1); }} aria-label={lang === "nl" ? "Vorige foto" : lang === "es" ? "Foto anterior" : "Previous photo"} style={pijlStijl("left")}>&#8249;</button>
