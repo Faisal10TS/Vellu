@@ -1100,13 +1100,20 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
   const staffList = fixedStaffName ? [] : (salonData.staff || []);
   const involvesStaff = apptInvolvesStaff;
 
+  // Volgorde = grid-volgorde op mobiel (3 kolommen): rij 1 "deze", rij 2
+  // "vorige" — maand/kwartaal/jaar recht onder elkaar, Aangepast als wees links.
   const presets = [
     { key: "this_month", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month" },
-    { key: "last_month", label: lang === "nl" ? "Vorige maand" : lang === "es" ? "Mes pasado" : "Last month" },
+    { key: "this_quarter", label: lang === "nl" ? "Dit kwartaal" : lang === "es" ? "Este trimestre" : "This quarter" },
     { key: "this_year", label: lang === "nl" ? "Dit jaar" : lang === "es" ? "Este año" : "This year" },
+    { key: "last_month", label: lang === "nl" ? "Vorige maand" : lang === "es" ? "Mes pasado" : "Last month" },
+    { key: "last_quarter", label: lang === "nl" ? "Vorig kwartaal" : lang === "es" ? "Trim. pasado" : "Last quarter" },
     { key: "last_year", label: lang === "nl" ? "Vorig jaar" : lang === "es" ? "Año pasado" : "Last year" },
     { key: "custom", label: lang === "nl" ? "Aangepast" : lang === "es" ? "Personalizado" : "Custom" },
   ];
+  // Eigen mobiel-check: dit blok rendert ook in de StaffApp en krijgt geen
+  // isMobile-prop mee.
+  const mobiel = typeof window !== "undefined" && window.innerWidth <= 1024;
 
   const getRange = () => {
     if (period === "custom") {
@@ -1199,15 +1206,17 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
+      <div style={mobiel ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 14 } : { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
         {presets.map(p => (
           <button
             key={p.key}
             onClick={() => setPeriod(p.key)}
             style={{
-              padding: "8px 14px",
+              padding: mobiel ? "8px 4px" : "8px 14px",
               borderRadius: 100,
-              fontSize: 11,
+              fontSize: mobiel ? 10 : 11,
+              whiteSpace: "nowrap",
+              textAlign: "center",
               fontWeight: period === p.key ? 600 : 400,
               background: period === p.key ? `${accent}18` : c.inputBg,
               border: `1px solid ${period === p.key ? accent : c.inputBorder}`,

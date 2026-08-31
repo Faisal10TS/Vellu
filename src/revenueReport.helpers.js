@@ -21,6 +21,21 @@ export function periodPreset(kind, lang = "nl") {
     const to = new Date(now.getFullYear(), now.getMonth(), 0);
     return { from: ymd(from), to: ymd(to), label: monthName(from) };
   }
+  if (kind === "this_quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    const from = new Date(now.getFullYear(), q * 3, 1);
+    const to = new Date(now.getFullYear(), q * 3 + 3, 0);
+    return { from: ymd(from), to: ymd(to), label: `Q${q + 1} ${now.getFullYear()}` };
+  }
+  if (kind === "last_quarter") {
+    // Q1 → Q4 van het jaar ervoor.
+    const qIdx = Math.floor(now.getMonth() / 3) - 1;
+    const jaar = now.getFullYear() + (qIdx < 0 ? -1 : 0);
+    const q = (qIdx + 4) % 4;
+    const from = new Date(jaar, q * 3, 1);
+    const to = new Date(jaar, q * 3 + 3, 0);
+    return { from: ymd(from), to: ymd(to), label: `Q${q + 1} ${jaar}` };
+  }
   if (kind === "this_year") {
     const from = new Date(now.getFullYear(), 0, 1);
     const to = new Date(now.getFullYear(), 11, 31);
