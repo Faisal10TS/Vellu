@@ -14015,7 +14015,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <div style={{ display: "flex", gap: 4, flexShrink: 0, ...((isMobile && editingStaff === m.id) ? { marginLeft: "auto" } : {}) }}>
                         {editingStaff === m.id ? (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 12px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }} onClick={async () => {
                               const emailTrim = (editStaffForm.email || "").trim().toLowerCase();
                               if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) { toast.show(lang === "nl" ? "Ongeldig e-mailadres" : lang === "es" ? "Dirección de correo no válida" : "Invalid email address", "error"); return; }
                               const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, email: emailTrim || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id).eq("owner_id", salonData.owner_id);
@@ -14026,17 +14026,19 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               }
                               update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, email: emailTrim || null, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
                               setEditingStaff(null);
-                            }}><NavIcon name="check" size={12} /> {lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px" }} onClick={() => setEditingStaff(null)}><NavIcon name="xmark" size={12} /></button>
+                            }}><NavIcon name="check" size={12} />{lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
+                            {/* Zelfde hoogte als de Opslaan-pil ernaast, icoon
+                                flex-gecentreerd i.p.v. op de tekst-baseline. */}
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: 0, width: 30, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center" }} onClick={() => setEditingStaff(null)}><NavIcon name="xmark" size={12} /></button>
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} /> {lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 12px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} />{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
                             {/* Delete is guarded for the owner-self row — the owner
                                 is the salon's anchor and losing that row breaks
                                 agenda ownership and the "eigenaar" badge. */}
                             {m.user_id !== salonData.owner_id && (
-                              <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: c.danger, borderColor: `${c.danger}26` }} onClick={async () => {
+                              <button className="btn-ghost" style={{ fontSize: 10, padding: 0, width: 30, alignSelf: "stretch", color: c.danger, borderColor: `${c.danger}26`, display: "inline-flex", alignItems: "center", justifyContent: "center" }} onClick={async () => {
                                 if (!await showConfirm(lang === "nl" ? `${m.name} verwijderen?` : lang === "es" ? `¿Eliminar ${m.name}?` : `Delete ${m.name}?`)) return;
                                 await supabase.from("staff_services").delete().eq("staff_id", m.id);
                                 await supabase.from("appointments").update({ staff_id: null }).eq("staff_id", m.id);
@@ -14044,7 +14046,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                 update(d => { d.staff = (d.staff || []).filter(s => s.id !== m.id); return d; });
                                 toast.show(lang === "nl" ? `${m.name} verwijderd` : lang === "es" ? `${m.name} eliminado` : `${m.name} deleted`);
-                              }}>×</button>
+                              }}><NavIcon name="xmark" size={12} color="currentColor" /></button>
                             )}
                           </>
                         )}
