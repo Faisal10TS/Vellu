@@ -6056,7 +6056,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const today = fmt(getToday());
       // Jaar loopt van 1 januari t/m vandaag \u2014 niet de laatste 365 dagen.
       // Een boekhouder wil het kalenderjaar, niet een schuivend venster.
+      // Kwartaal = kalenderkwartaal van vandaag (K3 = 1 jul t/m vandaag).
+      const kwartaal = Math.floor((parseInt(today.slice(5, 7), 10) - 1) / 3);
       const from = scope === "year" ? today.slice(0, 4) + "-01-01"
+        : scope === "quarter" ? today.slice(0, 4) + "-" + String(kwartaal * 3 + 1).padStart(2, "0") + "-01"
         : scope === "month" ? today.slice(0, 8) + "01"
         : today;
       const to = today;
@@ -6076,6 +6079,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const mod = await import("./productReport.js");
       const label = scope === "year"
         ? today.slice(0, 4)
+        : scope === "quarter"
+        ? `Q${kwartaal + 1} ${today.slice(0, 4)}`
         : scope === "month"
         ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
         : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -8849,16 +8854,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                           );
                         })}
-                        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("day")}>
-                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"}
-                          </button>
-                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("month")}>
-                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"}
-                          </button>
-                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport("year")}>
-                            <NavIcon name="download" size={11} color="currentColor" /> {lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"}
-                          </button>
+                        {/* Mobiel als 2×2-grid: vier gelijke rapportknoppen
+                            i.p.v. een rafelige wrap van 2+1. */}
+                        <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 } : { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                          {[
+                            ["day", lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"],
+                            ["month", lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"],
+                            ["quarter", lang === "nl" ? "Kwartaalrapport (PDF)" : lang === "es" ? "Trimestral (PDF)" : "Quarterly report (PDF)"],
+                            ["year", lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"],
+                          ].map(([scope, label]) => (
+                            <button key={scope} className="btn-ghost" style={{ padding: isMobile ? "8px 4px" : "8px 12px", fontSize: isMobile ? 9.5 : 10, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport(scope)}>
+                              <NavIcon name="download" size={11} color="currentColor" />{label}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     );
