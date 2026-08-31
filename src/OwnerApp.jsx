@@ -13466,15 +13466,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       })()}
                     </div>
                   )}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                  {/* Mobiel groeien de pillen mee zodat elke rij de volle
+                      breedte vult (losse wrap gaf rafelige rijen van 1/1/2/1). */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: isMobile ? 6 : 12 }}>
                     {/* Importeren + voorbeeldbestand staan ALTIJD hier: juist een
                         salon die overstapt heeft nog nul producten. */}
-                    <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: accent, borderColor: `${accent}44`, opacity: importBusy ? 0.5 : 1 }}>
+                    <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, color: accent, borderColor: `${accent}44`, opacity: importBusy ? 0.5 : 1, ...(isMobile ? { flex: "1 0 auto" } : {}) }}>
                       <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={!!importBusy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importProductsCsv(f); }} />
-                      <NavIcon name="upload" size={11} color="currentColor" />
+                      {/* download-icoon (pijl de bak in) — het upload-icoon las
+                          als exporteren. */}
+                      <NavIcon name="download" size={11} color="currentColor" />
                       {importBusy === "products" ? "…" : (lang === "nl" ? "Producten importeren" : lang === "es" ? "Importar productos" : "Import products")}
                     </label>
-                    <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: c.textMuted }} onClick={() => downloadImportTemplate("products")}>
+                    <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: c.textMuted, ...(isMobile ? { flex: "1 0 auto" } : {}) }} onClick={() => downloadImportTemplate("products")}>
                       {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
                     </button>
                   </div>
@@ -13483,15 +13487,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {(() => {
                         const shortages = (salonData.products || []).filter(p => p.stock != null && p.min_stock != null && p.stock < p.min_stock).length;
                         return (
-                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, display: "inline-flex", alignItems: "center", gap: 6, ...(shortages > 0 ? { color: c.danger, borderColor: `${c.danger}44` } : {}) }} onClick={() => setShowOrderList(true)}>
+                          <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, ...(shortages > 0 ? { color: c.danger, borderColor: `${c.danger}44` } : {}), ...(isMobile ? { flex: "1 0 auto" } : {}) }} onClick={() => setShowOrderList(true)}>
                             {lang === "nl" ? "Bestellijst" : lang === "es" ? "Lista de pedidos" : "Order list"}{shortages > 0 ? ` (${shortages})` : ""}
                           </button>
                         );
                       })()}
-                      <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10 }} onClick={exportProductsCsv}>
+                      <button className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, ...(isMobile ? { flex: "1 0 auto" } : {}) }} onClick={exportProductsCsv}>
                         {lang === "nl" ? "Export (Excel)" : lang === "es" ? "Exportar (Excel)" : "Export (Excel)"}
                       </button>
-                      <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", opacity: stockImporting ? 0.5 : 1 }}>
+                      <label className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: stockImporting ? 0.5 : 1, ...(isMobile ? { flex: "1 0 auto" } : {}) }}>
                         <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={stockImporting} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importStockCsv(f); }} />
                         {stockImporting ? "…" : (lang === "nl" ? "Import voorraad" : lang === "es" ? "Importar existencias" : "Import stock")}
                       </label>
@@ -13631,19 +13635,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {/* Mobiel: regel 2 van de kaart — prijzen/voorraad links,
                               schakelaars en knoppen rechts (space-between). */}
                           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, justifyContent: isMobile ? "space-between" : "flex-end", flexShrink: 0, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 14 : 12, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 10 : 12, minWidth: 0 }}>
                           {/* Mobiel: mini-kolommen met kopje — kale bedragen naast
-                              elkaar zeiden niet wat inkoop, verkoop of voorraad was. */}
+                              elkaar zeiden niet wat inkoop, verkoop of voorraad was.
+                              Labels compact (7.5px, weinig letterafstand): het NL
+                              "VOORRAAD" liep anders tegen het oogje aan. */}
                           <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
-                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Coste" : "Cost"}</div>}
+                            {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Coste" : "Cost"}</div>}
                             <div style={{ fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
                           </div>
                           <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
-                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>}
+                            {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>}
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, lineHeight: 1.1 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
                           </div>
                           <div style={{ width: isMobile ? "auto" : 72, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
-                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>}
+                            {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>}
                             {p.stock == null ? (
                               <span style={{ fontSize: 12, color: c.textMuted }}>—</span>
                             ) : (
