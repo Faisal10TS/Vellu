@@ -13447,19 +13447,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const saleVal = tracked.reduce((s, p) => s + (parseFloat(p.price) || 0) * p.stock, 0);
                         const buyVal = tracked.reduce((s, p) => s + (parseFloat(p.purchase_price) || 0) * p.stock, 0);
                         const chip = (label, val, kleur) => (
-                          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "7px 12px", flexShrink: 0 }}>
-                            <div style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel }}>{label}</div>
+                          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: isMobile ? "7px 8px" : "7px 12px", flexShrink: 0, minWidth: 0 }}>
+                            <div style={{ fontSize: isMobile ? 8 : 8.5, fontWeight: 600, letterSpacing: isMobile ? "0.05em" : "0.07em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{label}</div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: kleur || c.text, fontVariantNumeric: "tabular-nums" }}>{cur}{val.toFixed(2)}</div>
                           </div>
                         );
-                        return <>
+                        {/* Mobiel als 3-koloms grid op één rij — als losse
+                            flex-chips wrapte de winst-tegel naar een tweede
+                            regel. display:contents laat desktop met rust. */}
+                        return <div style={isMobile ? { display: "grid", gridTemplateColumns: buyVal > 0 ? "1fr 1fr 1fr" : "1fr", gap: 8, flexBasis: "100%", minWidth: 0 } : { display: "contents" }}>
                           {chip(lang === "nl" ? "Verkoopwaarde" : lang === "es" ? "Valor venta" : "Sale value", saleVal)}
                           {buyVal > 0 && chip(lang === "nl" ? "Inkoopwaarde" : lang === "es" ? "Valor compra" : "Purchase value", buyVal)}
                           {/* Winst als je de hele voorraad verkoopt — verkoopwaarde
                               is zelf al de potentiële omzet, dus dit is het
                               verschil dat je eraan overhoudt. */}
-                          {buyVal > 0 && chip(lang === "nl" ? "Potentiële winst" : lang === "es" ? "Beneficio potencial" : "Potential profit", saleVal - buyVal, accent)}
-                        </>;
+                          {buyVal > 0 && chip(lang === "nl" ? "Potentiële winst" : lang === "es" ? "Ganancia" : "Potential profit", saleVal - buyVal, accent)}
+                        </div>;
                       })()}
                     </div>
                   )}
