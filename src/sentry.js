@@ -52,11 +52,17 @@ export function initSentry() {
       // die referentie weg is gooit HUN code deze fout — niet de onze.
       // Klanten boeken massaal via de IG-bio-link, dus dit is pure ruis.
       "Java object is gone",
+      // Zelfde familie (VELLU-5): IG's navigation_performance_logger crasht
+      // in de native brug terwijl de webview sluit.
+      "Java exception was raised during method invocation",
       // supabase-js (gotrue) gebruikt navigator.locks met steal:true bij
       // token-refresh; in een tweede open tab wordt de "gestolen" lock als
       // AbortError geworpen. Bekend en onschuldig meertabs-gedrag.
       "Lock broken by another request with the 'steal' option",
     ],
+    // Structureel: alles waarvan de stack uit Instagrams geïnjecteerde
+    // bridge-script komt (iabjs://…) is per definitie niet onze code.
+    denyUrls: [/^iabjs:\/\//],
     beforeSend(event) {
       // Strip anything that smells like a token from the event before send.
       // Sentry masks some of this automatically but we belt-and-braces it.
