@@ -13446,15 +13446,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         if (!tracked.length) return null;
                         const saleVal = tracked.reduce((s, p) => s + (parseFloat(p.price) || 0) * p.stock, 0);
                         const buyVal = tracked.reduce((s, p) => s + (parseFloat(p.purchase_price) || 0) * p.stock, 0);
-                        const chip = (label, val) => (
+                        const chip = (label, val, kleur) => (
                           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "7px 12px", flexShrink: 0 }}>
                             <div style={{ fontSize: 8.5, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel }}>{label}</div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: c.text, fontVariantNumeric: "tabular-nums" }}>{cur}{val.toFixed(2)}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: kleur || c.text, fontVariantNumeric: "tabular-nums" }}>{cur}{val.toFixed(2)}</div>
                           </div>
                         );
                         return <>
                           {chip(lang === "nl" ? "Verkoopwaarde" : lang === "es" ? "Valor venta" : "Sale value", saleVal)}
                           {buyVal > 0 && chip(lang === "nl" ? "Inkoopwaarde" : lang === "es" ? "Valor compra" : "Purchase value", buyVal)}
+                          {/* Winst als je de hele voorraad verkoopt — verkoopwaarde
+                              is zelf al de potentiële omzet, dus dit is het
+                              verschil dat je eraan overhoudt. */}
+                          {buyVal > 0 && chip(lang === "nl" ? "Potentiële winst" : lang === "es" ? "Beneficio potencial" : "Potential profit", saleVal - buyVal, accent)}
                         </>;
                       })()}
                     </div>
@@ -13624,10 +13628,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {/* Mobiel: regel 2 van de kaart — prijzen/voorraad links,
                               schakelaars en knoppen rechts (space-between). */}
                           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, justifyContent: isMobile ? "space-between" : "flex-end", flexShrink: 0, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, minWidth: 0 }}>
-                          <div style={{ width: isMobile ? "auto" : 62, textAlign: "right", flexShrink: 0, fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
-                          <div style={{ width: isMobile ? "auto" : 62, textAlign: "right", flexShrink: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
-                          <div style={{ width: isMobile ? "auto" : 72, textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ display: "flex", alignItems: isMobile ? "flex-end" : "center", gap: isMobile ? 14 : 12, minWidth: 0 }}>
+                          {/* Mobiel: mini-kolommen met kopje — kale bedragen naast
+                              elkaar zeiden niet wat inkoop, verkoop of voorraad was. */}
+                          <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
+                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Coste" : "Cost"}</div>}
+                            <div style={{ fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
+                          </div>
+                          <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
+                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>}
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, lineHeight: 1.1 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                          </div>
+                          <div style={{ width: isMobile ? "auto" : 72, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
+                            {isMobile && <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>}
                             {p.stock == null ? (
                               <span style={{ fontSize: 12, color: c.textMuted }}>—</span>
                             ) : (
