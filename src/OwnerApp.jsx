@@ -13628,7 +13628,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {/* Mobiel: regel 2 van de kaart — prijzen/voorraad links,
                               schakelaars en knoppen rechts (space-between). */}
                           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, justifyContent: isMobile ? "space-between" : "flex-end", flexShrink: 0, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: isMobile ? "flex-end" : "center", gap: isMobile ? 14 : 12, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 14 : 12, minWidth: 0 }}>
                           {/* Mobiel: mini-kolommen met kopje — kale bedragen naast
                               elkaar zeiden niet wat inkoop, verkoop of voorraad was. */}
                           <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
