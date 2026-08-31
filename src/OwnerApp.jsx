@@ -3049,7 +3049,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               </button>
               {/* Zelfde 36px-vierkant als de knoppen ernaast: de oude btn-ghost-pil
                   centreerde het ×-teken nooit echt (letter-spacing + eigen padding). */}
-              <button aria-label={t.close} onClick={() => setSelected(null)}
+              <button aria-label={lang === "nl" ? "Sluiten" : lang === "es" ? "Cerrar" : "Close"} onClick={() => setSelected(null)}
                 style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <NavIcon name="xmark" size={14} color="currentColor" />
               </button>
