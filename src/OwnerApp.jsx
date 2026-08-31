@@ -13927,8 +13927,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 )}
                 {(salonData.staff || []).map(m => (
                   <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 10 }}>
-                    {/* Staff header row */}
-                    <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                    {/* Staff header row. In bewerk-stand op mobiel wrapt de rij:
+                        foto + Opslaan/× bovenaan, het formulier (naam/rol/e-mail/
+                        bio) op volle breedte eronder — naast de foto gepropt
+                        bleef rechts een dode kolom over. */}
+                    <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: (isMobile && editingStaff === m.id) ? "wrap" : "nowrap" }}>
                       {/* Photo */}
                       <div style={{ flexShrink: 0 }}>
                         {m.avatar_url ? (
@@ -13966,7 +13969,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         )}
                       </div>
                       {/* Info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0, ...((isMobile && editingStaff === m.id) ? { flexBasis: "100%", order: 3 } : {}) }}>
                         {editingStaff === m.id ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             <div style={{ display: "flex", gap: 6 }}>
@@ -14009,7 +14012,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         )}
                       </div>
                       {/* Buttons */}
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0, ...((isMobile && editingStaff === m.id) ? { marginLeft: "auto" } : {}) }}>
                         {editingStaff === m.id ? (
                           <>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 10px", color: accent, borderColor: `${accent}33` }} onClick={async () => {
@@ -14108,7 +14111,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               {salonData.services.map(s => {
                                 const isOn = editStaffForm.service_ids.includes(s.id);
                                 return (<div key={s.id} onClick={() => setEditStaffForm(f => ({...f, service_ids: isOn ? f.service_ids.filter(x => x !== s.id) : [...f.service_ids, s.id]}))}
-                                  style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
+                                  // Mobiel groeien de chips mee zodat elke rij de
+                                  // volle breedte vult — geen rafelige gaten meer
+                                  // achter een lange chip.
+                                  style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s", ...(isMobile ? { flex: "1 0 auto", textAlign: "center" } : {}) }}>
                                   {lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}</div>);
                               })}
                             </div>
