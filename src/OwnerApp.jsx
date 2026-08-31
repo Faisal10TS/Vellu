@@ -731,7 +731,8 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
       </div>
 
       <label style={lbl}>{lang === "nl" ? "Doelgroep" : lang === "es" ? "Segmento" : "Segment"}</label>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+      {/* Mobiel als 2×2-grid: vier gelijke segment-chips i.p.v. 3+1-wrap. */}
+      <div style={(typeof window !== "undefined" && window.innerWidth <= 1024) ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 4 } : { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
         {SEGMENTS.map(s => {
           const active = segment === s.key;
           return (
@@ -741,7 +742,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
               onClick={() => setSegment(s.key)}
               style={{
                 padding: "7px 12px", borderRadius: 100, fontSize: 11, fontWeight: 600,
-                letterSpacing: "0.04em", cursor: "pointer",
+                letterSpacing: "0.04em", cursor: "pointer", whiteSpace: "nowrap", textAlign: "center",
                 background: active ? accent : "transparent",
                 color: active ? c.btnOnDark : c.textSub,
                 border: `1px solid ${active ? accent : c.inputBorder}`,
@@ -3743,6 +3744,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     return out;
   };
+
+  // Jaaromzet-tegel op het dashboard. Het geheugenvenster is ~90 dagen, dus
+  // dit haalt éénmalig per sessie het hele kalenderjaar op — een "dit jaar"-
+  // tegel die stilzwijgend maar een kwart telt zou liegen. Mislukt de fetch,
+  // dan blijft hij null en probeert het volgende dashboardbezoek het opnieuw.
+  const [yearRevTile, setYearRevTile] = useState(null);
+  useEffect(() => {
+    if (view !== "dashboard" || yearRevTile !== null || !salonData?.owner_id) return;
+    let dood = false;
+    (async () => {
+      const vandaag = fmt(getToday());
+      const rows = await fetchApptsBetween(vandaag.slice(0, 4) + "-01-01", vandaag);
+      if (dood || rows === null) return;
+      const perMaand = Array(12).fill(0);
+      let totaal = 0;
+      for (const a of rows) {
+        if (a.status !== "completed") continue;
+        const n = parseFloat(a.service_price || 0);
+        totaal += n;
+        perMaand[parseInt(a.date.slice(5, 7), 10) - 1] += n;
+      }
+      setYearRevTile({ totaal, perMaand });
+    })();
+    return () => { dood = true; };
+  }, [view, salonData?.owner_id]);
 
   // Het bereik dat de agenda-periodebalk toont, los berekend zodat het effect
   // hieronder kan zien of het (deels) vóór het geladen venster ligt.
@@ -8425,6 +8451,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(2)}</div>
                         <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
                           {sparkline(monthDaily, accent, { labels: monthLabels })}
+                        </div>
+                      </div>
+
+                      {/* YEAR REVENUE — hele kalenderjaar via eigen fetch
+                          (het 90-dagen-venster telt anders maar een kwart). */}
+                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.yearlyRevenue}</div>
+                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{fmt(getToday()).slice(0, 4)}</div>
+                        </div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>
+                          {yearRevTile ? `${cur}${yearRevTile.totaal.toFixed(2)}` : "…"}
+                        </div>
+                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
+                          {sparkline(yearRevTile ? yearRevTile.perMaand : Array(12).fill(0), accent, { labels: (lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN).map(mn => mn[0].toUpperCase()) })}
                         </div>
                       </div>
 
