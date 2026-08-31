@@ -3035,19 +3035,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
                 aria-label={lang === "nl" ? "Samenvoegen met andere klant" : lang === "es" ? "Combinar con otro cliente" : "Merge into another client"}
                 title={lang === "nl" ? "Samenvoegen" : lang === "es" ? "Combinar" : "Merge"}
-                style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /><line x1="9" y1="12" x2="15" y2="12" /><polyline points="12 9 15 12 12 15" /></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /><line x1="9" y1="12" x2="15" y2="12" /><polyline points="12 9 15 12 12 15" /></svg>
               </button>
               <button
                 onClick={() => openEdit(selected)}
                 aria-label={lang === "nl" ? "Bewerk klant" : lang === "es" ? "Editar cliente" : "Edit customer"}
                 title={lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}
-                style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
                 <NavIcon name="edit" size={14} color="currentColor" />
               </button>
-              <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 16, lineHeight: 1 }} onClick={() => setSelected(null)}>×</button>
+              {/* Zelfde 36px-vierkant als de knoppen ernaast: de oude btn-ghost-pil
+                  centreerde het ×-teken nooit echt (letter-spacing + eigen padding). */}
+              <button aria-label={t.close} onClick={() => setSelected(null)}
+                style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <NavIcon name="xmark" size={14} color="currentColor" />
+              </button>
             </div>
 
             {/* Contact */}
