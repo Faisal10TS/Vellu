@@ -579,13 +579,44 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 // de eigenaar mag via RLS alleen zijn EIGEN rijen lezen — vandaar puur een
 // overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
 // zodat het instellingen-scherm er geen extra query bij krijgt.
-function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix }) {
+function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, slug }) {
   // Voorbeeld in het formaat van déze salon, zodat duidelijk is dat "TTBDAY"
   // het voorvoegsel is en niet de code.
   const voorbeeld = `${(String(prefix || "BDAY").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "BDAY")}-${pct || 10}-K7QM4`;
   const [rows, setRows] = useState(null); // null = nog nooit geladen
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Telefoonnummer + voornaam per e-mailadres (eigen contacten + boekers via
+  // RLS) voor de WhatsApp-knop: de codetabel zelf kent alleen het e-mailadres.
+  const [contact, setContact] = useState({});
+  const lookupContacts = async (emails) => {
+    const list = [...new Set((emails || []).map(e => String(e || "").toLowerCase()).filter(Boolean))];
+    if (!list.length) return;
+    const [{ data: m }, { data: cl }] = await Promise.all([
+      supabase.from("manual_clients").select("email, name, phone").in("email", list),
+      supabase.from("clients").select("email, first_name, phone").in("email", list),
+    ]);
+    setContact(prev => {
+      const next = { ...prev };
+      for (const r of cl || []) { const k = String(r.email || "").toLowerCase(); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: r.first_name || next[k]?.name || "" }; }
+      // Eigen contacten winnen (de eigenaar heeft ze zelf ingevuld).
+      for (const r of m || []) { const k = String(r.email || "").toLowerCase(); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: String(r.name || "").split(/\s+/)[0] || next[k]?.name || "" }; }
+      return next;
+    });
+  };
+  const waMsg = (r) => {
+    const k = String(r.client_email || "").toLowerCase();
+    const naam = contact[k]?.name || String(r.client_email || "").split("@")[0];
+    const salon = salonName || "Vellu";
+    const p = parseFloat(r.discount_pct);
+    const tot = (() => { try { return new Date(String(r.expires_on) + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long" }); } catch { return r.expires_on; } })();
+    const link = slug ? `https://vellu.cc/${slug}` : "https://vellu.cc";
+    return lang === "nl"
+      ? `Hoi ${naam}! 🎉 Van harte gefeliciteerd met je verjaardag, namens ${salon}. Als cadeautje krijg je ${p}% korting op je volgende afspraak met de code ${r.code} — alleen voor jou, geldig t/m ${tot}. Boeken: ${link}`
+      : lang === "es"
+      ? `¡Hola ${naam}! 🎉 Feliz cumpleaños de parte de ${salon}. Como regalo tienes ${p}% de descuento en tu próxima cita con el código ${r.code} — solo para ti, válido hasta el ${tot}. Reserva: ${link}`
+      : `Hi ${naam}! 🎉 Happy birthday from all of us at ${salon}. As a little gift you get ${p}% off your next appointment with the code ${r.code} — just for you, valid until ${tot}. Book: ${link}`;
+  };
   // Handmatig een code aanmaken (verzoek TTNB): de code stond alleen in de mail
   // aan de klant, en als de verjaardag pas ná de ochtendrun is ingevuld bestaat
   // er helemaal geen code. De RPC hanteert dezelfde regels als de cron.
@@ -622,6 +653,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix }) {
       }
       setRows(prev => [{ id: `nieuw-${hit.code}`, code: hit.code, client_email: email, discount_pct: hit.discount_pct, expires_on: hit.expires_on, used_at: null }, ...((prev || []).filter(r => r.code !== hit.code))]);
       setNewEmail("");
+      lookupContacts([email]);
       await copyText(hit.code);
     } finally { setCreating(false); }
   };
@@ -637,6 +669,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix }) {
     setLoading(false);
     if (error) { console.error("birthday codes load:", error); setFailed(true); return; }
     setRows(data || []);
+    lookupContacts((data || []).map(r => r.client_email));
   };
 
   // Altijd zichtbaar (geen uitklapbalk — die werd niet gevonden): één kleine
@@ -708,6 +741,15 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix }) {
                     style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 100, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer", background: "transparent", color: accent, border: `1px solid ${accent}55`, fontFamily: "'Jost',sans-serif" }}>
                     <NavIcon name="copy" size={10} color="currentColor" />{lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy"}
                   </button>
+                )}
+                {/* WhatsApp met voorgeschreven felicitatie + code — alleen als we
+                    een telefoonnummer van deze klant kennen. */}
+                {!r.used_at && r.expires_on >= today && contact[String(r.client_email || "").toLowerCase()]?.phone && (
+                  <a href={getWhatsAppUrl(contact[String(r.client_email || "").toLowerCase()].phone, waMsg(r))} target="_blank" rel="noopener noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 100, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", textDecoration: "none", color: "#25D366", border: "1px solid #25D36655", background: "transparent", fontFamily: "'Jost',sans-serif" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
+                    WhatsApp
+                  </a>
                 )}
               </div>
             );
@@ -16128,28 +16170,37 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     ? "Envía automáticamente una felicitación de cumpleaños con un código de descuento a los clientes cuya fecha de nacimiento conoces. Añade la fecha en «Editar cliente» o impórtala por CSV con una columna 'birthday' (aaaa-mm-dd)."
                     : "Automatically send a birthday wish + discount code to clients whose birthday you know. Add birthdays via 'Edit customer' or CSV import with a 'birthday' column (yyyy-mm-dd)."}
                 </div>
-                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", cursor: "pointer" }}>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Verjaardagsmail aan" : lang === "es" ? "Activar correo de cumpleaños" : "Enable birthday email"}</div>
-                    {/* "Cron draait rond 09:10" is jargon én UTC (op Bonaire
-                        05:10 lokaal) — beloof dus geen kloktijd. */}
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "De mails gaan elke ochtend automatisch de deur uit" : lang === "es" ? "Los correos se envían automáticamente cada mañana" : "The emails go out automatically every morning"}</div>
-                  </div>
-                  <div
-                    onClick={() => update(d => { d.birthday_email_enabled = !d.birthday_email_enabled; return d; })}
-                    style={{
-                      width: 40, height: 22, borderRadius: 100, position: "relative",
-                      background: salonData.birthday_email_enabled ? accent : c.inputBorder,
-                      transition: "background 0.2s", flexShrink: 0,
-                    }}
-                  >
-                    <div style={{
-                      position: "absolute", top: 2, left: salonData.birthday_email_enabled ? 20 : 2,
-                      width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                      transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                    }} />
-                  </div>
-                </label>
+                {/* Wie stuurt de felicitatie? Eén expliciete keuze i.p.v. een
+                    aan/uit-schakelaar die die keuze verborg. Beide standen
+                    gebruiken hetzelfde percentage + prefix hieronder. ("Elke
+                    ochtend" en geen kloktijd: de cron loopt in UTC.) */}
+                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, margin: "4px 0 8px" }}>
+                  {lang === "nl" ? "Wie stuurt de felicitatie?" : lang === "es" ? "¿Quién envía la felicitación?" : "Who sends the birthday wish?"}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+                  {[
+                    [true,
+                      lang === "nl" ? "Vellu mailt automatisch" : lang === "es" ? "Vellu lo envía automáticamente" : "Vellu emails automatically",
+                      lang === "nl" ? "Elke ochtend gaat er automatisch een mail met een persoonlijke code naar de jarige klant. Jij hoeft niets te doen." : lang === "es" ? "Cada mañana sale automáticamente un correo con un código personal para el cliente que cumple años. Tú no haces nada." : "Every morning an email with a personal code goes out to the client whose birthday it is. Nothing for you to do."],
+                    [false,
+                      lang === "nl" ? "Ik stuur zelf een bericht" : lang === "es" ? "Yo envío el mensaje" : "I send the message myself",
+                      lang === "nl" ? "Vellu maakt de persoonlijke code; jij stuurt 'm zelf, bijvoorbeeld via WhatsApp (zie Klantcodes hieronder)." : lang === "es" ? "Vellu crea el código personal; tú lo envías, por ejemplo por WhatsApp (ver Códigos de clientes abajo)." : "Vellu creates the personal code; you send it yourself, e.g. via WhatsApp (see Client codes below)."],
+                  ].map(([val, title, sub]) => {
+                    const active = !!salonData.birthday_email_enabled === val;
+                    return (
+                      <div key={String(val)} role="radio" aria-checked={active} onClick={() => update(d => { d.birthday_email_enabled = val; return d; })}
+                        style={{ cursor: "pointer", padding: "12px 14px", borderRadius: 14, border: `1.5px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}12` : "transparent", transition: "all 0.2s" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <span style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${active ? accent : c.inputBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {active && <span style={{ width: 8, height: 8, borderRadius: "50%", background: accent }} />}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: c.text }}>{title}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.45, paddingLeft: 25 }}>{sub}</div>
+                      </div>
+                    );
+                  })}
+                </div>
                 {/* Twee losse opties (verzoek TTNB): klanten vullen hun verjaardag
                     zelf in bij het boeken, en/of de salon krijgt op de dag zelf
                     een melding. Staan los van de mail — niet elke salon wil dit. */}
@@ -16172,8 +16223,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </div>
                   </label>
                 ))}
-                {salonData.birthday_email_enabled && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                {/* Percentage + prefix in BEIDE standen zichtbaar: ook wie zelf
+                    stuurt heeft ze nodig om een persoonlijke code te maken. */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
                     <div>
                       <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Korting (%)" : lang === "es" ? "Descuento (%)" : "Discount (%)"}</div>
                       <input
@@ -16210,11 +16262,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       })()}
                     </div>
                   </div>
-                )}
                 {/* Overzicht van door de cron uitgedeelde codes — ook zichtbaar
                     als de verjaardagsmail (tijdelijk) uitstaat: eerder
                     verstuurde codes blijven immers inwisselbaar. */}
-                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} prefix={salonData.birthday_email_code_prefix} />
+                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} prefix={salonData.birthday_email_code_prefix} salonName={salonData.name} slug={salonData.id} />
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
