@@ -658,10 +658,13 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
 
   return (
     <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 10 }}>
-      <button type="button" onClick={toggle}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", padding: 0, cursor: "pointer", color: c.textSub, fontSize: 11, fontWeight: 600, fontFamily: "'Jost',sans-serif" }}>
+      {/* Een echte knop i.p.v. een driehoekje: het kopiëren/aanmaken zat
+          verstopt onder "Uitstaande codes" en werd niet gevonden. */}
+      <button type="button" className="btn-ghost" onClick={toggle}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", fontSize: 10, color: open ? accent : c.textSub, borderColor: open ? accent : undefined }}>
+        <NavIcon name="copy" size={12} color="currentColor" />
+        {lang === "nl" ? "Klantcodes: bekijken, aanmaken & kopiëren" : lang === "es" ? "Códigos de clientes: ver, crear y copiar" : "Client codes: view, create & copy"}
         <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", fontSize: 9 }}>▶</span>
-        {lang === "nl" ? "Uitstaande codes" : lang === "es" ? "Códigos pendientes" : "Outstanding codes"}
       </button>
       {open && (
         <div style={{ marginTop: 8 }}>
