@@ -579,7 +579,10 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 // de eigenaar mag via RLS alleen zijn EIGEN rijen lezen — vandaar puur een
 // overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
 // zodat het instellingen-scherm er geen extra query bij krijgt.
-function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
+function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix }) {
+  // Voorbeeld in het formaat van déze salon, zodat duidelijk is dat "TTBDAY"
+  // het voorvoegsel is en niet de code.
+  const voorbeeld = `${(String(prefix || "BDAY").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "BDAY")}-${pct || 10}-K7QM4`;
   const [rows, setRows] = useState(null); // null = nog nooit geladen
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -662,16 +665,23 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
           {/* Zelf een code maken en meteen kopiëren — voor WhatsApp of als de
               verjaardag te laat is ingevuld voor de automatische mail. */}
           <div style={{ padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33`, marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Code aanmaken voor een klant" : lang === "es" ? "Crear un código para un cliente" : "Create a code for a client"}</div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Persoonlijke code voor een klant" : lang === "es" ? "Código personal para un cliente" : "Personal code for a client"}</div>
+            <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5, marginBottom: 8 }}>
+              {lang === "nl"
+                ? <>Er is geen vaste code: elke klant krijgt een eigen code zoals <span style={{ fontFamily: "'Courier New',monospace", fontWeight: 700 }}>{voorbeeld}</span>, die alleen werkt op háár e-mailadres. Vul dus eerst haar e-mail in — de code verschijnt hieronder met een kopieerknop. (Een code voor iedereen maak je bij Kortingscodes.)</>
+                : lang === "es"
+                ? <>No hay un código fijo: cada cliente recibe su propio código, p. ej. <span style={{ fontFamily: "'Courier New',monospace", fontWeight: 700 }}>{voorbeeld}</span>, válido solo para su correo. Introduce primero su correo — el código aparece abajo con un botón de copiar. (Un código para todos se crea en Códigos de descuento.)</>
+                : <>There is no fixed code: every client gets their own code such as <span style={{ fontFamily: "'Courier New',monospace", fontWeight: 700 }}>{voorbeeld}</span>, valid only for their email address. Enter their email first — the code appears below with a copy button. (A code for everyone lives under Discount codes.)</>}
+            </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <input className="input-field" type="email" inputMode="email" autoComplete="off" placeholder={lang === "nl" ? "E-mailadres van de klant" : lang === "es" ? "Correo del cliente" : "Client's email address"} value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); createCode(); } }} style={{ flex: 1, minWidth: 180, fontSize: 12, padding: "9px 12px" }} />
               <button type="button" className="btn-ghost" disabled={creating || !pct} onClick={createCode} style={{ padding: "8px 14px", fontSize: 10, color: accent, borderColor: `${accent}55`, opacity: creating || !pct ? 0.5 : 1, whiteSpace: "nowrap" }}>
-                {creating ? "…" : (lang === "nl" ? "Maak code & kopieer" : lang === "es" ? "Crear y copiar" : "Create & copy")}
+                {creating ? "…" : (lang === "nl" ? "Maak persoonlijke code" : lang === "es" ? "Crear código personal" : "Create personal code")}
               </button>
             </div>
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
               {pct
-                ? (lang === "nl" ? `De code (${pct}%) werkt alleen voor dit e-mailadres, één keer, tot het einde van deze maand — stuur 'm bijvoorbeeld via WhatsApp.` : lang === "es" ? `El código (${pct}%) solo vale para este correo, una vez, hasta fin de mes — envíalo por WhatsApp, por ejemplo.` : `The code (${pct}%) only works for this email address, once, until the end of this month — send it via WhatsApp, for example.`)
+                ? (lang === "nl" ? `${pct}% korting, één keer te gebruiken, geldig tot het einde van deze maand. De code wordt meteen gekopieerd — plak 'm bijvoorbeeld in WhatsApp.` : lang === "es" ? `${pct}% de descuento, un solo uso, válido hasta fin de mes. El código se copia al instante — pégalo en WhatsApp, por ejemplo.` : `${pct}% off, single use, valid until the end of this month. The code is copied straight away — paste it into WhatsApp, for example.`)
                 : (lang === "nl" ? "Stel hierboven eerst een kortingspercentage in en sla op." : lang === "es" ? "Configura primero un porcentaje de descuento arriba y guarda." : "Set a discount percentage above first and save.")}
             </div>
           </div>
@@ -16204,7 +16214,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 {/* Overzicht van door de cron uitgedeelde codes — ook zichtbaar
                     als de verjaardagsmail (tijdelijk) uitstaat: eerder
                     verstuurde codes blijven immers inwisselbaar. */}
-                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} />
+                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} prefix={salonData.birthday_email_code_prefix} />
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
