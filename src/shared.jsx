@@ -945,6 +945,7 @@ const _T_RAW = {
     slotInterval:"Tijdslot interval", slotIntervalDesc:"Om de hoeveel minuten kunnen klanten (en jijzelf) een starttijd kiezen?", slotIntervalMin:"min",
     allergies:"Allergieën / bijzonderheden", allergiesPlaceholder:"Bijv. latex allergie, gevoelige huid...",
     allergiesOptional:"optioneel", clientAllergies:"Allergie-info",
+    birthday:"Verjaardag", birthdayHint:"Optioneel — dan kunnen we je verrassen op je verjaardag.",
     // Multi-service booking
     addService:"+ Behandeling toevoegen", removeService:"Verwijder", selectedServices:"Geselecteerde behandelingen",
     servicesSelected:"behandelingen geselecteerd", serviceSelected:"behandeling geselecteerd",
@@ -1231,6 +1232,7 @@ const _T_RAW = {
     slotInterval:"Time slot interval", slotIntervalDesc:"How many minutes apart can clients (and you) pick a start time?", slotIntervalMin:"min",
     allergies:"Allergies / notes", allergiesPlaceholder:"E.g. latex allergy, sensitive skin...",
     allergiesOptional:"optional", clientAllergies:"Allergy info",
+    birthday:"Birthday", birthdayHint:"Optional — so we can surprise you on your birthday.",
     // Multi-service booking
     addService:"+ Add treatment", removeService:"Remove", selectedServices:"Selected treatments",
     servicesSelected:"treatments selected", serviceSelected:"treatment selected",
@@ -1517,6 +1519,7 @@ const _T_RAW = {
     slotInterval:"Intervalo entre horarios", slotIntervalDesc:"¿Cada cuántos minutos pueden los clientes (y tú) elegir una hora de inicio?", slotIntervalMin:"min",
     allergies:"Alergias / notas", allergiesPlaceholder:"P. ej. alergia al látex, piel sensible...",
     allergiesOptional:"opcional", clientAllergies:"Información de alergias",
+    birthday:"Cumpleaños", birthdayHint:"Opcional — así podemos sorprenderte en tu cumpleaños.",
     // Multi-service booking
     addService:"+ Agregar tratamiento", removeService:"Quitar", selectedServices:"Tratamientos seleccionados",
     servicesSelected:"tratamientos seleccionados", serviceSelected:"tratamiento seleccionado",

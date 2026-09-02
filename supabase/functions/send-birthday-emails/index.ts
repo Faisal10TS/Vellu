@@ -332,11 +332,14 @@ serve(async (req) => {
   // Only salons that have opted in and have a discount % configured.
   // discount_codes komt mee om naambotsingen met de eigen codes van de eigenaar
   // te vermijden (zie reserveCode) — we schrijven die kolom niet meer.
+  // Twee losse opties per salon: de mail naar de klant (birthday_email_enabled +
+  // percentage) en/of een melding naar de eigenaar (birthday_notify_owner).
+  // Een salon met alleen de melding aan wil géén mails — daarom pas in de lus
+  // beslissen wat er per salon gebeurt.
   const { data: salons, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_discount_pct, birthday_email_code_prefix, subscription_status, discount_codes, country_code")
-    .eq("birthday_email_enabled", true)
-    .not("birthday_email_discount_pct", "is", null);
+    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_notify_owner, subscription_status, discount_codes, country_code")
+    .or("birthday_email_enabled.eq.true,birthday_notify_owner.eq.true");
   if (salonErr) {
     console.error("Load salons failed:", salonErr);
     return new Response(JSON.stringify({ error: "db_error" }), { status: 500 });
@@ -412,6 +415,31 @@ serve(async (req) => {
     // Geen jarige klanten vandaag: niets te doen. Het opruimen van verlopen codes
     // gebeurt niet meer hier maar in purgeExpiredCodes, buiten deze lus om.
     if (targets.length === 0) continue;
+
+    // Melding voor de eigenaar (optie): één push per salon per dag met de namen.
+    // Fire-and-forget richting send-push-notification (x-internal-secret, net
+    // als book-appointment); geen abonnement = de functie doet gewoon niets.
+    if (salon.birthday_notify_owner === true) {
+      const names = targets.map((t) => t.name || t.email).join(", ");
+      const nlOwner = DUTCH_COUNTRIES.has(String(salon.country_code || "NL").toUpperCase());
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY },
+          body: JSON.stringify({
+            user_id: salon.id,
+            title: nlOwner ? "🎂 Jarige klant" : "🎂 Client birthday",
+            body: nlOwner ? `Vandaag jarig: ${names}` : `Birthday today: ${names}`,
+            url: "/owner",
+            tag: `bday-${sentOn}`,
+          }),
+        });
+      } catch (e) {
+        console.error("Birthday push failed:", e);
+      }
+    }
+    // Zonder de mail-optie (of zonder percentage) stopt het hier voor deze salon.
+    if (salon.birthday_email_enabled !== true || !Number.isFinite(pct) || pct < 1) continue;
 
     // Filter out any (owner, email, today) rows already logged so a re-run
     // doesn't double-send.

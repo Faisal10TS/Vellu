@@ -3756,6 +3756,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return out;
   };
 
+  // Jarige klanten vandaag voor de dashboardbanner (alleen met de optie
+  // birthday_notify_owner aan). manual_clients = eigen contacten; clients =
+  // boekers, via RLS beperkt tot klanten van deze salon. Maand+dag matchen,
+  // jaar negeren.
+  const [bdayToday, setBdayToday] = useState([]);
+  useEffect(() => {
+    if (!salonData?.owner_id || !salonData.birthday_notify_owner) { setBdayToday([]); return; }
+    let dood = false;
+    (async () => {
+      const md = fmt(getToday()).slice(5);
+      const [{ data: manual }, { data: booked }] = await Promise.all([
+        supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null),
+        supabase.from("clients").select("first_name, last_name, email, birthday").not("birthday", "is", null),
+      ]);
+      if (dood) return;
+      const namen = new Map();
+      for (const m of manual || []) if (String(m.birthday || "").slice(5) === md) namen.set(String(m.email || m.name).toLowerCase(), m.name || m.email);
+      for (const b of booked || []) if (String(b.birthday || "").slice(5) === md) { const k = String(b.email || "").toLowerCase(); if (!namen.has(k)) namen.set(k, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.email); }
+      setBdayToday([...namen.values()]);
+    })();
+    return () => { dood = true; };
+  }, [salonData?.owner_id, salonData?.birthday_notify_owner]);
+
   // Jaaromzet-tegel op het dashboard. Het geheugenvenster is ~90 dagen, dus
   // dit haalt éénmalig per sessie het hele kalenderjaar op — een "dit jaar"-
   // tegel die stilzwijgend maar een kwart telt zou liegen. Mislukt de fetch,
@@ -4064,6 +4087,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           birthday_email_enabled: data.birthday_email_enabled || false,
           birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
           birthday_email_code_prefix: data.birthday_email_code_prefix || "",
+          ask_birthday_on_booking: !!data.ask_birthday_on_booking,
+          birthday_notify_owner: !!data.birthday_notify_owner,
           break_minutes: data.break_minutes || 0,
           slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
@@ -8255,6 +8280,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view === "dashboard" && (
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflow: "hidden" }}>
               {isMobile && <PTitle sub={t.welcomeBack}>{t.dashboard}</PTitle>}
+
+              {/* Jarige klanten vandaag (optie "Melding als een klant jarig is"). */}
+              {bdayToday.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 14, marginBottom: 16, background: `${accent}12`, border: `1px solid ${accent}44`, fontSize: 12, color: c.text }}>
+                  <span style={{ fontSize: 18 }}>🎂</span>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{lang === "nl" ? "Vandaag jarig" : lang === "es" ? "Cumpleaños hoy" : "Birthday today"}</div>
+                    <div style={{ color: c.textSub, marginTop: 1 }}>{bdayToday.join(", ")}</div>
+                  </div>
+                </div>
+              )}
 
               {/* Onboarding checklist for new salons */}
               {appts.length === 0 && (
@@ -16050,6 +16086,28 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     }} />
                   </div>
                 </label>
+                {/* Twee losse opties (verzoek TTNB): klanten vullen hun verjaardag
+                    zelf in bij het boeken, en/of de salon krijgt op de dag zelf
+                    een melding. Staan los van de mail — niet elke salon wil dit. */}
+                {[
+                  ["ask_birthday_on_booking",
+                    lang === "nl" ? "Verjaardag vragen bij het boeken" : lang === "es" ? "Pedir el cumpleaños al reservar" : "Ask for birthday when booking",
+                    lang === "nl" ? "Optioneel veld op je boekingspagina — klanten vullen 'm zelf in, jij hoeft niets te doen" : lang === "es" ? "Campo opcional en tu página de reservas — los clientes lo rellenan ellos mismos" : "Optional field on your booking page — clients fill it in themselves"],
+                  ["birthday_notify_owner",
+                    lang === "nl" ? "Melding als een klant jarig is" : lang === "es" ? "Aviso cuando un cliente cumple años" : "Notify me when a client has a birthday",
+                    lang === "nl" ? "Push-melding op je telefoon 's ochtends + een banner op je dashboard" : lang === "es" ? "Notificación push por la mañana + un aviso en tu panel" : "Push notification in the morning + a banner on your dashboard"],
+                ].map(([key, label, sub]) => (
+                  <label key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", cursor: "pointer", borderTop: `1px solid ${c.border}` }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{label}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub}</div>
+                    </div>
+                    <div onClick={() => update(d => { d[key] = !d[key]; return d; })}
+                      style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: salonData[key] ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0 }}>
+                      <div style={{ position: "absolute", top: 2, left: salonData[key] ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                    </div>
+                  </label>
+                ))}
                 {salonData.birthday_email_enabled && (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
                     <div>
@@ -16272,6 +16330,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   birthday_email_enabled: !!salonData.birthday_email_enabled,
                   birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
                   birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,
+                  ask_birthday_on_booking: !!salonData.ask_birthday_on_booking,
+                  birthday_notify_owner: !!salonData.birthday_notify_owner,
                   break_minutes: salonData.break_minutes || 0,
                   slot_interval_minutes: salonData.slot_interval_minutes || 30,
                   logo_url: salonData.logo_url || null,

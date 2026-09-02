@@ -177,6 +177,16 @@ serve(async (req) => {
   const lastName = String(client.lastName || "").trim().slice(0, 80);
   const phone = String(client.phone || "").trim().slice(0, 40) || null;
   const allergies = String(client.allergies || "").trim().slice(0, 500) || null;
+  // Verjaardag (optioneel veld op de boekingspagina, alleen als de salon het
+  // aanzet). Strikt jjjj-mm-dd en een plausibel jaar; anders stil negeren —
+  // een rare datum mag nooit de boeking zelf blokkeren.
+  const birthday = (() => {
+    const b = String(client.birthday || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b)) return null;
+    const y = parseInt(b.slice(0, 4), 10);
+    if (y < 1900 || y > new Date().getUTCFullYear()) return null;
+    return b;
+  })();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(400, "invalid_email", origin);
   if (!firstName || !lastName) return err(400, "missing_name", origin);
   // Botval: het veld `website` staat op de boekingspagina buiten beeld en heeft
@@ -850,6 +860,8 @@ serve(async (req) => {
       last_name: lastName,
       phone: phone,
       allergies: allergies,
+      // Alleen zetten als de klant 'm nu invulde; nooit een bekende verjaardag wissen.
+      ...(birthday ? { birthday } : {}),
       last_visit: new Date().toISOString(),
     }).eq("id", clientId);
   } else {
@@ -859,6 +871,7 @@ serve(async (req) => {
       last_name: lastName,
       phone: phone,
       allergies: allergies,
+      birthday: birthday,
       last_visit: new Date().toISOString(),
     }).select("id").single();
     if (nErr || !newClient) return err(500, "client_create_failed", origin);

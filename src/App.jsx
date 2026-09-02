@@ -582,6 +582,8 @@ function SalonRoute({ lang, setLang }) {
         cover_focal_y: data.cover_focal_y ?? 50,
         cover_focal_x: data.cover_focal_x ?? 50,
         cover_zoom: Number(data.cover_zoom) || 1,
+        // Optioneel verjaardagsveld in de boekingsflow (salon-instelling).
+        ask_birthday_on_booking: !!data.ask_birthday_on_booking,
         discount_codes: (data.discount_codes || []).filter(d => d.active),
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,

@@ -750,7 +750,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // off-screen, aria-hidden, autocomplete off) but filled by dumb bots that
   // blindly populate every input on a page. If the server receives a non-empty
   // value, it rejects the booking. See also book-appointment edge fn.
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "" });
   // Server zei phone_required (kan alleen via een verouderde/gemanipuleerde
   // pagina voorbij de client-check komen): we springen dan terug naar de
   // gegevens-stap en markeren het telefoonveld — een toast alleen verdwijnt
@@ -1444,7 +1444,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     setClientNoShows(0);
-    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "" });
+    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "" });
     setPolicyAgreed(false);
     setAppliedDiscount(null);
     setDiscountCode("");
@@ -1932,6 +1932,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             email: clientEmail,
             phone: form.phone || null,
             allergies: form.allergies || null,
+            // Alleen als de salon het veld toont; de server valideert het formaat.
+            birthday: (initialSalon.ask_birthday_on_booking && form.birthday) ? form.birthday : null,
             // Honeypot — real users leave this empty; bots fill it. Server
             // silently rejects if non-empty.
             website: form.website || "",
@@ -3856,6 +3858,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   )}
                   <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
+                  {/* Verjaardag — alleen als de salon het aanzet (Instellingen →
+                      Verjaardagsmail). Date-inputs tonen geen placeholder, dus een
+                      eigen label erboven; geen autoFocus (iOS opent anders de picker). */}
+                  {initialSalon.ask_birthday_on_booking && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.birthday} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({t.allergiesOptional})</span></div>
+                      <input className="input-field" type="date" name="bday" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} value={form.birthday} onChange={e => setForm(f => ({...f, birthday: e.target.value}))} />
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.birthdayHint}</div>
+                    </div>
+                  )}
                   {/* Honeypot — invisible to real users, bots fill it. Offscreen
                       positioning beats display:none (savvier bots skip hidden
                       inputs). tabIndex=-1 keeps keyboard users out. Kept LAST
@@ -4577,6 +4589,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   )}
                       <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
+                      {initialSalon.ask_birthday_on_booking && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.birthday} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({t.allergiesOptional})</span></div>
+                          <input className="input-field" type="date" name="bday" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} value={form.birthday} onChange={e => setForm(f => ({...f, birthday: e.target.value}))} />
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.birthdayHint}</div>
+                        </div>
+                      )}
                       {/* Honeypot — kept LAST so it can't disturb autofill. */}
                       <input
                         type="text"
