@@ -580,7 +580,6 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 // overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
 // zodat het instellingen-scherm er geen extra query bij krijgt.
 function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
-  const [open, setOpen] = useState(false);
   const [rows, setRows] = useState(null); // null = nog nooit geladen
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -637,11 +636,9 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
     setRows(data || []);
   };
 
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && rows === null && !loading) load();
-  };
+  // Altijd zichtbaar (geen uitklapbalk — die werd niet gevonden): één kleine
+  // query bij het openen van deze instellingen-tab.
+  useEffect(() => { load(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
 
   const fmtD = (ds) => { try { return new Date(String(ds).length === 10 ? ds + "T12:00:00" : ds).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
   // Verlopen bepalen we op lokale datum; de server hanteert een dag speling,
@@ -658,16 +655,10 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
 
   return (
     <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 10 }}>
-      {/* Een echte knop i.p.v. een driehoekje: het kopiëren/aanmaken zat
-          verstopt onder "Uitstaande codes" en werd niet gevonden. */}
-      <button type="button" className="btn-ghost" onClick={toggle}
-        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", fontSize: 10, color: open ? accent : c.textSub, borderColor: open ? accent : undefined }}>
-        <NavIcon name="copy" size={12} color="currentColor" />
-        {lang === "nl" ? "Klantcodes: bekijken, aanmaken & kopiëren" : lang === "es" ? "Códigos de clientes: ver, crear y copiar" : "Client codes: view, create & copy"}
-        <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", fontSize: 9 }}>▶</span>
-      </button>
-      {open && (
-        <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+        {lang === "nl" ? "Klantcodes" : lang === "es" ? "Códigos de clientes" : "Client codes"}
+      </div>
+        <div>
           {/* Zelf een code maken en meteen kopiëren — voor WhatsApp of als de
               verjaardag te laat is ingevuld voor de automatische mail. */}
           <div style={{ padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33`, marginBottom: 10 }}>
@@ -712,7 +703,6 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
             );
           })}
         </div>
-      )}
     </div>
   );
 }
