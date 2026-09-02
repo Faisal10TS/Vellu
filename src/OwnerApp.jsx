@@ -3868,7 +3868,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // jaar negeren.
   const [bdayToday, setBdayToday] = useState([]);
   useEffect(() => {
-    if (!salonData?.owner_id || !salonData.birthday_notify_owner) { setBdayToday([]); return; }
+    if (!salonData?.owner_id || !salonData.birthday_feature_enabled || !salonData.birthday_notify_owner) { setBdayToday([]); return; }
     let dood = false;
     (async () => {
       const md = fmt(getToday()).slice(5);
@@ -3883,7 +3883,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setBdayToday([...namen.values()]);
     })();
     return () => { dood = true; };
-  }, [salonData?.owner_id, salonData?.birthday_notify_owner]);
+  }, [salonData?.owner_id, salonData?.birthday_notify_owner, salonData?.birthday_feature_enabled]);
 
   // Jaaromzet-tegel op het dashboard. Het geheugenvenster is ~90 dagen, dus
   // dit haalt éénmalig per sessie het hele kalenderjaar op — een "dit jaar"-
@@ -4193,6 +4193,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           birthday_email_enabled: data.birthday_email_enabled || false,
           birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
           birthday_email_code_prefix: data.birthday_email_code_prefix || "",
+          birthday_feature_enabled: !!data.birthday_feature_enabled,
           ask_birthday_on_booking: !!data.ask_birthday_on_booking,
           birthday_notify_owner: !!data.birthday_notify_owner,
           break_minutes: data.break_minutes || 0,
@@ -16170,11 +16171,23 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     ? "Envía automáticamente una felicitación de cumpleaños con un código de descuento a los clientes cuya fecha de nacimiento conoces. Añade la fecha en «Editar cliente» o impórtala por CSV con una columna 'birthday' (aaaa-mm-dd)."
                     : "Automatically send a birthday wish + discount code to clients whose birthday you know. Add birthdays via 'Edit customer' or CSV import with a 'birthday' column (yyyy-mm-dd)."}
                 </div>
+                {/* Hoofdschakelaar: uit = de rest van de kaart blijft verborgen. */}
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 0", cursor: "pointer" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Verjaardagsactie gebruiken" : lang === "es" ? "Usar códigos de cumpleaños" : "Use birthday codes"}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "Persoonlijke kortingscode voor jarige klanten — automatisch per mail of zelf via WhatsApp" : lang === "es" ? "Código de descuento personal para clientes que cumplen años — automático por correo o tú mismo por WhatsApp" : "A personal discount code for clients on their birthday — automatically by email or yourself via WhatsApp"}</div>
+                  </div>
+                  <div onClick={() => update(d => { d.birthday_feature_enabled = !d.birthday_feature_enabled; return d; })}
+                    style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: salonData.birthday_feature_enabled ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0 }}>
+                    <div style={{ position: "absolute", top: 2, left: salonData.birthday_feature_enabled ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  </div>
+                </label>
+                {salonData.birthday_feature_enabled && (<>
                 {/* Wie stuurt de felicitatie? Eén expliciete keuze i.p.v. een
                     aan/uit-schakelaar die die keuze verborg. Beide standen
                     gebruiken hetzelfde percentage + prefix hieronder. ("Elke
                     ochtend" en geen kloktijd: de cron loopt in UTC.) */}
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, margin: "4px 0 8px" }}>
+                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, margin: "4px 0 8px", borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
                   {lang === "nl" ? "Wie stuurt de felicitatie?" : lang === "es" ? "¿Quién envía la felicitación?" : "Who sends the birthday wish?"}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
@@ -16266,6 +16279,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     als de verjaardagsmail (tijdelijk) uitstaat: eerder
                     verstuurde codes blijven immers inwisselbaar. */}
                 <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} prefix={salonData.birthday_email_code_prefix} salonName={salonData.name} slug={salonData.id} />
+                </>)}
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
@@ -16445,6 +16459,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   birthday_email_enabled: !!salonData.birthday_email_enabled,
                   birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
                   birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,
+                  birthday_feature_enabled: !!salonData.birthday_feature_enabled,
                   ask_birthday_on_booking: !!salonData.ask_birthday_on_booking,
                   birthday_notify_owner: !!salonData.birthday_notify_owner,
                   break_minutes: salonData.break_minutes || 0,

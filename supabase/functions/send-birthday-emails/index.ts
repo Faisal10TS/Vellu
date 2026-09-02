@@ -339,6 +339,9 @@ serve(async (req) => {
   const { data: salons, error: salonErr } = await supabase
     .from("profiles")
     .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_notify_owner, subscription_status, discount_codes, country_code")
+    // Hoofdschakelaar: staat de verjaardagsactie uit, dan doet deze functie
+    // voor die salon niets — ook niet als de deelvlaggen nog aan staan.
+    .eq("birthday_feature_enabled", true)
     .or("birthday_email_enabled.eq.true,birthday_notify_owner.eq.true");
   if (salonErr) {
     console.error("Load salons failed:", salonErr);
