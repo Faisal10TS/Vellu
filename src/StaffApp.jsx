@@ -377,18 +377,29 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const days = getDays();
 
   const [processingApptId, setProcessingApptId] = useState(null);
+  // Afspraak-id waarvoor de "Hoe is er betaald?"-kiezer openstaat (Voltooid).
+  const [completeFor, setCompleteFor] = useState(null);
+  const payMethodLabel = (pm) => ({
+    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek" },
+    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request" },
+    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago" },
+  }[lang === "es" ? "es" : lang === "en" ? "en" : "nl"][pm] || "");
   // Scope all mutations to this salon's owner_id — defense-in-depth on top of
   // the RLS policy that already enforces staff can only update their employer's
   // appointments. Without the .eq("owner_id", ...) a compromised client-side
   // could attempt to flip appointments belonging to other salons.
-  const markComplete = async (id) => {
+  // Voltooien mét betaalwijze (zelfde als de eigenaars-app): cash/pin/
+  // overschrijving = nu betaald; method null = later via factuur.
+  const markComplete = async (id, method = null) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id).eq("owner_id", salonProfile.id);
+      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString() } : {}) };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", id).eq("owner_id", salonProfile.id);
       if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
-      setAppointments(a => a.map(x => x.id === id ? {...x, status: "completed"} : x));
-      toast.show(lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed");
+      setAppointments(a => a.map(x => x.id === id ? {...x, ...patch} : x));
+      setCompleteFor(null);
+      toast.show((lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed") + (method ? ` · ${payMethodLabel(method)}` : ""));
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -799,7 +810,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       </div>
       {a.status === "confirmed" && mine && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
+          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
           {showContact && phoneDigits && (
             <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time }))} target="_blank" rel="noopener noreferrer"
               className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -818,6 +829,29 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+        </div>
+      )}
+      {/* Betaalwijze-kiezer bij Voltooid — de afspraak wordt pas na de keuze
+          echt afgerond. */}
+      {a.status === "confirmed" && mine && completeFor === a.id && (
+        <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {[
+              ["cash", payMethodLabel("cash")],
+              ["pin", payMethodLabel("pin")],
+              ["transfer", payMethodLabel("transfer")],
+              [null, lang === "nl" ? "Later / factuur" : lang === "es" ? "Después / factura" : "Later / invoice"],
+            ].map(([pm, label]) => (
+              <button key={pm || "later"} className="btn-ghost" style={{ padding: "8px 6px", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(pm ? { color: accent, borderColor: `${accent}55` } : {}) }} disabled={!!processingApptId} onClick={() => markComplete(a.id, pm)}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {a.status === "completed" && a.paid_at && (
+        <div style={{ fontSize: 11, color: c.success, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <NavIcon name="check" size={11} color={c.success} />
+          {lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method) ? ` · ${payMethodLabel(a.payment_method)}` : ""}
         </div>
       )}
     </div>

@@ -1040,6 +1040,17 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, country
   );
 }
 
+// Betaalwijze-label voor afspraken én kassaverkopen. "transfer" = bank-
+// overschrijving (verzoek Eydy, Bonaire: daar wordt veel overgemaakt).
+const payMethodLabel = (pm, lang) => {
+  const map = {
+    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek" },
+    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request" },
+    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago" },
+  };
+  return (map[lang] || map.nl)[pm] || "";
+};
+
 // Revenue report block — renders inside the Facturen view. Owner picks a
 // period (this/last month, this/last year, or custom range) and clicks
 // download; jsPDF generates and triggers a browser download instantly.
@@ -4493,6 +4504,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddAppt, salonData.owner_id]);
   const [processingApptId, setProcessingApptId] = useState(null);
+  // Afspraak-id waarvoor de "Hoe is er betaald?"-kiezer openstaat (Afronden).
+  const [completeFor, setCompleteFor] = useState(null);
   const [invoicePickerFor, setInvoicePickerFor] = useState(null); // appointment id when the extra-profile picker is open
   // Counter sale (Sara-style "afrekenen"): appointment id the product-sale
   // modal is open for — or the sentinel "walkin" for a standalone sale to
@@ -4835,14 +4848,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : lang === "es" ? "No se pudo guardar el orden" : "Could not save order", "error");
     }
   };
-  const markComplete = async (id) => {
+  // Afronden mét betaalwijze (verzoek Eydy): cash/pin/overschrijving = op dit
+  // moment betaald (paid_at gezet, zoals de kassa doet); method null = "later"
+  // — alleen afronden, betaling blijft open voor de factuur/het betaalverzoek.
+  const markComplete = async (id, method = null) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "completed" }).eq("id", id);
+      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString() } : {}) };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", id);
       if (error) { toast.show(t.errorCompleting, "error"); return; }
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"completed"} : a); return d; });
-      toast.show(t.apptCompleted);
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, ...patch} : a); return d; });
+      setCompleteFor(null);
+      toast.show(method ? `${t.apptCompleted} · ${payMethodLabel(method, lang)}` : t.apptCompleted);
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -6829,7 +6847,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Alle pillen in deze rij delen 8px verticale padding: de
               btn-ghost-default (11px) maakte Afronden een dikke oval die
               over twee regels wrapte, terwijl "0 14px" de rest platsloeg. */}
-          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markComplete(a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
           {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
@@ -6844,6 +6862,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
             <NavIcon name="xmark" size={11} color="currentColor" />
           </button>
+        </div>
+      )}
+      {/* Betaalwijze-kiezer bij Afronden: pas ná de keuze wordt de afspraak
+          echt afgerond, zodat de betaling in één handeling vastligt. */}
+      {a.status === "confirmed" && completeFor === a.id && (
+        <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {[
+              ["cash", payMethodLabel("cash", lang)],
+              ["pin", payMethodLabel("pin", lang)],
+              ["transfer", payMethodLabel("transfer", lang)],
+              [null, lang === "nl" ? "Later / factuur" : lang === "es" ? "Después / factura" : "Later / invoice"],
+            ].map(([pm, label]) => (
+              <button key={pm || "later"} className="btn-ghost" style={{ padding: "8px 6px", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(pm ? { color: accent, borderColor: `${accent}55` } : {}) }} disabled={!!processingApptId} onClick={() => markComplete(a.id, pm)}>{label}</button>
+            ))}
+          </div>
         </div>
       )}
       {a.status === "completed" && (
@@ -6866,6 +6901,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           captured email simply has no invoice button. */}
       {a.status === "completed" && !a.invoice_sent && a.client_email && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
+      {a.status === "completed" && a.paid_at && (
+        <div style={{ fontSize: 11, color: c.success, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <NavIcon name="check" size={11} color={c.success} />
+          {lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method, lang) ? ` · ${payMethodLabel(a.payment_method, lang)}` : ""}
+        </div>
+      )}
       {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
       {a.status === "confirmed" && (
@@ -7760,7 +7801,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <span style={lblStyle}>{lang === "nl" ? "Betaling" : lang === "es" ? "Pago" : "Payment"}</span>
                 <span style={valStyle}>
                   {a.paid_at
-                    ? <span style={{ color: c.success, fontWeight: 600 }}>{lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}</span>
+                    ? <span style={{ color: c.success, fontWeight: 600 }}>{lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method, lang) ? ` · ${payMethodLabel(a.payment_method, lang)}` : ""}</span>
                     : (a.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek na afloop" : lang === "es" ? "Solicitud de pago posterior" : "Payment request afterwards") : (lang === "nl" ? "Betalen bij afspraak" : lang === "es" ? "Pagar en la cita" : "Pay at appointment"))}
                 </span>
               </div>
@@ -8836,6 +8877,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const dayTotal = rows.reduce((sum, a) => sum + (Array.isArray(a.products) ? a.products.reduce((x, it) => x + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0) : 0), 0);
                     const payLabel = (pm) => pm === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
                       : pm === "pin" ? (lang === "es" ? "Tarjeta" : "Pin")
+                      : pm === "transfer" ? (lang === "nl" ? "Overschrijving" : lang === "es" ? "Transferencia" : "Bank transfer")
                       : pm === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request")
                       : (lang === "nl" ? "In de salon" : lang === "es" ? "En el salón" : "In salon");
                     // Een dag bladeren; vooruit klemt op vandaag (geen toekomst).
@@ -10561,7 +10603,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               >
                                 {/* Mobiel: alleen het €-teken — groen gevuld = betaald;
                                     het "Paid"-label at de ruimte van de medewerker-chip op. */}
-                                {cur}{a.paid_at && !isMobile ? (lang === "nl" ? " Betaald" : lang === "es" ? " Pagada" : " Paid") : ""}
+                                {cur}{a.paid_at && !isMobile ? (lang === "nl" ? " Betaald" : lang === "es" ? " Pagada" : " Paid") + (payMethodLabel(a.payment_method, lang) && a.payment_method !== "online" ? ` · ${payMethodLabel(a.payment_method, lang)}` : "") : ""}
                               </button>
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:

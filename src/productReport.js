@@ -37,9 +37,9 @@ const fmtDate = (iso, lang = "nl") => {
 // Payment labels — the kassa stores "pin" / "cash" / "online" (pay request).
 // Older rows carry "on-arrival"; show that as "in de salon".
 const PAY_LABEL = {
-  nl: { pin: "Pin", cash: "Contant", online: "Betaalverzoek", "on-arrival": "In de salon" },
-  en: { pin: "Card", cash: "Cash", online: "Payment request", "on-arrival": "In salon" },
-  es: { pin: "Tarjeta", cash: "Efectivo", online: "Solicitud de pago", "on-arrival": "En el salón" },
+  nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", "on-arrival": "In de salon" },
+  en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", "on-arrival": "In salon" },
+  es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", "on-arrival": "En el salón" },
 };
 
 /**
