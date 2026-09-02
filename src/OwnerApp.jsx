@@ -579,11 +579,50 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 // de eigenaar mag via RLS alleen zijn EIGEN rijen lezen — vandaar puur een
 // overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
 // zodat het instellingen-scherm er geen extra query bij krijgt.
-function BirthdayCodesBlock({ lang, c, accent }) {
+function BirthdayCodesBlock({ lang, c, accent, toast, pct }) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState(null); // null = nog nooit geladen
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Handmatig een code aanmaken (verzoek TTNB): de code stond alleen in de mail
+  // aan de klant, en als de verjaardag pas ná de ochtendrun is ingevuld bestaat
+  // er helemaal geen code. De RPC hanteert dezelfde regels als de cron.
+  const [newEmail, setNewEmail] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const copyText = async (txt) => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(txt);
+      else {
+        // Oudere webviews zonder Clipboard API (o.a. Instagram-browser).
+        const ta = document.createElement("textarea"); ta.value = txt; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+      }
+      toast?.show?.(lang === "nl" ? `Gekopieerd: ${txt}` : lang === "es" ? `Copiado: ${txt}` : `Copied: ${txt}`);
+    } catch {
+      toast?.show?.(lang === "nl" ? "Kopiëren lukte niet — selecteer de code en kopieer handmatig" : lang === "es" ? "No se pudo copiar — selecciona el código y cópialo a mano" : "Copy failed — select the code and copy it manually", "error");
+    }
+  };
+
+  const createCode = async () => {
+    const email = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast?.show?.(lang === "nl" ? "Vul een geldig e-mailadres van de klant in" : lang === "es" ? "Introduce un correo válido del cliente" : "Enter a valid client email address", "error"); return; }
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.rpc("create_birthday_code", { p_email: email });
+      const hit = Array.isArray(data) ? data[0] : data;
+      if (error || !hit?.code) {
+        const msg = String(error?.message || "");
+        toast?.show?.(msg.includes("no_discount_pct")
+          ? (lang === "nl" ? "Stel eerst een kortingspercentage in en sla op" : lang === "es" ? "Configura primero un porcentaje de descuento y guarda" : "Set a discount percentage first and save")
+          : (lang === "nl" ? "Code aanmaken mislukt" : lang === "es" ? "No se pudo crear el código" : "Could not create the code"), "error");
+        return;
+      }
+      setRows(prev => [{ id: `nieuw-${hit.code}`, code: hit.code, client_email: email, discount_pct: hit.discount_pct, expires_on: hit.expires_on, used_at: null }, ...((prev || []).filter(r => r.code !== hit.code))]);
+      setNewEmail("");
+      await copyText(hit.code);
+    } finally { setCreating(false); }
+  };
 
   const load = async () => {
     setLoading(true); setFailed(false);
@@ -626,6 +665,22 @@ function BirthdayCodesBlock({ lang, c, accent }) {
       </button>
       {open && (
         <div style={{ marginTop: 8 }}>
+          {/* Zelf een code maken en meteen kopiëren — voor WhatsApp of als de
+              verjaardag te laat is ingevuld voor de automatische mail. */}
+          <div style={{ padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33`, marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Code aanmaken voor een klant" : lang === "es" ? "Crear un código para un cliente" : "Create a code for a client"}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <input className="input-field" type="email" inputMode="email" autoComplete="off" placeholder={lang === "nl" ? "E-mailadres van de klant" : lang === "es" ? "Correo del cliente" : "Client's email address"} value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); createCode(); } }} style={{ flex: 1, minWidth: 180, fontSize: 12, padding: "9px 12px" }} />
+              <button type="button" className="btn-ghost" disabled={creating || !pct} onClick={createCode} style={{ padding: "8px 14px", fontSize: 10, color: accent, borderColor: `${accent}55`, opacity: creating || !pct ? 0.5 : 1, whiteSpace: "nowrap" }}>
+                {creating ? "…" : (lang === "nl" ? "Maak code & kopieer" : lang === "es" ? "Crear y copiar" : "Create & copy")}
+              </button>
+            </div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+              {pct
+                ? (lang === "nl" ? `De code (${pct}%) werkt alleen voor dit e-mailadres, één keer, tot het einde van deze maand — stuur 'm bijvoorbeeld via WhatsApp.` : lang === "es" ? `El código (${pct}%) solo vale para este correo, una vez, hasta fin de mes — envíalo por WhatsApp, por ejemplo.` : `The code (${pct}%) only works for this email address, once, until the end of this month — send it via WhatsApp, for example.`)
+                : (lang === "nl" ? "Stel hierboven eerst een kortingspercentage in en sla op." : lang === "es" ? "Configura primero un porcentaje de descuento arriba y guarda." : "Set a discount percentage above first and save.")}
+            </div>
+          </div>
           {loading && <div style={{ fontSize: 11, color: c.textMuted }}>{lang === "nl" ? "Laden…" : lang === "es" ? "Cargando…" : "Loading…"}</div>}
           {failed && (
             <div style={{ fontSize: 11, color: c.textMuted }}>
@@ -644,6 +699,12 @@ function BirthdayCodesBlock({ lang, c, accent }) {
                 <span style={{ fontSize: 10, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{parseFloat(r.discount_pct)}%</span>
                 <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "verloopt" : lang === "es" ? "caduca" : "expires"} {fmtD(r.expires_on)}</span>
                 <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 100, color: st.color, border: `1px solid ${st.border}`, background: st.bg }}>{st.label}</span>
+                {!r.used_at && r.expires_on >= today && (
+                  <button type="button" onClick={() => copyText(r.code)} title={lang === "nl" ? "Code kopiëren" : lang === "es" ? "Copiar código" : "Copy code"}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 100, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer", background: "transparent", color: accent, border: `1px solid ${accent}55`, fontFamily: "'Jost',sans-serif" }}>
+                    <NavIcon name="copy" size={10} color="currentColor" />{lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy"}
+                  </button>
+                )}
               </div>
             );
           })}
@@ -16150,7 +16211,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 {/* Overzicht van door de cron uitgedeelde codes — ook zichtbaar
                     als de verjaardagsmail (tijdelijk) uitstaat: eerder
                     verstuurde codes blijven immers inwisselbaar. */}
-                <BirthdayCodesBlock lang={lang} c={c} accent={accent} />
+                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} />
               </div>
 
               {/* Newsletter — compose + send a one-off email to all clients
