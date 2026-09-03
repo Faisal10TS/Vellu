@@ -205,28 +205,66 @@ serve(async (req) => {
     }
   }
 
+  // ── Deelvensters ────────────────────────────────────────────────────────
+  // Een gecombineerde afspraak heeft per dienst een eigen stylist, duur en
+  // startverschuiving (service_breakdown). Elke per-stylist-toets hoort tegen
+  // HAAR deel te gaan — hetzelfde model als book-appointment (vensterVoorStaff).
+  // Verzetten deed dat niet: het keek alleen naar de PRIMAIRE stylist en het
+  // hele venster. Dat was twee kanten op fout — te streng voor haar (haar deel
+  // is korter dan de afspraak), en te soepel voor de tweede stylist: haar
+  // blokkades, werktijden en bestaande afspraken werden volledig genegeerd, dus
+  // je kon een teamboeking verzetten naar een moment waarop zij niet kan.
+  // Zonder breakdown (enkelvoudige of oude afspraak) is er precies één deel.
+  const breakdown = Array.isArray(appt.service_breakdown) ? appt.service_breakdown : [];
+  const delen: { staffId: string | null; serviceId: string | null; start: number; end: number }[] =
+    breakdown
+      .map((p: any) => {
+        const off = parseInt(p.offset_min) || 0;
+        const dur = parseInt(p.duration) || 0;
+        return {
+          // Wisselt de eigenaar van stylist, dan verhuizen alleen de delen van
+          // de vórige primaire stylist mee; de rest blijft bij haar eigen.
+          staffId: (new_staff_id !== undefined && (p.staff_id || null) === (appt.staff_id || null))
+            ? (new_staff_id || null)
+            : (p.staff_id || null),
+          serviceId: p.service_id || null,
+          start: startMin + off,
+          end: startMin + off + dur,
+        };
+      })
+      .filter((d: any) => d.end > d.start);
+  if (delen.length === 0) delen.push({ staffId: staffId || null, serviceId: appt.service_id || null, start: startMin, end: endMin });
+  const betrokkenStaff = [...new Set(delen.map((d) => d.staffId).filter(Boolean))] as string[];
+  const delenVan = (sid: string | null) => delen.filter((d) => d.staffId === sid);
+
   // staff_day_overrides rows for this date: kind='block' makes a stylist (or
   // the whole salon when staff_id is null) unavailable; kind='exception' is
   // an EXTRA open window that replaces the weekly schedule for that date.
-  // Same semantics as the public booking flow.
+  // Same semantics as the public booking flow — inclusief de terugkerende
+  // weekdag-blokkades ("elke zondag"), die bij verzetten helemaal niet golden
+  // omdat er alleen op `date` werd gezocht.
   const { data: sdoRows } = await supabase
     .from("staff_day_overrides")
-    .select("staff_id, kind, block_time_start, block_time_end")
+    .select("staff_id, service_id, kind, weekday, date, block_time_start, block_time_end")
     .eq("owner_id", callerId)
-    .eq("date", new_date);
-  const appliesToStaff = (r: { staff_id: string | null }) =>
-    !r.staff_id || (staffId && r.staff_id === staffId);
-  const blocks = (sdoRows || []).filter((r) => (r.kind || "block") !== "exception").filter(appliesToStaff);
+    .or(`date.eq.${new_date},weekday.eq.${dow}`);
+  const geldtOpDezeDag = (r: any) =>
+    r.weekday == null ? r.date === new_date : (r.weekday === dow && new_date >= r.date);
+  const sdo = (sdoRows || []).filter(geldtOpDezeDag);
+  const blocks = sdo.filter((r) => (r.kind || "block") !== "exception");
   for (const b of blocks) {
-    if (b.block_time_start && b.block_time_end) {
-      const bs = toMinutes(b.block_time_start);
-      const be = toMinutes(b.block_time_end);
-      if (startMin < be && endMin > bs) return err(400, "slot_blocked", origin);
-    } else {
-      return err(400, "day_blocked", origin);
-    }
+    // Salonbreed (geen stylist) = niemand werkt dan, dus tegen álle delen.
+    // Van een stylist = alleen tegen haar eigen delen. Een dienst-blokkade
+    // ("maandag geen brows") raakt alleen het deel met die dienst.
+    const raakt = b.staff_id ? delenVan(b.staff_id) : delen;
+    const relevant = b.service_id ? raakt.filter((d) => d.serviceId === b.service_id) : raakt;
+    if (relevant.length === 0) continue;
+    if (!b.block_time_start || !b.block_time_end) return err(400, "day_blocked", origin);
+    const bs = toMinutes(b.block_time_start);
+    const be = toMinutes(b.block_time_end);
+    if (relevant.some((d) => d.start < be && d.end > bs)) return err(400, "slot_blocked", origin);
   }
-  const exceptions = (sdoRows || []).filter((r) => r.kind === "exception").filter(appliesToStaff);
+  const exceptions = sdo.filter((r) => r.kind === "exception");
 
   // Determine the open window for this date. Team salons keep business_hours
   // mostly "closed" and schedule per staff member, so validate against the
@@ -236,37 +274,62 @@ serve(async (req) => {
   const fbOpen = salonDay?.open || "09:00";
   const fbClose = salonDay?.close || "17:30";
 
-  if (exceptions.length > 0) {
-    // Exception windows replace the weekly schedule: the slot must fit
-    // entirely inside one of them.
-    const fits = exceptions.some((e) => {
-      const o = toMinutes(e.block_time_start || fbOpen);
-      const c = toMinutes(e.block_time_end || fbClose);
-      return startMin >= o && endMin <= c;
-    });
-    if (!fits) return err(400, "outside_hours", origin);
-  } else if (override?.type === "exception") {
-    const hours = { open: override.open || fbOpen, close: override.close || fbClose };
-    if (startMin < toMinutes(hours.open) || endMin > toMinutes(hours.close)) return err(400, "outside_hours", origin);
-  } else if (salon.account_type === "team") {
-    let win: { open: string; close: string } | null = null;
-    if (staffId) {
-      const { data: st } = await supabase
-        .from("staff_members").select("working_hours").eq("id", staffId).maybeSingle();
-      const d = st?.working_hours?.[dow];
-      if (d) {
-        if (d.closed) return err(400, "closed", origin);
-        win = { open: d.open || fbOpen, close: d.close || fbClose };
+  // De legacy salonbrede uitzondering uit day_overrides meedoen alsof het een
+  // rij is, zodat hij voor iedere stylist geldt — net als in book-appointment.
+  const alleExc: any[] = [...exceptions];
+  if (override?.type === "exception") {
+    alleExc.push({ staff_id: null, block_time_start: override.open || fbOpen, block_time_end: override.close || fbClose });
+  }
+  const excVoor = (sid: string | null) => alleExc.filter((e) => !e.staff_id || (sid && e.staff_id === sid));
+
+  // Per betrokken stylist: haar eigen delen moeten passen in haar uitzondering
+  // (die vervangt het weekrooster) óf in haar weekrooster. Delen zonder stylist
+  // — en stylisten zonder eigen rooster — vallen terug op de salon-/teamuren.
+  const restDelen: typeof delen = [...delenVan(null)];
+  if (betrokkenStaff.length > 0) {
+    const { data: stRows } = await supabase
+      .from("staff_members").select("id, working_hours").in("id", betrokkenStaff);
+    for (const sid of betrokkenStaff) {
+      const eigen = delenVan(sid);
+      const exc = excVoor(sid);
+      if (exc.length > 0) {
+        const past = eigen.every((d) => exc.some((e) =>
+          d.start >= toMinutes(e.block_time_start || fbOpen) && d.end <= toMinutes(e.block_time_end || fbClose)));
+        if (!past) return err(400, "outside_hours", origin);
+        continue;
       }
-      // No working_hours (or day not configured) → fall through to salon hours.
-    } else {
-      // No stylist assigned: any active stylist working that day makes the
-      // slot possible — use the union (earliest open, latest close).
+      const wh = (stRows || []).find((s: any) => s.id === sid)?.working_hours?.[dow];
+      if (wh) {
+        if (wh.closed) return err(400, "closed", origin);
+        const o = toMinutes(wh.open || fbOpen);
+        const c = toMinutes(wh.close || fbClose);
+        if (eigen.some((d) => d.start < o || d.end > c)) return err(400, "outside_hours", origin);
+        continue;
+      }
+      // Geen eigen rooster → deze delen tegen de salon-/teamuren hieronder.
+      restDelen.push(...eigen);
+    }
+  }
+
+  if (restDelen.length > 0) {
+    const rs = Math.min(...restDelen.map((d) => d.start));
+    const re = Math.max(...restDelen.map((d) => d.end));
+    const excAlgemeen = alleExc.filter((e) => !e.staff_id);
+    if (excAlgemeen.length > 0) {
+      // Exception windows replace the weekly schedule: the slot must fit
+      // entirely inside one of them.
+      const fits = excAlgemeen.some((e) =>
+        rs >= toMinutes(e.block_time_start || fbOpen) && re <= toMinutes(e.block_time_end || fbClose));
+      if (!fits) return err(400, "outside_hours", origin);
+    } else if (salon.account_type === "team") {
+      // Geen stylist toegewezen: elke actieve stylist die die dag werkt maakt
+      // het slot mogelijk — de vereniging (vroegste open, laatste sluit).
       const { data: allStaff } = await supabase
         .from("staff_members").select("working_hours").eq("owner_id", callerId).eq("active", true);
       const wins = (allStaff || [])
         .map((s) => s.working_hours?.[dow])
         .filter((w) => w && !w.closed);
+      let win: { open: string; close: string } | null = null;
       if (wins.length > 0) {
         let open = "23:59", close = "00:00";
         for (const w of wins) {
@@ -278,19 +341,19 @@ serve(async (req) => {
         // Staff schedules exist but nobody works this day.
         return err(400, "closed", origin);
       }
-      // No staff schedules at all → fall through to salon hours.
-    }
-    if (win) {
-      if (startMin < toMinutes(win.open) || endMin > toMinutes(win.close)) return err(400, "outside_hours", origin);
+      if (win) {
+        if (rs < toMinutes(win.open) || re > toMinutes(win.close)) return err(400, "outside_hours", origin);
+      } else {
+        // No staff schedules at all → fall through to salon hours.
+        if (!salonDay || salonDay.closed) return err(400, "closed", origin);
+        if (rs < toMinutes(fbOpen) || re > toMinutes(fbClose)) return err(400, "outside_hours", origin);
+        if (!fitsMiddayBreak(salonDay, rs, re)) return err(400, "outside_hours", origin);
+      }
     } else {
       if (!salonDay || salonDay.closed) return err(400, "closed", origin);
-      if (startMin < toMinutes(fbOpen) || endMin > toMinutes(fbClose)) return err(400, "outside_hours", origin);
-      if (!fitsMiddayBreak(salonDay, startMin, endMin)) return err(400, "outside_hours", origin);
+      if (rs < toMinutes(salonDay.open) || re > toMinutes(salonDay.close)) return err(400, "outside_hours", origin);
+      if (!fitsMiddayBreak(salonDay, rs, re)) return err(400, "outside_hours", origin);
     }
-  } else {
-    if (!salonDay || salonDay.closed) return err(400, "closed", origin);
-    if (startMin < toMinutes(salonDay.open) || endMin > toMinutes(salonDay.close)) return err(400, "outside_hours", origin);
-    if (!fitsMiddayBreak(salonDay, startMin, endMin)) return err(400, "outside_hours", origin);
   }
 
   const breakMin = parseInt(salon.break_minutes || 0);
@@ -300,14 +363,17 @@ serve(async (req) => {
     .eq("owner_id", callerId).eq("date", new_date)
     .not("id", "eq", appointment_id)
     .not("status", "in", "(\"cancelled\",\"no_show\")");
-  for (const e of existing || []) {
-    const sameStaff = (e.staff_id || null) === (staffId || null);
-    if (!sameStaff && e.staff_id && staffId) continue;
-    const exStart = toMinutes(e.time);
-    const exEnd = exStart + parseInt(e.service_duration || 60) + breakMin;
-    const newStart = startMin;
-    const newEnd = endMin + breakMin;
-    if (newStart < exEnd && newEnd > exStart) return err(409, "slot_conflict", origin);
+  // Per deel toetsen, net als book-appointment stap 10: afspraken van de TWEEDE
+  // stylist werden hiervoor overgeslagen (haar staff_id ≠ de primaire), dus je
+  // kon haar met een verzetting dubbelboeken.
+  for (const d of delen) {
+    for (const e of existing || []) {
+      // Alleen overslaan als beide kanten een (verschillende) stylist hebben.
+      if (d.staffId && e.staff_id && e.staff_id !== d.staffId) continue;
+      const exStart = toMinutes(e.time);
+      const exEnd = exStart + parseInt(e.service_duration || 60) + breakMin;
+      if (d.start < exEnd && d.end + breakMin > exStart) return err(409, "slot_conflict", origin);
+    }
   }
 
   const oldDate = appt.date;
