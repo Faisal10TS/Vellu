@@ -707,22 +707,45 @@ serve(async (req) => {
     if (!fitsMorning && !fitsAfternoon) return err(400, "outside_hours", origin);
   }
 
+  // Deelvensters per stylist. In een gecombineerde boeking doet elke stylist
+  // ALLEEN haar eigen dienst(en), dus haar werktijden en blokkades horen tegen
+  // dát deelvenster te worden getoetst — niet tegen de hele boeking.
+  //
+  // Waarom dit een echte bug was (TTNB, zaterdag 12-09-2026): Lady was
+  // geblokkeerd 11:15-12:00; een klant boekte BIAB bij Esther (90 min) +
+  // pedicure bij Lady (60 min) om 10:30, dus Esther 10:30-12:00 en Lady
+  // 12:00-13:00 — Lady's blokkade raakt haar deel niet. De tijdkiezer bood
+  // 10:30 dan ook terecht aan (die rekent al per deelvenster), maar de server
+  // legde Lady's blokkade tegen het hele venster 10:30-13:00 en weigerde met
+  // "medewerker niet beschikbaar". Pas vanaf 12:00 lukte het. Nu toetsen we
+  // per deel, precies zoals de dubbelboekingscheck in stap 10 al deed.
+  const vensterVoorStaff = (staffId: string | null) => {
+    const eigen = serviceBreakdown.filter((p: any) => p.staff_id === staffId);
+    // Geen eigen deel (kan niet voorkomen zolang staffIdsFlat uit de breakdown
+    // komt): terugvallen op het hele venster is de veilige kant.
+    if (eigen.length === 0) return [{ start: apptStartMin, end: apptEndMin }];
+    return eigen.map((p: any) => ({
+      start: apptStartMin + p.offset_min,
+      end: apptStartMin + p.offset_min + p.duration,
+    }));
+  };
+
   // Also verify each picked stylist is personally open at the booked time. A
   // team salon can be "open" because one staff works while a DIFFERENT staff
   // (the one this booking picked) is off that weekday — booking her should
   // still fail. Exception windows REPLACE the weekly schedule for that date:
-  // when a stylist has one or more (own or salon-wide), the appointment must
-  // fit inside one of them. Same whole-appointment-window strictness as the
-  // weekly check below.
+  // when a stylist has one or more (own or salon-wide), each of her own
+  // sub-windows must fit inside one of them.
   if (salon.account_type === "team" && staffIdsFlat.length > 0) {
     const { data: pickedStaff } = await supabase
       .from("staff_members")
       .select("id, name, working_hours")
       .in("id", staffIdsFlat);
     for (const s of pickedStaff || []) {
+      const eigenVensters = vensterVoorStaff(s.id);
       const exc = exceptionsForStaff(s.id);
       if (exc.length > 0) {
-        const fits = exc.some(e => apptStartMin >= toMinutes(e.open) && apptEndMin <= toMinutes(e.close));
+        const fits = eigenVensters.every(v => exc.some(e => v.start >= toMinutes(e.open) && v.end <= toMinutes(e.close)));
         if (!fits) return err(400, "staff_not_available", origin);
         continue;
       }
@@ -730,7 +753,7 @@ serve(async (req) => {
       if (!day || day.closed) return err(400, "staff_not_available", origin);
       const sOpen = toMinutes(day.open || dayHours.open);
       const sClose = toMinutes(day.close || dayHours.close);
-      if (apptStartMin < sOpen || apptEndMin > sClose) return err(400, "staff_not_available", origin);
+      if (eigenVensters.some(v => v.start < sOpen || v.end > sClose)) return err(400, "staff_not_available", origin);
     }
   }
 
@@ -771,7 +794,8 @@ serve(async (req) => {
       if (!b.block_time_start) return err(400, "staff_day_blocked", origin);
       const blockStart = toMinutes(b.block_time_start);
       const blockEnd = toMinutes(b.block_time_end);
-      if (apptStartMin < blockEnd && apptEndMin > blockStart) return err(400, "staff_time_blocked", origin);
+      // Alleen het deel dat DEZE stylist zelf doet (zie vensterVoorStaff).
+      if (vensterVoorStaff(b.staff_id).some(v => v.start < blockEnd && v.end > blockStart)) return err(400, "staff_time_blocked", origin);
     }
   }
   // Salon-wide time blocks live as staff_day_overrides rows with staff_id IS
