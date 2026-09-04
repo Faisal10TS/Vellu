@@ -4008,7 +4008,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Multi-service structure: services is an array of {id, service_id,
   // variant_id, staff_id}. The owner can add or remove rows to build a
   // combined booking (nails with X + toes with Y, one client, one row).
-  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], variant_qty: 1, extra_qtys: {}, staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true });
+  const [addApptForm, setAddApptForm] = useState({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], variant_qty: 1, extra_qtys: {}, staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [clientList, setClientList] = useState([]);
@@ -4576,7 +4576,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // migration to split shared rows. Until then, RLS is the only barrier here.
         const emails = Object.keys(uniqueClients);
         if (emails.length > 0) {
-          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone, allergies").in("email", emails);
+          const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone, allergies, birthday").in("email", emails);
           if (fullClients) {
             fullClients.forEach(cl => {
               const k = String(cl.email || "").toLowerCase();
@@ -4593,7 +4593,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const extra = [];
         const { data: manual } = await supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden")
+          .select("id, name, email, phone, notes, hidden, birthday")
           .eq("owner_id", salonData.owner_id);
         for (const m of manual || []) {
           if (m.hidden) continue;
@@ -4603,6 +4603,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           if (existing) {
             if (m.name && m.name.trim()) { existing.first_name = parts[0] || m.name; existing.last_name = parts.slice(1).join(" "); }
             if (m.phone) existing.phone = m.phone;
+            if (m.birthday) existing.birthday = m.birthday;
           } else {
             extra.push({
               // Zonder e-mail is er geen natuurlijke sleutel; de manual_clients-id
@@ -4614,6 +4615,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               email: m.email || "",
               phone: m.phone || "",
               allergies: "",
+              birthday: m.birthday || "",
             });
           }
         }
@@ -8692,7 +8694,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Quick Actions — primary first, rest ghost */}
               <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""} 1fr`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 {/* Kassa — walk-in verkoop rechtstreeks vanaf het dashboard,
@@ -10386,7 +10388,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     without an appointment). */}
                 <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                   <button className="btn-ghost" style={{ flex: 1, padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}
-                    onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
+                    onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: calDate, time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                     <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
                   </button>
                   {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
@@ -16716,6 +16718,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                     client_email: cl.email || "",
                                     client_phone: cl.phone || "",
                                     client_allergies: cl.allergies || "",
+                                    // Al bekende verjaardag tonen; is hij leeg,
+                                    // dan kan de salon hem hier alsnog invullen.
+                                    client_birthday: cl.birthday || "",
                                     // Taal overnemen van de vorige afspraak van
                                     // deze klant; de eigenaar kan hem hieronder
                                     // nog omzetten.
@@ -16764,6 +16769,25 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.allergies} ({t.allergiesOptional})</div>
                       <textarea className="input-field" rows={2} placeholder={t.allergiesPlaceholder} value={addApptForm.client_allergies} onChange={e => setAddApptForm(f => ({...f, client_allergies: e.target.value}))} style={{ fontSize: 12, resize: "vertical", width: "100%" }} />
                     </div>
+                    {/* Verjaardag — alleen als de verjaardagsactie aanstaat. De
+                        publieke boekingspagina kan er sinds 02-09 om vragen,
+                        maar de meeste klanten van een salon worden hier met de
+                        hand ingevoerd (telefonisch/WhatsApp geboekt); zonder dit
+                        veld bleef de verjaardagsmail dan leeg. Bekend? Dan staat
+                        hij voorgevuld en verandert er niets. */}
+                    {salonData.birthday_feature_enabled && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
+                          {t.birthday} ({t.allergiesOptional})
+                        </div>
+                        <input className="input-field" type="date" max={fmt(getToday())} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.45 }}>
+                          {lang === "nl" ? "Voor de verjaardagsactie — laat leeg als je 'm niet weet."
+                            : lang === "es" ? "Para la acción de cumpleaños — déjalo vacío si no lo sabes."
+                            : "For the birthday campaign — leave empty if you don't know it."}
+                        </div>
+                      </div>
+                    )}
                     {/* Taal van de klant: bepaalt de taal van de bevestiging én
                         van de herinnering die de cron later stuurt. Voorgevuld
                         met de taal van de vorige afspraak van deze klant, of
@@ -16903,6 +16927,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         p_last: nameParts.slice(1).join(" ") || "",
                         p_phone: addApptForm.client_phone || null,
                         p_allergies: allergiesTrim || null,
+                        // Leeg = niet meesturen; de RPC overschrijft een bekende
+                        // verjaardag nooit met NULL.
+                        p_birthday: (addApptForm.client_birthday || "").trim() || null,
                       });
                       if (rpcId) clientId = rpcId;
                     }
@@ -16950,7 +16977,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       ));
                       if (!known) {
                         const { error: mcErr } = await supabase.from("manual_clients")
-                          .insert({ owner_id: salonData.owner_id, name: nameTrim, phone: phoneTrim || null });
+                          .insert({ owner_id: salonData.owner_id, name: nameTrim, phone: phoneTrim || null, birthday: (addApptForm.client_birthday || "").trim() || null });
                         if (mcErr) console.error("klant zonder e-mail vastleggen mislukt:", mcErr);
                       }
                     }

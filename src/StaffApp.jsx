@@ -96,7 +96,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [gallery, setGallery] = useState(null);
   const [showAddAppt, setShowAddAppt] = useState(false);
-  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", notify_client: true });
+  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true });
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -1148,7 +1148,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* Primary CTA */}
               <button className="btn-primary" style={{ width: "100%", marginBottom: 16, padding: "14px 24px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", notify_client: true }); }}>
+                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true }); }}>
                 <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
               </button>
 
@@ -2733,6 +2733,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
                       <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
                       <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
+                      {/* Verjaardag — alleen als de salon de verjaardagsactie
+                          aan heeft staan; zelfde veld als in de eigenaars-app. */}
+                      {salonProfile.birthday_feature_enabled && (
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
+                            {t.birthday} ({t.allergiesOptional})
+                          </div>
+                          <input className="input-field" type="date" max={fmt(getToday())} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
+                        </div>
+                      )}
                     </div>
                     {/* Opt-out for the client's confirmation email — useful when
                         back-filling a booking the client already knows about. */}
@@ -2762,6 +2772,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       p_first: nameParts[0] || nameTrim,
                       p_last: nameParts.slice(1).join(" ") || "",
                       p_phone: addApptForm.client_phone || null,
+                      p_birthday: (addApptForm.client_birthday || "").trim() || null,
                     });
                     if (rpcId) clientId = rpcId;
                     const apptData = {
