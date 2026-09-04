@@ -2561,7 +2561,7 @@ function csvRowsToClients(rows) {
   return { records, skipped };
 }
 
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€" }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -2599,7 +2599,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }] = await Promise.all([
         supabase
           .from("appointments")
-          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(first_name, last_name, email, phone)")
+          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(id, first_name, last_name, email, phone, birthday)")
           .eq("owner_id", ownerId)
           .order("date", { ascending: false }),
         supabase
@@ -2631,10 +2631,16 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         let agg = byEmail.get(email);
         if (!agg) {
           const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
-          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           byEmail.set(email, agg);
         }
         if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
+        // Verjaardag + id van de gedeelde clients-rij: die vult de klant zelf in
+        // bij het boeken. Niet elke afspraak heeft een client_id (handmatig
+        // toegevoegde afspraken zonder e-mail hebben er geen), dus vullen zolang
+        // het veld nog leeg is. manual_clients wint hieronder alsnog.
+        if (!agg.clientId && a.clients?.id) agg.clientId = a.clients.id;
+        if (!agg.birthday && a.clients?.birthday) agg.birthday = a.clients.birthday;
         agg.appts.push(a);
         if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
       }
@@ -2655,7 +2661,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           existing.manualId = m.id;
           existing.hidden = !!m.hidden;
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
         }
       }
       const list = [...Array.from(byEmail.values()), ...extra]
@@ -2727,6 +2733,19 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       ({ error } = await supabase.from("manual_clients").update(payload).eq("id", editing.manualId).eq("owner_id", ownerId));
     } else {
       ({ error } = await supabase.from("manual_clients").insert({ owner_id: ownerId, ...payload }));
+    }
+    // De verjaardag staat op twee plekken: manual_clients (wat de salon zelf
+    // noteert) en clients.birthday (wat de klant bij het boeken invulde). De
+    // verjaardagscron leest ze allebei, dus moeten ze hier gelijk lopen —
+    // anders blijft een verjaardag die de eigenaar hier wist tóch een mail
+    // sturen, en ziet hij een hier ingevulde datum niet terug als hij later
+    // zelf een afspraak voor deze klant aanmaakt (die leest clients.birthday).
+    // Alleen bij een echte wijziging, en alleen op de rij die aan een afspraak
+    // van dit salon hangt — de policy clients_update_visited_salon laat de rest
+    // sowieso niet toe.
+    if (!error && editing.clientId && (editing.birthday || "") !== (payload.birthday || "")) {
+      const { error: bErr } = await supabase.from("clients").update({ birthday: payload.birthday }).eq("id", editing.clientId);
+      if (bErr) console.error("Verjaardag synchroniseren met clients mislukt:", bErr);
     }
     setEditSaving(false);
     if (error) {
@@ -3204,6 +3223,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               {!selected.email && !selected.phone && (
                 <div style={{ fontSize: 12, color: c.textMuted }}>{lang === "nl" ? "Geen contactgegevens" : lang === "es" ? "Sin datos de contacto" : "No contact details"}</div>
               )}
+              {birthdayOn && selected.birthday && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text }}>
+                  <span style={{ fontSize: 14, width: 15, textAlign: "center" }}>🎂</span>
+                  {(() => {
+                    const d = new Date(`${selected.birthday}T00:00:00`);
+                    return isNaN(d) ? selected.birthday : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+                  })()}
+                </div>
+              )}
               {selected.notes && (
                 <div style={{ fontSize: 12, color: c.textSub, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 12px", marginTop: 2 }}>{selected.notes}</div>
               )}
@@ -3639,7 +3667,20 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
-              <div><label style={lbl}>{lang === "nl" ? "Verjaardag (optioneel)" : lang === "es" ? "Cumpleaños (opcional)" : "Birthday (optional)"}</label><input className="input-field" type="date" value={editForm.birthday || ""} onChange={(e) => setEditForm((f) => ({ ...f, birthday: e.target.value }))} style={{ width: "100%" }} /></div>
+              {/* Alleen als de verjaardagsactie aanstaat — precies zoals het veld
+                  bij "+ Afspraak". Staat hij uit, dan bewaren we een bestaande
+                  datum gewoon (editForm.birthday gaat ongewijzigd mee in payload). */}
+              {birthdayOn && (
+                <div>
+                  <label style={lbl}>{lang === "nl" ? "Verjaardag (optioneel)" : lang === "es" ? "Cumpleaños (opcional)" : "Birthday (optional)"}</label>
+                  <input className="input-field" type="date" max={fmt(getToday())} value={editForm.birthday || ""} onChange={(e) => setEditForm((f) => ({ ...f, birthday: e.target.value }))} style={{ width: "100%" }} />
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                    {lang === "nl" ? "Voor de verjaardagsactie — deze klant krijgt op die dag haar felicitatie met kortingscode."
+                      : lang === "es" ? "Para la acción de cumpleaños — este cliente recibirá ese día su felicitación con código de descuento."
+                      : "For the birthday campaign — this client gets their birthday wish and discount code on that day."}
+                  </div>
+                </div>
+              )}
             </div>
             ); })()}
             <div style={{ display: "flex", gap: 8 }}>
@@ -9362,7 +9403,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} />
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} />
           )}
 
           {/* AGENDA */}
