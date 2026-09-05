@@ -532,7 +532,9 @@ function SalonRoute({ lang, setLang }) {
         // de kolommen nog eens expliciet zodat een latere kolom in de view niet
         // stilzwijgend in de publieke payload belandt. owner_id hoeft niet in
         // de select: PostgREST filtert er ook op zonder hem terug te geven.
-        supabase.from("public_reviews").select("id, client_name, rating, comment, created_at").eq("owner_id", data.id).order("created_at", { ascending: false }),
+        // `anonymous`: de view geeft dan al geen naam terug; de vlag laat de
+        // pagina een vertaald "Anoniem" tonen in plaats van een lege regel.
+        supabase.from("public_reviews").select("id, client_name, rating, comment, created_at, anonymous").eq("owner_id", data.id).order("created_at", { ascending: false }),
         // public_staff view: name/role/bio/avatar/hours only — freelancer
         // billing data and emails never reach the anon wire.
         supabase.from("public_staff").select("*, staff_services(service_id), staff_service_prices(service_id, variant_id, price)").eq("owner_id", data.id).eq("active", true).order("position"),

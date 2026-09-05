@@ -11523,7 +11523,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {visible.map(r => (
                       <div key={r.id} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid " + c.border }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                          <span style={{ fontWeight: 500, fontSize: 13 }}>{r.client_name}</span>
+                          {/* Anoniem geplaatst = de klant koos dat bewust; dan ook hier geen naam. */}
+                          <span style={{ fontWeight: 500, fontSize: 13, ...(r.anonymous ? { fontStyle: "italic", color: c.textSub } : {}) }}>{r.anonymous ? t.anonymousClient : r.client_name}</span>
                           <span style={{ color: accent, fontSize: 13 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                         </div>
                         {r.comment && <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}

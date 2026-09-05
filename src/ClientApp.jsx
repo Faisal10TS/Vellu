@@ -50,14 +50,37 @@ function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
 // kon per definitie nooit slagen (de policy eist een e-mailadres met een
 // afgeronde afspraak, en dat adres had de client hier niet), dus loopt alles
 // nu via de RPC submit_review, die het adres zelf uit de token haalt.
-function ReviewForm({ token, lang, t, accent }) {
+//
+// Zonder token (de knop "Schrijf een review" op de pagina zelf) is dit geen
+// dood formulier meer: de bezoeker vult het adres in waarmee ze geboekt heeft
+// en request-review-link stuurt haar de persoonlijke link — dezelfde token-flow,
+// dus een review blijft het bewijs van een echt bezoek. Het antwoord van die
+// functie is bewust altijd hetzelfde (wel/niet klant is niet af te leiden).
+function ReviewForm({ token, lang, t, accent, salonSlug }) {
   const { colors: c } = useTheme();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
+  const [anonymous, setAnonymous] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const [reqEmail, setReqEmail] = useState("");
+  const [reqState, setReqState] = useState("idle"); // idle | sending | sent | error
+
+  const requestLink = async () => {
+    const email = reqEmail.trim();
+    if (reqState === "sending" || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return;
+    setReqState("sending");
+    try {
+      const { error } = await supabase.functions.invoke("request-review-link", { body: { salon_slug: salonSlug, email, lang } });
+      if (error) throw error;
+      setReqState("sent");
+    } catch (e) {
+      console.error("Review link request error:", e);
+      setReqState("error");
+    }
+  };
 
   // "?review=true" was de oude linkvorm zonder token — die mails staan nog in
   // ieders inbox. Zo'n link kan niets meer opslaan, dus tonen we geen
@@ -74,6 +97,7 @@ function ReviewForm({ token, lang, t, accent }) {
         p_token: token,
         p_rating: rating,
         p_comment: comment.trim() || null,
+        p_anonymous: anonymous,
       });
       if (error) {
         // De RPC weigert met een exception waarvan de tekst de code bevat
@@ -113,22 +137,37 @@ function ReviewForm({ token, lang, t, accent }) {
     }
   };
 
-  // Zonder bruikbare token geen sterren: dan is er niets om op te slaan en is
-  // eerlijk zijn over de uitnodigingsmail beter dan een dood formulier.
+  // Zonder bruikbare token geen sterren: dan is er niets om op te slaan. Een
+  // verouderde link krijgt uitleg; zonder link vragen we om het boekingsadres
+  // en sturen we de persoonlijke reviewlink toe (zie requestLink).
   if (!canSubmit) {
     return (
       <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, textAlign: "center", fontSize: 12.5, color: c.textSub, lineHeight: 1.5 }}>
-        {staleLink
-          ? (lang === "nl"
-              ? "Deze reviewlink is verouderd en werkt niet meer. Je krijgt na je volgende bezoek een nieuwe uitnodiging per e-mail."
-              : lang === "es"
-                ? "Este enlace de reseña es antiguo y ya no funciona. Después de tu próxima visita recibirás una nueva invitación por correo."
-                : "This review link is out of date and no longer works. You'll get a new invitation by email after your next visit.")
-          : (lang === "nl"
-              ? "Reviews kunnen alleen via de uitnodiging per e-mail. Na je bezoek sturen we je die link automatisch toe."
-              : lang === "es"
-                ? "Las reseñas solo se pueden dejar desde la invitación por correo. Te enviaremos ese enlace automáticamente después de tu visita."
-                : "Reviews can only be left through the email invitation. We'll send you that link automatically after your visit.")}
+        {staleLink ? (
+          lang === "nl"
+            ? "Deze reviewlink is verouderd en werkt niet meer. Je krijgt na je volgende bezoek een nieuwe uitnodiging per e-mail."
+            : lang === "es"
+              ? "Este enlace de reseña es antiguo y ya no funciona. Después de tu próxima visita recibirás una nueva invitación por correo."
+              : "This review link is out of date and no longer works. You'll get a new invitation by email after your next visit."
+        ) : reqState === "sent" ? (
+          <div style={{ color: c.text }}>
+            <div style={{ fontSize: 22, marginBottom: 6 }}>✉️</div>
+            {t.reviewRequestSent}
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 12 }}>{t.reviewRequestIntro}</div>
+            <input className="input-field" type="email" inputMode="email" autoComplete="email" placeholder={t.reviewRequestEmail}
+              value={reqEmail} onChange={e => { setReqEmail(e.target.value); if (reqState === "error") setReqState("idle"); }}
+              onKeyDown={e => { if (e.key === "Enter") requestLink(); }}
+              style={{ width: "100%", marginBottom: 8, fontSize: 13, textAlign: "center" }} />
+            {reqState === "error" && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8 }}>{t.reviewRequestFailed}</div>}
+            <button className="btn-ghost" onClick={requestLink} disabled={reqState === "sending" || !reqEmail.trim()}
+              style={{ width: "100%", color: reqEmail.trim() ? accent : undefined, borderColor: reqEmail.trim() ? `${accent}44` : undefined, opacity: reqState === "sending" ? 0.5 : 1 }}>
+              {reqState === "sending" ? "..." : t.reviewRequestSend}
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -151,6 +190,12 @@ function ReviewForm({ token, lang, t, accent }) {
       </div>
       <textarea className="input-field" placeholder={t.reviewComment} value={comment} maxLength={1000} onChange={e => setComment(e.target.value.slice(0, 1000))}
         style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
+      {/* Anoniem: de review blijft aan de afspraak hangen (bewijs van bezoek),
+          maar de naam verschijnt nergens — niet op de pagina, niet bij de salon. */}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: c.textSub, marginBottom: 12, cursor: "pointer", lineHeight: 1.3 }}>
+        <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} style={{ accentColor: accent, width: 15, height: 15, margin: 0, flexShrink: 0 }} />
+        {t.reviewAnonymous}
+      </label>
       {reviewError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8, textAlign: "center" }}>{reviewError}</div>}
       <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
         onClick={submit} disabled={rating === 0 || submitting}>{submitting ? "..." : t.submitReview}</button>
@@ -2703,7 +2748,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div key={review.id} className="profile-review-card">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: c.text }}>{review.client_name?.split(" ")[0] || "Klant"}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: review.anonymous ? c.textSub : c.text, fontStyle: review.anonymous ? "italic" : "normal" }}>{review.anonymous ? t.anonymousClient : (review.client_name?.split(" ")[0] || "Klant")}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
                           <StarRow rating={review.rating} size={12} />
                           <span style={{ fontSize: 12, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
@@ -3091,7 +3136,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {t.howWasAppt}
                 </div>
               </div>
-              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} />
+              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} salonSlug={initialSalon.id} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
                 {t.close}
               </button>
@@ -4843,7 +4888,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
                 <div style={{ fontSize: 12, color: c.textSub, marginTop: 4 }}>{initialSalon.name}</div>
               </div>
-              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} />
+              <ReviewForm token={reviewToken} lang={lang} t={t} accent={accent} salonSlug={initialSalon.id} />
               <button className="btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setShowReviewForm(false)}>
                 {t.close}
               </button>

@@ -181,3 +181,11 @@ enabled = true
 # door pg_cron zonder gebruikers-JWT, dus verify_jwt=false.
 verify_jwt = false
 entrypoint = "./functions/send-renewal-reminder/index.ts"
+
+[functions.request-review-link]
+enabled = true
+# "Stuur mijn reviewlink" op de publieke boekingspagina: bezoeker zonder sessie,
+# dus verify_jwt=false (net als book-appointment). Antwoordt altijd 200 zodat
+# het adresboek van een salon niet te raden valt.
+verify_jwt = false
+entrypoint = "./functions/request-review-link/index.ts"
