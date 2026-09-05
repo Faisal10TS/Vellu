@@ -4540,7 +4540,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         });
       })
     : agendaBaseAppts;
-  const calAppts = filteredAgendaAppts.filter(a => a.date === calDate);
+  // ÉÉN rij per afspraak — voor alles wat telt of optelt: statistiekbalk,
+  // "N afspraken", de lijstkaarten, week-/maandtellingen en de exportknop.
+  // Met een medewerkerfilter aan is filteredAgendaAppts gesplitst in
+  // deelblokken (één per behandeling van die stylist) en elk deelblok droeg
+  // de VOLLEDIGE prijs van de boeking mee: twee behandelingen in één boeking
+  // telden zo als twee afspraken van €70, en de omzet stond dubbel (TTNB,
+  // 05-09 — Esther: "e pone 2x 70 kaminda e ta totaal gwn 70"). Hier voegen
+  // we de delen weer samen: de eerste rij (vroegste deel) wint, `_parts`
+  // bewaart haar eigen deelbehandelingen (tijd, duur, label) zodat de kaart
+  // ze onder elkaar toont met de prijs één keer. De tijdlijn blijft
+  // filteredAgendaAppts gebruiken — daar horen de delen juist los te staan.
+  const agendaApptsUnique = (() => {
+    if (!agendaStaff) return agendaBaseAppts;
+    const byId = new Map();
+    for (const a of filteredAgendaAppts) {
+      const part = { time: a.time, duration: a.service_duration, label: a.service_name };
+      const cur = byId.get(a.id);
+      if (cur) cur._parts.push(part);
+      else byId.set(a.id, { ...a, _parts: [part] });
+    }
+    return [...byId.values()];
+  })();
+  const calAppts = agendaApptsUnique.filter(a => a.date === calDate);
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
 
   // Currency symbol for THIS salon's own money (services, revenue, invoices),
@@ -6982,17 +7004,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
           {(() => {
             // Compute end time from start + duration so the owner sees the
-            // real time window, not just "start + Xm".
-            const [h, m] = (a.time || "0:0").split(":").map(Number);
-            const startMin = h * 60 + (m || 0);
-            const endMin = startMin + parseInt(a.service_duration || 60);
+            // real time window, not just "start + Xm". Met een medewerkerfilter
+            // staan in `_parts` haar eigen deelbehandelingen van één boeking
+            // (zie agendaApptsUnique): elk deel op een eigen regel, één kaart.
             const pad = n => String(n).padStart(2, "0");
-            const endTime = `${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
-            return (
-              <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>
-                <strong style={{ color: c.text, fontWeight: 600 }}>{a.time} – {endTime}</strong> · {a.service_name}
+            const window = (time, dur) => {
+              const [h, m] = (time || "0:0").split(":").map(Number);
+              const endMin = h * 60 + (m || 0) + parseInt(dur || 60);
+              return `${time} – ${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
+            };
+            const parts = a._parts?.length ? a._parts : [{ time: a.time, duration: a.service_duration, label: a.service_name }];
+            return parts.map((p, i) => (
+              <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>
+                <strong style={{ color: c.text, fontWeight: 600 }}>{window(p.time, p.duration)}</strong> · {p.label}
               </div>
-            );
+            ));
           })()}
           {a.staff_name && (
             <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
@@ -7004,6 +7030,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status === "no_show" ? "No-show" : (lang === "nl" ? "Voltooid" : lang === "es" ? "Completada" : "Completed")}</span>
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</span>
+          {a._parts?.length > 1 && (
+            <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>
+              {lang === "nl" ? `totaal · ${a._parts.length} behandelingen` : lang === "es" ? `total · ${a._parts.length} tratamientos` : `total · ${a._parts.length} treatments`}
+            </span>
+          )}
         </div>
       </div>
       {a.client_allergies && (
@@ -9421,7 +9452,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             if (calViewMode === "day") {
               // Day view uses calDate directly; the prev/next arrows also
               // shift calDate by ±1 day so this label follows suit.
-              periodAppts = filteredAgendaAppts.filter(a => a.date === calDate);
+              periodAppts = agendaApptsUnique.filter(a => a.date === calDate);
               const d = new Date(calDate + "T12:00:00");
               periodLabel = `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
             } else if (calViewMode === "week") {
@@ -9433,7 +9464,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               weekEnd.setDate(weekStart.getDate() + 6);
               const ws = fmt(weekStart);
               const we = fmt(weekEnd);
-              periodAppts = filteredAgendaAppts.filter(a => a.date >= ws && a.date <= we);
+              periodAppts = agendaApptsUnique.filter(a => a.date >= ws && a.date <= we);
               const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
               periodLabel = sameMonth
                 ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
@@ -9441,11 +9472,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             } else if (calViewMode === "month") {
               const target = new Date(todayDate.getFullYear(), todayDate.getMonth() + calWeekOffset, 1);
               const prefix = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}`;
-              periodAppts = filteredAgendaAppts.filter(a => a.date?.startsWith(prefix));
+              periodAppts = agendaApptsUnique.filter(a => a.date?.startsWith(prefix));
               periodLabel = `${MON_FULL[target.getMonth()]} ${target.getFullYear()}`;
             } else {
               const yr = todayDate.getFullYear() + calWeekOffset;
-              periodAppts = filteredAgendaAppts.filter(a => a.date?.startsWith(String(yr)));
+              periodAppts = agendaApptsUnique.filter(a => a.date?.startsWith(String(yr)));
               periodLabel = String(yr);
             }
             const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
@@ -9606,6 +9637,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const dayOfWeek = new Date(calDate + "T12:00:00").getDay();
                 const dayHours = salonData.business_hours?.[dayOfWeek] || {};
                 const dayAppts = filteredAgendaAppts.filter(a => a.date === calDate).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                // Deelblokken van één boeking tellen als één afspraak in de kop.
+                const dayApptCount = new Set(dayAppts.map(a => a.id)).size;
                 // Blocks for this date: owner-authored day_override + staff-authored
                 // staff_blocks. Time blocks widen the timeline like appointments;
                 // full-day blocks span whatever window the timeline ends up using.
@@ -9763,7 +9796,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {new Date(calDate + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
                       </div>
                       <div style={{ fontSize: 10, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                        {dayAppts.length} {dayAppts.length === 1 ? (lang === "nl" ? "afspraak" : lang === "es" ? "cita" : "appt") : (lang === "nl" ? "afspraken" : lang === "es" ? "citas" : "appts")}
+                        {dayApptCount} {dayApptCount === 1 ? (lang === "nl" ? "afspraak" : lang === "es" ? "cita" : "appt") : (lang === "nl" ? "afspraken" : lang === "es" ? "citas" : "appts")}
                       </div>
                     </div>
                     <div style={{ display: "flex", position: "relative" }}>
@@ -10047,7 +10080,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const ds = fmt(d);
                       const isToday = ds === fmt(getToday());
                       const isSel = calDate === ds;
-                      const dayAppts = filteredAgendaAppts.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+                      const dayAppts = agendaApptsUnique.filter(a => a.date === ds).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
                       const visibleAppts = dayAppts.slice(0, isMobile ? 2 : 5);
                       const moreCount = dayAppts.length - visibleAppts.length;
                       // Blocks on this date — filtered against the staff-scope pill.
@@ -10235,8 +10268,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const ds = `${cell.year}-${String(cell.month + 1).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`;
                         const isSel = calDate === ds;
                         const isToday = ds === fmt(getToday());
-                        const count = filteredAgendaAppts.filter(a => a.date === ds).length;
-                        const dayAppts = filteredAgendaAppts.filter(a => a.date === ds).slice(0, 3);
+                        const count = agendaApptsUnique.filter(a => a.date === ds).length;
+                        const dayAppts = agendaApptsUnique.filter(a => a.date === ds).slice(0, 3);
                         const col = i % 7;
                         const row = Math.floor(i / 7);
                         return (
@@ -10341,7 +10374,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const currentYear = getToday().getFullYear();
                 const monthCounts = Array.from({ length: 12 }, (_, mi) => {
                   const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
-                  return filteredAgendaAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
+                  return agendaApptsUnique.filter(a => a.date?.startsWith(monthPrefix)).length;
                 });
                 const maxMonthCount = Math.max(...monthCounts, 1);
                 return (
@@ -10576,8 +10609,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 })() : (
                   calAppts.map(a => renderApptCard(a))
                 )}
+                {/* Export: wél de losse deelblokken (per deel de echte tijd in de
+                    agenda-app), maar de knop telt afspraken, niet delen. */}
                 {calAppts.length > 0 && (
-                  <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(calAppts)}>
+                  <button className="btn-ghost" style={{ width: "100%", marginTop: 14, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => exportCalendar(filteredAgendaAppts.filter(a => a.date === calDate))}>
                     <NavIcon name="download" size={13} color="currentColor" /> {lang === "nl" ? `Exporteer ${calAppts.length} afspraak(en)` : lang === "es" ? `Exportar ${calAppts.length} cita(s)` : `Export ${calAppts.length} appointment(s)`}
                   </button>
                 )}
