@@ -9714,6 +9714,48 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const colW = `((100% - 12px - ${g * (cols - 1)}px) / ${cols})`;
                   return { left: `calc(6px + ${info.col} * (${colW} + ${g}px))`, width: `calc(${colW})`, right: "auto" };
                 };
+                // Smalle kolom (2+ naast elkaar)? Dan minder padding en alleen de
+                // begintijd naast de medewerker-pil. Let op: dit MOET uit laneMap
+                // komen — de oude check keek of `width` de tekst "100%" bevatte, en
+                // dat doet de calc() hierboven altijd, dus compact was nooit waar.
+                const isCompactLane = (key) => (laneMap.get(key)?.cols || 1) > 1;
+
+                // ── Verticale plaatsing: kaarten overlappen nooit ──
+                // Een kaart heeft een minimale hoogte (één leesbare regel). Bij een
+                // kort tijdvak (15–25 min) is het vak lager dan dat minimum, en dan
+                // schoof de kaart over de volgende heen (TTNB 05-09: blokkade
+                // 14:15–14:30 over de afspraak van 14:30, en de twee korte
+                // afspraken van 09:00 en 09:20 over elkaar). Nu: een kaart begint
+                // op z'n vroegst waar de vorige kaart in dezelfde kolom(men)
+                // ophoudt — dus zo nodig een paar px onder haar eigen tijdstip —
+                // en houdt haar eigen onderkant, zodat het verder niets verschuift.
+                const GAP = 2, PAD_V = 4, MIN_APPT_H = 26, MIN_BLOCK_H = 22;
+                const toPx = (min) => ((min - dayStartMin) / 60) * HOUR_HEIGHT;
+                const spanOf = (key) => { const info = laneMap.get(key); if (!info || info.cols <= 1) return [0, 1]; return [info.col / info.cols, (info.col + 1) / info.cols]; };
+                const geom = new Map(); // key → { top, height }
+                {
+                  const placed = []; // { x0, x1, top, bottom }
+                  const items = [
+                    ...rawBlocks.filter(b => b.timeStart && b.timeEnd).map(b => ({ key: `blk:${b.key}`, start: toMin(b.timeStart), end: toMin(b.timeEnd), minH: MIN_BLOCK_H })),
+                    ...dayAppts.map(a => { const s = toMin(a.time); return { key: `apt:${a._slotKey || a.id}`, start: s, end: s + Math.max(15, parseInt(a.service_duration || 60)), minH: MIN_APPT_H }; }),
+                  ].sort((x, y) => x.start - y.start || x.end - y.end);
+                  for (const it of items) {
+                    const [x0, x1] = spanOf(it.key);
+                    let top = toPx(it.start);
+                    for (const p of placed) if (p.x0 < x1 && p.x1 > x0 && p.bottom + GAP > top) top = p.bottom + GAP;
+                    const height = Math.max(it.minH, toPx(it.end) - GAP - top);
+                    placed.push({ x0, x1, top, bottom: top + height });
+                    geom.set(it.key, { top, height });
+                  }
+                }
+                // Een naar beneden geschoven laatste kaart mag niet uit het rooster vallen.
+                const timelineH = Math.max(hours.length * HOUR_HEIGHT, ...[...geom.values()].map(g => g.top + g.height + 4));
+                // Tekst die doorloopt naar een volgende regel en pas een … krijgt als
+                // de toegewezen regels vol zijn. Vaste line-height, zodat het
+                // hoogtebudget van de kaarten hieronder exact klopt.
+                const clampLines = (n, lh) => n <= 1
+                  ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: `${lh}px` }
+                  : { display: "-webkit-box", WebkitLineClamp: n, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word", lineHeight: `${lh}px` };
                 return (
                   <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                     <div style={{ padding: "10px 14px", borderBottom: `1px solid ${c.border}`, background: c.inputBg, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -9734,7 +9776,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         ))}
                       </div>
                       {/* Slots */}
-                      <div style={{ flex: 1, position: "relative", minHeight: hours.length * HOUR_HEIGHT }}>
+                      <div style={{ flex: 1, position: "relative", minHeight: timelineH }}>
                         {hours.map((h, i) => (
                           <div key={h} style={{ position: "absolute", top: i * HOUR_HEIGHT, left: 0, right: 0, height: HOUR_HEIGHT, borderBottom: i < hours.length - 1 ? `1px dashed ${c.border}` : "none" }} />
                         ))}
@@ -9752,8 +9794,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           const isTime = b.timeStart && b.timeEnd;
                           const startMin = isTime ? toMin(b.timeStart) : dayStartMin;
                           const endMin = isTime ? toMin(b.timeEnd) : endHour * 60;
-                          const top = ((startMin - dayStartMin) / 60) * HOUR_HEIGHT;
-                          const height = Math.max(24, ((endMin - startMin) / 60) * HOUR_HEIGHT - 2);
+                          // Tijdblokken staan in `geom` (nooit-overlappen-plaatsing);
+                          // een hele-dag-blok is een achtergrond over het hele venster.
+                          const g = isTime ? geom.get(`blk:${b.key}`) : null;
+                          const top = g ? g.top : toPx(startMin);
+                          const height = g ? g.height : Math.max(MIN_BLOCK_H, toPx(endMin) - top - GAP);
                           const label = isTime
                             ? `${b.timeStart}–${b.timeEnd}`
                             : (lang === "nl" ? "Hele dag" : lang === "es" ? "Todo el día" : "All day");
@@ -9762,18 +9807,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // row. Full-day blocks stay a full-width background.
                           const editable = isTime && !!b.row;
                           const lane = isTime ? laneStyle(`blk:${b.key}`) : { left: 6, right: 6 };
-                          const compact = lane.width && !String(lane.width).includes("100%");
+                          const compact = isTime && isCompactLane(`blk:${b.key}`);
                           const staffLabel = b.staffName || (lang === "nl" ? "Iedereen" : lang === "es" ? "Todos" : "Everyone");
-                          // Same height-adaptive layout as the appointment cards so short
-                          // blocks don't clip the staff name / reason:
-                          //  - stackFull: room for time + staff + reason on their own rows.
-                          //  - medium: only time + staff rows (reason lives in the tooltip).
-                          //  - tight: too short to stack — everything on ONE horizontal row.
-                          const stackFull = height >= 60;
-                          const tight = height < 46 && !compact;
+                          // Zelfde hoogtebudget als de afspraakkaarten (vaste regelhoogtes
+                          // 14/14/13, marges 2), dus we weten precies wat er past:
+                          //  - full:   tijd / medewerker / reden — de reden mag doorlopen
+                          //  - medium: tijd / medewerker (reden zit in de tooltip)
+                          //  - tight:  alles op ÉÉN regel, verticaal gecentreerd
+                          const inner = height - 2 * PAD_V;
+                          const layout = inner >= 14 + 2 + 14 + 2 + 13 ? "full" : inner >= 14 + 2 + 14 ? "medium" : "tight";
+                          let reasonLines = 1;
+                          if (layout === "full") { let spare = inner - (14 + 2 + 14 + 2 + 13); while (reasonLines < 3 && spare >= 13) { reasonLines++; spare -= 13; } }
                           const warnIcon = (
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
                           );
+                          const editIcon = editable ? <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex" }}><NavIcon name="edit" size={10} color={c.danger} /></span> : null;
                           return (
                             <div key={b.key} title={`${label} · ${staffLabel}${b.reason ? ` · ${b.reason}` : ""}`}
                               onClick={editable ? (e) => { e.stopPropagation(); openBlockEdit(b.row); } : undefined}
@@ -9782,29 +9830,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 background: `${c.danger}18`,
                                 backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.danger}22 8px 12px)`,
                                 border: `1px dashed ${c.danger}66`,
-                                borderRadius: 6, padding: (compact || tight) ? "5px 7px" : "6px 10px", overflow: "hidden", zIndex: 1,
+                                borderRadius: 6, padding: `${PAD_V}px ${compact ? 7 : 9}px`, overflow: "hidden", zIndex: 1,
                                 cursor: editable ? "pointer" : "default"
                               }}>
-                              {tight ? (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", overflow: "hidden" }}>
+                              {layout === "tight" ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, height: "100%", whiteSpace: "nowrap", overflow: "hidden" }}>
                                   {warnIcon}
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{label}</span>
-                                  <span style={{ fontSize: 11, color: c.text, fontWeight: 500, flexShrink: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{staffLabel}</span>
-                                  {b.reason && <span style={{ fontSize: 10, color: c.textSub, fontStyle: "italic", flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{b.reason}</span>}
-                                  {editable && <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex" }}><NavIcon name="edit" size={10} color={c.danger} /></span>}
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", flexShrink: 0, lineHeight: "14px" }}>{label}</span>
+                                  <span style={{ fontSize: 11, color: c.text, fontWeight: 500, flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", lineHeight: "14px" }}>{staffLabel}</span>
+                                  {/* Smalle kolom: geen plek voor reden en potloodje — die zitten
+                                      in de tooltip, en klikken op de kaart opent bewerken. */}
+                                  {b.reason && !compact && <span style={{ fontSize: 10, color: c.textSub, fontStyle: "italic", flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", lineHeight: "13px" }}>{b.reason}</span>}
+                                  {!compact && editIcon}
                                 </div>
                               ) : (
                                 <>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2, height: 14 }}>
                                     {warnIcon}
-                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
-                                    {editable && <NavIcon name="edit" size={10} color={c.danger} />}
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "14px" }}>{label}</div>
+                                    {editIcon}
                                   </div>
-                                  <div style={{ fontSize: compact ? 10 : 11, color: c.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  <div style={{ fontSize: 11, color: c.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "14px" }}>
                                     {staffLabel}
                                   </div>
-                                  {b.reason && stackFull && !compact && (
-                                    <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", wordBreak: "break-word", lineHeight: 1.35 }}>{b.reason}</div>
+                                  {b.reason && layout === "full" && (
+                                    <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, fontStyle: "italic", ...clampLines(reasonLines, 13) }}>{b.reason}</div>
                                   )}
                                 </>
                               )}
@@ -9871,26 +9921,50 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {dayAppts.map(a => {
                           const startMin = toMin(a.time);
                           const durMin = Math.max(15, parseInt(a.service_duration || 60));
-                          const top = ((startMin - dayStartMin) / 60) * HOUR_HEIGHT;
-                          const height = Math.max(28, (durMin / 60) * HOUR_HEIGHT - 2);
+                          const key = `apt:${a._slotKey || a.id}`;
+                          const { top, height } = geom.get(key) || { top: toPx(startMin), height: Math.max(MIN_APPT_H, (durMin / 60) * HOUR_HEIGHT - GAP) };
                           const isCancelled = a.status === "cancelled" || a.status === "no_show";
                           const color = isCancelled ? c.danger : a.status === "completed" ? c.success : accent;
-                          const lane = laneStyle(`apt:${a._slotKey || a.id}`);
-                          const compact = lane.width && !String(lane.width).includes("100%");
+                          const lane = laneStyle(key);
+                          const compact = isCompactLane(key);
                           const pad2 = n => String(n).padStart(2, "0");
                           const endMinLocal = startMin + durMin;
                           const endTime = `${pad2(Math.floor(endMinLocal / 60) % 24)}:${pad2(endMinLocal % 60)}`;
-                          // Fit the content to the card's height so nothing gets clipped:
-                          //  - stackFull: tall enough for the classic 4-row stack (staff pill at bottom).
-                          //  - medium: not tall enough for a bottom pill, so move the staff pill up
-                          //    onto the time row and keep name/service on single lines.
-                          //  - tight: too short to stack at all — lay everything out on ONE horizontal
-                          //    row that flows to the right (only for wide cards, not narrow lanes).
-                          const stackFull = height >= 80;
-                          const tight = height < 62 && !compact;
-                          const staffChip = a.staff_name ? (
-                            <div style={{ fontSize: 9, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 0 }}>
-                              <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
+                          const hasChip = !!a.staff_name;
+                          // ── Hoogtebudget ──
+                          // Vaste regelhoogtes (de line-heights staan expliciet in de stijlen
+                          // hieronder): kopregel 14 — 17 als de medewerker-pil erin zit —,
+                          // naam 16, dienst 13, pil-regel 17; marges 2 / 2 / 3. Daarmee
+                          // weten we exact hoeveel regels er passen, en wordt er nooit een
+                          // halve regel afgesneden. Van ruim naar krap:
+                          //  - stack:  tijd + duur / naam / dienst / pil onderaan
+                          //  - medium: tijd + pil / naam / dienst
+                          //  - two:    tijd + pil / naam · dienst op één regel
+                          //  - tight:  alles op één regel, verticaal gecentreerd
+                          // Wat er dan nog over is gaat naar extra regels: eerst de dienst
+                          // (de lange tekst), dan de naam. Tekst loopt dus door naar de
+                          // volgende regel en krijgt pas een … als de kaart echt vol is.
+                          const inner = height - 2 * PAD_V;
+                          const headH = hasChip ? 17 : 14;
+                          const needStack = 14 + 2 + 16 + 2 + 13 + 3 + 17;
+                          const needMedium = headH + 2 + 16 + 2 + 13;
+                          const needTwo = headH + 2 + 16;
+                          const layout = (hasChip && inner >= needStack) ? "stack" : inner >= needMedium ? "medium" : inner >= needTwo ? "two" : "tight";
+                          let svcLines = 1, nameLines = 1;
+                          if (layout === "stack" || layout === "medium") {
+                            let spare = inner - (layout === "stack" ? needStack : needMedium);
+                            while (svcLines < 3 && spare >= 13) { svcLines++; spare -= 13; }
+                            while (nameLines < 2 && spare >= 16) { nameLines++; spare -= 16; }
+                          }
+                          const chipInHeader = hasChip && layout !== "stack";
+                          // Smalle kolom mét pil in de kop: alleen de begintijd, anders past
+                          // de pil er niet naast. De eindtijd zie je aan de kaarthoogte en in
+                          // de tooltip.
+                          const timeLabel = (compact && chipInHeader) ? a.time : `${a.time}–${endTime}`;
+                          const staffChip = hasChip ? (
+                            <div style={{ fontSize: 9, height: 17, display: "inline-flex", alignItems: "center", gap: 4, padding: "0 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", minWidth: 0, lineHeight: "11px" }}>
+                              <NavIcon name="user" size={8} color={accent} />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{a.staff_name}</span>
                             </div>
                           ) : null;
                           // Same compact pencil affordance the blocked-hour cards have —
@@ -9908,34 +9982,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               style={{
                                 position: "absolute", top, height, ...lane, zIndex: 2,
                                 background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
-                                padding: (compact || tight) ? "5px 7px" : "6px 10px", overflow: "hidden", cursor: "pointer",
+                                padding: `${PAD_V}px ${compact ? 7 : 9}px`, overflow: "hidden", cursor: "pointer",
                                 opacity: isCancelled ? 0.55 : 1
                               }}>
-                              {tight ? (
-                                <div style={{ display: "flex", alignItems: "baseline", gap: 8, whiteSpace: "nowrap", overflow: "hidden" }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
-                                  <span style={{ fontSize: 12, fontWeight: 500, color: c.text, flexShrink: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
-                                  {a.service_name && <span style={{ fontSize: 10, color: c.textSub, flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</span>}
-                                  {staffChip && <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex", alignItems: "center", alignSelf: "center" }}>{staffChip}</span>}
-                                  <span style={{ ...(staffChip ? {} : { marginLeft: "auto" }), flexShrink: 0, display: "inline-flex", alignSelf: "center" }}>{editBtn}</span>
+                              {layout === "tight" ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, height: "100%", whiteSpace: "nowrap", overflow: "hidden" }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", flexShrink: 0, lineHeight: "14px" }}>{a.time}</span>
+                                  {/* De naam krimpt pas als laatste (basis = eigen breedte); de
+                                      dienst (basis 0) krijgt alleen wat er overblijft. Eerst
+                                      was het andersom en werd de naam "J…" naast een volle
+                                      dienstomschrijving. In een smalle kolom vervallen dienst
+                                      en potloodje: naam + pil zijn daar wat telt. */}
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: c.text, flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", lineHeight: "16px" }}>{a.client_name}</span>
+                                  {a.service_name && !compact && <span style={{ fontSize: 10, color: c.textSub, flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", lineHeight: "13px" }}>{a.service_name}</span>}
+                                  {staffChip && <span style={{ marginLeft: "auto", flexShrink: 1, minWidth: 0, display: "inline-flex" }}>{staffChip}</span>}
+                                  {!compact && <span style={{ ...(staffChip ? {} : { marginLeft: "auto" }), flexShrink: 0, display: "inline-flex" }}>{editBtn}</span>}
                                 </div>
                               ) : (
                                 <>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                                    <div style={{ fontSize: compact ? 10 : 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{a.time}{compact ? "" : `–${endTime}`}</div>
-                                    {/* Medium cards show the staff pill here (top-right) so it isn't
-                                        clipped by a bottom row; full-height cards keep the duration
-                                        here and the pill at the bottom. */}
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 0 }}>
-                                      {(!stackFull && staffChip)
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, height: headH }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0, lineHeight: "14px" }}>{timeLabel}</div>
+                                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                                      {chipInHeader
                                         ? staffChip
-                                        : (!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{durMin} {t.min}</div>)}
+                                        : (!compact && <div style={{ fontSize: 10, color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0, lineHeight: "14px" }}>{durMin} {t.min}</div>)}
                                       {editBtn}
                                     </div>
                                   </div>
-                                  <div style={{ fontSize: compact ? 11 : 12, fontWeight: 500, color: c.text, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.client_name}</div>
-                                  <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, lineHeight: 1.3, ...((compact || !stackFull) ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : { wordBreak: "break-word" }) }}>{a.service_name}</div>
-                                  {stackFull && staffChip && <div style={{ marginTop: 4 }}>{staffChip}</div>}
+                                  {layout === "two" ? (
+                                    <div style={{ fontSize: 12, fontWeight: 500, color: c.text, ...clampLines(1, 16) }}>
+                                      {a.client_name}
+                                      {a.service_name && <span style={{ fontSize: 10, fontWeight: 400, color: c.textSub }}> · {a.service_name}</span>}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div style={{ fontSize: 12, fontWeight: 500, color: c.text, ...clampLines(nameLines, 16) }}>{a.client_name}</div>
+                                      <div style={{ fontSize: 10, color: c.textSub, marginTop: 2, ...clampLines(svcLines, 13) }}>{a.service_name}</div>
+                                    </>
+                                  )}
+                                  {layout === "stack" && <div style={{ marginTop: 3, display: "flex" }}>{staffChip}</div>}
                                 </>
                               )}
                             </div>
