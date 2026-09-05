@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
 } from "./shared.jsx";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -1208,7 +1208,9 @@ async function loadLogoForPdf(salonData) {
 // deze bron zou een jaarrapport stilzwijgend bij die grens ophouden — mét
 // belastinguitsplitsing en een regel "Totaal", dus niet als incompleet
 // herkenbaar. Ontbreekt de prop (staff-app), dan blijft het oude gedrag.
-function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fetchRange = null }) {
+// `fixedStaffId`: hoort bij fixedStaffName — de id waarmee staffShareOf het
+// aandeel van die stylist in gecombineerde boekingen uitrekent.
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null }) {
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -1290,8 +1292,13 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       const _money = currencyForCountry(salonData.country_code);
       const _tax = resolveTax(salonData);
       const _logo = await loadLogoForPdf(salonData);
+      // Rapport voor één stylist: per gecombineerde boeking alleen háár
+      // aandeel (staffShareOf), zodat het rapport optelt tot wat het dashboard
+      // voor haar laat zien. Het teamrapport houdt de hele prijzen.
+      const shareId = fixedStaffId || selectedStaff?.id || null;
+      const rows = shareId ? inRange.map(a => ({ ...a, service_price: staffShareOf(a, shareId) })) : inRange;
       const result = mod.generateRevenueReportPDF({
-        salon: salonData, appointments: inRange, range, lang, logo: _logo,
+        salon: salonData, appointments: rows, range, lang, logo: _logo,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
         taxCfg: _tax,
@@ -7035,6 +7042,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {lang === "nl" ? `totaal · ${a._parts.length} behandelingen` : lang === "es" ? `total · ${a._parts.length} tratamientos` : `total · ${a._parts.length} treatments`}
             </span>
           )}
+          {/* Medewerkerfilter + boeking gedeeld met een collega: de prijs
+              erboven is de hele boeking, dit is háár aandeel (staffShareOf). */}
+          {agendaStaff && (() => {
+            const share = staffShareOf(a, agendaStaff);
+            if (Math.abs(share - parseFloat(a.service_price || 0)) < 0.005) return null;
+            return <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>{lang === "nl" ? "aandeel" : lang === "es" ? "parte" : "share"} {cur}{share.toFixed(2)}</span>;
+          })()}
         </div>
       </div>
       {a.client_allergies && (
@@ -8529,9 +8543,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
                 const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
                 const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
-                const weekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const prevWeekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const monthRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                // Met een stylist-chip aan telt alleen háár aandeel in een
+                // gecombineerde boeking (staffShareOf); zonder chip de hele prijs.
+                const dashPrice = (a) => dashStaff ? staffShareOf(a, dashStaff) : parseFloat(a.service_price || 0);
+                const weekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + dashPrice(a), 0);
+                const prevWeekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + dashPrice(a), 0);
+                const monthRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + dashPrice(a), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
 
@@ -8638,7 +8655,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const pct = salonData.reviews?.length > 0 ? (count / salonData.reviews.length) * 100 : 0;
                   return { rating: r, count, pct };
                 });
-                const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const todayRevenue = todayAppts.reduce((s, a) => s + (dashStaff ? staffShareOf(a, dashStaff) : parseFloat(a.service_price || 0)), 0);
                 const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
                 return (
                   <>
@@ -9479,7 +9496,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               periodAppts = agendaApptsUnique.filter(a => a.date?.startsWith(String(yr)));
               periodLabel = String(yr);
             }
-            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            // Medewerkerfilter: haar aandeel in een gecombineerde boeking, niet de hele prijs.
+            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + (agendaStaff ? staffShareOf(a, agendaStaff) : parseFloat(a.service_price || 0)), 0);
             const periodConfirmed = periodAppts.filter(a => a.status === "confirmed").length;
             const periodDone = periodAppts.filter(a => a.status === "completed").length;
 
@@ -17044,7 +17062,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     const staffNames = Array.from(new Set(rows.map(r => r.staff?.name).filter(Boolean)));
                     let runningOffset = 0;
                     const serviceBreakdown = rows.map(r => {
-                      const entry = { service_id: r.svc.id, staff_id: r.staff?.id || null, duration: r.duration, offset_min: runningOffset, label: r.labelBase };
+                      // `price` per deel (zelfde als book-appointment): het aandeel
+                      // van elke stylist in een gecombineerde boeking — zie staffShareOf.
+                      const entry = { service_id: r.svc.id, staff_id: r.staff?.id || null, duration: r.duration, offset_min: runningOffset, label: r.labelBase, price: Number.isFinite(r.price) ? Math.round(r.price * 100) / 100 : null };
                       runningOffset += r.duration;
                       return entry;
                     });

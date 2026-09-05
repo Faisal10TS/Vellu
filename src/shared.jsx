@@ -1896,6 +1896,31 @@ export function PullToRefresh() {
 // rijen matchen exact op hun datum; terugkerende rijen (weekday 0-6 gezet,
 // "elke zondag") gelden elke week op die weekdag VANAF hun ankerdatum.
 // dateStr = "YYYY-MM-DD"; lokale parsing zodat de weekdag niet UTC-schuift.
+// Aandeel van één stylist in de prijs van een afspraak.
+//
+// Een gecombineerde boeking (BIAB bij Esther + pedicure bij Lady) is ÉÉN rij
+// met één service_price. Tot 05-09-2026 telde die hele prijs mee in de
+// omzet van elke betrokken stylist, dus Esther + Lady samen = 2× de boeking.
+// Sinds die dag zet book-appointment (en "+ Afspraak" van de eigenaar) per
+// deel een brutoprijs in service_breakdown. Hier: som van háár delen, naar
+// rato geschaald naar de eindprijs — zo worden korting en producten evenredig
+// verdeeld en tellen de aandelen van alle stylisten samen precies op tot de
+// boeking. Zonder prijzen per deel (oudere boekingen, staff-app-invoer) of met
+// maar één stylist: de hele prijs, zoals voorheen. De salon-totalen gebruiken
+// dit NIET — die tellen gewoon service_price.
+export const staffShareOf = (a, staffId) => {
+  const total = parseFloat(a?.service_price || 0) || 0;
+  if (!staffId) return total;
+  const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
+  if (bd.length < 2 || !bd.every(p => p && Number.isFinite(parseFloat(p.price)))) return total;
+  const stylists = new Set(bd.map(p => p.staff_id).filter(Boolean));
+  if (stylists.size < 2) return total;
+  const gross = bd.reduce((s, p) => s + parseFloat(p.price), 0);
+  if (gross <= 0) return total;
+  const mine = bd.filter(p => p.staff_id === staffId).reduce((s, p) => s + parseFloat(p.price), 0);
+  return Math.round((mine / gross) * total * 100) / 100;
+};
+
 export const blockAppliesOn = (b, dateStr) => {
   if (!b || !dateStr) return false;
   if (b.weekday == null) return b.date === dateStr;

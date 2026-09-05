@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf
 } from "./shared.jsx";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -349,7 +349,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const activeAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
   const completedAppts = myAppts.filter(a => a.status === "completed");
-  const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+  // Eigen aandeel in een gecombineerde boeking (staffShareOf): doet een
+  // collega een ander deel, dan telt alleen wat déze stylist deed. Zonder
+  // prijzen per deel (oudere boekingen) is dat gewoon de hele prijs.
+  const myShare = (a) => staffShareOf(a, staffMember.id);
+  // Voor de door de chip bepaalde set (dashboard vandaag, agenda-balk): één
+  // stylist gekozen → haar aandeel; "Iedereen" → de hele prijs.
+  const scopedShareId = !seeAll ? staffMember.id : staffFilter;
+  const scopedPrice = (a) => scopedShareId ? staffShareOf(a, scopedShareId) : parseFloat(a.service_price || 0);
+  const totalEarnings = completedAppts.reduce((s, a) => s + myShare(a), 0);
   const calAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.date === calDate);
 
   // Everyone/<stylist> chips — only when the owner enabled team visibility and
@@ -806,6 +814,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status}</span>
           {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
+          {/* Gecombineerde boeking met een collega: de hele prijs staat erboven
+              (dat is wat de klant betaalt), hieronder wat déze stylist deed. */}
+          {showMoney && mine && (() => {
+            const share = staffShareOf(a, staffMember.id);
+            if (Math.abs(share - parseFloat(a.service_price || 0)) < 0.005) return null;
+            return <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "jouw deel" : lang === "es" ? "tu parte" : "your share"} {cur}{share.toFixed(2)}</div>;
+          })()}
         </div>
       </div>
       {a.status === "confirmed" && mine && (
@@ -998,11 +1013,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
             const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
             const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
-            const weekRevenue = completedAppts.filter(a => parseDate(a.date) >= weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-            const prevWeekRevenue = completedAppts.filter(a => parseDate(a.date) >= prevWeekStart && parseDate(a.date) < weekAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-            const monthRevenue = completedAppts.filter(a => parseDate(a.date) >= monthAgo).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const weekRevenue = completedAppts.filter(a => parseDate(a.date) >= weekAgo).reduce((s, a) => s + myShare(a), 0);
+            const prevWeekRevenue = completedAppts.filter(a => parseDate(a.date) >= prevWeekStart && parseDate(a.date) < weekAgo).reduce((s, a) => s + myShare(a), 0);
+            const monthRevenue = completedAppts.filter(a => parseDate(a.date) >= monthAgo).reduce((s, a) => s + myShare(a), 0);
             const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
-            const todayRevenue = todayAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const todayRevenue = todayAppts.reduce((s, a) => s + scopedPrice(a), 0);
             const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
 
             // Daily revenue for sparklines
@@ -1010,7 +1025,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const revByDay = {};
             completedAppts.forEach(a => {
               const d = parseDate(a.date);
-              revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + parseFloat(a.service_price || 0);
+              revByDay[dayKey(d)] = (revByDay[dayKey(d)] || 0) + myShare(a);
             });
             const weekDaily = [];
             for (let i = 6; i >= 0; i--) {
@@ -1166,7 +1181,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     weekEnd.setDate(weekStart.getDate() + 7);
                     const rev = completedAppts
                       .filter(a => parseDate(a.date) >= weekStart && parseDate(a.date) < weekEnd)
-                      .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                      .reduce((s, a) => s + myShare(a), 0);
                     const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                     weeks.push({ label, revenue: rev });
                   }
@@ -1279,7 +1294,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       const n = a.service_name?.split(" — ")[0] || "?";
                       if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
                       svcStats[n].count += 1;
-                      svcStats[n].revenue += parseFloat(a.service_price || 0);
+                      svcStats[n].revenue += myShare(a);
                     });
                     const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
                     if (sorted.length === 0) return (
@@ -1366,7 +1381,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               periodAppts = filteredAppts.filter(a => a.date?.startsWith(String(yr)));
               periodLabel = String(yr);
             }
-            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + scopedPrice(a), 0);
             const periodDone = periodAppts.filter(a => a.status === "completed").length;
 
             return (
@@ -2036,6 +2051,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   accent={accent}
                   toast={toast}
                   fixedStaffName={myStaff.name}
+                  fixedStaffId={staffMember.id}
                 />}
 
                 {/* Search + filter toolbar */}

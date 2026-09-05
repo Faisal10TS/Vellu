@@ -487,6 +487,11 @@ serve(async (req) => {
       duration,
       offset_min: runningOffset,
       label: shortLabel,
+      // Brutoprijs van dít deel (dienst/variant + extra's, vóór korting en
+      // zonder producten). Zo kan een stylist die één deel van een gecombineerde
+      // boeking doet haar eigen aandeel zien i.p.v. de hele boeking — zie
+      // staffShareOf in shared.jsx, dat naar rato schaalt naar service_price.
+      price: Math.round((price + extrasPrice) * 100) / 100,
     });
     runningOffset += duration;
   }
