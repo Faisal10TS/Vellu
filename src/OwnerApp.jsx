@@ -17014,6 +17014,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       return entry;
                     });
                     const primaryStaff = rows.find(r => r.staff)?.staff || null;
+                    // Vorm-check op het e-mailadres. Leeg mag (zie de hint bij het
+                    // veld), maar "." of "geen" ging tot nu toe gewoon door en liet
+                    // daarna élke mail — bevestiging, herinnering, review-verzoek —
+                    // bij Resend stuklopen (Eydy, 02-09). Vóór de slot-vraag, zodat
+                    // niemand eerst "Toch boeken?" bevestigt en dan alsnog strandt.
+                    const emailRaw = (addApptForm.client_email || "").trim();
+                    if (emailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+                      toast.show(lang === "nl" ? "Ongeldig e-mailadres — laat het veld leeg als je het niet weet" : lang === "es" ? "Correo no válido — deja el campo vacío si no lo sabes" : "Invalid email address — leave the field empty if you don't know it", "error");
+                      setAddApptLoading(false); return;
+                    }
                     // Laatste controle vóór het wegschrijven: openingstijden,
                     // pauze, blokkades en overlap met bestaande afspraken.
                     // Bewust een bevestiging en geen harde blokkade — de

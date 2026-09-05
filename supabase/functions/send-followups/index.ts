@@ -144,6 +144,11 @@ serve(async () => {
     let sent = 0, skipped = 0;
     for (const appt of appointments || []) {
       if (!appt.client_email) { skipped++; continue; }
+      // Geen adres-vorm (Eydy zette "." in het e-mailveld, 02-09): Resend
+      // weigert met 422, followup_sent blijft false en dezelfde rij kwam drie
+      // dagen lang terug — de tweede keer zonder reviewknop, want de token
+      // bestond al. Overslaan, net als een leeg adres.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(appt.client_email).trim())) { skipped++; continue; }
       // Tweede slot op de deur: nooit op of na de dag van de afspraak zelf.
       if (!appt.date || appt.date >= todayStr) { skipped++; continue; }
       if (isSaleRow(appt)) { skipped++; continue; }
@@ -162,16 +167,30 @@ serve(async () => {
       // wisselt dat token in voor de identiteit die wij hier vastleggen.
       let reviewUrl = "";
       try {
-        const token = generateToken();
-        const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        const { error: tokenError } = await supabase.from("review_tokens").insert({
-          token,
-          appointment_id: appt.id,
-          owner_id: appt.owner_id,
-          client_email: appt.client_email,
-          expires_at: expiresAt,
-        });
-        if (tokenError) throw tokenError;
+        // Eén token per afspraak (unique index). Mislukte de mail de vorige
+        // run ná het aanmaken van de token, dan staat die er al: hergebruiken
+        // in plaats van op de index stuklopen en de mail zonder knop sturen.
+        // (request-review-link kan ondertussen ook een token hebben gemaakt.)
+        const { data: bestaand } = await supabase
+          .from("review_tokens")
+          .select("token")
+          .eq("appointment_id", appt.id)
+          .is("used_at", null)
+          .gt("expires_at", new Date().toISOString())
+          .limit(1);
+        let token = bestaand?.[0]?.token as string | undefined;
+        if (!token) {
+          token = generateToken();
+          const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+          const { error: tokenError } = await supabase.from("review_tokens").insert({
+            token,
+            appointment_id: appt.id,
+            owner_id: appt.owner_id,
+            client_email: appt.client_email,
+            expires_at: expiresAt,
+          });
+          if (tokenError) throw tokenError;
+        }
         reviewUrl = `https://vellu.cc/${slug}?review=${token}`;
       } catch (tokenErr) {
         // Bewuste keuze: de mail gaat wél de deur uit, zonder reviewknop. De

@@ -2761,6 +2761,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const price = variant ? variant.price : (svc?.price || 0);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
                     const email = addApptForm.client_email.toLowerCase().trim();
+                    // Vorm-check: een "." of "geen" als adres ging tot nu toe door
+                    // en liet daarna elke mail bij Resend stuklopen (zie OwnerApp).
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                      toast.show(lang === "nl" ? "Ongeldig e-mailadres" : lang === "es" ? "Dirección de correo no válida" : "Invalid email address", "error");
+                      setAddApptLoading(false); return;
+                    }
                     const nameTrim = addApptForm.client_name.trim();
                     // Via get_or_create_client RPC — clients van andere salons
                     // zijn door RLS niet leesbaar; de RPC dedupliceert op het

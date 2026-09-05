@@ -150,27 +150,35 @@ serve(async (req) => {
   const candidates = (appts || []).filter((a) => !isSaleRow(a));
   if (candidates.length === 0) return generic();
 
-  const { data: done } = await supabase
-    .from("reviews")
-    .select("appointment_id")
-    .in("appointment_id", candidates.map((a) => a.id));
+  // Al beoordeeld = er staat een review, óf de token van die afspraak is ooit
+  // ingewisseld (used_at). Dat tweede vangt een review die de eigenaar daarna
+  // heeft verwijderd: die krijgt de klant niet via deze weg een tweede keer.
+  const ids = candidates.map((a) => a.id);
+  const [{ data: done }, { data: toks }] = await Promise.all([
+    supabase.from("reviews").select("appointment_id").in("appointment_id", ids),
+    supabase.from("review_tokens").select("appointment_id, token, used_at, expires_at").in("appointment_id", ids),
+  ]);
   const reviewed = new Set((done || []).map((r: any) => r.appointment_id));
-  const appt = candidates.find((a) => !reviewed.has(a.id));
+  const tokenByAppt = new Map((toks || []).map((t: any) => [t.appointment_id, t]));
+  const appt = candidates.find((a) => !reviewed.has(a.id) && !tokenByAppt.get(a.id)?.used_at);
   if (!appt) return generic();
 
-  // Nog geldige, ongebruikte token voor deze afspraak? Hergebruiken.
-  const nowIso = new Date().toISOString();
-  const { data: existing } = await supabase
-    .from("review_tokens")
-    .select("token")
-    .eq("appointment_id", appt.id)
-    .is("used_at", null)
-    .gt("expires_at", nowIso)
-    .limit(1);
-  let token: string | null = existing?.[0]?.token || null;
-  if (!token) {
+  // Eén token per afspraak (unique index review_tokens_appointment_uniq):
+  // geldig → hergebruiken; verlopen → dezelfde rij verversen met een nieuwe
+  // token en einddatum; nog geen rij → aanmaken.
+  const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const existing = tokenByAppt.get(appt.id);
+  let token: string;
+  if (existing && new Date(existing.expires_at).getTime() > Date.now()) {
+    token = String(existing.token);
+  } else if (existing) {
     token = generateToken();
-    const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const { error: updErr } = await supabase.from("review_tokens")
+      .update({ token, expires_at: expiresAt, created_at: new Date().toISOString() })
+      .eq("token", existing.token);
+    if (updErr) { console.error("review token refresh:", updErr); return generic(); }
+  } else {
+    token = generateToken();
     const { error: tokErr } = await supabase.from("review_tokens").insert({
       token, appointment_id: appt.id, owner_id: salon.id, client_email: appt.client_email, expires_at: expiresAt,
     });
