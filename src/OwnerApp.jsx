@@ -12321,6 +12321,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   ))}
                 </div>
+                {/* Op de salonpagina tikt een klant op het nummer en kiest dan
+                    bellen of WhatsApp. WhatsApp verschijnt alleen als hier een
+                    WhatsApp-nummer staat — vaak hetzelfde nummer, vandaar de
+                    één-tik-koppeling. (TTNB, 05-09: alleen het WhatsApp-veld
+                    gevuld en dan stond er niets op de pagina.) */}
+                <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.45, marginTop: 8 }}>
+                  {lang === "nl" ? "Op je salonpagina kiest een klant bij het nummer tussen bellen (telefoonnummer) en WhatsApp (WhatsApp-nummer)."
+                    : lang === "es" ? "En tu página, el cliente elige junto al número entre llamar (teléfono) o WhatsApp (número de WhatsApp)."
+                    : "On your salon page a client taps the number and chooses between calling (phone number) and WhatsApp (WhatsApp number)."}
+                  {(salonData.salon_phone || "").trim() && !(salonData.whatsapp_number || "").trim() && (
+                    <> <span onClick={() => update(d => { d.whatsapp_number = d.salon_phone; return d; })} style={{ color: accent, cursor: "pointer", fontWeight: 600 }}>
+                      {lang === "nl" ? "Zelfde nummer ook voor WhatsApp gebruiken →" : lang === "es" ? "Usar el mismo número para WhatsApp →" : "Use the same number for WhatsApp →"}
+                    </span></>
+                  )}
+                </div>
                 {/* Salon-finder visibility — the landing page's "find your
                     salon" section only lists salons with this ON (opt-out,
                     default on). The salon's own vellu.cc/slug link always

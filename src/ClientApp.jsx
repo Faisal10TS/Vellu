@@ -204,6 +204,52 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
 }
 
 
+// Telefoonnummer op de salonpagina: tikken → kiezen tussen bellen en
+// WhatsApp. WhatsApp staat er alleen als de salon een WhatsApp-nummer heeft
+// ingevuld; heeft ze alléén dat nummer ingevuld (TTNB, 05-09: het veld
+// "Telefoonnummer salon" leeg, WhatsApp gevuld → er stond helemaal niets op
+// de pagina), dan is dát het nummer dat je ziet en kun je het ook bellen.
+// Zonder WhatsApp-nummer blijft het de simpele tel:-link van vroeger.
+function PhoneContact({ salon, lang, c, compact = false }) {
+  const [open, setOpen] = useState(false);
+  const phone = (salon.salon_phone || "").trim();
+  const wa = (salon.whatsapp_number || "").trim();
+  if (!phone && !wa) return null;
+  const shown = phone || wa;
+  const iconSize = compact ? 13 : 14;
+  const rowStyle = compact ? { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub } : {};
+  if (!wa) {
+    return (
+      <div className={compact ? undefined : "profile-contact-row"} style={rowStyle}>
+        <NavIcon name="phone" size={iconSize} color={c.textSub} />
+        <a href={`tel:${shown}`} style={{ color: c.textSub, textDecoration: "none" }}>{shown}</a>
+      </div>
+    );
+  }
+  const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+  const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 100, border: `1px solid ${c.inputBorder}`, background: c.bgCard, color: c.text, fontSize: 12, textDecoration: "none", fontWeight: 500 };
+  return (
+    <div className={compact ? undefined : "profile-contact-row"} style={{ ...rowStyle, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+      <div role="button" tabIndex={0} aria-expanded={open} aria-label={L("Bellen of WhatsApp", "Call or WhatsApp", "Llamar o WhatsApp")}
+        onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); } }}
+        style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 10, cursor: "pointer", color: c.textSub }}>
+        <NavIcon name="phone" size={iconSize} color={c.textSub} />
+        <span style={{ textDecoration: "underline" }}>{shown}</span>
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
+          style={{ transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
+      </div>
+      {open && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingLeft: compact ? 21 : 24 }}>
+          <a href={`tel:${shown}`} style={pill}><NavIcon name="phone" size={12} color="currentColor" /> {L("Bellen", "Call", "Llamar")}</a>
+          <a href={getWhatsAppUrl(wa, "", salon.country_code)} target="_blank" rel="noopener noreferrer" style={{ ...pill, color: "#25d366", borderColor: "rgba(37,211,102,0.45)" }}>
+            <NavIcon name="chat" size={12} color="currentColor" /> WhatsApp{wa !== shown ? ` · ${wa}` : ""}
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Circular share button pinned to the top-right of the salon profile hero.
 // Uses the native Web Share API when available (opens the OS share sheet
 // on mobile — WhatsApp / SMS / Instagram DM etc.) and falls back to a
@@ -2774,7 +2820,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 20 }}>
                 {/* Contact details */}
-                {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+                {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.whatsapp_number || initialSalon.salon_instagram) && (
                   <div>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.contactUs}</h3>
                     {(initialSalon.salon_email) && (
@@ -2783,12 +2829,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <a href={`mailto:${initialSalon.salon_email}`}>{initialSalon.salon_email}</a>
                       </div>
                     )}
-                    {initialSalon.salon_phone && (
-                      <div className="profile-contact-row">
-                        <NavIcon name="phone" size={14} color={c.textSub} />
-                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
-                      </div>
-                    )}
+                    <PhoneContact salon={initialSalon} lang={lang} c={c} />
                     {initialSalon.salon_instagram && (
                       <div className="profile-contact-row">
                         <NavIcon name="camera" size={14} color={c.textSub} />
@@ -3032,18 +3073,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               )}
 
               {/* Contact us */}
-              {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.salon_instagram) && (
+              {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.whatsapp_number || initialSalon.salon_instagram) && (
                 <div style={{ marginTop: 4 }}>
                   <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
                     {t.contactUs} ↓
                   </div>
                   <div style={{ padding: "0 0 4px", fontSize: 12 }}>
-                    {initialSalon.salon_phone && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
-                        <NavIcon name="phone" size={13} color={c.textSub} />
-                        <a href={`tel:${initialSalon.salon_phone}`} style={{ color: c.textSub, textDecoration: "none" }}>{initialSalon.salon_phone}</a>
-                      </div>
-                    )}
+                    <PhoneContact salon={initialSalon} lang={lang} c={c} compact />
                     {(initialSalon.salon_email) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", color: c.textSub }}>
                         <NavIcon name="mail" size={13} color={c.textSub} />

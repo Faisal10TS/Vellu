@@ -447,9 +447,24 @@ function getGoogleCalUrl({ title, date, time, duration, description, location })
 }
 
 // ─── WHATSAPP HELPER ─────────────────────────────────────────
-function getWhatsAppUrl(phone, message) {
-  const clean = (phone || "").replace(/[^0-9+]/g, "").replace(/^0/, "31");
-  return `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+// Telefoonnummer → cijfers zoals wa.me ze wil (landcode, geen + of 0).
+// Zonder landcode is het land van de salon leidend: "06 12345678" bij een
+// Nederlandse salon wordt 31612345678, "7951501" bij een Bonairiaanse
+// 5997951501. Onbekend land: NL-aanname, zoals dit altijd al deed.
+const WA_COUNTRY_PREFIX = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
+export function waDigits(phone, countryCode) {
+  let d = String(phone || "").replace(/[^0-9]/g, "");
+  if (!d) return "";
+  const cc = WA_COUNTRY_PREFIX[String(countryCode || "NL").toUpperCase()] || "31";
+  if (d.startsWith("00")) return d.slice(2);
+  if (d.startsWith("0")) return cc + d.slice(1);
+  // Korte lokale nummers (Caribisch: 7 cijfers) hebben nog geen landcode.
+  if (d.length <= 8 && !d.startsWith(cc)) return cc + d;
+  return d;
+}
+function getWhatsAppUrl(phone, message, countryCode) {
+  const clean = waDigits(phone, countryCode);
+  return `https://wa.me/${clean}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
 }
 
 function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
