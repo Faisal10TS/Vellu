@@ -129,7 +129,7 @@ serve(async () => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since)")
+      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff)")
       .eq("followup_sent", false)
       .gte("date", fromStr)
       .lte("date", untilStr)
@@ -222,18 +222,37 @@ serve(async () => {
       if (p.loyalty_enabled && (parseInt(p.loyalty_visits) || 0) > 0 && appt.status === "completed") {
         const need = parseInt(p.loyalty_visits);
         const pct = parseInt(p.loyalty_discount_pct) || 0;
-        let cq = supabase.from("appointments").select("id", { count: "exact", head: true })
+        // Alle afgeronde bezoeken van deze klant (zelfde regels als de trigger),
+        // in JS geteld: per teamlid moet er in de breakdown gekeken worden en
+        // dat is via de REST-filter niet uit te drukken.
+        let vq = supabase.from("appointments").select("id, staff_id, service_breakdown")
           .eq("owner_id", appt.owner_id).ilike("client_email", String(appt.client_email).replace(/[\\%_]/g, (m: string) => `\\${m}`))
           .eq("status", "completed").or("is_sale.is.null,is_sale.eq.false");
-        if (p.loyalty_since) cq = cq.gte("date", p.loyalty_since);
-        const { count } = await cq;
-        const visits = count || 0;
-        const inCycle = visits % need; // 0 = zojuist vol
-        const line = inCycle === 0
-          ? (lang === "nl" ? `Je stempelkaart is vol — je code voor ${pct}% korting staat in je mail.` : lang === "es" ? `Tu tarjeta de fidelidad está completa: tu código de ${pct}% de descuento está en tu correo.` : `Your loyalty card is full — your ${pct}% code is in your inbox.`)
-          : (lang === "nl" ? `Stempelkaart: ${inCycle} van ${need} bezoeken — nog ${need - inCycle} tot ${pct}% korting.` : lang === "es" ? `Tarjeta de fidelidad: ${inCycle} de ${need} visitas — faltan ${need - inCycle} para ${pct}% de descuento.` : `Loyalty card: ${inCycle} of ${need} visits — ${need - inCycle} more to ${pct}% off.`);
-        const stamps = Array.from({ length: need }, (_, i) => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;margin:0 3px;border:1.5px solid ${accent};background:${i < (inCycle === 0 ? need : inCycle) ? accent : "transparent"};"></span>`).join("");
-        loyaltyBlock = `<div style="background:#f8f7f5;border-radius:12px;padding:14px 16px;margin:16px 0;text-align:center;"><div style="margin-bottom:8px;line-height:1;">${stamps}</div><div style="font-size:13px;color:#555;">${line}</div></div>`;
+        if (p.loyalty_since) vq = vq.gte("date", p.loyalty_since);
+        const { data: visitRows } = await vq;
+        const rows = visitRows || [];
+        const involves = (a: any, sid: string) => a.staff_id === sid || (Array.isArray(a.service_breakdown) && a.service_breakdown.some((q: any) => q?.staff_id === sid));
+        // Per teamlid: één regel per stylist die in DIT bezoek iets deed.
+        let cards: { name: string; visits: number }[] = [];
+        if (p.loyalty_per_staff) {
+          const ids = Array.from(new Set([...(Array.isArray(appt.service_breakdown) ? appt.service_breakdown.map((q: any) => q?.staff_id) : []), appt.staff_id].filter((x: any) => typeof x === "string" && x.length === 36)));
+          if (ids.length > 0) {
+            const { data: staffRows } = await supabase.from("staff_members").select("id, name").in("id", ids);
+            cards = ids.map((sid: string) => ({ name: String((staffRows || []).find((s: any) => s.id === sid)?.name || ""), visits: rows.filter((a: any) => involves(a, sid)).length }));
+          }
+        } else {
+          cards = [{ name: "", visits: rows.length }];
+        }
+        const blocks = cards.map(({ name, visits }) => {
+          const inCycle = visits % need; // 0 = zojuist vol
+          const bij = name ? (lang === "nl" ? ` bij ${name}` : lang === "es" ? ` con ${name}` : ` with ${name}`) : "";
+          const line = inCycle === 0
+            ? (lang === "nl" ? `Je stempelkaart${bij} is vol — je code voor ${pct}% korting staat in je mail.` : lang === "es" ? `Tu tarjeta de fidelidad${bij} está completa: tu código de ${pct}% de descuento está en tu correo.` : `Your loyalty card${bij} is full — your ${pct}% code is in your inbox.`)
+            : (lang === "nl" ? `Stempelkaart${bij}: ${inCycle} van ${need} bezoeken — nog ${need - inCycle} tot ${pct}% korting.` : lang === "es" ? `Tarjeta de fidelidad${bij}: ${inCycle} de ${need} visitas — faltan ${need - inCycle} para ${pct}% de descuento.` : `Loyalty card${bij}: ${inCycle} of ${need} visits — ${need - inCycle} more to ${pct}% off.`);
+          const stamps = Array.from({ length: need }, (_, i) => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;margin:0 3px;border:1.5px solid ${accent};background:${i < (inCycle === 0 ? need : inCycle) ? accent : "transparent"};"></span>`).join("");
+          return `<div style="background:#f8f7f5;border-radius:12px;padding:14px 16px;margin:16px 0;text-align:center;"><div style="margin-bottom:8px;line-height:1;">${stamps}</div><div style="font-size:13px;color:#555;">${line}</div></div>`;
+        });
+        loyaltyBlock = blocks.join("");
       }
 
       try {

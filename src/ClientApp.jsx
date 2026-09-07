@@ -1237,6 +1237,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           type: hit.type || "percent",
           // Alleen geldig voor dít adres — zie de useEffect hieronder.
           personalEmail: email.toLowerCase(),
+          // Stempelkaart per teamlid: code hoort bij één stylist en geldt
+          // alleen voor haar behandelingen (getPrice + book-appointment).
+          staffId: hit.staff_id || null,
+          staffName: hit.staff_name || "",
         });
         setDiscountCode("");
       } else {
@@ -1403,13 +1407,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const p = (initialSalon.products || []).find(x => x.id === pid);
     return s + (p ? (parseFloat(p.price) || 0) * q : 0);
   }, 0);
+  // Bij een stylist-gebonden code (stempelkaart per teamlid): het bedrag van
+  // de behandelingen die zíj doet — alleen daar geldt de korting op.
+  const discountEligibleTotal = () => selectedServices
+    .filter(item => appliedDiscount?.staffId && item.staff?.id === appliedDiscount.staffId)
+    .reduce((sum, item) => sum + itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0), 0);
   const getPrice = () => {
     let total = selectedServices.reduce((sum, item) => {
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
       return sum + itemBasePrice(item) + extrasTotal;
     }, 0) + productsTotal();
     if (appliedDiscount) {
-      if (appliedDiscount.type === "percent") {
+      if (appliedDiscount.staffId) {
+        // Zelfde rekenregel als de server: alleen háár delen, producten en
+        // delen van collega's blijven vol geprijsd.
+        total = Math.max(0, total - discountEligibleTotal() * appliedDiscount.amount / 100);
+      } else if (appliedDiscount.type === "percent") {
         total = Math.max(0, total * (1 - appliedDiscount.amount / 100));
       } else {
         total = Math.max(0, total - appliedDiscount.amount);
@@ -2194,6 +2207,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           : isNl
             ? "Deze kortingscode is al een keer gebruikt. Een verjaardagscode is voor één boeking."
             : "This discount code has already been used. A birthday code is valid for one booking.",
+        // Stempelkaart per teamlid: de code hoort bij één stylist en de
+        // boeking bevat geen behandeling bij haar.
+        discount_staff_mismatch: lang === "es"
+          ? "Este código de descuento solo vale con la persona con la que lo conseguiste. Elígela para tu tratamiento."
+          : isNl
+            ? "Deze kortingscode geldt alleen bij de medewerker bij wie je hem hebt gespaard. Kies haar bij je behandeling."
+            : "This discount code is only valid with the team member you earned it with. Pick her for your treatment.",
         rate_limited: lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
         invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
@@ -3261,6 +3281,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})
               </span>
               <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{cur}{getOriginalPrice().toFixed(2)}</span>
+            </div>
+          )}
+          {/* Stylist-gebonden code: zeggen waar hij op geldt — en waarschuwen als
+              er (nog) geen behandeling bij die stylist in de selectie zit. */}
+          {appliedDiscount?.staffId && (
+            <div style={{ fontSize: 11, color: discountEligibleTotal() > 0 ? c.textSub : "#f87171", marginBottom: 8, lineHeight: 1.4 }}>
+              {discountEligibleTotal() > 0
+                ? (lang === "nl" ? `Korting geldt op je behandeling(en) bij ${appliedDiscount.staffName}.` : lang === "es" ? `El descuento se aplica a tus tratamientos con ${appliedDiscount.staffName}.` : `Discount applies to your treatment(s) with ${appliedDiscount.staffName}.`)
+                : (lang === "nl" ? `Deze code geldt alleen bij ${appliedDiscount.staffName} — kies haar bij je behandeling om de korting te krijgen.` : lang === "es" ? `Este código solo vale con ${appliedDiscount.staffName}: elígela para tu tratamiento para obtener el descuento.` : `This code is only valid with ${appliedDiscount.staffName} — pick her for your treatment to get the discount.`)}
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

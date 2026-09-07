@@ -21,9 +21,9 @@ export const RELEASES = [
       {
         kind: "new", audience: ["owner", "staff"],
         text: {
-          nl: "Stempelkaart: na elke X bezoeken krijgt de klant automatisch een persoonlijke kortingscode. Instellen bij Instellingen → Klanten & marketing; de stand zie je op elke klantkaart.",
-          en: "Loyalty card: after every X visits the client automatically gets a personal discount code. Set it up under Settings → Clients & marketing; progress shows on every client card.",
-          es: "Tarjeta de fidelidad: tras cada X visitas el cliente recibe automáticamente un código de descuento personal. Actívala en Ajustes → Clientes y marketing; el progreso se ve en cada ficha de cliente.",
+          nl: "Stempelkaart: na elke X bezoeken krijgt de klant automatisch een persoonlijke kortingscode. Instellen bij Instellingen → Klanten & marketing; de stand zie je op elke klantkaart. Teamsalon? Kies 'per teamlid': dan geldt een code alleen bij de medewerker bij wie hij is gespaard.",
+          en: "Loyalty card: after every X visits the client automatically gets a personal discount code. Set it up under Settings → Clients & marketing; progress shows on every client card. Team salon? Choose 'per team member': a code is then only valid with the person it was earned with.",
+          es: "Tarjeta de fidelidad: tras cada X visitas el cliente recibe automáticamente un código de descuento personal. Actívala en Ajustes → Clientes y marketing; el progreso se ve en cada ficha de cliente. ¿Salón en equipo? Elige «por miembro del equipo»: el código solo vale con la persona con la que se consiguió.",
         },
       },
       {

@@ -535,7 +535,7 @@ serve(async (req) => {
       const graceFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const { data: bday, error: bdErr } = await supabase
         .from("birthday_discount_codes")
-        .select("code, client_email, discount_pct, expires_on, used_at")
+        .select("code, client_email, discount_pct, expires_on, used_at, staff_id")
         .eq("owner_id", salon.id)
         .eq("code", code)
         .gte("expires_on", graceFrom)
@@ -554,6 +554,8 @@ serve(async (req) => {
           active: true,
           source: "birthday",
           client_email: bday.client_email,
+          // Stempelkaart per teamlid: de code hoort bij één stylist.
+          staff_id: bday.staff_id || null,
         };
       }
     }
@@ -564,7 +566,17 @@ serve(async (req) => {
     const boundTo = String(match.client_email || "").trim().toLowerCase();
     if (boundTo && boundTo !== email) return err(403, "discount_not_yours", origin);
     const amt = parseFloat(match.amount) || 0;
-    if (match.type === "percent") {
+    if (match.staff_id) {
+      // Aan een stylist gebonden code: de korting geldt alleen voor de delen
+      // die zíj in deze boeking doet — anders spaart een klant bij Lady en
+      // verzilvert ze bij Esther. Delen van collega's en producten blijven vol
+      // geprijsd; doet zij niets in deze boeking, dan is de code hier ongeldig.
+      const eligible = serviceBreakdown
+        .filter((p) => p.staff_id === match.staff_id)
+        .reduce((s, p) => s + (Number(p.price) || 0), 0);
+      if (eligible <= 0) return err(403, "discount_staff_mismatch", origin);
+      totalPrice = Math.max(0, totalPrice - eligible * amt / 100);
+    } else if (match.type === "percent") {
       totalPrice = Math.max(0, totalPrice * (1 - amt / 100));
     } else {
       totalPrice = Math.max(0, totalPrice - amt);

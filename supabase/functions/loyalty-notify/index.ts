@@ -54,8 +54,10 @@ const fmtDate = (lang: string, iso: string) => {
   catch { return iso; }
 };
 
-function renderHtml(o: { salonName: string; logo: string | null; accent: string; firstName: string; code: string; pct: number; visits: number; expires: string; slug: string; lang: string }) {
-  const { salonName, logo, accent, firstName, code, pct, visits, expires, slug, lang } = o;
+function renderHtml(o: { salonName: string; logo: string | null; accent: string; firstName: string; code: string; pct: number; visits: number; expires: string; slug: string; lang: string; staffName?: string }) {
+  const { salonName, logo, accent, firstName, code, pct, visits, expires, slug, lang, staffName } = o;
+  // Per teamlid: de kaart én de korting horen bij één stylist.
+  const bij = staffName ? txt(lang, ` bij ${esc(staffName)}`, ` with ${esc(staffName)}`, ` con ${esc(staffName)}`) : "";
   const header = logo
     ? `<div style="text-align:center;margin-bottom:28px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;border-collapse:separate;"><tr><td style="background:#ffffff;border-radius:14px;padding:14px 18px;text-align:center;"><img src="${esc(logo)}" alt="${esc(salonName)}" style="width:auto;height:auto;max-width:180px;display:block;border:0;" /></td></tr></table></div>`
     : `<div style="text-align:center;margin-bottom:28px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;color:#1a1a1a;">${esc(salonName)}</h1></div>`;
@@ -70,9 +72,9 @@ function renderHtml(o: { salonName: string; logo: string | null; accent: string;
     <h1 style="font-size:26px;font-weight:600;margin:0 0 14px;text-align:center;color:#1a1a1a;">${esc(heading)}</h1>
     <p style="font-size:15px;line-height:1.7;color:#333;margin:0 0 24px;text-align:center;">
       ${txt(lang,
-        `Je stempelkaart bij <strong>${esc(salonName)}</strong> is vol. Als dank: ${pct}% korting op je volgende afspraak.`,
-        `Your loyalty card at <strong>${esc(salonName)}</strong> is full. As a thank-you: ${pct}% off your next appointment.`,
-        `Tu tarjeta de fidelidad en <strong>${esc(salonName)}</strong> está completa. Como agradecimiento: ${pct}% de descuento en tu próxima cita.`)}
+        `Je stempelkaart${bij} bij <strong>${esc(salonName)}</strong> is vol. Als dank: ${pct}% korting op je volgende afspraak${bij}.`,
+        `Your loyalty card${bij} at <strong>${esc(salonName)}</strong> is full. As a thank-you: ${pct}% off your next appointment${bij}.`,
+        `Tu tarjeta de fidelidad${bij} en <strong>${esc(salonName)}</strong> está completa. Como agradecimiento: ${pct}% de descuento en tu próxima cita${bij}.`)}
     </p>
     <div style="background:#f9f7f4;border-radius:14px;padding:22px;text-align:center;margin-bottom:24px;">
       <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:6px;">${txt(lang, "Jouw code", "Your code", "Tu código")}</div>
@@ -115,7 +117,7 @@ serve(async (req) => {
 
   let q = supabase
     .from("birthday_discount_codes")
-    .select("id, owner_id, code, client_email, discount_pct, expires_on, visits_at, reward_no")
+    .select("id, owner_id, code, client_email, discount_pct, expires_on, visits_at, reward_no, staff_id")
     .eq("kind", "loyalty")
     .is("notified_at", null)
     .order("created_at", { ascending: true })
@@ -148,6 +150,12 @@ serve(async (req) => {
     const pct = Number(row.discount_pct) || 0;
     const visits = Number(row.visits_at) || Number(salon.loyalty_visits) || 0;
     const expires = fmtDate(lang, String(row.expires_on));
+    let staffName = "";
+    if (row.staff_id) {
+      const { data: st } = await supabase.from("staff_members").select("name").eq("id", row.staff_id).maybeSingle();
+      staffName = String(st?.name || "");
+    }
+    const bijKort = staffName ? txt(lang, ` bij ${staffName}`, ` with ${staffName}`, ` con ${staffName}`) : "";
 
     let mailed = false;
     try {
@@ -158,8 +166,8 @@ serve(async (req) => {
           from: `${salonName} <noreply@vellu.cc>`,
           to: [row.client_email],
           ...(salon.salon_email || salon.email ? { reply_to: salon.salon_email || salon.email } : {}),
-          subject: txt(lang, `Je stempelkaart bij ${salonName} is vol — ${pct}% korting`, `Your loyalty card at ${salonName} is full — ${pct}% off`, `Tu tarjeta en ${salonName} está completa — ${pct}% de descuento`),
-          html: renderHtml({ salonName, logo: safeImg(salon.logo_url), accent, firstName, code: row.code, pct, visits, expires, slug: String(salon.slug || ""), lang }),
+          subject: txt(lang, `Je stempelkaart${bijKort} bij ${salonName} is vol — ${pct}% korting`, `Your loyalty card${bijKort} at ${salonName} is full — ${pct}% off`, `Tu tarjeta${bijKort} en ${salonName} está completa — ${pct}% de descuento`),
+          html: renderHtml({ salonName, logo: safeImg(salon.logo_url), accent, firstName, code: row.code, pct, visits, expires, slug: String(salon.slug || ""), lang, staffName }),
         }),
       });
       if (res.ok) mailed = true;
@@ -179,14 +187,14 @@ serve(async (req) => {
         body: JSON.stringify({
           user_id: row.owner_id,
           title: nlOwner ? "Stempelkaart vol" : "Loyalty card full",
-          body: nlOwner ? `${who} verdiende ${pct}% korting (code ${row.code}) — gemaild` : `${who} earned ${pct}% off (code ${row.code}) — emailed`,
+          body: nlOwner ? `${who} verdiende ${pct}% korting${staffName ? ` bij ${staffName}` : ""} (code ${row.code}) — gemaild` : `${who} earned ${pct}% off${staffName ? ` with ${staffName}` : ""} (code ${row.code}) — emailed`,
           url: "/owner",
           tag: `loyalty-${row.id}`,
         }),
       });
     } catch (e) { console.error("Loyalty push failed:", e); }
 
-    sent.push({ code: row.code, client_email: row.client_email, client_name: appt.client_name || "", pct, visits, expires_on: row.expires_on });
+    sent.push({ code: row.code, client_email: row.client_email, client_name: appt.client_name || "", pct, visits, expires_on: row.expires_on, staff_name: staffName || null });
   }
   return json(200, { sent }, origin);
 });
