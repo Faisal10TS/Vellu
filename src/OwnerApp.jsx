@@ -20,6 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -5223,7 +5224,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString() } : {}) };
+      // Betaald via de kiezer = het hele (huidige) bedrag is binnen; amount_paid
+      // meeschrijven zodat een latere prijswijziging het verschil kan tonen.
+      const apptRow = (salonData.appointments || []).find(a => a.id === id);
+      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : {}) };
       const { error } = await supabase.from("appointments").update(patch).eq("id", id);
       if (error) { toast.show(t.errorCompleting, "error"); return; }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, ...patch} : a); return d; });
@@ -5256,15 +5260,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const a = fullAppt(raw);
     setProcessingApptId(a.id);
     try {
-      const patch = { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString() };
-      const { data: hit, error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("status", "pending_payment").select("id");
+      const price = parseFloat(a.service_price || 0) || 0;
+      // Eerste betaling: reservering → bevestigd. Restbetaling (de behandeling
+      // werd duurder na een vooruitbetaling): alleen het bedrag bijwerken.
+      const first = a.status === "pending_payment";
+      const patch = first
+        ? { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString(), amount_paid: price }
+        : { paid_at: new Date().toISOString(), amount_paid: price };
+      let q = supabase.from("appointments").update(patch).eq("id", a.id);
+      if (first) q = q.eq("status", "pending_payment");
+      const { data: hit, error } = await q.select("id");
       if (error || !hit || hit.length === 0) {
         toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
         return;
       }
       update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
-      toast.show(lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed");
-      if (a.client_email) {
+      toast.show(first
+        ? (lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed")
+        : (lang === "nl" ? "Restbetaling vastgelegd, alles is betaald" : lang === "es" ? "Pago restante registrado, todo pagado" : "Remaining payment recorded, fully paid"));
+      if (first && a.client_email) {
         // Annuleerlink meesturen als het token nog open is (eigenaar mag
         // cancellation_tokens van de eigen salon lezen).
         let cancelUrl = null;
@@ -5995,6 +6009,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       discount_amount: discountNum > 0 ? discountNum : null,
       discount_reason: discountNum > 0 ? ((editApptForm.discount_reason || "").trim() || null) : null,
     };
+    // Al (deels) betaald, bv. vooruitbetaald? De nieuwe prijs bepaalt of het
+    // nog "volledig betaald" is; het ontvangen bedrag zelf blijft staan.
+    Object.assign(payload, paymentPatchForPrice(orig, priceNum));
     // Service change: when the owner picks a different treatment, replace the
     // whole service the same shape a fresh booking uses — primary service_id,
     // a rolled-up name (keeping the assigned stylist), a single-entry
@@ -6097,6 +6114,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           cancel_url: cancelUrl || null,
           currency: cur,
           lang,
+          // Al (vooruit)betaald? Dan toont de mail het verschil, met betaalblok
+          // voor wat er nog openstaat (of de terugbetaling bij een lagere prijs).
+          amount_paid: paidAmountOf(orig),
+          payment_link: salonData.payment_link || "",
+          salon_iban: salonData.iban || "",
+          iban_holder: salonData.iban_holder || salonData.name || "",
+          payment_ref: `${salonData.name} ${payload.date} ${payload.time}`.slice(0, 100),
         };
         await sendEmails("appointment_updated", notifyPayload);
         // Fire SMS too — the edge function silently skips if the salon isn't
@@ -6503,10 +6527,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const newPrice = +(parseFloat(a.service_price || 0) + extraTotal).toFixed(2);
     const newName = `${a.service_name} + ${label}`;
     const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
-    const { error } = await supabase.from("appointments").update({ service_price: newPrice, service_name: newName, products: newProducts }).eq("id", a.id);
+    // Product erbij op een al (vooruit)betaalde afspraak → er staat weer iets open.
+    const payPatch = paymentPatchForPrice(a, newPrice);
+    const { error } = await supabase.from("appointments").update({ service_price: newPrice, service_name: newName, products: newProducts, ...payPatch }).eq("id", a.id);
     if (error) { toast.show(t.somethingWrong, "error"); return; }
     await decrementStock(items);
-    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts } : x); return d; });
+    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts, ...payPatch } : x); return d; });
     setProductSaleFor(null); setProductSaleSel({});
     toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
   };
@@ -6866,10 +6892,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // second worker's requests route to their own account, never the
           // salon-wide one.
           payment_request: a.payment_method === "online",
+          // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
+          // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
+          amount_paid: paidAmountOf(a),
           iban_holder: p ? (p.iban_holder || p.label || "") : (salonData.iban_holder || ""),
-          // bunq.me/PayPal.Me links get this invoice's exact amount appended,
-          // so the client never has to type it (other providers pass through).
-          payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (salonData.payment_link || ""), a.service_price),
+          // bunq.me/PayPal.Me links get the exact OPEN amount appended, so the
+          // client never has to type it (other providers pass through).
+          payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (salonData.payment_link || ""), Math.max(0, outstandingOf(a))),
           salon_accent: salonData.accent || "",
           // 0 als het bedrag niet op een klantdocument mag (Aruba). Zo laat ook
           // een nog niet bijgewerkte factuurmail de belastingregel weg — de
@@ -6958,12 +6987,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // can see who still owes after a payment request went out.
   const togglePaid = async (a) => {
     const newVal = a.paid_at ? null : new Date().toISOString();
-    const { error } = await supabase.from("appointments").update({ paid_at: newVal }).eq("id", a.id);
+    // Betaald = het hele bedrag; terugzetten = niets ontvangen.
+    const patch = { paid_at: newVal, amount_paid: newVal ? (parseFloat(a.service_price || 0) || 0) : 0 };
+    const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
     if (error) {
       toast.show(lang === "nl" ? "Kon betaalstatus niet bijwerken" : lang === "es" ? "No se pudo actualizar el estado del pago" : "Could not update payment status", "error");
       return;
     }
-    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, paid_at: newVal } : x); return d; });
+    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
     toast.show(newVal ? (lang === "nl" ? "Gemarkeerd als betaald" : lang === "es" ? "Marcada como pagada" : "Marked as paid") : (lang === "nl" ? "Betaling teruggezet naar open" : lang === "es" ? "Pago restablecido a pendiente" : "Payment set back to open"));
   };
 
@@ -7289,7 +7320,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* Alle pillen in deze rij delen 8px verticale padding: de
               btn-ghost-default (11px) maakte Afronden een dikke oval die
               over twee regels wrapte, terwijl "0 14px" de rest platsloeg. */}
-          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
           <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
           {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
@@ -7339,7 +7370,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           echt afgerond, zodat de betaling in één handeling vastligt. */}
       {a.status === "confirmed" && completeFor === a.id && (
         <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?"}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${cur}${outstandingOf(a).toFixed(2)} open. Hoe is de rest betaald?` : lang === "es" ? `Quedan ${cur}${outstandingOf(a).toFixed(2)}. ¿Cómo se pagó el resto?` : `${cur}${outstandingOf(a).toFixed(2)} still open. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             {[
               ["cash", payMethodLabel("cash", lang)],
@@ -7372,12 +7403,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           captured email simply has no invoice button. */}
       {a.status === "completed" && !a.invoice_sent && a.client_email && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
-      {a.status === "completed" && a.paid_at && (
-        <div style={{ fontSize: 11, color: c.success, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <NavIcon name="check" size={11} color={c.success} />
-          {lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method, lang) ? ` · ${payMethodLabel(a.payment_method, lang)}` : ""}
-        </div>
-      )}
+      {/* Betaalstand. Deels betaald (vooruitbetaling op een behandeling die
+          duurder werd): wat er nog openstaat + "Restbetaling ontvangen" +
+          WhatsApp-verzoek voor het verschil; te veel betaald: terugbetalen;
+          anders het vertrouwde "Betaald · wijze". */}
+      {(a.status === "completed" || a.status === "confirmed") && (() => {
+        const paid = paidAmountOf(a), open = outstandingOf(a);
+        if (paid <= 0) return null;
+        if (open > 0.005) return (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+              <NavIcon name="alerttri" size={11} color={c.warning} />
+              {lang === "nl" ? `Vooruitbetaald ${cur}${paid.toFixed(2)} · nog ${cur}${open.toFixed(2)} open` : lang === "es" ? `Pagado por adelantado ${cur}${paid.toFixed(2)} · quedan ${cur}${open.toFixed(2)}` : `Paid in advance ${cur}${paid.toFixed(2)} · ${cur}${open.toFixed(2)} still open`}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received")}</button>
+              {a.client_phone && (salonData.payment_link || salonData.iban) && (
+                <a
+                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: open, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                  target="_blank" rel="noopener noreferrer" className="btn-ghost"
+                  style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  title={lang === "nl" ? "Betaalverzoek voor het verschil via WhatsApp" : lang === "es" ? "Solicitud de pago del resto por WhatsApp" : "Payment request for the difference via WhatsApp"}
+                >WhatsApp</a>
+              )}
+            </div>
+          </div>
+        );
+        if (open < -0.005) return (
+          <div style={{ fontSize: 11, color: c.warning, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <NavIcon name="alerttri" size={11} color={c.warning} />
+            {lang === "nl" ? `Te veel betaald: ${cur}${(-open).toFixed(2)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${cur}${(-open).toFixed(2)}` : `Overpaid: ${cur}${(-open).toFixed(2)} to refund`}
+          </div>
+        );
+        if (!a.paid_at) return null;
+        return (
+          <div style={{ fontSize: 11, color: c.success, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <NavIcon name="check" size={11} color={c.success} />
+            {lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method, lang) ? ` · ${payMethodLabel(a.payment_method, lang)}` : ""}
+          </div>
+        );
+      })()}
       {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
       {/* Quick actions: Google Calendar + WhatsApp */}
       {a.status === "confirmed" && (
@@ -8275,7 +8340,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={rowStyle}>
                 <span style={lblStyle}>{lang === "nl" ? "Betaling" : lang === "es" ? "Pago" : "Payment"}</span>
                 <span style={valStyle}>
-                  {a.paid_at
+                  {(paidAmountOf(a) > 0 && outstandingOf(a) > 0.005)
+                    ? <span style={{ color: c.warning, fontWeight: 600 }}>{lang === "nl" ? `Vooruitbetaald ${cur}${paidAmountOf(a).toFixed(2)} · nog ${cur}${outstandingOf(a).toFixed(2)} open` : lang === "es" ? `Pagado por adelantado ${cur}${paidAmountOf(a).toFixed(2)} · quedan ${cur}${outstandingOf(a).toFixed(2)}` : `Paid in advance ${cur}${paidAmountOf(a).toFixed(2)} · ${cur}${outstandingOf(a).toFixed(2)} still open`}</span>
+                    : a.paid_at
                     ? <span style={{ color: c.success, fontWeight: 600 }}>{lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"}{payMethodLabel(a.payment_method, lang) ? ` · ${payMethodLabel(a.payment_method, lang)}` : ""}</span>
                     : (a.payment_method === "prepay" ? (lang === "nl" ? `Vooruitbetaling, nog niet ontvangen${a.payment_due_at ? ` (vervalt ${fmtDueShort(a.payment_due_at)})` : ""}` : lang === "es" ? `Pago por adelantado, aún no recibido${a.payment_due_at ? ` (caduca ${fmtDueShort(a.payment_due_at)})` : ""}` : `Prepayment, not received yet${a.payment_due_at ? ` (expires ${fmtDueShort(a.payment_due_at)})` : ""}`) : a.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek na afloop" : lang === "es" ? "Solicitud de pago posterior" : "Payment request afterwards") : (lang === "nl" ? "Betalen bij afspraak" : lang === "es" ? "Pagar en la cita" : "Pay at appointment"))}
                 </span>

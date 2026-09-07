@@ -27,6 +27,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Vooruitbetaald en toch een duurdere behandeling gekozen? Pas de afspraak aan via 'Bewerk': de klant krijgt dan alleen het verschil als betaalverzoek, de kaart toont wat er nog openstaat, en de factuur trekt de vooruitbetaling af. Eén factuur, geen twee.",
+          en: "Paid in advance but chose a more expensive treatment? Adjust the appointment via 'Edit': the client then only gets the difference as a payment request, the card shows what is still open, and the invoice deducts the prepayment. One invoice, not two.",
+          es: "¿Pagó por adelantado pero eligió un tratamiento más caro? Ajusta la cita con «Editar»: el cliente solo recibe la diferencia como solicitud de pago, la tarjeta muestra lo que queda pendiente y la factura descuenta el pago por adelantado. Una factura, no dos.",
+        },
+      },
+      {
         kind: "new", audience: ["staff"],
         text: {
           nl: "Vooruitbetalen: een afspraak met 'Wacht op betaling' is een reservering. Zie je het geld binnenkomen, tik dan op 'Betaling ontvangen'; de klant krijgt dan haar bevestiging.",

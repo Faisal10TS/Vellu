@@ -1936,6 +1936,30 @@ export const staffShareOf = (a, staffId) => {
   return Math.round((mine / gross) * total * 100) / 100;
 };
 
+// Betaald bedrag per afspraak. appointments.amount_paid (sinds 07-09-2026) is
+// het totaal ontvangen bedrag; oudere rijen hebben NULL en vallen terug op
+// paid_at (gezet = alles betaald, anders niets). Open bedrag > 0 = er staat nog
+// geld uit, bv. €45 vooruitbetaald op een behandeling die in de salon €75
+// werd; < 0 = te veel betaald, de salon moet terugbetalen. paid_at blijft de
+// betekenis "volledig betaald" houden.
+export const paidAmountOf = (a) => {
+  if (!a) return 0;
+  if (a.amount_paid != null && a.amount_paid !== "") return Math.max(0, parseFloat(a.amount_paid) || 0);
+  return a.paid_at ? (parseFloat(a.service_price || 0) || 0) : 0;
+};
+export const outstandingOf = (a) => Math.round(((parseFloat(a?.service_price || 0) || 0) - paidAmountOf(a)) * 100) / 100;
+// Bij een prijswijziging (Bewerk, product erbij): is het nog "volledig
+// betaald"? Niets betaald → niets aanpassen. Wel betaald: paid_at weg zodra er
+// weer iets openstaat, en (opnieuw) gezet als het betaalde bedrag de nieuwe
+// prijs dekt. amount_paid zelf verandert hier nooit.
+export const paymentPatchForPrice = (a, newPrice) => {
+  const paid = paidAmountOf(a);
+  if (paid <= 0) return {};
+  const open = Math.round(((parseFloat(newPrice) || 0) - paid) * 100) / 100;
+  if (open > 0.005) return { paid_at: null, amount_paid: paid };
+  return { paid_at: a?.paid_at || new Date().toISOString(), amount_paid: paid };
+};
+
 export const blockAppliesOn = (b, dateStr) => {
   if (!b || !dateStr) return false;
   if (b.weekday == null) return b.date === dateStr;
