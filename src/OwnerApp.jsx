@@ -7507,7 +7507,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
       {/* Floating AI help assistant — knowledge-only support for the owner.
           Hidden while the guided tour is running so they don't overlap. */}
-      {!tourOpen && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
+      {/* Chatknop weg zolang de rondleiding of "Wat is er nieuw" open is — hij
+          zweefde anders over de feedbackregel van dat venster (Faisal, 07-09). */}
+      {!tourOpen && !whatsNew && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
