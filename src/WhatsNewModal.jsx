@@ -2,8 +2,9 @@
 // met de punten uit releaseNotes.js. Kruisje of knop sluit; de aanroeper
 // markeert daarna de nieuwste release als gezien. Zie releaseNotes.js voor
 // wanneer het venster wél/niet verschijnt.
+import { useState } from "react";
 import { createPortal } from "react-dom";
-import { NavIcon } from "./shared.jsx";
+import { NavIcon, LangToggle } from "./shared.jsx";
 
 const KIND = {
   new: { nl: "Nieuw", en: "New", es: "Nuevo" },
@@ -11,7 +12,11 @@ const KIND = {
   fix: { nl: "Opgelost", en: "Fixed", es: "Corregido" },
 };
 
-export default function WhatsNewModal({ releases, lang, c, accent, onClose }) {
+export default function WhatsNewModal({ releases, lang: appLang, c, accent, onClose }) {
+  // Eigen taalkeuze voor dit venster: de taalknoppen in de app-kop zitten
+  // achter de overlay, en wie de app in het Nederlands heeft wil de notes
+  // soms tóch even in het Engels lezen. Verandert de app-taal niet.
+  const [lang, setLang] = useState(appLang || "nl");
   if (!releases || releases.length === 0) return null;
   const L = (o) => (o && (o[lang] || o.nl || o.en)) || "";
   const fmtDate = (iso) => {
@@ -29,6 +34,7 @@ export default function WhatsNewModal({ releases, lang, c, accent, onClose }) {
               {lang === "nl" ? "Wat is er nieuw" : lang === "es" ? "Novedades" : "What's new"}
             </div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, lineHeight: 1.15 }}>{L(releases[0].title)}</div>
+            <div style={{ marginTop: 10, display: "inline-flex" }}><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <button aria-label={lang === "nl" ? "Sluiten" : lang === "es" ? "Cerrar" : "Close"} onClick={onClose}
             style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
