@@ -87,6 +87,67 @@ const AC=acOf(b);
 const sCU=safeImgSrc(b.cancel_url);
 const row=(l,r)=>`<tr><td ${cL}>${l}</td><td ${cR}>${r}</td></tr>`;
 const totRow=(l,r)=>`<tr ${gL}><td style="padding:12px 0 4px;font-weight:600;color:${AC};">${l}</td><td style="padding:12px 0 4px;font-weight:600;color:${AC};text-align:right;">${r}</td></tr>`;
+// Betaalblok: betaallink (bunq.me/PayPal.Me met bedrag), SEPA-QR + IBAN.
+// Gedeeld door de factuur (type invoice) en Vooruitbetalen (booking_pending_
+// payment / prepay_reminder). Leeg als de salon geen link én geen IBAN heeft.
+// The SEPA EPC QR + bunq.me amount-append are euro-only. For non-euro salons
+// (Bonaire/Aruba/Curacao) we skip the QR and show plain bank details instead,
+// with the amount in the salon's own currency (CURSYM) — never a euro QR.
+const payBlockHtml=(gross,payRef)=>{
+const link=safeImgSrc(b.payment_link);
+const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
+if(!link&&!ibanP)return"";
+const isEur=CURSYM==="€";
+let linkAmt=link;
+if(link&&gross>0&&isEur){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
+const holder=esc(b.iban_holder||b.salon_name||"");
+let h=`<div style="background:${AC}10;border:1px solid ${AC}44;border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">`;
+h+=`<div style="font-size:14px;font-weight:600;margin-bottom:12px;">${txt(lang,"Betalen","Payment","Pago")} · ${fP(gross)}</div>`;
+if(link)h+=`<a href="${esc(linkAmt)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">${txt(lang,"Betaal online","Pay online","Pagar en línea")}</a>`;
+if(ibanP&&gross>0&&isEur){
+const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}&currency=EUR`;
+h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of scan met je bank-app:":"Scan met je bank-app:",link?"Or scan with your banking app:":"Scan with your banking app:",link?"O escanea con tu app bancaria:":"Escanea con tu app bancaria:")}</div>`;
+h+=`<img src="${esc(qrUrl)}" width="150" height="150" alt="SEPA QR" style="display:block;margin:0 auto 10px;border-radius:8px;" />`;
+h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${esc(ibanP)}${holder?` ${txt(lang,"t.n.v.","in the name of","a nombre de")} ${holder}`:""}<br/>${txt(lang,"o.v.v.","reference:","referencia:")} ${esc(payRef)}</div>`;
+}else if(ibanP&&gross>0){
+h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of maak het bedrag over naar:":"Maak het bedrag over naar:",link?"Or transfer the amount to:":"Transfer the amount to:",link?"O transfiere el importe a:":"Transfiere el importe a:")}</div>`;
+h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${holder?`${holder}<br/>`:""}${esc(ibanP)}<br/>${txt(lang,"Bedrag","Amount","Importe")}: ${fP(gross)}<br/>${txt(lang,"o.v.v.","reference:","referencia:")} ${esc(payRef)}</div>`;
+}
+h+=`</div>`;
+return h;};
+// Annuleerblok onder de klantmails (bevestiging, reservering, herinnering).
+// ANNULEERTERMIJN KOMT VAN DE SALON — zie de uitleg bij booking_confirmation.
+const cancelBlock=()=>{if(!sCU)return"";
+const cdh=parseInt(String(b.cancel_deadline_hours??""));
+const cTxt=Number.isFinite(cdh)&&cdh>0
+?txt(lang,`Kun je niet komen? Annuleer tot ${cdh} uur van tevoren:`,`Can't make it? Cancel up to ${cdh} hours in advance:`,`¿No puedes venir? Cancela hasta ${cdh} horas antes:`)
+:txt(lang,"Kun je niet komen? Annuleer je afspraak hier:","Can't make it? Cancel your appointment here:","¿No puedes venir? Cancela tu cita aquí:");
+return`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${cTxt}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment","Cancelar cita")}</a></div>`;};
+// Vooruitbetalen: de reservering (pending_payment) staat vast tot due_text;
+// pas na "Betaling ontvangen" in de app volgt de gewone booking_confirmation
+// (met payment "prepaid"). Verstuurd door book-appointment.
+if(type==="booking_pending_payment"||type==="prepay_reminder"){
+const amt=parseFloat(b.price||0);const eDue=esc(b.due_text||"");
+const pb=payBlockHtml(amt,String(b.payment_ref||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100));
+const isRem=type==="prepay_reminder";
+const subj=isRem
+?txt(lang,`Herinnering: betaal vóór ${b.due_text} voor je afspraak bij ${b.salon_name}`,`Reminder: pay before ${b.due_text} for your appointment at ${b.salon_name}`,`Recordatorio: paga antes del ${b.due_text} para tu cita en ${b.salon_name}`)
+:txt(lang,`Reservering bij ${b.salon_name}: betaal om te bevestigen`,`Reservation at ${b.salon_name}: pay to confirm`,`Reserva en ${b.salon_name}: paga para confirmar`);
+const h2=isRem?txt(lang,"Nog even betalen","One more step: payment","Solo falta el pago"):txt(lang,"Je reservering staat vast","Your reservation is in","Tu reserva está registrada");
+const intro=isRem
+?txt(lang,`Je reservering bij <strong>${eS}</strong> voor <strong>${eD}</strong> om <strong>${eT}</strong> staat nog open. Maak <strong>${fP(amt)}</strong> over vóór <strong>${eDue}</strong>, anders vervalt de reservering en komt de tijd weer vrij.`,`Your reservation at <strong>${eS}</strong> for <strong>${eD}</strong> at <strong>${eT}</strong> is still open. Transfer <strong>${fP(amt)}</strong> before <strong>${eDue}</strong>, otherwise the reservation expires and the slot is released.`,`Tu reserva en <strong>${eS}</strong> para el <strong>${eD}</strong> a las <strong>${eT}</strong> sigue pendiente. Transfiere <strong>${fP(amt)}</strong> antes del <strong>${eDue}</strong>; si no, la reserva caduca y la hora vuelve a quedar libre.`)
+:txt(lang,`Bedankt voor je boeking bij <strong>${eS}</strong>. Maak <strong>${fP(amt)}</strong> over vóór <strong>${eDue}</strong>. Zodra de salon je betaling ziet, is je afspraak definitief en krijg je een bevestiging. Niet op tijd betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij.`,`Thank you for booking at <strong>${eS}</strong>. Transfer <strong>${fP(amt)}</strong> before <strong>${eDue}</strong>. As soon as the salon sees your payment, your appointment is final and you receive a confirmation. Not paid in time? The reservation expires automatically and the slot is released.`,`Gracias por reservar en <strong>${eS}</strong>. Transfiere <strong>${fP(amt)}</strong> antes del <strong>${eDue}</strong>. En cuanto el salón vea tu pago, tu cita será definitiva y recibirás una confirmación. ¿No pagas a tiempo? La reserva caduca automáticamente y la hora vuelve a quedar libre.`);
+await send(plainText(b.client_email),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${h2}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Datum","Date","Fecha"),eD)}${row(txt(lang,"Tijd","Time","Hora"),eT)}${row(txt(lang,"Betalen vóór","Pay before","Pagar antes del"),eDue)}${totRow(txt(lang,"Totaal","Total","Total"),fP(amt))}</table></div>${pb}${cancelBlock()}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Tot dan, ${eC}!`,`See you then, ${eC}!`,`¡Hasta entonces, ${eC}!`)}</p></div>`);}
+// Termijn verstreken zonder betaling: prepay-watch heeft de reservering op
+// cancelled gezet. Klant krijgt uitleg + boekknop; salon een korte melding.
+if(type==="prepay_expired"){
+const eDue=esc(b.due_text||"");const salonUrl=b.salon_slug?`https://vellu.cc/${eSl}`:"https://vellu.cc";
+await send(plainText(b.client_email),plainText(txt(lang,`Je reservering bij ${b.salon_name} is vervallen`,`Your reservation at ${b.salon_name} has expired`,`Tu reserva en ${b.salon_name} ha caducado`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Reservering vervallen","Reservation expired","Reserva caducada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`We hebben geen betaling ontvangen vóór ${eDue}, dus je reservering bij <strong>${eS}</strong> voor <strong>${eD}</strong> om <strong>${eT}</strong> is vervallen en de tijd is weer vrijgegeven. Wil je alsnog komen? Boek gerust opnieuw.`,`We did not receive a payment before ${eDue}, so your reservation at <strong>${eS}</strong> for <strong>${eD}</strong> at <strong>${eT}</strong> has expired and the slot has been released. Still want to come? Feel free to book again.`,`No recibimos ningún pago antes del ${eDue}, así que tu reserva en <strong>${eS}</strong> para el <strong>${eD}</strong> a las <strong>${eT}</strong> ha caducado y la hora vuelve a estar libre. ¿Aún quieres venir? Reserva de nuevo cuando quieras.`)}</p><p style="text-align:center;margin:20px 0;"><a href="${esc(salonUrl)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Opnieuw boeken","Book again","Reservar de nuevo")}</a></p></div>`);
+const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>0)rcp.push(...b.staff_emails);
+const eDueO=esc(b.due_text_owner||b.due_text||"");
+// Zelfde zichtbaarheidsregel als _hideContact verderop (die const bestaat hier nog niet).
+const hideC=(em)=>em!==b.owner_email&&b.staff_view_client_contact===false;
+for(const em of rcp){await send(plainText(em),plainText(txt(oLang,`Reservering vervallen: ${b.client_name}`,`Reservation expired: ${b.client_name}`,`Reserva caducada: ${b.client_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Reservering vervallen","Reservation expired","Reserva caducada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> heeft niet vóór ${eDueO} vooruitbetaald. De reservering bij <strong>${eS}</strong> is vervallen en de tijd is weer vrij in je agenda.`,`<strong>${eC}</strong> did not pay in advance before ${eDueO}. The reservation at <strong>${eS}</strong> has expired and the slot is free again in your agenda.`,`<strong>${eC}</strong> no pagó por adelantado antes del ${eDueO}. La reserva en <strong>${eS}</strong> ha caducado y la hora vuelve a estar libre en tu agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!hideC(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}</table></div></div>`);}}
 if(type==="booking_confirmation"){
 // ANNULEERTERMIJN KOMT VAN DE SALON, niet uit een vaste tekst. Hier stond
 // "tot 24 uur van tevoren" hardgecodeerd terwijl cancel-appointment
@@ -100,7 +161,7 @@ const cTxt=Number.isFinite(cdh)&&cdh>0
 ?txt(lang,`Kun je niet komen? Annuleer tot ${cdh} uur van tevoren:`,`Can't make it? Cancel up to ${cdh} hours in advance:`,`¿No puedes venir? Cancela hasta ${cdh} horas antes:`)
 :txt(lang,"Kun je niet komen? Annuleer je afspraak hier:","Can't make it? Cancel your appointment here:","¿No puedes venir? Cancela tu cita aquí:");
 const cs=sCU?`<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;"><p style="color:#666;font-size:13px;margin:0 0 12px;">${cTxt}</p><a href="${esc(sCU)}" style="display:inline-block;background:#fee2e2;color:#dc2626;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Afspraak annuleren","Cancel appointment","Cancelar cita")}</a></div>`:"";
-await send(plainText(b.client_email),plainText(txt(lang,`Bevestiging afspraak bij ${b.salon_name}`,`Appointment confirmed at ${b.salon_name}`,`Cita confirmada en ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is bevestigd","Your appointment is confirmed","Tu cita está confirmada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,`Bedankt voor je boeking bij <strong>${eS}</strong>`,`Thank you for booking at <strong>${eS}</strong>`,`Gracias por tu reserva en <strong>${eS}</strong>`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Datum","Date","Fecha"),eD)}${row(txt(lang,"Tijd","Time","Hora"),eT)}${row(txt(lang,"Betaling","Payment","Pago"),b.payment==="online"?txt(lang,"Betaalverzoek na afloop","Payment request afterwards","Solicitud de pago después"):txt(lang,"Betalen bij afspraak","Pay at appointment","Pago en la cita"))}${totRow(txt(lang,"Totaal","Total","Total"),fP(b.price))}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Tot dan, ${eC}!`,`See you then, ${eC}!`,`¡Hasta entonces, ${eC}!`)}</p></div>`);}
+await send(plainText(b.client_email),plainText(txt(lang,`Bevestiging afspraak bij ${b.salon_name}`,`Appointment confirmed at ${b.salon_name}`,`Cita confirmada en ${b.salon_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je afspraak is bevestigd","Your appointment is confirmed","Tu cita está confirmada")}</h2><p style="color:#666;margin-bottom:28px;">${b.payment==="prepaid"?txt(lang,`We hebben je betaling ontvangen, bedankt! Je afspraak bij <strong>${eS}</strong> is nu definitief.`,`We have received your payment, thank you! Your appointment at <strong>${eS}</strong> is now final.`,`Hemos recibido tu pago, ¡gracias! Tu cita en <strong>${eS}</strong> ya es definitiva.`):txt(lang,`Bedankt voor je boeking bij <strong>${eS}</strong>`,`Thank you for booking at <strong>${eS}</strong>`,`Gracias por tu reserva en <strong>${eS}</strong>`)}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Datum","Date","Fecha"),eD)}${row(txt(lang,"Tijd","Time","Hora"),eT)}${row(txt(lang,"Betaling","Payment","Pago"),b.payment==="prepaid"?txt(lang,"Vooruitbetaald","Paid in advance","Pagado por adelantado"):b.payment==="online"?txt(lang,"Betaalverzoek na afloop","Payment request afterwards","Solicitud de pago después"):txt(lang,"Betalen bij afspraak","Pay at appointment","Pago en la cita"))}${totRow(txt(lang,"Totaal","Total","Total"),fP(b.price))}</table></div>${cs}<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,`Tot dan, ${eC}!`,`See you then, ${eC}!`,`¡Hasta entonces, ${eC}!`)}</p></div>`);}
 // Staff copies respect the owner's visibility toggles (Instellingen → Team):
 // phone/e-mail weg als klantgegevens uit staat, prijsregel weg als omzet uit
 // staat. De EIGENAAR krijgt altijd de volledige mail. Vlaggen afwezig
@@ -109,7 +170,13 @@ const _hideContact=(em:string)=>em!==b.owner_email&&b.staff_view_client_contact=
 const _hidePrice=(em:string)=>em!==b.owner_email&&b.staff_view_revenue===false;
 if(type==="booking_notification"){
 const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>0)rcp.push(...b.staff_emails);
-for(const em of rcp){await send(plainText(em),plainText(txt(oLang,`Nieuwe boeking: ${b.client_name}`,`New booking: ${b.client_name}`,`Nueva reserva: ${b.client_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Nieuwe boeking!","New booking!","¡Nueva reserva!")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`Er is een nieuwe afspraak gemaakt bij <strong>${eS}</strong>`,`A new appointment was booked at <strong>${eS}</strong>`,`Se ha reservado una nueva cita en <strong>${eS}</strong>`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${_hidePrice(em)?"":totRow(txt(oLang,"Totaal","Total","Total"),fP(b.price))}</table></div></div>`);}}
+// Vooruitbetalen: het is nog een reservering. De salon moet hem in de app op
+// "Betaling ontvangen" zetten zodra het geld er is — anders vervalt hij vanzelf.
+const pend=!!b.pending_payment;const eDueO=esc(b.due_text||"");
+const subj=pend?txt(oLang,`Nieuwe reservering (wacht op betaling): ${b.client_name}`,`New reservation (awaiting payment): ${b.client_name}`,`Nueva reserva (pendiente de pago): ${b.client_name}`):txt(oLang,`Nieuwe boeking: ${b.client_name}`,`New booking: ${b.client_name}`,`Nueva reserva: ${b.client_name}`);
+const h2=pend?txt(oLang,"Nieuwe reservering: wacht op betaling","New reservation: awaiting payment","Nueva reserva: pendiente de pago"):txt(oLang,"Nieuwe boeking!","New booking!","¡Nueva reserva!");
+const intro=pend?txt(oLang,`<strong>${eC}</strong> heeft gereserveerd bij <strong>${eS}</strong> en betaalt vooruit, uiterlijk <strong>${eDueO}</strong>. Zet de afspraak in de app op "Betaling ontvangen" zodra het geld binnen is; dan krijgt de klant haar bevestiging. Blijft de betaling uit, dan vervalt de reservering vanzelf en komt de tijd weer vrij.`,`<strong>${eC}</strong> reserved at <strong>${eS}</strong> and pays in advance, by <strong>${eDueO}</strong> at the latest. Mark the appointment as "Payment received" in the app once the money is in; the client then gets her confirmation. If the payment does not arrive, the reservation expires automatically and the slot is released.`,`<strong>${eC}</strong> ha reservado en <strong>${eS}</strong> y paga por adelantado, como muy tarde el <strong>${eDueO}</strong>. Marca la cita como "Pago recibido" en la app en cuanto llegue el dinero; el cliente recibirá entonces su confirmación. Si el pago no llega, la reserva caduca automáticamente y la hora vuelve a quedar libre.`):txt(oLang,`Er is een nieuwe afspraak gemaakt bij <strong>${eS}</strong>`,`A new appointment was booked at <strong>${eS}</strong>`,`Se ha reservado una nueva cita en <strong>${eS}</strong>`);
+for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${h2}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${pend?row(txt(oLang,"Betaling","Payment","Pago"),txt(oLang,`Vooruitbetaling vóór ${eDueO}`,`Prepayment before ${eDueO}`,`Pago por adelantado antes del ${eDueO}`)):""}${_hidePrice(em)?"":totRow(txt(oLang,"Totaal","Total","Total"),fP(b.price))}</table></div></div>`);}}
 // Owner/staff notification that a CLIENT cancelled their own appointment
 // (via the cancel link in their booking email). Fired server-side by the
 // cancel-appointment edge function so it lands even if the client closes
@@ -179,33 +246,9 @@ const totLabel=vatRows?`${txt(lang,"Totaal","Total","Total")} (${txt(lang,"incl.
 const taxCharged=(taxLines&&taxLines.length>0)||(!!b.salon_btw&&rate>0);
 const noVatNote=taxCharged?"":`<p style="color:#aaa;font-size:11px;text-align:center;margin:0 0 8px;">${txt(lang,"Geen belasting in rekening gebracht.","No tax charged.","No se aplican impuestos.")}</p>`;
 const invDate=fmtD(new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Amsterdam"}),lang);
-const payBlock=(()=>{
-if(!b.payment_request)return"";
-const link=safeImgSrc(b.payment_link);
-const ibanP=String(b.salon_iban||"").replace(/\s+/g,"");
-if(!link&&!ibanP)return"";
-// The SEPA EPC QR + bunq.me amount-append are euro-only. For non-euro salons
-// (Bonaire/Aruba/Curacao) we skip the QR and show plain bank details instead,
-// with the amount in the salon's own currency (CURSYM) — never a euro QR.
-const isEur=CURSYM==="€";
-let linkAmt=link;
-if(link&&gross>0&&isEur){try{const u=new URL(link);const host=u.hostname.toLowerCase().replace(/^www\./,"");const segs=u.pathname.split("/").filter(Boolean);if((host==="bunq.me"||host==="paypal.me")&&segs.length===1){linkAmt=link.replace(/\/+$/,"")+"/"+gross.toFixed(2);}}catch{/* keep base link */}}
-const holder=esc(b.iban_holder||b.salon_name||"");
-const payRef=String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100);
-let h=`<div style="background:${AC}10;border:1px solid ${AC}44;border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">`;
-h+=`<div style="font-size:14px;font-weight:600;margin-bottom:12px;">${txt(lang,"Betalen","Payment","Pago")} · ${fP(gross)}</div>`;
-if(link)h+=`<a href="${esc(linkAmt)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">${txt(lang,"Betaal online","Pay online","Pagar en línea")}</a>`;
-if(ibanP&&gross>0&&isEur){
-const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}&currency=EUR`;
-h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of scan met je bank-app:":"Scan met je bank-app:",link?"Or scan with your banking app:":"Scan with your banking app:",link?"O escanea con tu app bancaria:":"Escanea con tu app bancaria:")}</div>`;
-h+=`<img src="${esc(qrUrl)}" width="150" height="150" alt="SEPA QR" style="display:block;margin:0 auto 10px;border-radius:8px;" />`;
-h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${esc(ibanP)}${holder?` ${txt(lang,"t.n.v.","in the name of","a nombre de")} ${holder}`:""}<br/>${txt(lang,"o.v.v.","reference:","referencia:")} ${esc(payRef)}</div>`;
-}else if(ibanP&&gross>0){
-h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of maak het bedrag over naar:":"Maak het bedrag over naar:",link?"Or transfer the amount to:":"Transfer the amount to:",link?"O transfiere el importe a:":"Transfiere el importe a:")}</div>`;
-h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${holder?`${holder}<br/>`:""}${esc(ibanP)}<br/>${txt(lang,"Bedrag","Amount","Importe")}: ${fP(gross)}<br/>${txt(lang,"o.v.v.","reference:","referencia:")} ${esc(payRef)}</div>`;
-}
-h+=`</div>`;
-return h;})();
+// Betaalblok alleen bij "Betaalverzoek na afloop" (payment_request); de
+// opbouw zelf staat in payBlockHtml, gedeeld met Vooruitbetalen.
+const payBlock=b.payment_request?payBlockHtml(gross,String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100)):"";
 await send(plainText(b.client_email),plainText(`${txt(lang,"Factuur","Invoice","Factura")} ${b.invoice_number||""} - ${b.salon_name}`),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin:0 0 4px;">${txt(lang,"Factuur","Invoice","Factura")}</h2><p style="color:#888;font-size:13px;margin:0 0 24px;">${eS}</p>${b.invoice_number?`<div style="background:${AC}1a;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;color:${AC};display:inline-block;margin-bottom:16px;">${eIN}</div>`:""}${bSec}<div ${bS}><table ${tS}>${row(txt(lang,"Klant","Client","Cliente"),eC)}${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Factuurdatum","Invoice date","Fecha de factura"),invDate)}${row(txt(lang,"Datum afspraak","Appointment date","Fecha de la cita"),eD)}${vatRows}${totRow(totLabel,fP(gross))}</table></div>${noVatNote}${payBlock}<p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Bedankt voor je bezoek!","Thank you for your visit!","¡Gracias por tu visita!")}</p></div>`);}
 if(type==="appointment_reminder"){
 // Deze mail zei altijd "morgen", maar de salon kiest zelf hoeveel uur van

@@ -410,10 +410,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Afspraak-id waarvoor de "Hoe is er betaald?"-kiezer openstaat (Voltooid).
   const [completeFor, setCompleteFor] = useState(null);
   const payMethodLabel = (pm) => ({
-    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek" },
-    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request" },
-    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago" },
+    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
+    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", prepay: "Prepayment", prepaid: "Paid in advance" },
+    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", prepay: "Pago por adelantado", prepaid: "Pagado por adelantado" },
   }[lang === "es" ? "es" : lang === "en" ? "en" : "nl"][pm] || "");
+  // Statuslabel op de kaarten; "Wacht op betaling" = reservering met vooruitbetaling.
+  const statusLabelOf = (s) => s === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed")
+    : s === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done")
+    : s === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled")
+    : s === "no_show" ? "No-show"
+    : s === "pending_payment" ? (lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment")
+    : s;
+  const fmtDueShort = (iso) => {
+    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    catch { return String(iso || ""); }
+  };
   // Scope all mutations to this salon's owner_id — defense-in-depth on top of
   // the RLS policy that already enforces staff can only update their employer's
   // appointments. Without the .eq("owner_id", ...) a compromised client-side
@@ -443,6 +454,39 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               ? `Tarjeta${hit.staff_name ? ` con ${hit.staff_name}` : ""} completa: ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código enviado`
               : `Loyalty card${hit.staff_name ? ` with ${hit.staff_name}` : ""} full: ${hit.client_name || "Client"} gets ${hit.pct}% off — code emailed`);
         }).catch(e => console.error("loyalty-notify:", e));
+      }
+    } finally { setProcessingApptId(null); }
+  };
+  // Vooruitbetalen: geld binnen → bevestigde afspraak + bevestigingsmail naar
+  // de klant ("Vooruitbetaald"). Claim op status, zodat een intussen vervallen
+  // of geannuleerde reservering niet stilletjes weer tot leven komt.
+  const markPrepaid = async (a) => {
+    if (processingApptId) return;
+    setProcessingApptId(a.id);
+    try {
+      const patch = { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString() };
+      const { data: hit, error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id).eq("status", "pending_payment").select("id");
+      if (error || !hit || hit.length === 0) {
+        toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
+        return;
+      }
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
+      toast.show(lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed");
+      if (a.client_email) {
+        let cancelUrl = null;
+        try {
+          const { data: tok } = await supabase.from("cancellation_tokens").select("token").eq("appointment_id", a.id).not("used", "is", true).limit(1).maybeSingle();
+          if (tok?.token) cancelUrl = `https://vellu.cc/cancel/${tok.token}`;
+        } catch { /* dan zonder link */ }
+        sendEmails("booking_confirmation", {
+          client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
+          service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
+          payment: "prepaid", price: a.service_price,
+          salon_name: salonProfile.business_name, owner_email: null, salon_email: salonProfile.salon_email || "",
+          salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
+          lang: a.lang || ownerLangFor(salonProfile.country_code), currency: cur,
+          cancel_url: cancelUrl, cancel_deadline_hours: salonProfile.cancel_deadline_hours ?? 0,
+        }).catch(e => console.error("bevestiging na vooruitbetaling:", e));
       }
     } finally { setProcessingApptId(null); }
   };
@@ -848,7 +892,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-          <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status}</span>
+          <span className={`badge badge-${a.status}`}>{statusLabelOf(a.status)}</span>
           {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
           {/* Gecombineerde boeking met een collega: de hele prijs staat erboven
               (dat is wat de klant betaalt), hieronder wat déze stylist deed. */}
@@ -880,6 +924,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+        </div>
+      )}
+      {/* Vooruitbetalen: reservering tot het geld er is. "Betaling ontvangen"
+          bevestigt de afspraak en mailt de klant (zie OwnerApp.markPrepaid). */}
+      {a.status === "pending_payment" && mine && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: c.warning, marginBottom: 6, lineHeight: 1.45, display: "flex", alignItems: "center", gap: 5 }}>
+            <NavIcon name="alerttri" size={11} color={c.warning} />
+            {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"}{showMoney ? ` ${cur}${parseFloat(a.service_price || 0).toFixed(2)}` : ""}
+            {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${fmtDueShort(a.payment_due_at)}` : ""}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button className="btn-ghost" style={{ flex: 1, minWidth: 120, fontSize: 10, padding: "8px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received")}</button>
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+          </div>
         </div>
       )}
       {/* Betaalwijze-kiezer bij Voltooid — de afspraak wordt pas na de keuze
@@ -2009,7 +2068,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <div style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</div>
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "completed" ? (lang === "nl" ? "Voltooid" : lang === "es" ? "Hecho" : "Done") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status === "no_show" ? "No-show" : a.status}</span>
+                                <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{statusLabelOf(a.status)}</span>
                                 {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
                               </div>
                             </div>

@@ -197,3 +197,11 @@ enabled = true
 # x-internal-secret — de gateway mag dus niet zelf 401'en.
 verify_jwt = false
 entrypoint = "./functions/loyalty-notify/index.ts"
+
+[functions.prepay-watch]
+enabled = true
+# Vooruitbetalen: herinnert en laat onbetaalde reserveringen vervallen. Wordt
+# elk uur door pg_cron aangeroepen zonder gebruikers-JWT, dus verify_jwt=false;
+# net als check-pending-payments bewust zonder geheim (idempotente veegronde).
+verify_jwt = false
+entrypoint = "./functions/prepay-watch/index.ts"

@@ -578,6 +578,9 @@ function SalonRoute({ lang, setLang }) {
         // the salon set up a pay link and/or an IBAN for the invoice email.
         // Boolean only — the actual details never enter the public payload.
         payment_configured: !!data.payment_configured,
+        // Vooruitbetalen: de view zet dit alleen op true als de salon het aanzet
+        // én een betaallink of IBAN heeft.
+        prepay_enabled: !!data.prepay_enabled,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",

@@ -836,7 +836,7 @@ const _T_RAW = {
     confirmBooking:"Bevestig je afspraak", confirmSub:"Controleer je gegevens",
     firstName:"Voornaam", lastName:"Achternaam", email:"E-mailadres",
     phone:"Telefoonnummer", optional:"optioneel",
-    payMethod:"Betaalmethode", payOnline:"Betaalverzoek na afloop", payArrival:"Betalen bij Afspraak",
+    payMethod:"Betaalmethode", payOnline:"Betaalverzoek na afloop", payArrival:"Betalen bij Afspraak", payPrepay:"Vooruitbetalen",
     next:"Volgende →", confirm:"Bevestigen", newBooking:"Nieuwe Afspraak",
     treatment:"Behandeling", date:"Datum", time:"Tijd", name:"Naam", payment:"Betaling",
     total:"Totaal", confirmedSub:"We zien je op", at:"om",
@@ -1133,7 +1133,7 @@ const _T_RAW = {
     confirmBooking:"Confirm Booking", confirmSub:"Review your details",
     firstName:"First Name", lastName:"Last Name", email:"Email address",
     phone:"Phone number", optional:"optional",
-    payMethod:"Payment Method", payOnline:"Payment request afterwards", payArrival:"Pay at Appointment",
+    payMethod:"Payment Method", payOnline:"Payment request afterwards", payArrival:"Pay at Appointment", payPrepay:"Pay in advance",
     next:"Next →", confirm:"Confirm", newBooking:"New Booking",
     treatment:"Treatment", date:"Date", time:"Time", name:"Name", payment:"Payment",
     total:"Total", confirmedSub:"We'll see you on", at:"at",
@@ -1425,7 +1425,7 @@ const _T_RAW = {
     confirmBooking:"Confirmar reserva", confirmSub:"Revisa tus datos",
     firstName:"Nombre", lastName:"Apellido", email:"Correo electrónico",
     phone:"Número de teléfono", optional:"opcional",
-    payMethod:"Método de pago", payOnline:"Solicitud de pago después", payArrival:"Pagar en la cita",
+    payMethod:"Método de pago", payOnline:"Solicitud de pago después", payArrival:"Pagar en la cita", payPrepay:"Pagar por adelantado",
     next:"Siguiente →", confirm:"Confirmar", newBooking:"Nueva reserva",
     treatment:"Tratamiento", date:"Fecha", time:"Hora", name:"Nombre", payment:"Pago",
     total:"Total", confirmedSub:"Te esperamos el", at:"a las",
@@ -2073,6 +2073,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .badge-confirmed { background: rgba(59,130,246,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#93c5fd" : "#2563eb"}; border: 1px solid rgba(59,130,246,${c === THEMES.dark ? "0.2" : "0.15"}); }
   .badge-completed { background: rgba(34,197,94,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#86efac" : "#16a34a"}; border: 1px solid rgba(34,197,94,${c === THEMES.dark ? "0.2" : "0.15"}); }
   .badge-cancelled { background: rgba(239,68,68,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#f87171" : "#dc2626"}; border: 1px solid rgba(239,68,68,${c === THEMES.dark ? "0.2" : "0.15"}); }
+  .badge-pending_payment { background: rgba(245,158,11,${c === THEMES.dark ? "0.12" : "0.1"}); color: ${c === THEMES.dark ? "#fbbf24" : "#b45309"}; border: 1px solid rgba(245,158,11,${c === THEMES.dark ? "0.25" : "0.2"}); }
   .badge-no_show { background: rgba(249,115,22,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#fb923c" : "#ea580c"}; border: 1px solid rgba(249,115,22,${c === THEMES.dark ? "0.2" : "0.15"}); }
 
   .confirm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid ${c.bgCardHover}; }

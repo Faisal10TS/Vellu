@@ -51,6 +51,9 @@ const MONITORED = [
   // is. Deze staat er nadrukkelijk bij: hij is zelf het vangnet onder de
   // betaal-webhook, en een vangnet zonder toezicht is geen vangnet.
   { name: "check-pending-payments", schedule: "hourly at :20", maxAgeHours: 3 },
+  // Vooruitbetalen (sinds 2026-09-07): laat onbetaalde reserveringen vervallen
+  // en herinnert vooraf. Stilstand = slots die eeuwig bezet blijven.
+  { name: "prepay-watch", schedule: "hourly at :25", maxAgeHours: 3 },
   { name: "send-renewal-reminder", schedule: "daily", maxAgeHours: 25 },
   // De waakhond voor de waakhond (Vercel-cron, zie api/cron-health-check.js).
   // Hij schrijft 'error' als hij ónze hartslag stilgevallen vond — die rij

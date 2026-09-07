@@ -14,6 +14,29 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-07b",
+    date: "2026-09-07",
+    title: { nl: "Vooruitbetalen", en: "Paying in advance", es: "Pago por adelantado" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Vooruitbetalen: klanten kunnen bij het boeken vooraf betalen (aanzetten bij Instellingen → Betaalverzoeken; werkt met je betaallink en/of IBAN). De afspraak staat als reservering in je agenda tot jij op 'Betaling ontvangen' tikt; niet betaald binnen de termijn, dan vervalt hij vanzelf en komt de tijd weer vrij.",
+          en: "Paying in advance: clients can pay upfront when booking (enable it under Settings → Payment requests; works with your payment link and/or IBAN). The appointment sits in your agenda as a reservation until you tap 'Payment received'; not paid within the deadline, and it expires by itself, freeing the slot.",
+          es: "Pago por adelantado: los clientes pueden pagar al reservar (actívalo en Ajustes → Solicitudes de pago; funciona con tu enlace de pago y/o IBAN). La cita queda como reserva en tu agenda hasta que pulses «Pago recibido»; si no paga dentro del plazo, caduca sola y la hora vuelve a quedar libre.",
+        },
+      },
+      {
+        kind: "new", audience: ["staff"],
+        text: {
+          nl: "Vooruitbetalen: een afspraak met 'Wacht op betaling' is een reservering. Zie je het geld binnenkomen, tik dan op 'Betaling ontvangen'; de klant krijgt dan haar bevestiging.",
+          en: "Paying in advance: an appointment marked 'Awaiting payment' is a reservation. Once the money is in, tap 'Payment received' and the client gets her confirmation.",
+          es: "Pago por adelantado: una cita con «Pendiente de pago» es una reserva. Cuando llegue el dinero, pulsa «Pago recibido» y el cliente recibirá su confirmación.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-07",
     date: "2026-09-07",
     title: { nl: "Stempelkaart, reviews en meer", en: "Loyalty card, reviews and more", es: "Tarjeta de fidelidad, reseñas y más" },

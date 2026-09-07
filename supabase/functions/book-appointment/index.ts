@@ -199,7 +199,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -931,6 +931,30 @@ serve(async (req) => {
     })
     .filter(Boolean);
 
+  // ---------- 12b. Vooruitbetalen ----------
+  // De klant koos "Vooruitbetalen": de afspraak wordt een RESERVERING (status
+  // pending_payment) die het slot vasthoudt tot payment_due_at. De salon zet
+  // hem in de app op "Betaling ontvangen" (→ confirmed); prepay-watch laat hem
+  // na de termijn vervallen en geeft de tijd weer vrij. Kan alleen als de salon
+  // het aanzet én een betaallink of IBAN heeft — anders valt er nergens naar te
+  // betalen. Gratis (bv. 100% korting): niets te betalen, gewoon bevestigen.
+  const prepayReady = !!salon.prepay_enabled && !!(salon.payment_link || salon.iban);
+  if (payment_method === "prepay" && !prepayReady) return err(400, "prepay_not_available", origin);
+  const prepay = payment_method === "prepay" && prepayReady && Number(totalPrice) > 0;
+  let dueAt: Date | null = null;
+  if (prepay) {
+    const nowMs = Date.now();
+    const startMs = apptStart.getTime();
+    const daysAhead = (startMs - nowMs) / 86400000;
+    // 24 uur (48 bij een afspraak over meer dan een week), maar uiterlijk 2 uur
+    // vóór de afspraak zodat de salon de betaling nog kan zien; en nooit korter
+    // dan 2 uur vanaf nu, behalve als de afspraak zelf eerder begint.
+    let due = nowMs + (daysAhead > 7 ? 48 : 24) * 3600000;
+    due = Math.min(due, startMs - 2 * 3600000);
+    due = Math.max(due, Math.min(nowMs + 2 * 3600000, startMs));
+    dueAt = new Date(due);
+  }
+
   // ---------- 13. Insert appointment ----------
   const { data: appt, error: aErr } = await supabase.from("appointments").insert({
     owner_id: salon.id,
@@ -944,8 +968,9 @@ serve(async (req) => {
     client_name: `${firstName} ${lastName}`,
     client_email: email,
     client_phone: phone,
-    payment_method: payment_method === "online" ? "online" : "on-arrival",
-    status: "confirmed",
+    payment_method: prepay ? "prepay" : payment_method === "online" ? "online" : "on-arrival",
+    status: prepay ? "pending_payment" : "confirmed",
+    payment_due_at: dueAt ? dueAt.toISOString() : null,
     invoice_sent: false,
     staff_id: primaryStaffIdCol,
     staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
@@ -1053,6 +1078,47 @@ serve(async (req) => {
     currency: ({ BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
+  const ownerLang = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en";
+  // Vooruitbetalen: de betaalgegevens gaan naar de mail (send-emails bouwt er
+  // hetzelfde betaalblok van als op de factuur) én terug naar de boekingspagina,
+  // zodat de klant meteen kan betalen zonder eerst haar mail te openen. De
+  // termijn wordt in SALONTIJD geschreven, in de taal van de lezer.
+  const fmtDue = (d: Date, l: string) => {
+    try {
+      return d.toLocaleString(l === "es" ? "es-ES" : l === "en" ? "en-GB" : "nl-NL",
+        { timeZone: salonTz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    } catch { return d.toISOString(); }
+  };
+  const prepayInfo = (() => {
+    if (!prepay || !dueAt) return null;
+    const amount = Number(totalPrice);
+    const isEur = emailBase.currency === "€";
+    const ibanP = String(salon.iban || "").replace(/\s+/g, "");
+    const holder = String(salon.iban_holder || salon.business_name || "");
+    const reference = `${salon.business_name} ${date} ${time}`.slice(0, 100);
+    // bunq.me / PayPal.Me nemen het bedrag als padsegment (zelfde regel als
+    // getPaymentLinkWithAmount in shared.jsx en het betaalblok in send-emails).
+    const link = (() => {
+      const base = String(salon.payment_link || "").trim().replace(/\/+$/, "");
+      if (!base) return "";
+      try {
+        const u = new URL(base);
+        if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+        const host = u.hostname.toLowerCase().replace(/^www\./, "");
+        const segs = u.pathname.split("/").filter(Boolean);
+        if (isEur && (host === "bunq.me" || host === "paypal.me") && segs.length === 1) return `${base}/${amount.toFixed(2)}`;
+        return base;
+      } catch { return ""; }
+    })();
+    const qr_url = (ibanP && isEur)
+      ? `${SUPABASE_URL}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(holder.slice(0, 70))}&amount=${amount.toFixed(2)}&ref=${encodeURIComponent(reference)}&currency=EUR`
+      : "";
+    return {
+      method: "prepay", amount, currency: emailBase.currency,
+      due_at: dueAt.toISOString(), due_text: fmtDue(dueAt, emailLang),
+      link, iban: ibanP, iban_holder: holder, reference, qr_url,
+    };
+  })();
   let emailsSent = false;
   try {
     const internalHeaders = { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY };
@@ -1062,16 +1128,30 @@ serve(async (req) => {
         headers: internalHeaders,
         body: JSON.stringify({ type, booking: { ...emailBase, ...extra } }),
       });
+    const cancelBits = {
+      cancel_url: `https://vellu.cc/cancel/${cancelToken}`,
+      // De termijn die de mail noemt moet dezelfde zijn die cancel-appointment
+      // straks handhaaft — anders staat er een getal in de mail waar de
+      // annuleerknop zich niets van aantrekt.
+      cancel_deadline_hours: salon.cancel_deadline_hours ?? 0,
+    };
     const jobs = [
-      // Confirmation to the client (with the cancel link).
-      sendMail("booking_confirmation", {
-        payment: isOnline ? "online" : "on-arrival",
-        cancel_url: `https://vellu.cc/cancel/${cancelToken}`,
-        // De termijn die de mail noemt moet dezelfde zijn die cancel-appointment
-        // straks handhaaft — anders staat er een getal in de mail waar de
-        // annuleerknop zich niets van aantrekt.
-        cancel_deadline_hours: salon.cancel_deadline_hours ?? 0,
-      }),
+      prepayInfo
+        // Reservering: "betaal vóór … om te bevestigen", met betaalblok.
+        ? sendMail("booking_pending_payment", {
+            ...cancelBits,
+            payment_link: salon.payment_link || "",
+            salon_iban: salon.iban || "",
+            iban_holder: salon.iban_holder || "",
+            payment_ref: prepayInfo.reference,
+            due_text: prepayInfo.due_text,
+            salon_slug,
+          })
+        // Confirmation to the client (with the cancel link).
+        : sendMail("booking_confirmation", {
+            payment: isOnline ? "online" : "on-arrival",
+            ...cancelBits,
+          }),
     ];
     // Notification to the owner (+ any assigned staff). The owner reads this
     // in the SALON's language (mirrors DUTCH_COUNTRIES in send-reminders),
@@ -1080,9 +1160,11 @@ serve(async (req) => {
       jobs.push(sendMail("booking_notification", {
         owner_email: ownerEmail,
         staff_emails: staffEmails,
-        owner_lang: ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en",
+        owner_lang: ownerLang,
         staff_view_revenue: salon.staff_view_revenue,
         staff_view_client_contact: salon.staff_view_client_contact,
+        pending_payment: !!prepayInfo,
+        due_text: prepayInfo && dueAt ? fmtDue(dueAt, ownerLang) : "",
       }));
     }
     // NOTE: no invoice at booking time anymore. "online" now means "payment
@@ -1092,7 +1174,8 @@ serve(async (req) => {
     // above already tells the client payment happens after the visit.
     // Confirmation SMS to the client. send-sms silently no-ops for non-Pro
     // salons / invalid phones, so it's safe to always fire when a phone exists.
-    if (phone) {
+    // Niet bij een reservering: die SMS zegt "bevestigd", en dat is hij nog niet.
+    if (phone && !prepayInfo) {
       jobs.push(fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
         method: "POST",
         headers: internalHeaders,
@@ -1126,7 +1209,9 @@ serve(async (req) => {
         headers: internalHeaders,
         body: JSON.stringify({
           user_id: salon.id,
-          title: ownerNl ? "Nieuwe boeking" : "New booking",
+          title: prepayInfo
+            ? (ownerNl ? "Nieuwe reservering, wacht op betaling" : "New reservation, awaiting payment")
+            : (ownerNl ? "Nieuwe boeking" : "New booking"),
           body: `${firstName} ${lastName} · ${date} ${time} · ${combinedName} · ${priceStr}`,
           url: "/owner",
           tag: `booking-${appt.id}`,
@@ -1152,5 +1237,9 @@ serve(async (req) => {
     salon_name: salon.business_name,
     staff_emails: staffEmails,
     emails_sent: emailsSent,
+    // Vooruitbetalen: null bij een gewone boeking; anders bedrag, termijn en
+    // betaalgegevens voor het scherm na het boeken (zie ClientApp).
+    status: prepayInfo ? "pending_payment" : "confirmed",
+    payment: prepayInfo,
   }, origin);
 });

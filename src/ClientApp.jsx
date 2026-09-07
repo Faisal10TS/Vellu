@@ -210,6 +210,42 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
 // "Telefoonnummer salon" leeg, WhatsApp gevuld → er stond helemaal niets op
 // de pagina), dan is dát het nummer dat je ziet en kun je het ook bellen.
 // Zonder WhatsApp-nummer blijft het de simpele tel:-link van vroeger.
+// Vooruitbetalen: betaalblok op het scherm na het boeken. Zelfde inhoud als
+// het betaalblok in de mail (book-appointment geeft link-met-bedrag, IBAN,
+// kenmerk en QR-url terug), zodat de klant meteen kan betalen zonder eerst
+// haar mail te openen. De link komt van de salon: alleen http(s) laten we door.
+function PrepayBlock({ info, lang, accent, c }) {
+  if (!info) return null;
+  const L = (nl, en, es) => lang === "es" ? es : lang === "en" ? en : nl;
+  const amount = `${info.currency || "€"}${Number(info.amount || 0).toFixed(2)}`;
+  const safe = (u, httpsOnly) => { try { const x = new URL(String(u || "")); return (x.protocol === "https:" || (!httpsOnly && x.protocol === "http:")) ? x.toString() : ""; } catch { return ""; } };
+  const link = safe(info.link, false);
+  const qr = safe(info.qr_url, true);
+  return (
+    <div data-prepay-block="1" style={{ textAlign: "left", background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 16, padding: 16, margin: "0 auto 28px", maxWidth: 400 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent, marginBottom: 6 }}>{L("Betalen", "Payment", "Pago")} · {amount}</div>
+      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {L("Maak ", "Transfer ", "Transfiere ")}<strong style={{ color: c.text }}>{amount}</strong>{L(" over vóór ", " before ", " antes del ")}<strong style={{ color: c.text }}>{info.due_text}</strong>{L(". Zodra de salon je betaling ziet, is je afspraak definitief en krijg je een bevestiging per e-mail. Niet op tijd betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij.", ". As soon as the salon sees your payment, your appointment is final and you receive a confirmation by email. Not paid in time? The reservation expires by itself and the slot is released.", ". En cuanto el salón vea tu pago, tu cita será definitiva y recibirás una confirmación por correo. ¿No pagas a tiempo? La reserva caduca sola y la hora vuelve a quedar libre.")}
+      </div>
+      {link && <a className="btn-primary" href={link} target="_blank" rel="noopener noreferrer" style={{ display: "block", textAlign: "center", textDecoration: "none", marginBottom: 14 }}>{L("Betaal online", "Pay online", "Pagar en línea")}</a>}
+      {qr && (
+        <div style={{ textAlign: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 8 }}>{link ? L("Of scan met je bank-app:", "Or scan with your banking app:", "O escanea con tu app bancaria:") : L("Scan met je bank-app:", "Scan with your banking app:", "Escanea con tu app bancaria:")}</div>
+          <img src={qr} width={150} height={150} alt="SEPA QR" style={{ display: "block", margin: "0 auto", borderRadius: 8, background: "#fff", padding: 6, boxSizing: "content-box" }} />
+        </div>
+      )}
+      {info.iban && (
+        <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, textAlign: "center" }}>
+          {!qr && <div style={{ color: c.textMuted, marginBottom: 4 }}>{link ? L("Of maak het bedrag over naar:", "Or transfer the amount to:", "O transfiere el importe a:") : L("Maak het bedrag over naar:", "Transfer the amount to:", "Transfiere el importe a:")}</div>}
+          <div style={{ fontWeight: 600, color: c.text, letterSpacing: "0.04em" }}>{info.iban}</div>
+          {info.iban_holder && <div>{L("t.n.v.", "in the name of", "a nombre de")} {info.iban_holder}</div>}
+          {info.reference && <div>{L("o.v.v.", "reference:", "referencia:")} {info.reference}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PhoneContact({ salon, lang, c, compact = false }) {
   const [open, setOpen] = useState(false);
   const phone = (salon.salon_phone || "").trim();
@@ -849,6 +885,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [phoneError, setPhoneError] = useState(false);
   const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
+  // Vooruitbetalen: book-appointment geeft bedrag, termijn en betaalgegevens
+  // terug (result.payment); het scherm na het boeken toont ze dan meteen.
+  const [prepayInfo, setPrepayInfo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorToast, setErrorToast] = useState("");
   const [gallery, setGallery] = useState(null);
@@ -1451,7 +1490,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setProductSel({}); setTime(null); setDone(false); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
   // Seed the day multi-select when the waitlist modal opens (with the day the
   // customer was looking at), and clear it when it closes.
@@ -1545,6 +1584,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setSelectedServices(service ? [{ service, variant: null, extras: [], staff: null }] : []);
     setTime(null);
     setDone(false);
+    setPrepayInfo(null);
     setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     setClientNoShows(0);
@@ -2072,6 +2112,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       const serverPrice = result.service_price;
       const serverDuration = result.service_duration;
 
+      setPrepayInfo(result.payment && result.payment.method === "prepay" ? result.payment : null);
       setDone(true);
       setSubmitting(false);
       submittingRef.current = false;
@@ -2215,6 +2256,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             ? "Deze kortingscode geldt alleen bij de medewerker bij wie je hem hebt gespaard. Kies haar bij je behandeling."
             : "This discount code is only valid with the team member you earned it with. Pick her for your treatment.",
         rate_limited: lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
+        // De salon zette Vooruitbetalen uit (of haalde haar betaalgegevens weg)
+        // terwijl deze pagina al open stond.
+        prepay_not_available: lang === "es" ? "Pagar por adelantado ya no está disponible en este salón. Elige otra forma de pago." : isNl ? "Vooruitbetalen is bij deze salon niet meer beschikbaar. Kies een andere betaalwijze." : "Paying in advance is no longer available at this salon. Please choose another payment method.",
         invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
         phone_required: lang === "es" ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita." : isNl ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak." : "You also need to fill in your phone number — this salon needs it for your appointment.",
@@ -4021,7 +4065,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                 <SL>{t.payMethod}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : [])].map(([v,icon,label]) => (
+                  {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : []), ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
                     <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                       <div className={`radio ${form.payment === v ? "on" : ""}`} />
                       <NavIcon name={icon} size={15} color={c.textSub} />
@@ -4100,7 +4144,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                    [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                    [t.payment, form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -4131,9 +4175,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           ) : (
             <div className="fade-up" style={{ textAlign: "center", paddingTop: 60 }}>
               <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${accent}18`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", fontSize: 28 }}><NavIcon name="beauty" size={28} color={accent} /></div>
-              <div style={{ fontFamily: displayFont, fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
-              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 6 }}>{t.confirmedSub} <strong style={{ color: accent }}>{date}</strong> {t.at} <strong style={{ color: accent }}>{time}</strong></div>
-              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{t.confirmationSent} {form.email}</div>
+              <div style={{ fontFamily: displayFont, fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
+              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 6 }}>{prepayInfo ? (lang === "nl" ? "Je reservering voor" : lang === "es" ? "Tu reserva para el" : "Your reservation for") : t.confirmedSub} <strong style={{ color: accent }}>{date}</strong> {t.at} <strong style={{ color: accent }}>{time}</strong>{prepayInfo ? (lang === "nl" ? " staat vast zodra je betaling binnen is." : lang === "es" ? " será definitiva en cuanto llegue tu pago." : " is final as soon as your payment is in.") : ""}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: prepayInfo ? 16 : 28 }}>{prepayInfo ? (lang === "nl" ? "De betaalgegevens staan ook in de mail naar" : lang === "es" ? "Los datos de pago también están en el correo a" : "The payment details are also in the email to") : t.confirmationSent} {form.email}</div>
+              {prepayInfo && <PrepayBlock info={prepayInfo} lang={lang} accent={accent} c={c} />}
 
               {/* Calendar sync buttons */}
               <div style={{ marginBottom: 32 }}>
@@ -4746,7 +4791,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
                     <SL>{t.payMethod}</SL>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                      {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : [])].map(([v,icon,label]) => (
+                      {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : []), ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
                         <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                           <div className={`radio ${form.payment === v ? "on" : ""}`} />
                           <NavIcon name={icon} size={15} color={c.textSub} />
@@ -4819,7 +4864,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                        [t.payment, form.payment === "online" ? t.payOnline : t.payArrival]].map(([l,v]) => (
+                        [t.payment, form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -4875,11 +4920,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 /* Done screen mobile */
                 <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
                   <div style={{ marginBottom: 20, opacity: 0.6 }}><NavIcon name="sparkle" size={44} color={accent} /></div>
-                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{t.confirmed}</div>
-                  <p style={{ color: c.textSub, fontSize: 14, marginBottom: 30 }}>
-                    {t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}
+                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
+                  <p style={{ color: c.textSub, fontSize: 14, marginBottom: prepayInfo ? 12 : 30 }}>
+                    {prepayInfo ? (lang === "nl" ? "Je reservering voor" : lang === "es" ? "Tu reserva para el" : "Your reservation for") : t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}{prepayInfo ? (lang === "nl" ? " staat vast zodra je betaling binnen is." : lang === "es" ? " será definitiva en cuanto llegue tu pago." : " is final as soon as your payment is in.") : ""}
                   </p>
-                  <p style={{ fontSize: 12, color: c.textLabel, marginBottom: 30 }}>{t.confirmationSent} {form.email}</p>
+                  <p style={{ fontSize: 12, color: c.textLabel, marginBottom: prepayInfo ? 16 : 30 }}>{prepayInfo ? (lang === "nl" ? "De betaalgegevens staan ook in de mail naar" : lang === "es" ? "Los datos de pago también están en el correo a" : "The payment details are also in the email to") : t.confirmationSent} {form.email}</p>
+                  {prepayInfo && <PrepayBlock info={prepayInfo} lang={lang} accent={accent} c={c} />}
                   <div style={{ marginBottom: 32 }}>
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
                     <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
