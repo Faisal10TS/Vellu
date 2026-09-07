@@ -516,6 +516,21 @@ function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink
   return `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. The total is ${amount}.\n\n${payVia}\n\nSee you next time! ✨`;
 }
 
+// Te veel betaald (prijs omlaag na een vooruitbetaling): Vellu kent het
+// rekeningnummer van de klant niet, dus de salon vraagt het via WhatsApp en
+// maakt het verschil zelf terug over. Daarna "Terugbetaald" op de kaart.
+function getWhatsAppRefundMsg(lang, { clientName, salonName, amount, countryCode } = {}) {
+  const firstName = (clientName || "").split(" ")[0] || clientName || "";
+  const bedrag = fmtMoney(amount, countryCode);
+  if (lang === "nl") {
+    return `Hoi ${firstName}! 💛\n\nJe hebt ${bedrag} te veel betaald voor je afspraak bij ${salonName}. Stuur me even je rekeningnummer (IBAN), dan maak ik het terug over.\n\nTot snel! ✨`;
+  }
+  if (lang === "es") {
+    return `¡Hola ${firstName}! 💛\n\nPagaste ${bedrag} de más por tu cita en ${salonName}. Envíame tu número de cuenta (IBAN) y te lo devuelvo.\n\n¡Hasta pronto! ✨`;
+  }
+  return `Hi ${firstName}! 💛\n\nYou paid ${bedrag} too much for your appointment at ${salonName}. Send me your account number (IBAN) and I will transfer it back.\n\nSee you soon! ✨`;
+}
+
 // De default `= {}` is een vangnet: deze helper draait tijdens render van een
 // afspraakkaart, en een aanroep die het tweede argument vergeet liet het
 // destructureren op undefined klappen — een TypeError in render trekt via de
@@ -2933,7 +2948,7 @@ export {
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,
   ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,

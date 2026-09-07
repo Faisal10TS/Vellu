@@ -20,7 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -5298,6 +5298,42 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
     } finally { setProcessingApptId(null); }
   };
+  // Te veel betaald (prijs omlaag na een vooruitbetaling) en de salon heeft
+  // het verschil teruggestort: vastleggen (amount_paid = prijs, dus niets meer
+  // open) + korte bevestigingsmail naar de klant. Het geld zelf gaat via de
+  // bank van de salon; Vellu kan niet terugstorten.
+  const recordRefund = async (raw) => {
+    if (processingApptId) return;
+    const a = fullAppt(raw);
+    const price = parseFloat(a.service_price || 0) || 0;
+    const refund = Math.round((paidAmountOf(a) - price) * 100) / 100;
+    if (refund <= 0) return;
+    const msg = lang === "nl"
+      ? `Terugbetaling van ${cur}${refund.toFixed(2)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
+      : lang === "es"
+      ? `¿Registrar la devolución de ${cur}${refund.toFixed(2)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
+      : `Record the refund of ${cur}${refund.toFixed(2)} to ${a.client_name}? The client gets a confirmation by email.`;
+    if (!(await showConfirm(msg))) return;
+    setProcessingApptId(a.id);
+    try {
+      const paidBefore = paidAmountOf(a);
+      const patch = { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
+      if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
+      update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+      toast.show(lang === "nl" ? `Terugbetaling van ${cur}${refund.toFixed(2)} vastgelegd` : lang === "es" ? `Devolución de ${cur}${refund.toFixed(2)} registrada` : `Refund of ${cur}${refund.toFixed(2)} recorded`);
+      if (a.client_email) {
+        sendEmails("refund_sent", {
+          client_name: a.client_name, client_email: a.client_email,
+          service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
+          price, amount_paid: paidBefore, refund,
+          salon_name: salonData.name, salon_email: salonData.salon_email || "",
+          salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
+          lang: a.lang || ownerLangFor(salonData.country_code), currency: cur,
+        }).catch(e => console.error("refund_sent:", e));
+      }
+    } finally { setProcessingApptId(null); }
+  };
   // Korte termijnweergave op de kaart: "ma 8 sep, 14:00".
   const fmtDueShort = (iso) => {
     try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
@@ -7430,9 +7466,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
         );
         if (open < -0.005) return (
-          <div style={{ fontSize: 11, color: c.warning, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <NavIcon name="alerttri" size={11} color={c.warning} />
-            {lang === "nl" ? `Te veel betaald: ${cur}${(-open).toFixed(2)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${cur}${(-open).toFixed(2)}` : `Overpaid: ${cur}${(-open).toFixed(2)} to refund`}
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+              <NavIcon name="alerttri" size={11} color={c.warning} />
+              {lang === "nl" ? `Te veel betaald: ${cur}${(-open).toFixed(2)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${cur}${(-open).toFixed(2)}` : `Overpaid: ${cur}${(-open).toFixed(2)} to refund`}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => recordRefund(a)} title={lang === "nl" ? "Het verschil is teruggestort; klant krijgt een bevestiging" : lang === "es" ? "La diferencia se ha devuelto; el cliente recibe una confirmación" : "The difference has been refunded; the client gets a confirmation"}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded")}</button>
+              {a.client_phone && (
+                <a
+                  href={getWhatsAppUrl(a.client_phone, getWhatsAppRefundMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: -open, countryCode: salonData.country_code }), salonData.country_code)}
+                  target="_blank" rel="noopener noreferrer" className="btn-ghost"
+                  style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  title={lang === "nl" ? "Rekeningnummer vragen via WhatsApp" : lang === "es" ? "Pedir el número de cuenta por WhatsApp" : "Ask for the account number via WhatsApp"}
+                >WhatsApp</a>
+              )}
+            </div>
           </div>
         );
         if (!a.paid_at) return null;

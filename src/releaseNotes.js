@@ -35,6 +35,22 @@ export const RELEASES = [
         },
       },
       {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Te veel vooruitbetaald (goedkopere behandeling gekozen)? De kaart toont het bedrag; vraag via WhatsApp het rekeningnummer, maak het over en tik op 'Terugbetaald': de klant krijgt een bevestiging.",
+          en: "Paid too much in advance (cheaper treatment chosen)? The card shows the amount; ask for the account number via WhatsApp, transfer it and tap 'Refunded': the client gets a confirmation.",
+          es: "¿Pagó de más por adelantado (eligió un tratamiento más barato)? La tarjeta muestra el importe; pide el número de cuenta por WhatsApp, transfiérelo y pulsa «Devuelto»: el cliente recibe una confirmación.",
+        },
+      },
+      {
+        kind: "new", audience: ["staff"],
+        text: {
+          nl: "Prijs aanpassen op je eigen afspraak (bijvoorbeeld een andere behandeling in de salon): tik op 'Prijs' op de kaart. Had de klant vooruitbetaald, dan krijgt ze automatisch alleen het verschil als betaalverzoek.",
+          en: "Adjust the price on your own appointment (for example a different treatment in the salon): tap 'Price' on the card. If the client paid in advance, she automatically gets only the difference as a payment request.",
+          es: "Ajusta el precio de tu propia cita (por ejemplo, otro tratamiento en el salón): pulsa «Precio» en la tarjeta. Si el cliente pagó por adelantado, recibe automáticamente solo la diferencia como solicitud de pago.",
+        },
+      },
+      {
         kind: "new", audience: ["staff"],
         text: {
           nl: "Vooruitbetalen: een afspraak met 'Wacht op betaling' is een reservering. Zie je het geld binnenkomen, tik dan op 'Betaling ontvangen'; de klant krijgt dan haar bevestiging.",

@@ -10,7 +10,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -504,6 +504,76 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       }
     } finally { setProcessingApptId(null); }
   };
+  // Prijs aanpassen op een eigen afspraak (andere behandeling in de salon).
+  // Zelfde afhandeling als Bewerk in de eigenaars-app: bij een vooruitbetaling
+  // krijgt de klant alleen het verschil als betaalverzoek (appointment_updated,
+  // betaalgegevens van de medewerker zelf of anders van de salon).
+  const [priceFor, setPriceFor] = useState(null);
+  const [priceInput, setPriceInput] = useState("");
+  const savePrice = async (a) => {
+    if (processingApptId) return;
+    const newPrice = Math.round((parseFloat(String(priceInput).replace(",", ".")) || 0) * 100) / 100;
+    if (!Number.isFinite(newPrice) || newPrice < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+    const oldPrice = parseFloat(a.service_price || 0) || 0;
+    if (Math.abs(newPrice - oldPrice) < 0.005) { setPriceFor(null); return; }
+    setProcessingApptId(a.id);
+    try {
+      const patch = { service_price: newPrice, ...paymentPatchForPrice(a, newPrice) };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
+      if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
+      setPriceFor(null);
+      toast.show(lang === "nl" ? `Prijs aangepast naar ${cur}${newPrice.toFixed(2)}` : lang === "es" ? `Precio ajustado a ${cur}${newPrice.toFixed(2)}` : `Price changed to ${cur}${newPrice.toFixed(2)}`);
+      if (a.client_email && a.status !== "cancelled" && a.status !== "no_show") {
+        sendEmails("appointment_updated", {
+          client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
+          service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
+          price: newPrice, old_price: oldPrice,
+          salon_name: salonProfile.business_name, salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
+          salon_slug: salonProfile.slug || "", salon_email: salonProfile.salon_email || "", owner_id: salonProfile.id,
+          currency: cur, lang: a.lang || ownerLangFor(salonProfile.country_code),
+          amount_paid: paidAmountOf(a),
+          payment_link: invoiceForm.payment_link || salonProfile.payment_link || "",
+          salon_iban: invoiceForm.iban || salonProfile.iban || "",
+          iban_holder: invoiceForm.iban_holder || salonProfile.iban_holder || salonProfile.business_name || "",
+          payment_ref: `${salonProfile.business_name} ${a.date} ${(a.time || "").slice(0, 5)}`.slice(0, 100),
+        }).catch(e => console.error("appointment_updated:", e));
+      }
+    } finally { setProcessingApptId(null); }
+  };
+  // Te veel betaald (prijs omlaag na een vooruitbetaling) en teruggestort:
+  // vastleggen (niets meer open) + bevestigingsmail. Zie OwnerApp.recordRefund.
+  const recordRefund = async (a) => {
+    if (processingApptId) return;
+    const price = parseFloat(a.service_price || 0) || 0;
+    const refund = Math.round((paidAmountOf(a) - price) * 100) / 100;
+    if (refund <= 0) return;
+    const msg = lang === "nl"
+      ? `Terugbetaling van ${cur}${refund.toFixed(2)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
+      : lang === "es"
+      ? `¿Registrar la devolución de ${cur}${refund.toFixed(2)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
+      : `Record the refund of ${cur}${refund.toFixed(2)} to ${a.client_name}? The client gets a confirmation by email.`;
+    if (!(await showConfirm(msg))) return;
+    setProcessingApptId(a.id);
+    try {
+      const paidBefore = paidAmountOf(a);
+      const patch = { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
+      if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
+      toast.show(lang === "nl" ? `Terugbetaling van ${cur}${refund.toFixed(2)} vastgelegd` : lang === "es" ? `Devolución de ${cur}${refund.toFixed(2)} registrada` : `Refund of ${cur}${refund.toFixed(2)} recorded`);
+      if (a.client_email) {
+        sendEmails("refund_sent", {
+          client_name: a.client_name, client_email: a.client_email,
+          service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
+          price, amount_paid: paidBefore, refund,
+          salon_name: salonProfile.business_name, salon_email: salonProfile.salon_email || "",
+          salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
+          lang: a.lang || ownerLangFor(salonProfile.country_code), currency: cur,
+        }).catch(e => console.error("refund_sent:", e));
+      }
+    } finally { setProcessingApptId(null); }
+  };
   const markNoShow = async (id) => {
     if (processingApptId) return;
     setProcessingApptId(id);
@@ -922,6 +992,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {a.status === "confirmed" && mine && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
+          {showMoney && (
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", opacity: processingApptId ? 0.5 : 1, ...(priceFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId}
+              title={lang === "nl" ? "Prijs aanpassen (bv. andere behandeling)" : lang === "es" ? "Ajustar el precio (p. ej. otro tratamiento)" : "Adjust the price (e.g. a different treatment)"}
+              onClick={() => { setPriceInput(String(parseFloat(a.service_price || 0) || 0)); setPriceFor(v => v === a.id ? null : a.id); }}>{lang === "nl" ? "Prijs" : lang === "es" ? "Precio" : "Price"}</button>
+          )}
           {showContact && phoneDigits && (
             <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time }))} target="_blank" rel="noopener noreferrer"
               className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -940,6 +1015,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           }}>{t.addToGoogleCal}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
           <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+        </div>
+      )}
+      {/* Prijs aanpassen (eigen afspraak): inline veldje, zelfde plek als de
+          betaalwijze-kiezer. */}
+      {a.status === "confirmed" && mine && priceFor === a.id && (
+        <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? `Nieuwe prijs (${cur})` : lang === "es" ? `Nuevo precio (${cur})` : `New price (${cur})`}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input className="input-field" type="number" step="0.01" min="0" inputMode="decimal" value={priceInput} onChange={e => setPriceInput(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: "8px 10px" }} />
+            <button className="btn-primary" style={{ fontSize: 10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => savePrice(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save")}</button>
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px" }} onClick={() => setPriceFor(null)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+          </div>
+          {paidAmountOf(a) > 0 && (
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+              {lang === "nl" ? `Al betaald: ${cur}${paidAmountOf(a).toFixed(2)}. Bij een hogere prijs krijgt de klant alleen het verschil als betaalverzoek.` : lang === "es" ? `Ya pagado: ${cur}${paidAmountOf(a).toFixed(2)}. Con un precio más alto, el cliente solo recibe la diferencia como solicitud de pago.` : `Already paid: ${cur}${paidAmountOf(a).toFixed(2)}. With a higher price the client only gets the difference as a payment request.`}
+            </div>
+          )}
         </div>
       )}
       {/* Vooruitbetalen: reservering tot het geld er is. "Betaling ontvangen"
@@ -992,11 +1084,23 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           </div>
         );
         if (open < -0.005) return (
-          <div style={{ fontSize: 11, color: c.warning, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <NavIcon name="alerttri" size={11} color={c.warning} />
-            {showMoney
-              ? (lang === "nl" ? `Te veel betaald: ${amt(-open)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${amt(-open)}` : `Overpaid: ${amt(-open)} to refund`)
-              : (lang === "nl" ? "Te veel betaald, terugbetalen" : lang === "es" ? "Pagado de más, devolver" : "Overpaid, refund due")}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+              <NavIcon name="alerttri" size={11} color={c.warning} />
+              {showMoney
+                ? (lang === "nl" ? `Te veel betaald: ${amt(-open)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${amt(-open)}` : `Overpaid: ${amt(-open)} to refund`)
+                : (lang === "nl" ? "Te veel betaald, terugbetalen" : lang === "es" ? "Pagado de más, devolver" : "Overpaid, refund due")}
+            </div>
+            {mine && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => recordRefund(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded")}</button>
+                {showContact && phoneDigits && (
+                  <a href={getWhatsAppUrl(a.client_phone, getWhatsAppRefundMsg(lang, { clientName: a.client_name, salonName: salonProfile.business_name, amount: -open, countryCode: salonProfile.country_code }), salonProfile.country_code)} target="_blank" rel="noopener noreferrer"
+                    className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none" }}
+                    title={lang === "nl" ? "Rekeningnummer vragen via WhatsApp" : lang === "es" ? "Pedir el número de cuenta por WhatsApp" : "Ask for the account number via WhatsApp"}>WhatsApp</a>
+                )}
+              </div>
+            )}
           </div>
         );
         if (!a.paid_at) return null;
