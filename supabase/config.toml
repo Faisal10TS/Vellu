@@ -189,3 +189,11 @@ enabled = true
 # het adresboek van een salon niet te raden valt.
 verify_jwt = false
 entrypoint = "./functions/request-review-link/index.ts"
+
+[functions.loyalty-notify]
+enabled = true
+# Stempelkaart-mail + eigenaarsmelding. Aangeroepen door de app (user-JWT,
+# controleert zelf eigenaar/medewerker) én door send-followups met
+# x-internal-secret — de gateway mag dus niet zelf 401'en.
+verify_jwt = false
+entrypoint = "./functions/loyalty-notify/index.ts"

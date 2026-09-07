@@ -408,6 +408,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       setAppointments(a => a.map(x => x.id === id ? {...x, ...patch} : x));
       setCompleteFor(null);
       toast.show((lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed") + (method ? ` · ${payMethodLabel(method)}` : ""));
+      // Stempelkaart (zie OwnerApp.markComplete): de trigger maakte misschien
+      // net een code; loyalty-notify mailt hem, pusht de eigenaar en zegt voor wie.
+      if (salonProfile.loyalty_enabled) {
+        const appt = appointments.find(x => x.id === id);
+        const mail = String(appt?.client_email || "").trim().toLowerCase();
+        supabase.functions.invoke("loyalty-notify", { body: { client_email: mail || null } }).then(({ data }) => {
+          const hit = (data?.sent || []).find(s => String(s.client_email || "").toLowerCase() === mail);
+          if (hit) toast.show(lang === "nl"
+            ? `🎟️ Stempelkaart vol! ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code is gemaild`
+            : lang === "es"
+              ? `🎟️ ¡Tarjeta completa! ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código enviado`
+              : `🎟️ Loyalty card full! ${hit.client_name || "Client"} gets ${hit.pct}% off — code emailed`);
+        }).catch(e => console.error("loyalty-notify:", e));
+      }
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {

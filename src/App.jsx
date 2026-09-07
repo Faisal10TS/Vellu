@@ -586,6 +586,10 @@ function SalonRoute({ lang, setLang }) {
         cover_zoom: Number(data.cover_zoom) || 1,
         // Optioneel verjaardagsveld in de boekingsflow (salon-instelling).
         ask_birthday_on_booking: !!data.ask_birthday_on_booking,
+        // Stempelkaart: alleen deze drie zitten in de view — genoeg voor de badge.
+        loyalty_enabled: !!data.loyalty_enabled,
+        loyalty_visits: parseInt(data.loyalty_visits) || 10,
+        loyalty_discount_pct: parseInt(data.loyalty_discount_pct) || 10,
         discount_codes: (data.discount_codes || []).filter(d => d.active),
         day_overrides: data.day_overrides || {},
         min_advance_hours: data.min_advance_hours || 0,

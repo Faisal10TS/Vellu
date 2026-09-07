@@ -2505,7 +2505,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {initialSalon.city && (
               <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>{initialSalon.city}</div>
             )}
-            {(initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0) && (
+            {(initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0 || initialSalon.loyalty_enabled) && (
               <div className="profile-hero-meta">
                 {initialSalon.reviews?.length > 0 && (
                   <span className="profile-hero-meta-item">
@@ -2522,6 +2522,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <span className="profile-hero-meta-item">
                     <NavIcon name="scissors" size={13} color="rgba(255,255,255,0.88)" />
                     <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
+                  </span>
+                )}
+                {/* Stempelkaart van de salon — de actie mag gezien worden. */}
+                {initialSalon.loyalty_enabled && (initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0) && (
+                  <span className="profile-hero-meta-sep" />
+                )}
+                {initialSalon.loyalty_enabled && (
+                  <span className="profile-hero-meta-item">
+                    <span style={{ fontSize: 13, lineHeight: 1 }}>🎟️</span>
+                    <span>{lang === "nl"
+                      ? `Na elke ${initialSalon.loyalty_visits} bezoeken ${initialSalon.loyalty_discount_pct}% korting`
+                      : lang === "es"
+                        ? `${initialSalon.loyalty_discount_pct}% de descuento cada ${initialSalon.loyalty_visits} visitas`
+                        : `${initialSalon.loyalty_discount_pct}% off after every ${initialSalon.loyalty_visits} visits`}</span>
                   </span>
                 )}
               </div>

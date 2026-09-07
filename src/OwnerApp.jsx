@@ -665,6 +665,9 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
     const { data, error } = await supabase
       .from("birthday_discount_codes")
       .select("id, code, client_email, discount_pct, expires_on, used_at")
+      // Stempelkaartcodes staan in dezelfde tabel (kind = 'loyalty') en horen
+      // op de klantkaart, niet in dit verjaardagsoverzicht.
+      .eq("kind", "birthday")
       .order("expires_on", { ascending: false });
     setLoading(false);
     if (error) { console.error("birthday codes load:", error); setFailed(true); return; }
@@ -2568,7 +2571,9 @@ function csvRowsToClients(rows) {
   return { records, skipped };
 }
 
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false }) {
+// `loyalty`: { enabled, visits, pct, since, salonName, slug } — stempelkaart-
+// instellingen van de salon; null/uit = geen stempelkaart-blok op de kaarten.
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -2597,13 +2602,25 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [showWaitlist, setShowWaitlist] = useState(false);
   const [waitlistOpen, setWaitlistOpen] = useState({}); // { [groupKey]: true } — expanded date lists
   const [waitlistEnabled, setWaitlistEnabled] = useState(true);
+  // Open stempelkaartcodes per e-mailadres (kind = 'loyalty', ongebruikt,
+  // niet verlopen) — voor de klantkaart.
+  const [loyaltyCodes, setLoyaltyCodes] = useState({});
+  const copyText = async (s, done) => {
+    try { await navigator.clipboard.writeText(s); }
+    catch {
+      const el = document.createElement("textarea"); el.value = s; document.body.appendChild(el); el.select();
+      try { document.execCommand("copy"); } catch { /* geef op */ }
+      document.body.removeChild(el);
+    }
+    toast.show(done);
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       // Appointment-derived clients + owner's manually-added contacts + waitlist + waitlist setting, in parallel.
-      const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }] = await Promise.all([
+      const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }, { data: lcodes }] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(id, first_name, last_name, email, phone, birthday)")
@@ -2624,10 +2641,18 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .select("waitlist_enabled")
           .eq("id", ownerId)
           .maybeSingle(),
+        // Stempelkaartcodes (RLS: alleen eigen rijen). Alleen als de actie
+        // aanstaat, anders een lege lijst zonder query.
+        loyalty?.enabled
+          ? supabase.from("birthday_discount_codes").select("code, client_email, discount_pct, expires_on, used_at, visits_at").eq("kind", "loyalty").is("used_at", null).gte("expires_on", fmt(getToday()))
+          : Promise.resolve({ data: [] }),
       ]);
       if (!cancelled) {
         setWaitlist(wl || []);
         setWaitlistEnabled(prof?.waitlist_enabled !== false);
+        const byMail = {};
+        for (const r of lcodes || []) { const k = String(r.client_email || "").toLowerCase(); if (!byMail[k] || r.expires_on > byMail[k].expires_on) byMail[k] = r; }
+        setLoyaltyCodes(byMail);
       }
       if (cancelled) return;
       const nowMs = Date.now();
@@ -2678,6 +2703,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a) && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
             .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
           cl.next = upcoming[0] || null;
+          // Stempels: zelfde telling als de trigger appointments_loyalty_stamp
+          // (afgerond, geen kassaverkoop, sinds loyalty_since).
+          cl.loyaltyVisits = loyalty?.enabled
+            ? cl.appts.filter((a) => a.status === "completed" && !isSaleRow(a) && (!loyalty.since || a.date >= loyalty.since)).length
+            : 0;
           return cl;
         });
       list.sort((a, b) => a.name.localeCompare(b.name));
@@ -3155,6 +3185,18 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 <div style={{ fontSize: 11, color: cl.next ? accent : c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {cl.next ? `${lang === "nl" ? "Volgende afspraak" : lang === "es" ? "Próxima cita" : "Next appointment"}: ${fmtNext(cl.next)}` : (lang === "nl" ? "Geen aankomende afspraak" : lang === "es" ? "Sin próximas citas" : "No upcoming appointment")}
                 </div>
+                {/* Stempelkaart-stand in de lijst; details op de kaart zelf. */}
+                {loyalty?.enabled && (cl.loyaltyVisits > 0 || loyaltyCodes[String(cl.email || "").toLowerCase()]) && (() => {
+                  const need = Math.max(1, parseInt(loyalty.visits) || 10);
+                  const code = loyaltyCodes[String(cl.email || "").toLowerCase()];
+                  const inCycle = (cl.loyaltyVisits || 0) % need;
+                  const filled = (inCycle === 0 && code) ? need : inCycle;
+                  return (
+                    <div style={{ fontSize: 10, color: code ? accent : c.textLabel, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                      🎟️ {filled}/{need}{code ? ` · ${code.code}` : ""}
+                    </div>
+                  );
+                })()}
               </div>
               {cl.phone && (
                 <a href={getWhatsAppUrl(cl.phone, lang === "nl" ? `Hoi ${(cl.name || "").split(" ")[0]}! ` : lang === "es" ? `¡Hola ${(cl.name || "").split(" ")[0]}! ` : `Hi ${(cl.name || "").split(" ")[0]}! `)}
@@ -3242,6 +3284,45 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               {selected.notes && (
                 <div style={{ fontSize: 12, color: c.textSub, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 12px", marginTop: 2 }}>{selected.notes}</div>
               )}
+              {/* Stempelkaart: stand van deze klant + haar open code (kopiëren /
+                  WhatsApp — de mail is al automatisch gegaan). */}
+              {loyalty?.enabled && (() => {
+                const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                const need = Math.max(1, parseInt(loyalty.visits) || 10);
+                const visits = selected.loyaltyVisits || 0;
+                const code = loyaltyCodes[String(selected.email || "").toLowerCase()] || null;
+                const inCycle = visits % need;
+                const filled = (inCycle === 0 && visits > 0 && code) ? need : inCycle;
+                const first = (selected.name || "").split(" ")[0];
+                const waMsg = code ? L(
+                  `Hoi ${first}! 🎉 Je stempelkaart bij ${loyalty.salonName} is vol: ${code.discount_pct}% korting op je volgende afspraak met code ${code.code}, geldig tot ${code.expires_on}. Boek: https://vellu.cc/${loyalty.slug}`,
+                  `Hi ${first}! 🎉 Your loyalty card at ${loyalty.salonName} is full: ${code.discount_pct}% off your next appointment with code ${code.code}, valid until ${code.expires_on}. Book: https://vellu.cc/${loyalty.slug}`,
+                  `¡Hola ${first}! 🎉 Tu tarjeta en ${loyalty.salonName} está completa: ${code.discount_pct}% de descuento en tu próxima cita con el código ${code.code}, válido hasta ${code.expires_on}. Reserva: https://vellu.cc/${loyalty.slug}`) : "";
+                return (
+                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginTop: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>🎟️ {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
+                      <div style={{ fontSize: 11, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{filled}/{need}{visits > need ? ` · ${visits} ${L("totaal", "total", "en total")}` : ""}</div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                      {Array.from({ length: need }, (_, i) => <span key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: `1.5px solid ${accent}`, background: i < filled ? accent : "transparent", flexShrink: 0 }} />)}
+                    </div>
+                    <div style={{ fontSize: 11, color: code ? c.text : c.textSub, marginTop: 8, lineHeight: 1.4 }}>
+                      {code
+                        ? L(`Open code: ${code.code} — ${code.discount_pct}% korting, geldig tot ${code.expires_on}`, `Open code: ${code.code} — ${code.discount_pct}% off, valid until ${code.expires_on}`, `Código abierto: ${code.code} — ${code.discount_pct}% de descuento, válido hasta ${code.expires_on}`)
+                        : L(`Nog ${need - inCycle} ${need - inCycle === 1 ? "bezoek" : "bezoeken"} tot ${loyalty.pct}% korting`, `${need - inCycle} more ${need - inCycle === 1 ? "visit" : "visits"} to ${loyalty.pct}% off`, `${need - inCycle} ${need - inCycle === 1 ? "visita" : "visitas"} más para ${loyalty.pct}% de descuento`)}
+                    </div>
+                    {code && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                        <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px" }} onClick={() => copyText(code.code, L("Code gekopieerd", "Code copied", "Código copiado"))}>{L("Kopieer code", "Copy code", "Copiar código")}</button>
+                        {selected.phone && (
+                          <a className="btn-ghost" href={getWhatsAppUrl(selected.phone, waMsg, loyalty.countryCode)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 10, padding: "8px 10px", textDecoration: "none", textAlign: "center", color: "#25d366", borderColor: "rgba(37,211,102,0.45)" }}>WhatsApp</a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Stats */}
@@ -4244,6 +4325,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           birthday_feature_enabled: !!data.birthday_feature_enabled,
           ask_birthday_on_booking: !!data.ask_birthday_on_booking,
           birthday_notify_owner: !!data.birthday_notify_owner,
+          loyalty_enabled: !!data.loyalty_enabled,
+          loyalty_visits: parseInt(data.loyalty_visits) || 10,
+          loyalty_discount_pct: parseInt(data.loyalty_discount_pct) || 10,
+          loyalty_code_days: parseInt(data.loyalty_code_days) || 90,
+          loyalty_code_prefix: data.loyalty_code_prefix || "",
+          loyalty_since: data.loyalty_since || "",
           break_minutes: data.break_minutes || 0,
           slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
@@ -5065,6 +5152,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, ...patch} : a); return d; });
       setCompleteFor(null);
       toast.show(method ? `${t.apptCompleted} · ${payMethodLabel(method, lang)}` : t.apptCompleted);
+      // Stempelkaart: de trigger heeft bij deze afronding misschien net een
+      // code aangemaakt. loyalty-notify mailt hem en zegt voor wie — was het
+      // déze klant, dan hoort de eigenaar dat meteen.
+      if (salonData.loyalty_enabled) {
+        const appt = (salonData.appointments || []).find(a => a.id === id);
+        const mail = String(appt?.client_email || "").trim().toLowerCase();
+        supabase.functions.invoke("loyalty-notify", { body: { client_email: mail || null } }).then(({ data }) => {
+          const hit = (data?.sent || []).find(s => String(s.client_email || "").toLowerCase() === mail);
+          if (hit) toast.show(lang === "nl"
+            ? `🎟️ Stempelkaart vol! ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code ${hit.code} is gemaild`
+            : lang === "es"
+              ? `🎟️ ¡Tarjeta completa! ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código ${hit.code} enviado`
+              : `🎟️ Loyalty card full! ${hit.client_name || "Client"} gets ${hit.pct}% off — code ${hit.code} emailed`);
+        }).catch(e => console.error("loyalty-notify:", e));
+      }
     } finally { setProcessingApptId(null); }
   };
   const markNoShow = async (id) => {
@@ -9451,7 +9553,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} />
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled}
+              loyalty={salonData.loyalty_enabled ? { enabled: true, visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
           )}
 
           {/* AGENDA */}
@@ -16479,6 +16582,88 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 </>)}
               </div>
 
+              {/* Stempelkaart — na elke N afgeronde bezoeken automatisch een
+                  persoonlijke kortingscode (database-trigger
+                  appointments_loyalty_stamp maakt de code, loyalty-notify mailt
+                  hem en meldt het de eigenaar). Zelfde hoofdschakelaar-patroon
+                  als de verjaardagsactie: uit = alleen de kop. */}
+              {(() => {
+                const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                const on = !!salonData.loyalty_enabled;
+                const VIS = [5, 8, 10, 12], PCT = [10, 15, 20, 25], DAYS = [30, 60, 90, 180];
+                const chip = (active, label, onClick) => (
+                  <div key={label} onClick={onClick} role="radio" aria-checked={active}
+                    style={{ padding: "9px 6px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                );
+                const setNum = (key, min, max) => (e) => update(d => { const v = parseInt(e.target.value); if (Number.isFinite(v)) d[key] = Math.max(min, Math.min(max, v)); return d; });
+                const lbl = (txt, first) => <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6, marginTop: first ? 16 : 14 }}>{txt}</div>;
+                const anders = (key, val, min, max, suffix) => (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 11, color: c.textMuted }}>
+                    {L("Anders:", "Other:", "Otro:")}
+                    <input className="input-field" type="number" min={min} max={max} value={val ?? ""} onChange={setNum(key, min, max)} style={{ width: 84, fontSize: 12, padding: "8px 10px", textAlign: "center" }} />
+                    {suffix}
+                  </div>
+                );
+                const need = salonData.loyalty_visits || 10, pct = salonData.loyalty_discount_pct || 10, days = salonData.loyalty_code_days || 90;
+                const prefix = (salonData.loyalty_code_prefix || "STEMPEL");
+                return (
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>🎟️ {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
+                        <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.45 }}>
+                          {L("Na elke X afgeronde bezoeken krijgt de klant automatisch een persoonlijke kortingscode per e-mail voor haar volgende afspraak. Jij krijgt een melding en ziet de stand op elke klantkaart.",
+                             "After every X completed visits the client automatically gets a personal discount code by email for her next appointment. You get a notification and see the progress on every client card.",
+                             "Tras cada X visitas completadas, el cliente recibe automáticamente por correo un código de descuento personal para su próxima cita. Recibes un aviso y ves el progreso en cada ficha de cliente.")}
+                        </div>
+                      </div>
+                      <div onClick={() => update(d => { d.loyalty_enabled = !d.loyalty_enabled; if (d.loyalty_enabled && !d.loyalty_since) d.loyalty_since = fmt(getToday()); return d; })}
+                        style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: on ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
+                        <div style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                      </div>
+                    </div>
+                    {on && (<>
+                      {lbl(L("Na hoeveel bezoeken?", "After how many visits?", "¿Después de cuántas visitas?"), true)}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                        {VIS.map(v => chip(salonData.loyalty_visits === v, `${v}`, () => update(d => { d.loyalty_visits = v; return d; })))}
+                      </div>
+                      {anders("loyalty_visits", salonData.loyalty_visits, 1, 100, L("bezoeken", "visits", "visitas"))}
+                      {lbl(L("Korting", "Discount", "Descuento"))}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                        {PCT.map(p => chip(salonData.loyalty_discount_pct === p, `${p}%`, () => update(d => { d.loyalty_discount_pct = p; return d; })))}
+                      </div>
+                      {anders("loyalty_discount_pct", salonData.loyalty_discount_pct, 1, 100, "%")}
+                      {lbl(L("Code geldig", "Code valid for", "Código válido"))}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                        {DAYS.map(dd => chip(salonData.loyalty_code_days === dd,
+                          dd === 30 ? L("1 maand", "1 month", "1 mes") : dd === 60 ? L("2 maanden", "2 months", "2 meses") : dd === 90 ? L("3 maanden", "3 months", "3 meses") : L("6 maanden", "6 months", "6 meses"),
+                          () => update(d => { d.loyalty_code_days = dd; return d; })))}
+                      </div>
+                      {anders("loyalty_code_days", salonData.loyalty_code_days, 7, 730, L("dagen", "days", "días"))}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Code-prefix", "Code prefix", "Prefijo del código")}</div>
+                          <input className="input-field" value={salonData.loyalty_code_prefix || ""} placeholder="STEMPEL"
+                            onChange={e => update(d => { d.loyalty_code_prefix = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); return d; })}
+                            style={{ width: "100%", fontSize: 13, padding: "10px 12px", fontFamily: "'Courier New',monospace", letterSpacing: "0.06em" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Tel bezoeken vanaf", "Count visits from", "Contar visitas desde")}</div>
+                          <input className="input-field" type="date" max={fmt(getToday())} value={salonData.loyalty_since || ""}
+                            onChange={e => update(d => { d.loyalty_since = e.target.value; return d; })}
+                            style={{ width: "100%", fontSize: 13, padding: "10px 12px" }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8, lineHeight: 1.5 }}>
+                        {L(`Voorbeeld: na ${need} bezoeken krijgt de klant code ${prefix}-${pct}-K7QM4 voor ${pct}% korting, ${days} dagen geldig — en daarna opnieuw na elke ${need}. Zet de datum eerder om eerdere bezoeken mee te tellen. Aan de kassa vul je de code in bij korting; klanten zonder e-mailadres kunnen niet sparen. Vergeet niet 'Opslaan'.`,
+                           `Example: after ${need} visits the client gets code ${prefix}-${pct}-K7QM4 for ${pct}% off, valid ${days} days — and again after every ${need}. Set an earlier date to count past visits. At the till, enter the code as a discount; clients without an email address can't collect stamps. Don't forget 'Save'.`,
+                           `Ejemplo: tras ${need} visitas el cliente recibe el código ${prefix}-${pct}-K7QM4 con ${pct}% de descuento, válido ${days} días — y de nuevo cada ${need}. Pon una fecha anterior para contar visitas pasadas. En caja, introduce el código como descuento; los clientes sin correo no pueden acumular. No olvides «Guardar».`)}
+                      </div>
+                    </>)}
+                  </div>
+                );
+              })()}
+
               {/* Newsletter — compose + send a one-off email to all clients
                   who have booked here. Recipients derived server-side.
                   Professional-only. */}
@@ -16659,6 +16844,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   birthday_feature_enabled: !!salonData.birthday_feature_enabled,
                   ask_birthday_on_booking: !!salonData.ask_birthday_on_booking,
                   birthday_notify_owner: !!salonData.birthday_notify_owner,
+                  loyalty_enabled: !!salonData.loyalty_enabled,
+                  loyalty_visits: Math.max(1, Math.min(100, parseInt(salonData.loyalty_visits) || 10)),
+                  loyalty_discount_pct: Math.max(1, Math.min(100, parseInt(salonData.loyalty_discount_pct) || 10)),
+                  loyalty_code_days: Math.max(7, Math.min(730, parseInt(salonData.loyalty_code_days) || 90)),
+                  loyalty_code_prefix: (salonData.loyalty_code_prefix || "").trim() || null,
+                  loyalty_since: salonData.loyalty_since || null,
                   break_minutes: salonData.break_minutes || 0,
                   slot_interval_minutes: salonData.slot_interval_minutes || 30,
                   logo_url: salonData.logo_url || null,
