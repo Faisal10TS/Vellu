@@ -67,7 +67,7 @@ function renderHtml(o: { salonName: string; logo: string | null; accent: string;
   return `<div style="font-family:Georgia,'Times New Roman',serif;max-width:520px;margin:0 auto;padding:40px 24px;color:#1a1a1a;background:#ffffff;">
     ${header}
     <div style="width:40px;height:1px;background:${esc(accent)};margin:0 auto 28px;"></div>
-    <h1 style="font-size:26px;font-weight:600;margin:0 0 14px;text-align:center;color:#1a1a1a;">🎉 ${esc(heading)}</h1>
+    <h1 style="font-size:26px;font-weight:600;margin:0 0 14px;text-align:center;color:#1a1a1a;">${esc(heading)}</h1>
     <p style="font-size:15px;line-height:1.7;color:#333;margin:0 0 24px;text-align:center;">
       ${txt(lang,
         `Je stempelkaart bij <strong>${esc(salonName)}</strong> is vol. Als dank: ${pct}% korting op je volgende afspraak.`,
@@ -158,7 +158,7 @@ serve(async (req) => {
           from: `${salonName} <noreply@vellu.cc>`,
           to: [row.client_email],
           ...(salon.salon_email || salon.email ? { reply_to: salon.salon_email || salon.email } : {}),
-          subject: txt(lang, `🎉 Je stempelkaart bij ${salonName} is vol — ${pct}% korting`, `🎉 Your loyalty card at ${salonName} is full — ${pct}% off`, `🎉 Tu tarjeta en ${salonName} está completa — ${pct}% de descuento`),
+          subject: txt(lang, `Je stempelkaart bij ${salonName} is vol — ${pct}% korting`, `Your loyalty card at ${salonName} is full — ${pct}% off`, `Tu tarjeta en ${salonName} está completa — ${pct}% de descuento`),
           html: renderHtml({ salonName, logo: safeImg(salon.logo_url), accent, firstName, code: row.code, pct, visits, expires, slug: String(salon.slug || ""), lang }),
         }),
       });
@@ -178,7 +178,7 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY },
         body: JSON.stringify({
           user_id: row.owner_id,
-          title: nlOwner ? "🎟️ Stempelkaart vol" : "🎟️ Loyalty card full",
+          title: nlOwner ? "Stempelkaart vol" : "Loyalty card full",
           body: nlOwner ? `${who} verdiende ${pct}% korting (code ${row.code}) — gemaild` : `${who} earned ${pct}% off (code ${row.code}) — emailed`,
           url: "/owner",
           tag: `loyalty-${row.id}`,

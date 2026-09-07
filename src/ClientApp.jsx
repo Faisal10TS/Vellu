@@ -151,7 +151,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
               : "This review link is out of date and no longer works. You'll get a new invitation by email after your next visit."
         ) : reqState === "sent" ? (
           <div style={{ color: c.text }}>
-            <div style={{ fontSize: 22, marginBottom: 6 }}>✉️</div>
+            <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}><NavIcon name="mail" size={22} color={accent} /></div>
             {t.reviewRequestSent}
           </div>
         ) : (
@@ -2530,7 +2530,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
                 {initialSalon.loyalty_enabled && (
                   <span className="profile-hero-meta-item">
-                    <span style={{ fontSize: 13, lineHeight: 1 }}>🎟️</span>
+                    <NavIcon name="tag" size={13} color="rgba(255,255,255,0.88)" />
                     <span>{lang === "nl"
                       ? `Na elke ${initialSalon.loyalty_visits} bezoeken ${initialSalon.loyalty_discount_pct}% korting`
                       : lang === "es"

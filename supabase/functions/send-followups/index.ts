@@ -233,7 +233,7 @@ serve(async () => {
           ? (lang === "nl" ? `Je stempelkaart is vol — je code voor ${pct}% korting staat in je mail.` : lang === "es" ? `Tu tarjeta de fidelidad está completa: tu código de ${pct}% de descuento está en tu correo.` : `Your loyalty card is full — your ${pct}% code is in your inbox.`)
           : (lang === "nl" ? `Stempelkaart: ${inCycle} van ${need} bezoeken — nog ${need - inCycle} tot ${pct}% korting.` : lang === "es" ? `Tarjeta de fidelidad: ${inCycle} de ${need} visitas — faltan ${need - inCycle} para ${pct}% de descuento.` : `Loyalty card: ${inCycle} of ${need} visits — ${need - inCycle} more to ${pct}% off.`);
         const stamps = Array.from({ length: need }, (_, i) => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;margin:0 3px;border:1.5px solid ${accent};background:${i < (inCycle === 0 ? need : inCycle) ? accent : "transparent"};"></span>`).join("");
-        loyaltyBlock = `<div style="background:#f8f7f5;border-radius:12px;padding:14px 16px;margin:16px 0;text-align:center;"><div style="margin-bottom:8px;line-height:1;">${stamps}</div><div style="font-size:13px;color:#555;">🎟️ ${line}</div></div>`;
+        loyaltyBlock = `<div style="background:#f8f7f5;border-radius:12px;padding:14px 16px;margin:16px 0;text-align:center;"><div style="margin-bottom:8px;line-height:1;">${stamps}</div><div style="font-size:13px;color:#555;">${line}</div></div>`;
       }
 
       try {

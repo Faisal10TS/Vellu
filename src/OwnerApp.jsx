@@ -3192,8 +3192,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   const inCycle = (cl.loyaltyVisits || 0) % need;
                   const filled = (inCycle === 0 && code) ? need : inCycle;
                   return (
-                    <div style={{ fontSize: 10, color: code ? accent : c.textLabel, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-                      🎟️ {filled}/{need}{code ? ` · ${code.code}` : ""}
+                    <div style={{ fontSize: 10, color: code ? accent : c.textLabel, marginTop: 2, fontVariantNumeric: "tabular-nums", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <NavIcon name="tag" size={10} color="currentColor" /> {filled}/{need}{code ? ` · ${code.code}` : ""}
                     </div>
                   );
                 })()}
@@ -3274,7 +3274,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               )}
               {birthdayOn && selected.birthday && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text }}>
-                  <span style={{ fontSize: 14, width: 15, textAlign: "center" }}>🎂</span>
+                  <NavIcon name="gift" size={15} color={accent} />
                   {(() => {
                     const d = new Date(`${selected.birthday}T00:00:00`);
                     return isNaN(d) ? selected.birthday : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -3301,7 +3301,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 return (
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginTop: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>🎟️ {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={11} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
                       <div style={{ fontSize: 11, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{filled}/{need}{visits > need ? ` · ${visits} ${L("totaal", "total", "en total")}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
@@ -5161,10 +5161,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         supabase.functions.invoke("loyalty-notify", { body: { client_email: mail || null } }).then(({ data }) => {
           const hit = (data?.sent || []).find(s => String(s.client_email || "").toLowerCase() === mail);
           if (hit) toast.show(lang === "nl"
-            ? `🎟️ Stempelkaart vol! ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code ${hit.code} is gemaild`
+            ? `Stempelkaart vol: ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code ${hit.code} is gemaild`
             : lang === "es"
-              ? `🎟️ ¡Tarjeta completa! ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código ${hit.code} enviado`
-              : `🎟️ Loyalty card full! ${hit.client_name || "Client"} gets ${hit.pct}% off — code ${hit.code} emailed`);
+              ? `Tarjeta completa: ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código ${hit.code} enviado`
+              : `Loyalty card full: ${hit.client_name || "Client"} gets ${hit.pct}% off — code ${hit.code} emailed`);
         }).catch(e => console.error("loyalty-notify:", e));
       }
     } finally { setProcessingApptId(null); }
@@ -8581,7 +8581,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Jarige klanten vandaag (optie "Melding als een klant jarig is"). */}
               {bdayToday.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 14, marginBottom: 16, background: `${accent}12`, border: `1px solid ${accent}44`, fontSize: 12, color: c.text }}>
-                  <span style={{ fontSize: 18 }}>🎂</span>
+                  <span style={{ display: "inline-flex" }}><NavIcon name="gift" size={18} color={accent} /></span>
                   <div>
                     <div style={{ fontWeight: 600 }}>{lang === "nl" ? "Vandaag jarig" : lang === "es" ? "Cumpleaños hoy" : "Birthday today"}</div>
                     <div style={{ color: c.textSub, marginTop: 1 }}>{bdayToday.join(", ")}</div>
@@ -16551,12 +16551,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       />
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Code-prefix" : lang === "es" ? "Prefijo del código" : "Code prefix"}</div>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Begin van de code" : lang === "es" ? "Inicio del código" : "Start of the code"}</div>
                       <input
                         className="input-field"
                         value={salonData.birthday_email_code_prefix || ""}
                         onChange={e => update(d => { d.birthday_email_code_prefix = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); return d; })}
-                        placeholder="BDAY"
+                        placeholder={lang === "nl" ? "bijv. TTNB" : lang === "es" ? "p. ej. TTNB" : "e.g. TTNB"}
                         style={{ width: "100%", fontSize: 13, padding: "10px 12px", fontFamily: "'Courier New',monospace", letterSpacing: "0.06em" }}
                       />
                     </div>
@@ -16610,7 +16610,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>🎟️ {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={12} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
                         <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.45 }}>
                           {L("Na elke X afgeronde bezoeken krijgt de klant automatisch een persoonlijke kortingscode per e-mail voor haar volgende afspraak. Jij krijgt een melding en ziet de stand op elke klantkaart.",
                              "After every X completed visits the client automatically gets a personal discount code by email for her next appointment. You get a notification and see the progress on every client card.",
@@ -16642,10 +16642,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       {anders("loyalty_code_days", salonData.loyalty_code_days, 7, 730, L("dagen", "days", "días"))}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Code-prefix", "Code prefix", "Prefijo del código")}</div>
-                          <input className="input-field" value={salonData.loyalty_code_prefix || ""} placeholder="STEMPEL"
+                          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Begin van de code", "Start of the code", "Inicio del código")}</div>
+                          <input className="input-field" value={salonData.loyalty_code_prefix || ""} placeholder={L("bijv. TTNB", "e.g. TTNB", "p. ej. TTNB")}
                             onChange={e => update(d => { d.loyalty_code_prefix = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); return d; })}
                             style={{ width: "100%", fontSize: 13, padding: "10px 12px", fontFamily: "'Courier New',monospace", letterSpacing: "0.06em" }} />
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                            {L(`Elke code wordt ${prefix}-${pct}-XXXXX — je salonnaam, het percentage en een willekeurige staart.`, `Every code becomes ${prefix}-${pct}-XXXXX — your salon name, the percentage and a random tail.`, `Cada código será ${prefix}-${pct}-XXXXX — tu salón, el porcentaje y una cola aleatoria.`)}
+                          </div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Tel bezoeken vanaf", "Count visits from", "Contar visitas desde")}</div>

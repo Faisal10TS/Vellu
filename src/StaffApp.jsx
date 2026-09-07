@@ -416,10 +416,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         supabase.functions.invoke("loyalty-notify", { body: { client_email: mail || null } }).then(({ data }) => {
           const hit = (data?.sent || []).find(s => String(s.client_email || "").toLowerCase() === mail);
           if (hit) toast.show(lang === "nl"
-            ? `🎟️ Stempelkaart vol! ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code is gemaild`
+            ? `Stempelkaart vol: ${hit.client_name || "Klant"} krijgt ${hit.pct}% korting — code is gemaild`
             : lang === "es"
-              ? `🎟️ ¡Tarjeta completa! ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código enviado`
-              : `🎟️ Loyalty card full! ${hit.client_name || "Client"} gets ${hit.pct}% off — code emailed`);
+              ? `Tarjeta completa: ${hit.client_name || "Cliente"} recibe ${hit.pct}% de descuento — código enviado`
+              : `Loyalty card full: ${hit.client_name || "Client"} gets ${hit.pct}% off — code emailed`);
         }).catch(e => console.error("loyalty-notify:", e));
       }
     } finally { setProcessingApptId(null); }
