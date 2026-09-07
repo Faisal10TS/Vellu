@@ -3822,6 +3822,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Dashboard has its own staff scope (kept separate from the agenda's so
   // switching tabs doesn't silently re-filter the other view).
   const [dashStaff, setDashStaff] = useState(null);
+  // Stempelkaart-instellingen: welke rijen op "Anders…" staan (eigen waarde),
+  // ook als de eigen waarde toevallig gelijk is aan een van de vaste keuzes.
+  const [loyaltyCustom, setLoyaltyCustom] = useState({});
   // Scroll-nudge na iOS-toetsenbord-dismiss voor de overgebleven fixed
   // elementen (chat-launcher, save-pill); de onderbalk zelf is sinds de
   // app-shell-ombouw een flex-sibling en heeft dit niet meer nodig.
@@ -16593,17 +16596,27 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const VIS = [5, 8, 10, 12], PCT = [10, 15, 20, 25], DAYS = [30, 60, 90, 180];
                 const chip = (active, label, onClick) => (
                   <div key={label} onClick={onClick} role="radio" aria-checked={active}
-                    style={{ padding: "9px 6px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                    style={{ padding: "9px 4px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
                 );
                 const setNum = (key, min, max) => (e) => update(d => { const v = parseInt(e.target.value); if (Number.isFinite(v)) d[key] = Math.max(min, Math.min(max, v)); return d; });
                 const lbl = (txt, first) => <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6, marginTop: first ? 16 : 14 }}>{txt}</div>;
-                const anders = (key, val, min, max, suffix) => (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 11, color: c.textMuted }}>
-                    {L("Anders:", "Other:", "Otro:")}
-                    <input className="input-field" type="number" min={min} max={max} value={val ?? ""} onChange={setNum(key, min, max)} style={{ width: 84, fontSize: 12, padding: "8px 10px", textAlign: "center" }} />
-                    {suffix}
+                // Vier vaste keuzes + "Anders…" als vijfde chip. Pas ná een tik op
+                // Anders verschijnt het invulveld (met focus) — een los veld naast
+                // de chips las als tekst, niet als keuze (Faisal, 07-09).
+                const isCustom = (key, presets) => !!loyaltyCustom[key] || !presets.includes(salonData[key]);
+                const keuzerij = (key, presets, labelOf, min, max, suffix) => (<>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                    {presets.map(v => chip(!isCustom(key, presets) && salonData[key] === v, labelOf(v), () => { setLoyaltyCustom(s => ({ ...s, [key]: false })); update(d => { d[key] = v; return d; }); }))}
+                    {chip(isCustom(key, presets), L("Anders…", "Other…", "Otro…"), () => setLoyaltyCustom(s => ({ ...s, [key]: true })))}
                   </div>
-                );
+                  {isCustom(key, presets) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 11, color: c.textSub }}>
+                      {L("Eigen waarde:", "Your own value:", "Valor propio:")}
+                      <input autoFocus className="input-field" type="number" min={min} max={max} value={salonData[key] ?? ""} onChange={setNum(key, min, max)} style={{ width: 84, fontSize: 12, padding: "8px 10px", textAlign: "center" }} />
+                      {suffix}
+                    </div>
+                  )}
+                </>);
                 const need = salonData.loyalty_visits || 10, pct = salonData.loyalty_discount_pct || 10, days = salonData.loyalty_code_days || 90;
                 const prefix = (salonData.loyalty_code_prefix || "STEMPEL");
                 return (
@@ -16624,22 +16637,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </div>
                     {on && (<>
                       {lbl(L("Na hoeveel bezoeken?", "After how many visits?", "¿Después de cuántas visitas?"), true)}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                        {VIS.map(v => chip(salonData.loyalty_visits === v, `${v}`, () => update(d => { d.loyalty_visits = v; return d; })))}
-                      </div>
-                      {anders("loyalty_visits", salonData.loyalty_visits, 1, 100, L("bezoeken", "visits", "visitas"))}
+                      {keuzerij("loyalty_visits", VIS, v => `${v}`, 1, 100, L("bezoeken", "visits", "visitas"))}
                       {lbl(L("Korting", "Discount", "Descuento"))}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                        {PCT.map(p => chip(salonData.loyalty_discount_pct === p, `${p}%`, () => update(d => { d.loyalty_discount_pct = p; return d; })))}
-                      </div>
-                      {anders("loyalty_discount_pct", salonData.loyalty_discount_pct, 1, 100, "%")}
+                      {keuzerij("loyalty_discount_pct", PCT, p => `${p}%`, 1, 100, "%")}
                       {lbl(L("Code geldig", "Code valid for", "Código válido"))}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                        {DAYS.map(dd => chip(salonData.loyalty_code_days === dd,
-                          dd === 30 ? L("1 maand", "1 month", "1 mes") : dd === 60 ? L("2 maanden", "2 months", "2 meses") : dd === 90 ? L("3 maanden", "3 months", "3 meses") : L("6 maanden", "6 months", "6 meses"),
-                          () => update(d => { d.loyalty_code_days = dd; return d; })))}
-                      </div>
-                      {anders("loyalty_code_days", salonData.loyalty_code_days, 7, 730, L("dagen", "days", "días"))}
+                      {keuzerij("loyalty_code_days", DAYS, dd => `${dd / 30} ${L("mnd", "mo", "mes")}`, 7, 730, L("dagen", "days", "días"))}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Begin van de code", "Start of the code", "Inicio del código")}</div>
