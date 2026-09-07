@@ -2625,7 +2625,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }, { data: lcodes }] = await Promise.all([
         supabase
           .from("appointments")
-          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, clients(id, first_name, last_name, email, phone, birthday)")
+          // staff_id/staff_assignments/service_breakdown: nodig voor de
+          // stempelkaart per teamlid (apptInvolvesStaff), anders telt niets.
+          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, staff_id, staff_assignments, service_breakdown, clients(id, first_name, last_name, email, phone, birthday)")
           .eq("owner_id", ownerId)
           .order("date", { ascending: false }),
         supabase
