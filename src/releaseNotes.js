@@ -29,9 +29,9 @@ export const RELEASES = [
       {
         kind: "new", audience: ["owner"],
         text: {
-          nl: "Deel Vellu met een collega: één tik op je dashboard opent WhatsApp met een kant-en-klaar bericht, je eigen boekingspagina en je verwijzingslink — meldt zij zich aan, dan krijgen jullie allebei 2 weken gratis.",
-          en: "Share Vellu with a colleague: one tap on your dashboard opens WhatsApp with a ready-made message, your own booking page and your referral link — if she signs up, you both get 2 weeks free.",
-          es: "Comparte Vellu con una colega: un toque en tu panel abre WhatsApp con un mensaje listo, tu página de reservas y tu enlace de recomendación; si se registra, ambas conseguís 2 semanas gratis.",
+          nl: "Nodig een salon uit (Instellingen → Klanten & marketing): stuur je uitnodiging nu met één tik via WhatsApp, met je eigen boekingspagina erin — meldt zij zich aan, dan krijgen jullie allebei 2 weken gratis.",
+          en: "Refer a salon (Settings → Clients & marketing): send your invitation with one tap via WhatsApp, with your own booking page in it — if she signs up, you both get 2 weeks free.",
+          es: "Recomienda un salón (Ajustes → Clientes y marketing): envía tu invitación con un toque por WhatsApp, con tu página de reservas incluida; si se registra, ambas conseguís 2 semanas gratis.",
         },
       },
       {

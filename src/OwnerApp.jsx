@@ -9002,29 +9002,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </button>
               </div>
 
-              {/* Deel Vellu — één tik naar WhatsApp met een kant-en-klaar bericht,
-                  eigen boekingspagina en verwijzingscode erin. Tot nu toe kwam
-                  elke salon via een warme aanbeveling binnen; dit maakt zo'n
-                  aanbeveling één tik in plaats van een gunst (Faisal, 07-09). */}
-              {salonData.referral_code && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, marginBottom: 22, flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Deel Vellu met een collega" : lang === "es" ? "Comparte Vellu con una colega" : "Share Vellu with a colleague"}</div>
-                    <div style={{ fontSize: 11, color: c.textSub, marginTop: 2, lineHeight: 1.4 }}>{lang === "nl" ? "Meldt zij zich aan via jouw link, dan krijgen jullie allebei 2 weken gratis." : lang === "es" ? "Si se registra con tu enlace, ambas conseguís 2 semanas gratis." : "If she signs up through your link, you both get 2 weeks free."}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    <a href={referralWhatsAppUrl(referralPromoText(salonData, lang))} target="_blank" rel="noopener noreferrer" className="btn-primary" aria-label="WhatsApp"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", fontSize: 11, textDecoration: "none" }}>
-                      <NavIcon name="chat" size={14} color="currentColor" /> WhatsApp
-                    </a>
-                    <button className="btn-ghost" style={{ padding: "10px 14px", fontSize: 11 }}
-                      onClick={async () => { try { await navigator.clipboard.writeText(referralPromoText(salonData, lang)); toast.show(lang === "nl" ? "Bericht gekopieerd" : lang === "es" ? "Mensaje copiado" : "Message copied"); } catch { toast.show(lang === "nl" ? "Kopiëren mislukt" : lang === "es" ? "No se pudo copiar" : "Copy failed", "error"); } }}>
-                      {lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Revenue Chart + Popular Services */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
                 {/* Revenue area chart */}
