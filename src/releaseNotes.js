@@ -29,6 +29,14 @@ export const RELEASES = [
       {
         kind: "new", audience: ["owner"],
         text: {
+          nl: "Deel Vellu met een collega: één tik op je dashboard opent WhatsApp met een kant-en-klaar bericht, je eigen boekingspagina en je verwijzingslink — meldt zij zich aan, dan krijgen jullie allebei 2 weken gratis.",
+          en: "Share Vellu with a colleague: one tap on your dashboard opens WhatsApp with a ready-made message, your own booking page and your referral link — if she signs up, you both get 2 weeks free.",
+          es: "Comparte Vellu con una colega: un toque en tu panel abre WhatsApp con un mensaje listo, tu página de reservas y tu enlace de recomendación; si se registra, ambas conseguís 2 semanas gratis.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
           nl: "Reviews: klanten kunnen anoniem plaatsen, en 'Schrijf een review' op je salonpagina stuurt de klant nu echt haar reviewlink.",
           en: "Reviews: clients can post anonymously, and 'Write a review' on your salon page now actually sends the client her review link.",
           es: "Reseñas: los clientes pueden publicar de forma anónima, y «Escribir una reseña» en tu página ahora envía de verdad el enlace al cliente.",

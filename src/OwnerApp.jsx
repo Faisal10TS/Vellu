@@ -459,6 +459,26 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
 // link, shows how many salons have signed up with it, and how many days of
 // free credit they've earned (2 weeks per referral). Billing credit is
 // redeemed by the Mollie webhook from profiles.referral_credit_days.
+// Kant-en-klaar aanbevelingsbericht: verwijzingslink (2 weken gratis voor
+// allebei) én de eigen boekingspagina, want "kijk maar hoe het eruitziet"
+// overtuigt meer dan een featurelijst. Gedeeld door de instellingenkaart en
+// de dashboardknop — één tekst, zodat het overal hetzelfde aankomt.
+const referralPromoText = (salonData, lang) => {
+  const code = salonData.referral_code || "";
+  const referralUrl = code ? `https://vellu.cc/owner?ref=${code}` : "https://vellu.cc";
+  const pageUrl = salonData.id ? `https://vellu.cc/${salonData.id}` : "";
+  const look = pageUrl
+    ? (lang === "nl" ? ` Zo ziet mijn boekingspagina eruit: ${pageUrl}` : lang === "es" ? ` Así se ve mi página de reservas: ${pageUrl}` : ` This is what my booking page looks like: ${pageUrl}`)
+    : "";
+  return lang === "nl"
+    ? `Hey! Ik gebruik Vellu voor mijn salonafspraken en het doet precies wat ik wil — klanten boeken zelf online en krijgen vanzelf een herinnering, dus ik hoef niemand meer achterna te zitten. Geen commissie, gewoon een vast bedrag per maand.${look} Probeer het 2 weken gratis via mijn link: ${referralUrl}`
+    : lang === "es"
+    ? `¡Hola! Uso Vellu para las citas de mi salón y hace justo lo que necesito — los clientes reservan online por su cuenta y reciben un recordatorio automático, así que ya no tengo que perseguir a nadie. Sin comisiones, solo una cuota fija al mes.${look} Pruébalo 2 semanas gratis con mi enlace: ${referralUrl}`
+    : `Hey! I'm using Vellu for my salon appointments and it does exactly what I need — clients book online by themselves and get automatic reminders, so I never have to chase anyone. No commission, just a fixed monthly price.${look} Try it 2 weeks for free with my link: ${referralUrl}`;
+};
+// Zonder nummer: WhatsApp vraagt zelf aan wie — de eigenaar kiest de collega.
+const referralWhatsAppUrl = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
+
 function ReferralBlock({ salonData, lang, c, accent, toast }) {
   const [copied, setCopied] = useState(false);
   const code = salonData.referral_code || "";
@@ -475,11 +495,7 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   // link erin: een persoonlijke aanbeveling deelt makkelijker en de eigenaar
   // hoeft zelf niets te typen. Zelfde tekst voor Kopieer en Delen, zodat het
   // bericht overal identiek aankomt.
-  const promoText = lang === "nl"
-    ? `Hey! Ik gebruik Vellu voor mijn salonafspraken en het doet precies wat ik wil — klanten boeken zelf online en krijgen vanzelf een herinnering, dus ik hoef niemand meer achterna te zitten. Geen commissie, gewoon een vast bedrag per maand. Probeer het 2 weken gratis via mijn link: ${referralUrl}`
-    : lang === "es"
-    ? `¡Hola! Uso Vellu para las citas de mi salón y hace justo lo que necesito — los clientes reservan online por su cuenta y reciben un recordatorio automático, así que ya no tengo que perseguir a nadie. Sin comisiones, solo una cuota fija al mes. Pruébalo 2 semanas gratis con mi enlace: ${referralUrl}`
-    : `Hey! I'm using Vellu for my salon appointments and it does exactly what I need — clients book online by themselves and get automatic reminders, so I never have to chase anyone. No commission, just a fixed monthly price. Try it 2 weeks for free with my link: ${referralUrl}`;
+  const promoText = referralPromoText(salonData, lang);
 
   const copy = async () => {
     try {
@@ -553,12 +569,17 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
         {referralUrl || "—"}
       </div>
 
+      {/* WhatsApp voorop: daar leven de collega's van een nail tech. */}
+      <a href={referralWhatsAppUrl(promoText)} target="_blank" rel="noopener noreferrer" className="btn-primary"
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", fontSize: 11, textDecoration: "none", marginBottom: 8, pointerEvents: code ? "auto" : "none", opacity: code ? 1 : 0.5 }}>
+        <NavIcon name="chat" size={14} color="currentColor" /> {lang === "nl" ? "Stuur via WhatsApp" : lang === "es" ? "Enviar por WhatsApp" : "Send via WhatsApp"}
+      </a>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn-ghost" style={{ flex: 1, fontSize: 11 }} onClick={copy} disabled={!code}>
-          {copied ? (lang === "nl" ? "✓ Gekopieerd" : lang === "es" ? "✓ Copiado" : "✓ Copied") : (lang === "nl" ? "Kopieer bericht" : lang === "es" ? "Copiar mensaje" : "Copy message")}
+          {copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer bericht" : lang === "es" ? "Copiar mensaje" : "Copy message")}
         </button>
-        <button className="btn-primary" style={{ flex: 1, fontSize: 11 }} onClick={share} disabled={!code}>
-          {lang === "nl" ? "Delen" : lang === "es" ? "Compartir" : "Share"}
+        <button className="btn-ghost" style={{ flex: 1, fontSize: 11 }} onClick={share} disabled={!code}>
+          {lang === "nl" ? "Anders delen" : lang === "es" ? "Compartir de otra forma" : "Share another way"}
         </button>
       </div>
 
@@ -8980,6 +9001,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <NavIcon name="calendar" size={14} color={c.textSub} /> {lang === "nl" ? "Koppel telefoon-agenda" : lang === "es" ? "Vincular calendario del móvil" : "Link phone calendar"}
                 </button>
               </div>
+
+              {/* Deel Vellu — één tik naar WhatsApp met een kant-en-klaar bericht,
+                  eigen boekingspagina en verwijzingscode erin. Tot nu toe kwam
+                  elke salon via een warme aanbeveling binnen; dit maakt zo'n
+                  aanbeveling één tik in plaats van een gunst (Faisal, 07-09). */}
+              {salonData.referral_code && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, marginBottom: 22, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Deel Vellu met een collega" : lang === "es" ? "Comparte Vellu con una colega" : "Share Vellu with a colleague"}</div>
+                    <div style={{ fontSize: 11, color: c.textSub, marginTop: 2, lineHeight: 1.4 }}>{lang === "nl" ? "Meldt zij zich aan via jouw link, dan krijgen jullie allebei 2 weken gratis." : lang === "es" ? "Si se registra con tu enlace, ambas conseguís 2 semanas gratis." : "If she signs up through your link, you both get 2 weeks free."}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <a href={referralWhatsAppUrl(referralPromoText(salonData, lang))} target="_blank" rel="noopener noreferrer" className="btn-primary" aria-label="WhatsApp"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", fontSize: 11, textDecoration: "none" }}>
+                      <NavIcon name="chat" size={14} color="currentColor" /> WhatsApp
+                    </a>
+                    <button className="btn-ghost" style={{ padding: "10px 14px", fontSize: 11 }}
+                      onClick={async () => { try { await navigator.clipboard.writeText(referralPromoText(salonData, lang)); toast.show(lang === "nl" ? "Bericht gekopieerd" : lang === "es" ? "Mensaje copiado" : "Message copied"); } catch { toast.show(lang === "nl" ? "Kopiëren mislukt" : lang === "es" ? "No se pudo copiar" : "Copy failed", "error"); } }}>
+                      {lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Revenue Chart + Popular Services */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
