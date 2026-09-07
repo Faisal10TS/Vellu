@@ -67,10 +67,10 @@ export default function WhatsNewModal({ releases, lang: appLang, c, accent, onCl
             een privéadres). */}
         <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>
           {lang === "nl" ? "Iets gevonden dat niet werkt, of een idee voor Vellu? " : lang === "es" ? "¿Algo que no funciona o una idea para Vellu? " : "Found something that doesn't work, or have an idea for Vellu? "}
-          <a href={`mailto:info@vellu.cc?subject=${encodeURIComponent(lang === "nl" ? "Vellu: idee of bug" : lang === "es" ? "Vellu: idea o error" : "Vellu: idea or bug")}`} style={{ color: accent, textDecoration: "underline", fontWeight: 500 }}>
+          <a href={`mailto:mirahventures@vellu.cc?subject=${encodeURIComponent(lang === "nl" ? "Vellu: idee of bug" : lang === "es" ? "Vellu: idea o error" : "Vellu: idea or bug")}`} style={{ color: accent, textDecoration: "underline", fontWeight: 500 }}>
             {lang === "nl" ? "Mail ons" : lang === "es" ? "Escríbenos" : "Email us"}
           </a>
-          {" · info@vellu.cc"}
+          {" · mirahventures@vellu.cc"}
         </div>
       </div>
     </div>
