@@ -553,7 +553,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       : lang === "es"
       ? `¿Registrar la devolución de ${cur}${refund.toFixed(2)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
       : `Record the refund of ${cur}${refund.toFixed(2)} to ${a.client_name}? The client gets a confirmation by email.`;
-    if (!(await showConfirm(msg))) return;
+    // Neutrale knop: de standaard is de rode "Verwijderen" en dat klopt hier niet.
+    if (!(await showConfirm(msg, { tone: "primary", confirmText: lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded" }))) return;
     setProcessingApptId(a.id);
     try {
       const paidBefore = paidAmountOf(a);
