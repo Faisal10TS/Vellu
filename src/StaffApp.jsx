@@ -11,6 +11,8 @@ import {
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf
 } from "./shared.jsx";
+import WhatsNewModal from "./WhatsNewModal.jsx";
+import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
@@ -19,6 +21,26 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
+  // "Wat is er nieuw" — zelfde regels als in OwnerApp (releaseNotes.js), met
+  // de punten voor medewerkers. Sleutel per account, per apparaat.
+  const [whatsNew, setWhatsNew] = useState(null);
+  const whatsNewId = staffMember?.user_id || staffMember?.id;
+  useEffect(() => {
+    if (!whatsNewId) return;
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem(seenKey(whatsNewId)); } catch { /* private mode */ }
+    const unseen = unseenReleases({ lastSeenId: lastSeen, userCreatedAt: staffMember?.created_at, audience: "staff" });
+    if (unseen.length === 0) {
+      try { if (lastSeen !== LATEST_RELEASE_ID) localStorage.setItem(seenKey(whatsNewId), LATEST_RELEASE_ID); } catch { /* private mode */ }
+      return;
+    }
+    const t = setTimeout(() => setWhatsNew(unseen), 800);
+    return () => clearTimeout(t);
+  }, [whatsNewId]);
+  const closeWhatsNew = () => {
+    setWhatsNew(null);
+    try { localStorage.setItem(seenKey(whatsNewId), LATEST_RELEASE_ID); } catch { /* private mode */ }
+  };
   const accent = readableAccent(salonProfile.accent_color, theme);
   const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
   // Currency symbol from the salon's country_code — all amounts staff see (their
@@ -909,6 +931,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+      {whatsNew && <WhatsNewModal releases={whatsNew} lang={lang} c={c} accent={accent} onClose={closeWhatsNew} />}
       {/* Mobile-only PWA install banner — staff are Vellu users just like
           owners (they open their agenda daily), so they get the same install
           nudge. Deliberately NOT shown to salon clients (see ClientApp). */}

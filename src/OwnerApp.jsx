@@ -21,6 +21,8 @@ import {
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
 } from "./shared.jsx";
+import WhatsNewModal from "./WhatsNewModal.jsx";
+import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
 // genoeg om gewoon mee te bundelen — jsPDF blijft lazy.
@@ -4202,6 +4204,28 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [tourOpen, setTourOpen] = useState(false);
   const [tourRun, setTourRun] = useState(0); // remount key — always restart at step 1
   const tourKey = `vellu_tour_v1_${salonData.id || "new"}`;
+  // "Wat is er nieuw": één keer per release (per apparaat, localStorage), pas
+  // als het dashboard staat en er geen wizard of rondleiding open is — die
+  // gaan voor. Zie releaseNotes.js voor de inhoud en de regels.
+  const [whatsNew, setWhatsNew] = useState(null);
+  useEffect(() => {
+    if (!dataLoaded || showOnboarding || tourOpen || !user?.id) return;
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem(seenKey(user.id)); } catch { /* private mode */ }
+    const unseen = unseenReleases({ lastSeenId: lastSeen, userCreatedAt: user.created_at, audience: "owner" });
+    if (unseen.length === 0) {
+      // Niets te tonen (alles gezien, of account jonger dan de releases):
+      // wel de stand vastleggen, anders komt een oude release later alsnog.
+      try { if (lastSeen !== LATEST_RELEASE_ID) localStorage.setItem(seenKey(user.id), LATEST_RELEASE_ID); } catch { /* private mode */ }
+      return;
+    }
+    const t = setTimeout(() => setWhatsNew(unseen), 600);
+    return () => clearTimeout(t);
+  }, [dataLoaded, showOnboarding, tourOpen, user?.id]);
+  const closeWhatsNew = () => {
+    setWhatsNew(null);
+    try { localStorage.setItem(seenKey(user?.id), LATEST_RELEASE_ID); } catch { /* private mode */ }
+  };
   const startTour = () => { setView("dashboard"); setTourRun(n => n + 1); setTourOpen(true); };
   const endTour = () => {
     setTourOpen(false);
@@ -7452,6 +7476,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
 
       {tourOpen && <AppTour key={tourRun} steps={tourSteps} lang={lang} c={c} accent={accent} onFinish={endTour} />}
+      {whatsNew && !tourOpen && <WhatsNewModal releases={whatsNew} lang={lang} c={c} accent={accent} onClose={closeWhatsNew} />}
 
       {/* Floating AI help assistant — knowledge-only support for the owner.
           Hidden while the guided tour is running so they don't overlap. */}
