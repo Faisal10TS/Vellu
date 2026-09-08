@@ -21,6 +21,14 @@ export const RELEASES = [
       {
         kind: "new", audience: ["owner"],
         text: {
+          nl: "Licht of donker: kies bij Instellingen → Salon → Stijl waarin je boekingspagina opent (Licht, Donker of Apparaat volgen). Tot nu toe opende de pagina altijd donker.",
+          en: "Light or dark: under Settings → Salon → Style choose how your booking page opens (Light, Dark or Follow device). Until now it always opened dark.",
+          es: "Claro u oscuro: en Ajustes → Salón → Estilo elige cómo se abre tu página de reservas (Claro, Oscuro o Según el dispositivo). Hasta ahora siempre se abría en oscuro.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
           nl: "Stempelkaart: kies bij Instellingen → Klanten & marketing 'Alle klanten' of 'Alleen gekozen klanten'. Bij gekozen klanten zet je per klant de schakelaar 'Stempelkaart' aan op haar klantkaart; alleen zij sparen en krijgen een code.",
           en: "Loyalty card: under Settings → Clients & marketing choose 'All clients' or 'Only chosen clients'. With chosen clients you turn on the 'Loyalty card' switch on a client's card; only they collect stamps and get a code.",
           es: "Tarjeta de fidelidad: en Ajustes → Clientes y marketing elige «Todos los clientes» o «Solo clientes elegidos». Con clientes elegidos activas el interruptor «Tarjeta de fidelidad» en la ficha del cliente; solo ellos acumulan sellos y reciben un código.",

@@ -417,7 +417,24 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false }) {
-  const { colors: themeC, theme } = useTheme();
+  const { colors: themeC, theme, set: setThemeMode } = useTheme();
+  // Thema bij het openen = keuze van de salon (Instellingen → Salon → Stijl):
+  // "light"/"dark" vast, "auto" volgt het apparaat. Een Bonaire-salon vroeg
+  // erom (08-09): de pagina opende donker en licht is overzichtelijker. De
+  // bezoeker kan tijdens het bezoek nog wisselen; bij weggaan komt haar eigen
+  // (bewaarde) voorkeur terug zodat het dashboard er niets van merkt.
+  useEffect(() => {
+    const pref = initialSalon.booking_theme;
+    let wanted = null;
+    if (pref === "light" || pref === "dark") wanted = pref;
+    else if (pref === "auto") { try { wanted = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; } catch { wanted = null; } }
+    if (wanted) setThemeMode(wanted);
+    return () => {
+      let stored = null; try { stored = localStorage.getItem("vellu-theme"); } catch { stored = null; }
+      setThemeMode(stored === "light" || stored === "dark" ? stored : "dark");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSalon.id, initialSalon.booking_theme]);
   // readableAccent: wit accent in licht thema (of zwart in donker) zou overal
   // in de achtergrond verdwijnen — render het dan als neutrale inkt. En op een
   // donker accent moet de tekst óp knoppen/chips licht zijn (onAccentInk).

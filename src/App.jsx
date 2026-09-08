@@ -563,6 +563,8 @@ function SalonRoute({ lang, setLang }) {
         business_hours: data.business_hours || DEFAULT_HOURS,
         account_type: data.account_type || "joint",
         page_font: data.page_font || "classic",
+        // Boekingspagina opent in dark (oude gedrag) | light | auto (apparaat).
+        booking_theme: data.booking_theme || "dark",
         slot_interval_minutes: data.slot_interval_minutes || 30,
         show_owner_on_booking: !!data.show_owner_on_booking,
         booking_policy: data.booking_policy || "",

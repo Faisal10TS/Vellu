@@ -4494,6 +4494,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           cover_focal_x: data.cover_focal_x ?? 50,
           cover_zoom: Number(data.cover_zoom) || 1,
           page_font: data.page_font || "classic",
+          booking_theme: data.booking_theme || "dark",
           discount_codes: data.discount_codes || [],
           day_overrides: data.day_overrides || {},
           // kind='block' rows are unavailability (agenda banners, slot
@@ -12378,6 +12379,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   the same everywhere; only headings/titles/prices change. */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Stijl" : lang === "es" ? "Estilo" : "Style"}</SL>
+                {/* Licht of donker: waarin de boekingspagina OPENT (verzoek van een
+                    Bonaire-salon, 08-09). De bezoeker kan tijdens het bezoek nog
+                    wisselen met het zonnetje/maantje. */}
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8 }}>
+                  {lang === "nl" ? "Je boekingspagina opent in:" : lang === "es" ? "Tu página de reservas se abre en:" : "Your booking page opens in:"}
+                </div>
+                <div role="radiogroup" data-booking-theme="1" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+                  {[
+                    ["light", lang === "nl" ? "Licht" : lang === "es" ? "Claro" : "Light"],
+                    ["dark", lang === "nl" ? "Donker" : lang === "es" ? "Oscuro" : "Dark"],
+                    ["auto", lang === "nl" ? "Apparaat volgen" : lang === "es" ? "Según el dispositivo" : "Follow device"],
+                  ].map(([key, label]) => {
+                    const sel = (salonData.booking_theme || "dark") === key;
+                    return (
+                      <div key={key} role="radio" aria-checked={sel} tabIndex={0}
+                        onClick={() => update(d => { d.booking_theme = key; return d; })}
+                        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); update(d => { d.booking_theme = key; return d; }); } }}
+                        style={{ padding: "10px 6px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: `1px solid ${sel ? accent : c.inputBorder}`, background: sel ? `${accent}18` : c.bg, color: sel ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 16, lineHeight: 1.45 }}>
+                  {lang === "nl" ? "Klanten kunnen op de pagina zelf nog wisselen met het zonnetje/maantje; bij een volgend bezoek geldt weer jouw keuze. 'Apparaat volgen' neemt de licht/donker-stand van hun telefoon over." : lang === "es" ? "Los clientes aún pueden cambiar en la página con el sol/la luna; en la siguiente visita vuelve a valer tu elección. 'Según el dispositivo' sigue el modo claro/oscuro de su teléfono." : "Clients can still switch on the page with the sun/moon; on their next visit your choice applies again. 'Follow device' takes the light/dark setting of their phone."}
+                </div>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
                   {lang === "nl" ? "Het lettertype van je boekingspagina." : lang === "es" ? "La fuente de tu página de reservas." : "The font of your booking page."}
                 </div>
@@ -17276,6 +17301,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   cover_focal_x: salonData.cover_focal_x ?? 50,
                   cover_zoom: Number(salonData.cover_zoom) || 1,
                   page_font: salonData.page_font || "classic",
+                  booking_theme: ["auto", "light", "dark"].includes(salonData.booking_theme) ? salonData.booking_theme : "dark",
                   discount_codes: salonData.discount_codes || [],
                   day_overrides: salonData.day_overrides || {},
                   account_type: salonData.account_type || "joint",

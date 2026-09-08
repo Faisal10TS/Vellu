@@ -47,7 +47,7 @@ const THEMES = {
   }
 };
 
-const ThemeContext = createContext({ theme: "dark", colors: THEMES.dark, toggle: () => {} });
+const ThemeContext = createContext({ theme: "dark", colors: THEMES.dark, toggle: () => {}, set: () => {} });
 
 function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
@@ -94,7 +94,12 @@ select option { background-color: ${THEMES[theme].selectBg}; color: ${THEMES[the
     if (meta) meta.setAttribute("content", bg);
   }, [theme]);
   return (
-    <ThemeContext.Provider value={{ theme, colors: THEMES[theme], toggle }}>
+    <ThemeContext.Provider value={{ theme, colors: THEMES[theme], toggle,
+      // Zetten ZONDER te bewaren: de boekingspagina opent in het thema dat de
+      // salon koos (profiles.booking_theme); de voorkeur van de bezoeker in
+      // localStorage blijft onaangeroerd en geldt weer zodra ze terug is in
+      // het dashboard of zelf het zonnetje/maantje aantikt.
+      set: (t) => { if (t === "light" || t === "dark") setTheme(t); } }}>
       {children}
     </ThemeContext.Provider>
   );
