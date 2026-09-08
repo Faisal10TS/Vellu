@@ -131,11 +131,11 @@ Vellu is een boekingsplatform voor salons met 0% commissie per boeking (vast maa
 Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp, of print de QR-code (knop "Toon QR-code" bij je link, of via Kopieer/Preview bovenaan het dashboard). De Preview-knop opent je publieke pagina zoals klanten die zien; omdat jij ingelogd bent zie je daar linksonder een knop "Terug naar dashboard" (klanten zien die knop niet).
 
 # Instellingen — zes tabbladen (nieuwe indeling)
-- Salon: profiel, stijl (kleur/logo/foto's), locaties, contact, adres & factuurgegevens, regio & valuta, betaalverzoeken, extra factuurprofielen.
+- Salon: profiel, stijl (kleur/logo/foto's), locaties, contact, adres & factuurgegevens, regio & valuta, betaalverzoeken (incl. "Vooruitbetalen aanbieden"), extra factuurprofielen.
 - Diensten & producten: behandelingen, categorieën, varianten, extra's én producten (voorraad, barcode, leverancier, CSV/Excel-import en -export).
 - Team: medewerkers.
 - Planning & boekingen: openingstijden, pauze, tijdslot-interval, boekingsvenster + annuleringstermijn, boekingsvoorwaarden, telefoonnummer verplicht, wachtlijst, herinnering-timing, herboek-herinnering, uitzonderingsdagen, blokkades, Google Agenda-koppeling, "Agenda in je telefoon" (iCal-feed), push-meldingen ("Meldingen op je telefoon"), no-show-blokkade.
-- Klanten & marketing: Google Reviews, verjaardagsmail, kortingscodes, nieuwsbrief, klanten importeren/exporteren.
+- Klanten & marketing: reviews en Google Reviews, verjaardagsactie, stempelkaart (spaarkaart), kortingscodes, nieuwsbrief, klanten importeren/exporteren.
 - Abonnement & account: abonnement, facturen van Vellu (met downloadlink), referral, e-mail/wachtwoord, rondleiding, uitloggen.
 
 # Diensten (Instellingen → Diensten & producten)
@@ -154,7 +154,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Medewerkers met eigen login beheren zelf hun werktijden, extra werkdagen en blokkades (ook "elke vrijdag geen <behandeling>") in hun eigen omgeving, en kunnen daar hun eigen telefoon-agenda koppelen (Instellingen → Werktijden → "Agenda in je telefoon" — alleen hun eigen afspraken).
 
 # Planning (Instellingen → Planning & boekingen)
-- Openingstijden per dag. Slot-interval instelbaar (bijv. elke 15 of 30 minuten). Pauze (break) instelbaar.
+- Openingstijden per dag. Slot-interval instelbaar (elke 15, 30, 45 of 60 minuten). Pauze (break) instelbaar.
 - Boekingsvenster: hoe kort van tevoren (min-advance) en hoe ver vooruit (max-advance) klanten mogen boeken.
 - Annuleringstermijn (bij Boekingsvenster): tot X uur voor aanvang werkt de annuleerlink uit de mail; binnen die termijn ziet de klant het telefoonnummer van de salon om te bellen. De eigenaar kan in de agenda altijd alles annuleren.
 - Herboek-herinnering: automatische "tijd voor een nieuwe afspraak"-mail na een instelbaar aantal weken (of uit). Ook de timing van de afspraakherinnering is instelbaar (ondergrens, gaat mee met de dagelijkse verzendronde).
@@ -168,12 +168,17 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Uitzonderingsdagen: EXTRA open openen op een dag die normaal dicht is (met eigen open/dicht-tijd), eventueel per medewerker.
 
 # Agenda
-- Bekijk per dag, week of maand. Zelf een afspraak inplannen, verzetten, afronden (voltooid) of markeren als no-show.
-- Tik op een afspraak voor alle details (per behandeling de starttijd, medewerker, prijs, betaalmethode, telefoon met bel/WhatsApp, e-mail, allergieën).
-- Een afspraak bewerken kan meerdere behandelingen bevatten; met "+ Dienst toevoegen" voeg je er een toe zonder de andere te verliezen. Je kunt ook extra's toevoegen bij het bewerken.
+- Bekijk per dag, week of maand. Zelf een afspraak inplannen ("+ Afspraak toevoegen", ook met verjaardag van de klant), verzetten, bewerken, afronden (voltooid) of markeren als no-show. Annuleren kan altijd; de klant krijgt dan een mail.
+- Tik op een afspraak voor alle details (per behandeling de starttijd, medewerker, prijs, betaalmethode/betaalstatus, telefoon met bel/WhatsApp, e-mail, allergieën).
+- Bewerk: datum, tijd, behandelingen (meerdere; met "+ Dienst toevoegen" voeg je er een toe zonder de andere te verliezen), extra's, en de prijs — korting als bedrag OF als percentage (schakelaar naast het veld). Verandert er iets dat de klant raakt (datum, tijd, prijs, behandeling), dan krijgt ze automatisch een "Afspraak gewijzigd"-mail met oud en nieuw.
+- Afronden ("Markeer voltooid"): er verschijnt een kiezer "Hoe is er betaald?" — Contant, Pin, Overschrijving of "Later / factuur". De keuze staat daarna op de kaart ("Betaald · Pin") en in de Facturen-tab. Was alles al vooruitbetaald, dan slaat de kiezer over.
+- Producten bij een afspraak aanslaan (Professional): mandje-knop op de kaart; de producten komen op dezelfde factuur.
+- Een afspraak met de amberkleurige badge "Wacht op betaling" is een RESERVERING van een klant die vooruitbetaalt (zie Betalingen).
 
 # Klanten (tab Klanten)
-- Iedereen die ooit geboekt heeft, met historie en je eigen notities (bijv. welke kleur ze had). Je kunt handmatig klanten toevoegen, klanten samenvoegen (merge), en een klant bewerken/verbergen.
+- Iedereen die ooit geboekt heeft, met historie, bezoeken, besteed bedrag, laatste bezoek, je eigen notities (bijv. welke kleur ze had), verjaardag en stempelkaart-stand. Je kunt handmatig klanten toevoegen, een klant bewerken (naam, e-mail, telefoon, notities, verjaardag) en verbergen/verwijderen.
+- Dubbele klanten: staat dezelfde persoon twee keer in de lijst (bijv. één keer met 06-nummer en één keer met +316, of twee keer dezelfde naam met verschillende e-mailadressen), dan zie je bovenaan de lijst een gele banner "mogelijke duplicates gevonden". Tik erop en kies per paar welke kaart moet blijven. Het kan ook vanaf de klantkaart zelf: knop "Samenvoegen met duplicaat" → kies de andere kaart. Afspraken, notities, telefoon, verjaardag en stempelkaart gaan mee naar de kaart die blijft; dit kan niet ongedaan worden gemaakt.
+- Op de klantkaart: bel/WhatsApp-knoppen, "Schrijf een review" (mailt de klant een persoonlijke reviewlink), verjaardagscode aanmaken (als je zelf berichten stuurt), stempelkaart-stand met open code (kopiëren of via WhatsApp sturen).
 - No-shows worden geteld; je kunt automatisch blokkeren instellen na X no-shows.
 - Klant-export naar CSV is een Professional-functie.
 
@@ -190,13 +195,19 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Zie je nog euro's terwijl je regio al goed staat? Ververs de app volledig — op je telefoon: trek de pagina bovenaan omlaag (pull-to-refresh), of sluit het tabblad/app-icoon en open opnieuw. Je draait waarschijnlijk nog een oude, gecachte versie.
 
 # Betalingen
-- Standaard betaalt de klant bij de afspraak in de salon. Kiest de klant "online betalen", dan stuur je een BETAALVERZOEK NA afloop — Vellu verwerkt zelf geen geld.
-- Betaalverzoek: stel in Instellingen → Salon → Betaalverzoeken je betaallink (bunq.me of PayPal.me) en/of IBAN in. De factuurmail krijgt dan een "Betalen"-knop en een SEPA-QR-code die klanten met elke bank-app kunnen scannen — het bedrag en de referentie worden vooraf ingevuld. De klant hoeft niet bij dezelfde bank te zitten.
-- Elke medewerker kan eigen betaalgegevens hebben, zodat verzoeken naar hun eigen rekening gaan.
+- Vellu verwerkt zelf geen geld: het geld gaat altijd rechtstreeks naar de rekening of betaallink van de salon (of van de medewerker). Bij het boeken kiest de klant een betaalwijze: "Betalen bij afspraak" (standaard), "Betaalverzoek na afloop" (alleen als je een betaallink/IBAN hebt ingesteld) of "Vooruitbetalen" (alleen als je dat aanzet).
+- Betaalverzoek: stel in Instellingen → Salon → Betaalverzoeken je betaallink (bunq.me of PayPal.me, zónder bedrag — Vellu plakt het bedrag er zelf achter) en/of IBAN + tenaamstelling in. De factuurmail krijgt dan een "Betaal online"-knop en een SEPA-QR-code die klanten met elke bank-app kunnen scannen — bedrag en betaalkenmerk staan vooraf ingevuld. De klant hoeft niet bij dezelfde bank te zitten. Buiten de eurozone geen QR maar gewone bankgegevens.
+- Elke medewerker kan eigen betaalgegevens hebben, zodat verzoeken naar haar eigen rekening gaan.
+- VOORUITBETALEN: aanzetten met de schakelaar "Vooruitbetalen aanbieden" onder Instellingen → Salon → Betaalverzoeken (werkt alleen met een betaallink en/of IBAN). Kiest een klant bij het boeken "Vooruitbetalen", dan komt de afspraak als RESERVERING in je agenda met de badge "Wacht op betaling" en een betaaltermijn: 24 uur, of 48 uur als de afspraak meer dan een week weg is, en altijd uiterlijk 2 uur vóór de afspraak. De klant ziet direct na het boeken (en in de mail) het bedrag, de betaalknop met het bedrag, de QR-code, IBAN en het betaalkenmerk. De reservering houdt het tijdslot vast. Zodra het geld binnen is tik jij (of je medewerker) op de kaart op "Betaling ontvangen": de afspraak wordt bevestigd en de klant krijgt pas dan haar bevestigingsmail. Op de kaart staat ook een WhatsApp-knop voor een betaalherinnering. Niet op tijd betaald? 6 uur vóór de termijn krijgt de klant automatisch een herinnering; daarna vervalt de reservering vanzelf: de tijd komt weer vrij, klant en salon krijgen een mail, en wie op de wachtlijst staat wordt gemaild. Een reservering kun je ook gewoon annuleren.
+- Andere behandeling na een vooruitbetaling (bijv. €45 vooruitbetaald, in de salon toch de behandeling van €75): pas de afspraak aan via Bewerk (eigenaar) of "Prijs" op de kaart (medewerker, eigen afspraak). De klant krijgt dan automatisch een mail met "Al betaald €45 / Nog te betalen €30" en een betaalblok voor alleen het verschil — geen tweede volledige factuur. Op de kaart staat "Vooruitbetaald €45 · nog €30 open" met de knoppen "Restbetaling ontvangen" en WhatsApp. Betaalt ze het verschil in de salon, kies dat dan in de kiezer bij het afronden ("Nog €30 open. Hoe is de rest betaald?"). De factuur is er één voor het geheel: totaal €75, "Vooruitbetaald −€45", "Te betalen €30"; de betaalknop en QR vragen alleen het openstaande bedrag.
+- Goedkopere behandeling dan vooruitbetaald: de kaart toont "Te veel betaald: €X terug te betalen" met een WhatsApp-knop om het rekeningnummer van de klant te vragen. Na het overmaken tik je "Terugbetaald"; de klant krijgt een bevestigingsmail. Vellu stort zelf niets terug.
+- Een AANBETALING (alleen een deel vooraf) bestaat nog niet; vooruitbetalen is altijd het hele bedrag.
 
 # Facturen
-- Elke afgeronde behandeling wordt een factuur met BTW erbij (standaard 21%, per salon instelbaar). Je kunt de factuur direct naar de klant mailen.
-- In de Facturen-tab kun je per medewerker of het hele team filteren op omzet, en een omzetrapport als PDF downloaden (per medewerker of team).
+- Elke afgeronde behandeling wordt een factuur met belasting erbij (standaard 21% BTW; tarief en label volgen je regio). Je mailt de factuur zelf met "Factuur sturen" op de kaart; het factuurnummer loopt automatisch op. Op de factuur staat de betaalwijze; een vooruitbetaling wordt afgetrokken ("Vooruitbetaald −€X / Te betalen €Y").
+- Facturen-tab: per medewerker of het hele team filteren, betaald/open bijhouden, en een omzetrapport als PDF downloaden (per medewerker of team) voor een dag, week, maand, dit of vorig kwartaal, jaar of eigen periode.
+- Gecombineerde boeking met meerdere stylistes: de omzet wordt per stylist naar rato verdeeld (haar eigen aandeel), zodat de aandelen samen precies de boeking zijn.
+- Dashboard: tegel "Omzet dit jaar" (heel kalenderjaar).
 
 # Kassa (tab Kassa — Professional)
 - Volwaardig verkooppunt voor producten en kadobonnen, los van de agenda. Producten aantikken in het raster of scannen (USB-scanner in het zoekveld, of camera via de scan-knop).
@@ -204,10 +215,11 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Betaalwijzen: pin, contant of betaalverzoek. Klantnaam en e-mail zijn optioneel; mét e-mailadres gaat de factuur direct mee (bij betaalverzoek is e-mail verplicht). "Verkocht door" koppelt de verkoop aan een medewerker en telt mee in diens omzet.
 - Na afrekenen: bon printen (opent direct het printvenster), bon downloaden als PDF, of factuur mailen. Er is een schakelaar "Bon automatisch printen na afrekenen" (geldt per apparaat); zet je die aan, dan verschijnt ook een uitklap-instructie om bonnen zónder printvenster direct uit de printer te laten rollen.
 - Verkoop corrigeren doet de eigenaar ZELF, zonder support: elke verkoop in de lijst "Vandaag verkocht" is aanklikbaar — details bekijken, bon opnieuw printen, factuur sturen of VERWIJDEREN. Verwijderen zet de voorraad terug, geeft een ingewisselde kadobon zijn saldo terug (een in die bon verkochte kadobon wordt ongeldig) en haalt de verkoop uit omzet en rapporten. Fout afgerekend? Verwijderen en opnieuw aanslaan.
-- Dag-, maand- en jaarrapport als PDF, direct vanuit de Kassa-tab.
+- Korting op een losse verkoop: bedrag of percentage (zelfde schakelaar als bij afspraken), alleen op het productdeel.
+- Dag-, maand-, kwartaal- en jaarrapport als PDF, direct vanuit de Kassa-tab. Bij Producten zie je naast verkoop- en inkoopwaarde ook een tegel "Potentiële winst".
 
 # E-mails
-- Automatisch: boekingsbevestiging (klant), melding nieuwe boeking (salon), herinnering 24 uur vooraf (klant + salon-dagoverzicht), annuleringsmail, en de factuur.
+- Automatisch: boekingsbevestiging (klant), melding nieuwe boeking of reservering (salon), herinnering 24 uur vooraf (klant + salon-dagoverzicht), "Afspraak gewijzigd", annuleringsmail, follow-up na het bezoek met reviewlink en stempelstand, vooruitbetaal-mails (betaalverzoek, herinnering, vervallen, bevestiging na ontvangst), terugbetaal-bevestiging, stempelkaart-code, verjaardagsmail, herboek-herinnering, wachtlijst-mails en de factuur (die stuur je zelf).
 - Krijgt niemand mails? Controleer of je salon-e-mailadres klopt in Instellingen. Mails komen van noreply@vellu.cc met jouw salonnaam als afzender en jouw adres als antwoordadres.
 
 # Uiterlijk / stijl (Instellingen → Salon)
@@ -229,12 +241,25 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Omzet over tijd, populairste behandelingen, drukste dagen; te filteren per medewerker.
 
 # Klanten & marketing (Instellingen → Klanten & marketing)
-- Reviews: klanten kunnen na een afspraak een review achterlaten; die zie je op je pagina. Hier koppel je ook Google Reviews.
-- Verjaardagsmail: automatische felicitatie met persoonlijke kortingscode op de verjaardag van de klant. Werkt voor klanten met een bekende geboortedatum (invullen via "Bewerk klant" of meenemen in de CSV-import). Percentage en code-prefix stel je zelf in; de code is persoonlijk en alleen geldig voor het e-mailadres van de jarige.
+- Reviews: klanten krijgen na hun bezoek een mail met een persoonlijke reviewlink (ook te sturen via "Schrijf een review" op de klantkaart); ze kunnen de review desgewenst anoniem plaatsen. Reviews staan op je boekingspagina. Hier koppel je ook Google Reviews.
+- Verjaardagsactie: hoofdschakelaar "Verjaardagsactie gebruiken". Dan kies je: "Vellu mailt automatisch" (felicitatie met persoonlijke kortingscode op de verjaardag) of "Ik stuur zelf een bericht" (je maakt op de klantkaart zelf een persoonlijke code aan en stuurt die bijv. via WhatsApp). Percentage en code-prefix stel je in. Werkt voor klanten met een bekende geboortedatum: invullen via "Bewerk klant", bij "+ Afspraak toevoegen", meenemen in de CSV-import, of — met de optie "vraag verjaardag bij het boeken" — vult de klant 'm zelf in op je boekingspagina. De code is persoonlijk en alleen geldig voor het e-mailadres van de jarige.
+- STEMPELKAART (spaarkaart): zet 'm aan en kies na hoeveel afgeronde bezoeken (5/8/10/12 of eigen getal) de klant welke korting (10/15/20/25% of eigen) krijgt, hoe lang de code geldig is, het begin van de code (bijv. je salonnaam) en "tel bezoeken vanaf" (zet de datum eerder om eerdere bezoeken mee te tellen). Na elk volle kaart krijgt de klant AUTOMATISCH een persoonlijke kortingscode per e-mail; jij krijgt een melding. De stand (stempels, open code) zie je in de klantenlijst en op de klantkaart, met Kopieer- en WhatsApp-knop. Een stempel = een afgeronde afspraak (Voltooid); kassaverkopen tellen niet; klanten zonder e-mailadres kunnen niet sparen. Inwisselen: de klant vult de code in bij "kortingscode" op de boekingspagina, of jij verrekent 'm aan de kassa. Vergeet niet Opslaan.
+- Stempelkaart per teamlid (salons met team): schakelaar "Stempelkaart per teamlid" — bezoeken tellen per medewerker en de code geldt alleen op behandelingen bij háár (anders spaart een klant bij de een en verzilvert ze bij de ander).
+- Stempelkaart voor wie? Kies "Alle klanten" (iedereen met e-mailadres spaart) of "Alleen gekozen klanten": dan zet je per klant de schakelaar "Stempelkaart" aan op haar klantkaart in Klanten. Alleen die klanten sparen en krijgen een code; eerdere bezoeken tellen meteen mee zodra je iemand aanzet. Bij "gekozen klanten" staat de spaar-regel niet op je boekingspagina.
 - Klanten importeren uit een andere app (CSV met Naam, E-mail, Telefoon, Verjaardag, Notitie) kan hier; klanten exporteren naar CSV is Professional.
 - Kortingscodes, nieuwsbrief en meerdere locaties zijn Professional-functies.
 
-Vellu is een product van Mirah Ventures. Kom je er samen niet uit, verwijs dan naar mirahventures@vellu.cc.`;
+# Medewerkers-app (eigen login, Professional)
+- Een medewerker ziet haar eigen afspraken (of de hele salon als "Team ziet elkaars agenda" aanstaat), haar omzet en klanten. Op haar eigen afspraak kan ze: Voltooid (met de betaalwijze-kiezer), Prijs aanpassen (bijv. andere behandeling in de salon — bij een vooruitbetaling krijgt de klant alleen het verschil als betaalverzoek), Betaling ontvangen / Restbetaling ontvangen / Terugbetaald, No-show, Annuleer, WhatsApp-herinnering, Factuur sturen (met haar eigen factuurgegevens als ze die heeft).
+- Zelf regelen: werktijden, extra werkdagen, blokkades (ook wekelijks en per behandeling), telefoon-agenda-koppeling, eigen betaal-/factuurgegevens. Wat de eigenaar kan verbergen: omzet en klantcontactgegevens (Instellingen → Team).
+
+# Boekingspagina (wat klanten zien)
+- Diensten met "Vanaf"-prijzen, opties per dienst, medewerkerskeuze met eigen prijzen, foto's (lightbox met bladerpijlen), reviews, openingsstatus in de tijdzone van de salon, wachtlijst als het vol is, kortingscodeveld (ook verjaardags- en stempelkaartcodes), betaalkeuze, optioneel verjaardag en telefoonnummer. Op het telefoonnummer van de salon tikken geeft de keuze bellen of WhatsApp.
+
+# "Wat is er nieuw"-venster
+- Na elke update zien eigenaar en medewerkers één keer een venster met wat er nieuw is (NL/EN/ES). Onderaan staat waar je bugs of ideeën kunt melden. Gemiste updates staan er niet in; vraag mij of mail support.
+
+Vellu is een product van Mirah Ventures. Kom je er samen niet uit, of vraagt de eigenaar naar iets wat je hier niet vindt, verwijs dan naar mirahventures@vellu.cc.`;
 
 // Extra steer for PUBLIC visitors (landing page, not logged in). Overrides the
 // KB's "you help the owner, not the client" framing for prospects who are still
