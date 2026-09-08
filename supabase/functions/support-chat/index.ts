@@ -224,6 +224,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # Uiterlijk / stijl (Instellingen → Salon)
 - Merkkleur, logo en omslagfoto stel je in bij Salon. Daar kies je ook de STIJL (het lettertype van je boekingspagina): Klassiek, Modern, Elegant, Bold, Speels of Handgeschreven. Klassiek is de standaard.
+- Licht of donker: in dezelfde Stijl-kaart kies je waarin je boekingspagina OPENT — Licht, Donker (standaard) of Apparaat volgen (de licht/donker-stand van de telefoon van de klant). Klanten kunnen op de pagina zelf nog wisselen met het zonnetje/maantje; bij een volgend bezoek geldt weer jouw keuze. Opent je pagina donker en wil je licht? Kies Licht en klik Opslaan.
 - Een EIGEN lettertype (elke naam van fonts.google.com) is een Professional-functie.
 
 # Rondleiding / hulp
