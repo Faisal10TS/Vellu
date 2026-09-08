@@ -607,8 +607,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           side="left"
           launcherBottom={20}
           greeting={lang === "nl"
-            ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak."
-            : "Hi! Questions about Vellu? Happy to help — pricing, how it works, or whether it fits your salon. Ask away."}
+            ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc."
+            : "Hi! Questions about Vellu? Happy to help — pricing, how it works, or whether it fits your salon. Ask away. Can't get the answer from me? Email Mirah Ventures at mirahventures@vellu.cc."}
           subtitle={lang === "nl" ? "Vragen over Vellu?" : lang === "es" ? "¿Preguntas sobre Vellu?" : "Questions about Vellu?"}
         />
       </div>

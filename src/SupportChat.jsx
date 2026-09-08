@@ -11,8 +11,8 @@ import { supabase } from "./supabase.js";
 export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting: greetingOverride, subtitle: subtitleOverride, side = "right", launcherBottom }) {
   const [open, setOpen] = useState(false);
   const greeting = greetingOverride || (lang === "nl"
-    ? "Hoi! Ik ben de Vellu-assistent. Vraag me hoe iets werkt — bijvoorbeeld je openingstijden instellen, een medewerker toevoegen, of waarom een klant geen mail kreeg."
-    : "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email.");
+    ? "Hoi! Ik ben de Vellu-assistent. Vraag me hoe iets werkt — bijvoorbeeld je openingstijden instellen, een medewerker toevoegen, of waarom een klant geen mail kreeg. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc."
+    : "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email. Can't get the answer from me? Email Mirah Ventures at mirahventures@vellu.cc.");
   const [messages, setMessages] = useState([{ role: "assistant", content: greeting }]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -179,8 +179,13 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
               </button>
             </div>
-            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 6, textAlign: "center" }}>
+            {/* Altijd zichtbaar, ook als het gesprek al loopt: waar je heen kunt
+                als de assistent het niet weet (Faisal, 08-09). */}
+            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
               {lang === "nl" ? "AI-assistent · kan af en toe iets missen" : "AI assistant · may occasionally be wrong"}
+              <br />
+              {lang === "nl" ? "Geen antwoord? Mail Mirah Ventures: " : "No answer? Email Mirah Ventures: "}
+              <a href="mailto:mirahventures@vellu.cc" style={{ color: c.textSub, textDecoration: "underline" }}>mirahventures@vellu.cc</a>
             </div>
           </div>
         </div>
