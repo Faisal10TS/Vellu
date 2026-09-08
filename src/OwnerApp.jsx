@@ -3456,7 +3456,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <button className="btn-ghost" data-merge-btn="1" onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
               style={{ width: "100%", marginTop: -8, marginBottom: 6, fontSize: 11, padding: "10px 14px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}><circle cx="9" cy="12" r="5.5" /><circle cx="15" cy="12" r="5.5" /></svg>
-              {lang === "nl" ? "Samenvoegen met andere klant" : lang === "es" ? "Combinar con otro cliente" : "Merge with another client"}
+              {lang === "nl" ? "Samenvoegen met duplicaat" : lang === "es" ? "Combinar con duplicado" : "Merge with duplicate"}
             </button>
             <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", marginBottom: 20, lineHeight: 1.4 }}>
               {lang === "nl" ? "Staat deze klant dubbel in je lijst? Kies de kaart die moet blijven; afspraken en notities gaan mee." : lang === "es" ? "¿Este cliente aparece dos veces? Elige la ficha que se conserva; las citas y notas se trasladan." : "Is this client listed twice? Pick the card that stays; appointments and notes move along."}
