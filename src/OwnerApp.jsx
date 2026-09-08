@@ -3311,14 +3311,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400 }}>{selected.name}</div>
               </div>
-              <button
-                onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
-                aria-label={lang === "nl" ? "Samenvoegen met andere klant" : lang === "es" ? "Combinar con otro cliente" : "Merge into another client"}
-                title={lang === "nl" ? "Samenvoegen" : lang === "es" ? "Combinar" : "Merge"}
-                style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /><line x1="9" y1="12" x2="15" y2="12" /><polyline points="12 9 15 12 12 15" /></svg>
-              </button>
+              {/* Samenvoegen zat hier als icoontje, maar dat las als "scan"
+                  (Faisal, 08-09) — nu een benoemde knop onder de contactgegevens. */}
               <button
                 onClick={() => openEdit(selected)}
                 aria-label={lang === "nl" ? "Bewerk klant" : lang === "es" ? "Editar cliente" : "Edit customer"}
@@ -3455,6 +3449,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginTop: 3 }}>{selected.lastVisit ? fmtDate(selected.lastVisit).replace(/ \d{4}$/, "") : "—"}</div>
                 <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Laatst" : lang === "es" ? "Última" : "Last"}</div>
               </div>
+            </div>
+
+            {/* Samenvoegen als benoemde knop: het icoontje in de kop las als
+                "scan" (Faisal, 08-09). Twee kaarten van dezelfde klant → één. */}
+            <button className="btn-ghost" data-merge-btn="1" onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
+              style={{ width: "100%", marginTop: -8, marginBottom: 6, fontSize: 11, padding: "10px 14px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0 }}><circle cx="9" cy="12" r="5.5" /><circle cx="15" cy="12" r="5.5" /></svg>
+              {lang === "nl" ? "Samenvoegen met andere klant" : lang === "es" ? "Combinar con otro cliente" : "Merge with another client"}
+            </button>
+            <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", marginBottom: 20, lineHeight: 1.4 }}>
+              {lang === "nl" ? "Staat deze klant dubbel in je lijst? Kies de kaart die moet blijven; afspraken en notities gaan mee." : lang === "es" ? "¿Este cliente aparece dos veces? Elige la ficha que se conserva; las citas y notas se trasladan." : "Is this client listed twice? Pick the card that stays; appointments and notes move along."}
             </div>
 
             {/* History */}
