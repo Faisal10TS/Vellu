@@ -14,6 +14,29 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-08",
+    date: "2026-09-08",
+    title: { nl: "Stempelkaart voor gekozen klanten", en: "Loyalty card for chosen clients", es: "Tarjeta de fidelidad para clientes elegidos" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Stempelkaart: kies bij Instellingen → Klanten & marketing 'Alle klanten' of 'Alleen gekozen klanten'. Bij gekozen klanten zet je per klant de schakelaar 'Stempelkaart' aan op haar klantkaart; alleen zij sparen en krijgen een code.",
+          en: "Loyalty card: under Settings → Clients & marketing choose 'All clients' or 'Only chosen clients'. With chosen clients you turn on the 'Loyalty card' switch on a client's card; only they collect stamps and get a code.",
+          es: "Tarjeta de fidelidad: en Ajustes → Clientes y marketing elige «Todos los clientes» o «Solo clientes elegidos». Con clientes elegidos activas el interruptor «Tarjeta de fidelidad» en la ficha del cliente; solo ellos acumulan sellos y reciben un código.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Klanten: dubbele klanten worden weer herkend (ook als het nummer eens als 06 en eens als +316 is ingevuld, of bij dezelfde naam) en samenvoegen werkt weer, ook na een eerdere samenvoeging.",
+          en: "Clients: duplicate clients are recognised again (also when the number was entered once as 06 and once as +316, or with the same name) and merging works again, also after an earlier merge.",
+          es: "Clientes: los clientes duplicados se vuelven a reconocer (también si el número se escribió una vez como 06 y otra como +316, o con el mismo nombre) y combinar vuelve a funcionar, también tras una combinación anterior.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-07b",
     date: "2026-09-07",
     title: { nl: "Vooruitbetalen", en: "Paying in advance", es: "Pago por adelantado" },

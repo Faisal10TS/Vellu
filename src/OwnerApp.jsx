@@ -2654,7 +2654,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .order("date", { ascending: false }),
         supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday")
+          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in")
           .eq("owner_id", ownerId),
         supabase
           .from("waitlist")
@@ -2697,7 +2697,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         let agg = byEmail.get(email);
         if (!agg) {
           const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
-          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, loyaltyOptIn: false, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           byEmail.set(email, agg);
         }
         if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
@@ -2726,8 +2726,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           if (m.birthday) existing.birthday = m.birthday;
           existing.manualId = m.id;
           existing.hidden = !!m.hidden;
+          existing.loyaltyOptIn = !!m.loyalty_opt_in;
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
         }
       }
       const list = [...Array.from(byEmail.values()), ...extra]
@@ -2877,6 +2878,25 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     setRefreshKey((k) => k + 1);
   };
 
+  // Stempelkaart alleen voor gekozen klanten: het vinkje per klant staat op
+  // de salon-eigen klantrij (manual_clients). Geen rij? Dan een schaduwrij
+  // aanmaken, net als bij verbergen. De trigger leest hetzelfde vinkje.
+  const setLoyaltyOptIn = async (cl, on) => {
+    if (!cl) return;
+    let error, newId = cl.manualId || null;
+    if (cl.manualId) {
+      ({ error } = await supabase.from("manual_clients").update({ loyalty_opt_in: on }).eq("id", cl.manualId).eq("owner_id", ownerId));
+    } else {
+      if (!cl.email) { toast.show(lang === "nl" ? "Deze klant heeft geen e-mailadres en kan niet sparen" : lang === "es" ? "Este cliente no tiene correo y no puede acumular" : "This client has no email address and cannot collect stamps", "error"); return; }
+      const { data, error: e } = await supabase.from("manual_clients").insert({ owner_id: ownerId, name: cl.name || cl.email, email: cl.email, phone: cl.phone || null, loyalty_opt_in: on }).select("id").maybeSingle();
+      error = e; newId = data?.id || null;
+    }
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+    setSelected(s => s && s.key === cl.key ? { ...s, loyaltyOptIn: on, manualId: newId } : s);
+    toast.show(on ? (lang === "nl" ? "Stempelkaart aan voor deze klant" : lang === "es" ? "Tarjeta activada para este cliente" : "Loyalty card on for this client") : (lang === "nl" ? "Stempelkaart uit voor deze klant" : lang === "es" ? "Tarjeta desactivada para este cliente" : "Loyalty card off for this client"));
+    setRefreshKey((k) => k + 1);
+  };
+
   // Merge source client INTO target: rewrite all of source's appointments
   // to point at target's email/client_id, carry over notes/phone/birthday
   // from source's manual_clients row when target lacks them, then drop the
@@ -2916,6 +2936,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         if (source.notes && !target.notes) patch.notes = source.notes;
         if (source.phone && !target.phone) patch.phone = source.phone;
         if (source.birthday && !target.birthday) patch.birthday = source.birthday;
+        // Stempelkaart-vinkje gaat mee: wie meedeed, blijft meedoen.
+        if (source.loyaltyOptIn && !target.loyaltyOptIn) patch.loyalty_opt_in = true;
         if (Object.keys(patch).length > 0) {
           if (target.manualId) {
             await supabase.from("manual_clients").update(patch).eq("id", target.manualId).eq("owner_id", ownerId);
@@ -3243,6 +3265,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 </div>
                 {/* Stempelkaart-stand in de lijst; details op de kaart zelf. */}
                 {loyalty?.enabled && (() => {
+                  // Alleen gekozen klanten: zonder vinkje geen stand in de lijst.
+                  if (loyalty.selectedOnly && !cl.loyaltyOptIn) return null;
                   const need = Math.max(1, parseInt(loyalty.visits) || 10);
                   const mail = String(cl.email || "").toLowerCase();
                   // Eén kaart (salon) of één per stylist; alleen kaarten met stempels/code.
@@ -3361,11 +3385,30 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   `Hoi ${first}! 🎉 Je stempelkaart${card.name ? ` bij ${card.name}` : ""} bij ${loyalty.salonName} is vol: ${card.code.discount_pct}% korting op je volgende afspraak${card.name ? ` bij ${card.name}` : ""} met code ${card.code.code}, geldig tot ${card.code.expires_on}. Boek: https://vellu.cc/${loyalty.slug}`,
                   `Hi ${first}! 🎉 Your loyalty card${card.name ? ` with ${card.name}` : ""} at ${loyalty.salonName} is full: ${card.code.discount_pct}% off your next appointment${card.name ? ` with ${card.name}` : ""} with code ${card.code.code}, valid until ${card.code.expires_on}. Book: https://vellu.cc/${loyalty.slug}`,
                   `¡Hola ${first}! 🎉 Tu tarjeta${card.name ? ` con ${card.name}` : ""} en ${loyalty.salonName} está completa: ${card.code.discount_pct}% de descuento en tu próxima cita${card.name ? ` con ${card.name}` : ""} con el código ${card.code.code}, válido hasta ${card.code.expires_on}. Reserva: https://vellu.cc/${loyalty.slug}`) : "";
+                // Alleen gekozen klanten: schakelaar op de kaart; zonder vinkje
+                // geen stempels (de trigger slaat haar bezoeken over).
+                const takesPart = !loyalty.selectedOnly || !!selected.loyaltyOptIn;
                 return (
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginTop: 4 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={11} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}{loyalty.perStaff ? ` · ${L("per teamlid", "per team member", "por miembro")}` : ""}</div>
-                    {cards.length === 0 && <div style={{ fontSize: 11, color: c.textSub, marginTop: 6 }}>{L("Nog geen stempels", "No stamps yet", "Aún sin sellos")}</div>}
-                    {cards.map((card) => {
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={11} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}{loyalty.perStaff ? ` · ${L("per teamlid", "per team member", "por miembro")}` : ""}</div>
+                      {loyalty.selectedOnly && (
+                        <div role="switch" aria-checked={takesPart} data-loyalty-switch="1" onClick={() => setLoyaltyOptIn(selected, !takesPart)}
+                          title={takesPart ? L("Doet mee. Tik om uit te zetten.", "Takes part. Tap to turn off.", "Participa. Toca para desactivar.") : L("Doet niet mee. Tik om aan te zetten.", "Not taking part. Tap to turn on.", "No participa. Toca para activar.")}
+                          style={{ width: 34, height: 20, borderRadius: 100, position: "relative", background: takesPart ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
+                          <div style={{ position: "absolute", top: 2, left: takesPart ? 16 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                        </div>
+                      )}
+                    </div>
+                    {loyalty.selectedOnly && (
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                        {takesPart
+                          ? L("Doet mee: bezoeken tellen, code per e-mail.", "Takes part: visits count, code by email.", "Participa: las visitas cuentan, código por correo.")
+                          : L("Doet niet mee. Zet aan om deze klant te laten sparen; eerdere bezoeken tellen dan meteen mee.", "Not taking part. Turn on to let this client collect stamps; earlier visits count right away.", "No participa. Actívalo para que acumule sellos; las visitas anteriores cuentan de inmediato.")}
+                      </div>
+                    )}
+                    {takesPart && cards.length === 0 && <div style={{ fontSize: 11, color: c.textSub, marginTop: 6 }}>{L("Nog geen stempels", "No stamps yet", "Aún sin sellos")}</div>}
+                    {takesPart && cards.map((card) => {
                       const inCycle = card.visits % need;
                       const filled = (inCycle === 0 && card.visits > 0 && card.code) ? need : inCycle;
                       return (
@@ -4431,6 +4474,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           loyalty_code_prefix: data.loyalty_code_prefix || "",
           loyalty_since: data.loyalty_since || "",
           loyalty_per_staff: !!data.loyalty_per_staff,
+          // "all" = iedereen spaart; "selected" = alleen klanten met het vinkje
+          // Stempelkaart op hun klantkaart (manual_clients.loyalty_opt_in).
+          loyalty_scope: data.loyalty_scope === "selected" ? "selected" : "all",
           break_minutes: data.break_minutes || 0,
           slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
@@ -9846,7 +9892,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* CUSTOMERS */}
           {view === "klanten" && (
             <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} countryCode={salonData.country_code}
-              loyalty={salonData.loyalty_enabled ? { enabled: true, perStaff: !!salonData.loyalty_per_staff, visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
+              loyalty={salonData.loyalty_enabled ? { enabled: true, perStaff: !!salonData.loyalty_per_staff, selectedOnly: salonData.loyalty_scope === "selected", visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
           )}
 
           {/* AGENDA */}
@@ -16979,6 +17025,21 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           </div>
                         </div>
                       )}
+                      {/* Voor wie? Iedereen, of alleen klanten met het vinkje op hun
+                          klantkaart (verzoek van een salon, 08-09). Bij "gekozen"
+                          staat de spaar-regel niet op de publieke pagina. */}
+                      {lbl(L("Voor wie?", "For whom?", "¿Para quién?"), true)}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                        {chip((salonData.loyalty_scope || "all") !== "selected", L("Alle klanten", "All clients", "Todos los clientes"), () => update(d => { d.loyalty_scope = "all"; return d; }))}
+                        {chip(salonData.loyalty_scope === "selected", L("Alleen gekozen klanten", "Only chosen clients", "Solo clientes elegidos"), () => update(d => { d.loyalty_scope = "selected"; return d; }))}
+                      </div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+                        {salonData.loyalty_scope === "selected"
+                          ? L("Zet per klant de schakelaar 'Stempelkaart' aan op haar klantkaart (Klanten). Alleen die klanten sparen en krijgen een code; eerdere bezoeken tellen dan meteen mee. De spaar-regel staat niet op je boekingspagina.",
+                              "Turn on the 'Loyalty card' switch on a client's card (Clients). Only those clients collect stamps and get a code; earlier visits count right away. The loyalty line is not shown on your booking page.",
+                              "Activa el interruptor 'Tarjeta de fidelidad' en la ficha del cliente (Clientes). Solo esos clientes acumulan sellos y reciben un código; las visitas anteriores cuentan de inmediato. La línea de fidelidad no aparece en tu página de reservas.")
+                          : L("Elke klant met een e-mailadres spaart automatisch mee.", "Every client with an email address collects automatically.", "Cada cliente con correo acumula automáticamente.")}
+                      </div>
                       {lbl(L("Na hoeveel bezoeken?", "After how many visits?", "¿Después de cuántas visitas?"), true)}
                       {keuzerij("loyalty_visits", VIS, v => `${v}`, 1, 100, L("bezoeken", "visits", "visitas"))}
                       {lbl(L("Korting", "Discount", "Descuento"))}
@@ -17200,6 +17261,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   loyalty_code_prefix: (salonData.loyalty_code_prefix || "").trim() || null,
                   loyalty_since: salonData.loyalty_since || null,
                   loyalty_per_staff: !!salonData.loyalty_per_staff,
+                  loyalty_scope: salonData.loyalty_scope === "selected" ? "selected" : "all",
                   break_minutes: salonData.break_minutes || 0,
                   slot_interval_minutes: salonData.slot_interval_minutes || 30,
                   logo_url: salonData.logo_url || null,
