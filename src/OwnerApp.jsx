@@ -20,7 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, waDigits,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -2597,7 +2597,7 @@ function csvRowsToClients(rows) {
 
 // `loyalty`: { enabled, visits, pct, since, salonName, slug } — stempelkaart-
 // instellingen van de salon; null/uit = geen stempelkaart-blok op de kaarten.
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL" }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -2685,7 +2685,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const nowMs = Date.now();
       const byEmail = new Map();
       for (const a of appts || []) {
-        const email = String(a.clients?.email || a.client_email || "").toLowerCase();
+        // Sleutel = het e-mailadres OP DE AFSPRAAK. Dat is wat de salon ziet
+        // en bewerkt, waar de mails heen gaan en wat Samenvoegen herschrijft.
+        // De gedeelde clients-rij (client_id) kan een ander, ouder adres
+        // dragen — bij TTNB stonden zo twee "Carmen"-kaarten met hetzelfde
+        // afspraak-adres los van elkaar, en bleef samenvoegen zonder effect
+        // omdat de groepering op dat oude adres hing. Alleen terugvallen op
+        // de clients-rij als de afspraak zelf geen adres heeft.
+        const email = String(a.client_email || a.clients?.email || "").trim().toLowerCase();
         if (!email) continue;
         let agg = byEmail.get(email);
         if (!agg) {
@@ -2884,17 +2891,21 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     if (!source.manualId && !target.manualId && source.email && source.email === target.email && source.key === target.key) return;
     setMerging(true);
     try {
-      // 1. Rewrite appointments belonging to source → target's email.
-      //    Only touch this salon (owner_id) so a shared-email case at
-      //    another Vellu salon is untouched. Skip when both share the
-      //    same email — nothing to rewrite and the update is a no-op that
-      //    would also match target's rows.
-      if (source.email && target.email && source.email !== target.email) {
+      // 1. Rewrite the source's appointments → target's email (+ target's
+      //    shared clients-row when it has one, so the join agrees with the
+      //    address). Op ID, niet op e-mailadres: het adres in de lijst is
+      //    kleingemaakt en een .eq op client_email is hoofdlettergevoelig —
+      //    "Carmen@…" bleef zo onaangeroerd en de samenvoeging deed niets.
+      //    Only this salon's rows are ever touched (owner_id).
+      const ids = (source.appts || []).map(a => a.id).filter(Boolean);
+      if (ids.length > 0 && target.email && source.email !== target.email) {
+        const patch = { client_email: target.email };
+        if (target.clientId) patch.client_id = target.clientId;
         const { error: apptErr } = await supabase
           .from("appointments")
-          .update({ client_email: target.email })
+          .update(patch)
           .eq("owner_id", ownerId)
-          .eq("client_email", source.email);
+          .in("id", ids);
         if (apptErr) throw apptErr;
       }
 
@@ -2932,25 +2943,36 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   // number (digits only). Same email is already dedupe'd at load time, so
   // phone is the most reliable "same person, different email" signal.
   const dupePairs = useMemo(() => {
-    const byPhone = new Map();
+    // Telefoonnummers in internationale cijfers (waDigits): "+31 6 41…" en
+    // "(06) 41…" zijn hetzelfde nummer, maar kaal op cijfers vergeleken zijn
+    // ze dat niet — zo verdween bij TTNB de duplicaat-melding zodra een klant
+    // haar nummer een keer als 06 en een keer als +316 had ingevuld.
+    // Tweede signaal: exact dezelfde voor- én achternaam (zonder accenten en
+    // spaties) op verschillende adressen.
+    const groups = new Map();
+    const add = (k, cl) => { if (!groups.has(k)) groups.set(k, []); const g = groups.get(k); if (!g.includes(cl)) g.push(cl); };
     for (const cl of clients) {
-      const digits = (cl.phone || "").replace(/\D/g, "");
-      if (digits.length < 6) continue;
-      if (!byPhone.has(digits)) byPhone.set(digits, []);
-      byPhone.get(digits).push(cl);
+      const digits = waDigits(cl.phone, countryCode);
+      if (digits.length >= 8) add(`tel:${digits}`, cl);
+      const nm = String(cl.name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+      if (nm.split(/\s+/).length >= 2) add(`naam:${nm.replace(/[^a-z]/g, "")}`, cl);
     }
     const pairs = [];
-    for (const group of byPhone.values()) {
+    const seen = new Set();
+    for (const group of groups.values()) {
       if (group.length < 2) continue;
       // Emit pairs — sort by visits DESC so the record with more history
       // becomes the suggested survivor.
       const sorted = group.slice().sort((a, b) => (b.visitCount || 0) - (a.visitCount || 0));
       for (let i = 1; i < sorted.length; i++) {
+        const id = [sorted[0].key, sorted[i].key].sort().join("|");
+        if (seen.has(id)) continue;
+        seen.add(id);
         pairs.push({ survivor: sorted[0], source: sorted[i] });
       }
     }
     return pairs;
-  }, [clients]);
+  }, [clients, countryCode]);
 
   const markWaitlistNotified = async (id) => {
     const { error } = await supabase.from("waitlist").update({ status: "notified", notified_at: new Date().toISOString() }).eq("id", id);
@@ -3196,7 +3218,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               {lang === "nl" ? `${dupePairs.length} mogelijke duplicate${dupePairs.length === 1 ? "" : "s"} gevonden` : lang === "es" ? `${dupePairs.length} posible${dupePairs.length === 1 ? "" : "s"} duplicado${dupePairs.length === 1 ? "" : "s"} encontrado${dupePairs.length === 1 ? "" : "s"}` : `${dupePairs.length} possible duplicate${dupePairs.length === 1 ? "" : "s"} found`}
             </div>
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
-              {lang === "nl" ? "Klanten met hetzelfde telefoonnummer — klik om samen te voegen." : lang === "es" ? "Clientes que comparten un número de teléfono — haz clic para combinar." : "Clients sharing a phone number — click to merge."}
+              {lang === "nl" ? "Klanten met hetzelfde telefoonnummer of dezelfde naam — klik om samen te voegen." : lang === "es" ? "Clientes que comparten un número de teléfono o el mismo nombre — haz clic para combinar." : "Clients sharing a phone number or the same name — click to merge."}
             </div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.warning} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
@@ -3560,10 +3582,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
-                ? "Klanten die hetzelfde telefoonnummer delen. Kies welke record je wilt behouden — de ander wordt daarin samengevoegd."
+                ? "Klanten die hetzelfde telefoonnummer of dezelfde naam delen. Kies welke record je wilt behouden — de ander wordt daarin samengevoegd."
                 : lang === "es"
-                ? "Clientes que comparten el mismo número de teléfono. Elige cuál quieres conservar — el otro se combina con ese."
-                : "Clients sharing the same phone number. Pick which record to keep — the other gets merged in."}
+                ? "Clientes que comparten el mismo número de teléfono o el mismo nombre. Elige cuál quieres conservar — el otro se combina con ese."
+                : "Clients sharing the same phone number or the same name. Pick which record to keep — the other gets merged in."}
             </div>
             {dupePairs.length === 0 ? (
               <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "24px 0" }}>
@@ -9823,7 +9845,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled}
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} countryCode={salonData.country_code}
               loyalty={salonData.loyalty_enabled ? { enabled: true, perStaff: !!salonData.loyalty_per_staff, visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
           )}
 
