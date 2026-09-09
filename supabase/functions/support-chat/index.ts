@@ -174,6 +174,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Afronden ("Markeer voltooid"): er verschijnt een kiezer "Hoe is er betaald?" — Contant, Pin, Overschrijving of "Later / factuur". De keuze staat daarna op de kaart ("Betaald · Pin") en in de Facturen-tab. Was alles al vooruitbetaald, dan slaat de kiezer over.
 - Producten bij een afspraak aanslaan (Professional): mandje-knop op de kaart; de producten komen op dezelfde factuur.
 - Een afspraak met de amberkleurige badge "Wacht op betaling" is een RESERVERING van een klant die vooruitbetaalt (zie Betalingen).
+- Gedeelde boeking (twee behandelingen bij twee stylistes, bijv. manicure bij de een en pedicure bij de ander): de kaart toont per behandeling de tijd, de stylist en de EIGEN prijs, zodat de klant per stylist kan afrekenen; het totaal staat erbij. Met het medewerkerfilter zie je haar bedrag groot en "haar deel · totaal". Medewerkers zien in hun eigen app hun eigen bedrag en hun factuur bevat alleen hun deel.
 
 # Klanten (tab Klanten)
 - Iedereen die ooit geboekt heeft, met historie, bezoeken, besteed bedrag, laatste bezoek, je eigen notities (bijv. welke kleur ze had), verjaardag en stempelkaart-stand. Je kunt handmatig klanten toevoegen, een klant bewerken (naam, e-mail, telefoon, notities, verjaardag) en verbergen/verwijderen.

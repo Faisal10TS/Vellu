@@ -14,6 +14,21 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-09",
+    date: "2026-09-09",
+    title: { nl: "Prijs per behandeling bij een gedeelde boeking", en: "Price per treatment in a shared booking", es: "Precio por tratamiento en una reserva compartida" },
+    items: [
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Boekt een klant twee behandelingen bij twee stylistes, dan staat op de kaart nu per behandeling de tijd, de stylist én de eigen prijs. Met het medewerkerfilter zie je haar bedrag groot en het totaal klein; medewerkers zien in hun eigen app hun eigen bedrag en factureren alleen hun deel.",
+          en: "When a client books two treatments with two stylists, the card now shows each treatment's time, stylist and own price. With the team-member filter you see her amount large and the total small; team members see their own amount in their app and invoice only their part.",
+          es: "Si un cliente reserva dos tratamientos con dos estilistas, la tarjeta muestra ahora por tratamiento la hora, la estilista y su propio precio. Con el filtro de equipo ves su importe en grande y el total en pequeño; las trabajadoras ven su propio importe en su app y facturan solo su parte.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-08",
     date: "2026-09-08",
     title: { nl: "Stempelkaart voor gekozen klanten", en: "Loyalty card for chosen clients", es: "Tarjeta de fidelidad para clientes elegidos" },
