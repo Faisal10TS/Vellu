@@ -4775,6 +4775,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           return {
             ...a,
             time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+            // Starttijd van de HELE boeking: de kaart rekent de deeltijden
+            // hiervandaan (offset_min), niet vanaf deze al verschoven deeltijd.
+            _baseTime: a.time,
             service_duration: p.duration || a.service_duration,
             service_name: p.label || a.service_name,
             _slotKey: `${a.id}::${p.offset_min || 0}`,
@@ -7403,7 +7406,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // de catalogus gereconstrueerd); onbekend → geen bedrag per deel.
             const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
             const prices = bd.length >= 2 ? partPricesOf(a, salonData.services || [], salonData.staff || []) : null;
-            const [bh, bm] = (a.time || "0:0").split(":").map(Number);
+            const [bh, bm] = (a._baseTime || a.time || "0:0").split(":").map(Number);
             const baseMin = bh * 60 + (bm || 0);
             const multiStylist = new Set(bd.map(p => p.staff_id).filter(Boolean)).size > 1;
             const staffName = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
