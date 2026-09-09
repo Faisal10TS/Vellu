@@ -1989,7 +1989,10 @@ const catalogPartPrice = (p, services, staff) => {
 export const partPricesOf = (a, services = [], staff = []) => {
   const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
   if (bd.length === 0) return null;
-  const total = parseFloat(a?.service_price || 0) || 0;
+  // Producten die op de afspraak zijn aangeslagen zitten in service_price maar
+  // horen niet bij de behandelingen: eraf, anders slokken de delen ze op.
+  const productsSum = (Array.isArray(a?.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
+  const total = Math.max(0, (parseFloat(a?.service_price || 0) || 0) - productsSum);
   const raw = bd.map(p => {
     const stored = parseFloat(p?.price);
     return Number.isFinite(stored) ? stored : catalogPartPrice(p, services, staff);

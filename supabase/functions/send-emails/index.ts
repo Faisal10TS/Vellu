@@ -217,6 +217,14 @@ if(callerId&&!(await staffMayInvoice(callerId)))return new Response(JSON.stringi
 const bd=[];if(b.salon_address)bd.push(eAd);if(b.salon_kvk)bd.push(`KVK: ${eKv}`);if(b.salon_btw)bd.push(`${b.tax_id_label?esc(String(b.tax_id_label)):"BTW"}: ${eBt}`);if(b.salon_iban)bd.push(`IBAN: ${eIb}`);
 const bSec=bd.length>0?`<div style="background:#f0ede8;border-radius:10px;padding:16px;margin-bottom:24px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:8px;">${txt(lang,"Bedrijfsgegevens","Business details","Datos de la empresa")}</div><div style="font-size:13px;font-weight:500;margin-bottom:4px;">${eS}</div>${bd.map((d)=>`<div style="font-size:12px;color:#666;">${d}</div>`).join("")}</div>`:"";
 const gross=parseFloat(b.price||0);
+// Regels: bij een gedeelde boeking (twee behandelingen bij twee stylistes)
+// elke behandeling met haar stylist en eigen prijs, plus producten — één
+// factuur, en toch ziet de klant €67 bij de een en €58 bij de ander (TTNB
+// 09-09). Eén regel → de vertrouwde "Behandeling"-rij.
+const items=Array.isArray(b.items)?b.items.filter((it:any)=>it&&Number.isFinite(parseFloat(it.price))):[];
+const itemRows=items.length>=2
+ ? items.map((it:any)=>`<tr><td ${cL}>${esc(String(it.name||""))}${it.staff?`<span style="color:#999;"> · ${esc(String(it.staff))}</span>`:""}${(parseInt(it.qty)||1)>1?`<span style="color:#999;"> ×${parseInt(it.qty)}</span>`:""}</td><td ${cR}>${fP(parseFloat(it.price))}</td></tr>`).join("")
+ : row(txt(lang,"Behandeling","Treatment","Servicio"),eSv);
 const rate=Math.max(0,parseFloat(b.salon_btw_rate!=null?b.salon_btw_rate:21))/100;
 let vatRows="";
 const TAXL=b.tax_label?esc(String(b.tax_label)):txt(lang,"Btw","VAT","IVA");
@@ -265,7 +273,7 @@ const paidRows=paidAmt>0?`${row(txt(lang,"Vooruitbetaald","Paid in advance","Pag
 // een vooruitbetaling nog iets openstaat; altijd voor het OPEN bedrag. De
 // opbouw zelf staat in payBlockHtml, gedeeld met Vooruitbetalen.
 const payBlock=(b.payment_request||paidAmt>0)&&openAmt>0.005?payBlockHtml(openAmt,String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100)):"";
-await send(plainText(b.client_email),plainText(`${txt(lang,"Factuur","Invoice","Factura")} ${b.invoice_number||""} - ${b.salon_name}`),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin:0 0 4px;">${txt(lang,"Factuur","Invoice","Factura")}</h2><p style="color:#888;font-size:13px;margin:0 0 24px;">${eS}</p>${b.invoice_number?`<div style="background:${AC}1a;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;color:${AC};display:inline-block;margin-bottom:16px;">${eIN}</div>`:""}${bSec}<div ${bS}><table ${tS}>${row(txt(lang,"Klant","Client","Cliente"),eC)}${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Factuurdatum","Invoice date","Fecha de factura"),invDate)}${row(txt(lang,"Datum afspraak","Appointment date","Fecha de la cita"),eD)}${vatRows}${totRow(totLabel,fP(gross))}${paidRows}</table></div>${noVatNote}${payBlock}<p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Bedankt voor je bezoek!","Thank you for your visit!","¡Gracias por tu visita!")}</p></div>`);}
+await send(plainText(b.client_email),plainText(`${txt(lang,"Factuur","Invoice","Factura")} ${b.invoice_number||""} - ${b.salon_name}`),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin:0 0 4px;">${txt(lang,"Factuur","Invoice","Factura")}</h2><p style="color:#888;font-size:13px;margin:0 0 24px;">${eS}</p>${b.invoice_number?`<div style="background:${AC}1a;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;color:${AC};display:inline-block;margin-bottom:16px;">${eIN}</div>`:""}${bSec}<div ${bS}><table ${tS}>${row(txt(lang,"Klant","Client","Cliente"),eC)}${itemRows}${row(txt(lang,"Factuurdatum","Invoice date","Fecha de factura"),invDate)}${row(txt(lang,"Datum afspraak","Appointment date","Fecha de la cita"),eD)}${vatRows}${totRow(totLabel,fP(gross))}${paidRows}</table></div>${noVatNote}${payBlock}<p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Bedankt voor je bezoek!","Thank you for your visit!","¡Gracias por tu visita!")}</p></div>`);}
 if(type==="appointment_reminder"){
 // Deze mail zei altijd "morgen", maar de salon kiest zelf hoeveel uur van
 // tevoren de herinnering vertrekt (profiles.reminder_hours): bij 1, 2, 4 of 12

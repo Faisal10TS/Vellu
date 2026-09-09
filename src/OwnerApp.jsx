@@ -6998,10 +6998,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const nextNum = rpcNum;
         const invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
         sentInvoiceNumber = invoiceNumber;
+        // Regels op de factuur: bij een gedeelde boeking elke behandeling met
+        // haar stylist en EIGEN prijs (plus eventuele producten), zodat één
+        // factuur laat zien wie wat krijgt en wat het totaal is (TTNB, 09-09).
+        const invoiceItems = (() => {
+          const bdx = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+          const prod = (Array.isArray(a.products) ? a.products : []).map(it => ({ name: it.name || "", qty: parseInt(it.qty) || 1, price: (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1) }));
+          if (bdx.length < 2) return prod.length ? [{ name: String(a.service_name || "").split(" + ")[0], price: Math.max(0, parseFloat(a.service_price || 0) - prod.reduce((s, x) => s + x.price, 0)) }, ...prod] : null;
+          const pp = partPricesOf(a, salonData.services || [], salonData.staff || []);
+          if (!pp) return null;
+          return [...bdx.map((p2, i) => ({ name: p2.label || a.service_name, staff: (salonData.staff || []).find(s => s.id === p2.staff_id)?.name || "", price: pp[i] })), ...prod];
+        })();
         await sendEmails("invoice", {
           client_name: a.client_name,
           client_email: a.client_email,
           service_name: a.service_name,
+          items: invoiceItems,
           date: a.date,
           price: a.service_price,
           salon_name: p?.label ? `${salonData.name} — ${p.label}` : salonData.name,

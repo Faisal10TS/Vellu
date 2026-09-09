@@ -735,8 +735,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(rpcNum).padStart(4, "0")}`;
       await sendEmails("invoice", {
         client_name: a.client_name, client_email: a.client_email,
-        // Gedeelde boeking: alleen háár behandelingen en haar bedrag.
+        // Gedeelde boeking: alleen háár behandelingen en haar bedrag; met
+        // meerdere eigen behandelingen elk als regel met eigen prijs.
         service_name: myInvoiceName(a), date: a.date, price: myShare(a),
+        items: (() => { const sl = mySlots(a); return sl.length >= 2 && sl.every(s => s.price != null) ? sl.map(s => ({ name: s.label, staff: staffMember.name, price: s.price })) : null; })(),
         salon_name: `${salonProfile.business_name} — ${myStaff.name}`,
         invoice_number: invoiceNumber,
         salon_address: invoiceForm.address || salonProfile.address || "",
