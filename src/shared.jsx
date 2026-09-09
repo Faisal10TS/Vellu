@@ -1943,17 +1943,79 @@ export function PullToRefresh() {
 // boeking. Zonder prijzen per deel (oudere boekingen, staff-app-invoer) of met
 // maar één stylist: de hele prijs, zoals voorheen. De salon-totalen gebruiken
 // dit NIET — die tellen gewoon service_price.
-export const staffShareOf = (a, staffId) => {
+// Prijs per DEEL van een (gecombineerde) boeking, in de volgorde van
+// service_breakdown. Boekingen sinds 07-09-2026 dragen per deel een
+// brutoprijs (`price`); oudere niet — dan reconstrueren we 'm uit de
+// catalogus via het label dat book-appointment schrijft: "<dienst> — <variant>
+// + <extra>, <extra>", met de prijs per medewerker (price_overrides) als die
+// bestaat. Zijn alle delen bekend, dan worden ze naar rato geschaald naar de
+// eindprijs (korting en producten evenredig verdeeld) en klopt de som exact.
+// Eén onbekend deel → null: de kaart toont dan alleen het totaal, liever
+// niets dan een verkeerd getal. Aanleiding TTNB 09-09 (Esther): manicure bij
+// haar, pedicure bij Lady, klant rekent per stylist af — elk deel zijn prijs.
+const normLabel = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const catalogPartPrice = (p, services, staff) => {
+  const svc = (services || []).find(s => s.id === p?.service_id);
+  if (!svc) return null;
+  const label = String(p?.label || "");
+  // De dienstnaam zelf mag gewone streepjes bevatten ("Minimale design - BIAB"),
+  // dus splitsen op de em-dash vóór de variant en op " + " vóór de extra's.
+  const dash = label.indexOf(" — ");
+  const head = dash >= 0 ? label.slice(0, dash) : label;
+  const rest = dash >= 0 ? label.slice(dash + 3) : "";
+  const src = dash >= 0 ? rest : head;
+  const plus = src.indexOf(" + ");
+  const variantName = dash >= 0 ? (plus >= 0 ? src.slice(0, plus) : src) : "";
+  const extrasStr = plus >= 0 ? src.slice(plus + 3) : "";
+  const same = (x, name) => normLabel(x?.name_nl) === name || normLabel(x?.name_en) === name || normLabel(x?.name_es) === name;
+  let variant = null;
+  if (variantName) {
+    variant = (svc.variants || []).find(v => same(v, normLabel(variantName))) || null;
+    if (!variant) return null;
+  }
+  const member = (staff || []).find(m => m.id === p?.staff_id);
+  const override = (member?.price_overrides || []).find(o => o.service_id === svc.id && (variant ? o.variant_id === variant.id : !o.variant_id));
+  let price = override ? parseFloat(override.price) : (variant ? parseFloat(variant.price) : parseFloat(svc.price));
+  if (!Number.isFinite(price)) return null;
+  if (extrasStr) {
+    for (const name of extrasStr.split(", ")) {
+      const ex = (svc.extras || []).find(e => same(e, normLabel(name)));
+      if (!ex) return null;
+      price += parseFloat(ex.price) || 0;
+    }
+  }
+  return Math.round(price * 100) / 100;
+};
+export const partPricesOf = (a, services = [], staff = []) => {
+  const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
+  if (bd.length === 0) return null;
+  const total = parseFloat(a?.service_price || 0) || 0;
+  const raw = bd.map(p => {
+    const stored = parseFloat(p?.price);
+    return Number.isFinite(stored) ? stored : catalogPartPrice(p, services, staff);
+  });
+  if (raw.some(v => v == null || !Number.isFinite(v))) return null;
+  const gross = raw.reduce((s, v) => s + v, 0);
+  if (gross <= 0) return null;
+  const scaled = raw.map(v => Math.round((v / gross) * total * 100) / 100);
+  const diff = Math.round((total - scaled.reduce((s, v) => s + v, 0)) * 100) / 100;
+  scaled[scaled.length - 1] = Math.round((scaled[scaled.length - 1] + diff) * 100) / 100;
+  return scaled;
+};
+// Aandeel van één stylist in een gecombineerde boeking (som van háár delen).
+// `services`/`staff` zijn optioneel: zonder catalogus alleen opgeslagen
+// deelprijzen, zoals voorheen. Eén stylist of geen delen → de hele prijs.
+export const staffShareOf = (a, staffId, services, staff) => {
   const total = parseFloat(a?.service_price || 0) || 0;
   if (!staffId) return total;
   const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
-  if (bd.length < 2 || !bd.every(p => p && Number.isFinite(parseFloat(p.price)))) return total;
+  if (bd.length < 2) return total;
   const stylists = new Set(bd.map(p => p.staff_id).filter(Boolean));
   if (stylists.size < 2) return total;
-  const gross = bd.reduce((s, p) => s + parseFloat(p.price), 0);
-  if (gross <= 0) return total;
-  const mine = bd.filter(p => p.staff_id === staffId).reduce((s, p) => s + parseFloat(p.price), 0);
-  return Math.round((mine / gross) * total * 100) / 100;
+  const parts = partPricesOf(a, services, staff);
+  if (!parts) return total;
+  const mine = bd.reduce((s, p, i) => s + (p.staff_id === staffId ? parts[i] : 0), 0);
+  return Math.round(mine * 100) / 100;
 };
 
 // Betaald bedrag per afspraak. appointments.amount_paid (sinds 07-09-2026) is

@@ -20,7 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, waDigits,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, waDigits, partPricesOf,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -5895,6 +5895,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       svcRows: breakdown.map((bRow, i) => ({
         key: `r${i}_${bRow.service_id || i}`,
         original: true,
+        origIndex: i,
         origLabel: bRow.label || "",
         service_id: bRow.service_id || "",
         variant_id: "",
@@ -6145,6 +6146,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const svcLabelOf = (svc) => lang === "nl" ? (svc?.name_nl || svc?.name || "") : lang === "es" ? (svc?.name_es || svc?.name_en || svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
       const staffNameOf = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
       let runningOffset = 0;
+      // Prijs per deel bewaren: bestaande delen houden hun (opgeslagen of uit
+      // de catalogus gereconstrueerde) prijs, nieuwe delen krijgen de geschatte
+      // prijs uit het formulier. Zonder dit verloor Bewerk de deelprijzen en
+      // toonde elk deel weer het totaal.
+      const origPrices = partPricesOf(orig, salonData.services || [], salonData.staff || []);
       const parts = validRows.map(r => {
         const svc = (salonData.services || []).find(s => s.id === r.service_id);
         let base;
@@ -6157,6 +6163,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
         if (exs.length > 0) base += " + " + exs.map(e => lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)).join(", ");
         const entry = { service_id: r.service_id, staff_id: r.staff_id || null, duration: parseInt(r.duration) || 60, offset_min: runningOffset, label: base };
+        const partPrice = r.original
+          ? (origPrices && Number.isFinite(origPrices[r.origIndex]) ? origPrices[r.origIndex] : null)
+          : (Number.isFinite(parseFloat(r.estPrice)) && parseFloat(r.estPrice) > 0 ? parseFloat(r.estPrice) : null);
+        if (partPrice != null) entry.price = partPrice;
         runningOffset += entry.duration;
         const sn = r.staff_id ? staffNameOf(r.staff_id) : "";
         return { entry, full: base + (sn ? ` (${sn})` : "") };
@@ -7384,34 +7394,67 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const endMin = h * 60 + (m || 0) + parseInt(dur || 60);
               return `${time} – ${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
             };
-            const parts = a._parts?.length ? a._parts : [{ time: a.time, duration: a.service_duration, label: a.service_name }];
+            // Gecombineerde boeking (meerdere behandelingen, evt. bij
+            // verschillende stylistes): elk deel op een eigen regel met zijn
+            // tijd, stylist én EIGEN prijs — TTNB (Esther, 09-09): manicure bij
+            // haar, pedicure bij Lady, de klant rekent per stylist af, dus de
+            // totaalprijs op elk deel zei niets. Met een medewerkerfilter
+            // alleen háár delen. Prijzen via partPricesOf (opgeslagen of uit
+            // de catalogus gereconstrueerd); onbekend → geen bedrag per deel.
+            const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+            const prices = bd.length >= 2 ? partPricesOf(a, salonData.services || [], salonData.staff || []) : null;
+            const [bh, bm] = (a.time || "0:0").split(":").map(Number);
+            const baseMin = bh * 60 + (bm || 0);
+            const multiStylist = new Set(bd.map(p => p.staff_id).filter(Boolean)).size > 1;
+            const staffName = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
+            const parts = bd.length >= 2
+              ? bd.map((p, i) => ({ p, i })).filter(({ p }) => !agendaStaff || p.staff_id === agendaStaff).map(({ p, i }) => {
+                  const startMin = baseMin + (p.offset_min || 0);
+                  return { time: `${pad(Math.floor(startMin / 60) % 24)}:${pad(startMin % 60)}`, duration: p.duration || a.service_duration, label: p.label || a.service_name, staff: p.staff_id ? staffName(p.staff_id) : "", price: prices ? prices[i] : null };
+                })
+              : (a._parts?.length ? a._parts : [{ time: a.time, duration: a.service_duration, label: a.service_name }]);
             return parts.map((p, i) => (
               <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>
                 <strong style={{ color: c.text, fontWeight: 600 }}>{window(p.time, p.duration)}</strong> · {p.label}
+                {multiStylist && p.staff ? <span style={{ color: accent, fontWeight: 600 }}> · {p.staff}</span> : null}
+                {p.price != null && bd.length >= 2 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {cur}{p.price.toFixed(2)}</span> : null}
               </div>
             ));
           })()}
-          {a.staff_name && (
-            <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
-              <NavIcon name="user" size={9} color={accent} /> {a.staff_name}
-            </div>
-          )}
+          {(() => {
+            // Stylist-pil: met een medewerkerfilter alleen háár naam, anders de
+            // hele lijst zoals opgeslagen ("Esther, Lady").
+            const name = agendaStaff ? ((salonData.staff || []).find(s => s.id === agendaStaff)?.name || a.staff_name) : a.staff_name;
+            return name ? (
+              <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
+                <NavIcon name="user" size={9} color={accent} /> {name}
+              </div>
+            ) : null;
+          })()}
           <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{a.client_email}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <span className={`badge badge-${a.status}`}>{a.status === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed") : a.status === "pending_payment" ? (lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment") : a.status === "cancelled" ? (lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled") : a.status === "no_show" ? "No-show" : (lang === "nl" ? "Voltooid" : lang === "es" ? "Completada" : "Completed")}</span>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</span>
-          {a._parts?.length > 1 && (
-            <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>
-              {lang === "nl" ? `totaal · ${a._parts.length} behandelingen` : lang === "es" ? `total · ${a._parts.length} tratamientos` : `total · ${a._parts.length} treatments`}
-            </span>
-          )}
-          {/* Medewerkerfilter + boeking gedeeld met een collega: de prijs
-              erboven is de hele boeking, dit is háár aandeel (staffShareOf). */}
-          {agendaStaff && (() => {
-            const share = staffShareOf(a, agendaStaff);
-            if (Math.abs(share - parseFloat(a.service_price || 0)) < 0.005) return null;
-            return <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>{lang === "nl" ? "aandeel" : lang === "es" ? "parte" : "share"} {cur}{share.toFixed(2)}</span>;
+          {(() => {
+            // Medewerkerfilter + boeking gedeeld met een collega: HAAR bedrag
+            // groot (dat rekent de klant bij haar af), het totaal klein eronder.
+            // Zonder filter of één stylist: gewoon de hele prijs.
+            const total = parseFloat(a.service_price || 0);
+            const share = agendaStaff ? staffShareOf(a, agendaStaff, salonData.services || [], salonData.staff || []) : total;
+            const split = agendaStaff && Math.abs(share - total) >= 0.005;
+            return (<>
+              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{(split ? share : total).toFixed(2)}</span>
+              {split && (
+                <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>
+                  {lang === "nl" ? `haar deel · totaal ${cur}${total.toFixed(2)}` : lang === "es" ? `su parte · total ${cur}${total.toFixed(2)}` : `her part · total ${cur}${total.toFixed(2)}`}
+                </span>
+              )}
+              {!split && a._parts?.length > 1 && (
+                <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>
+                  {lang === "nl" ? `totaal · ${a._parts.length} behandelingen` : lang === "es" ? `total · ${a._parts.length} tratamientos` : `total · ${a._parts.length} treatments`}
+                </span>
+              )}
+            </>);
           })()}
         </div>
       </div>
@@ -8435,12 +8478,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {breakdown.length > 1 ? (
                 <div style={{ padding: "7px 0", borderBottom: `1px solid ${c.border}` }}>
                   <div style={{ ...lblStyle, marginBottom: 6 }}>{lang === "nl" ? "Behandelingen" : lang === "es" ? "Tratamientos" : "Treatments"}</div>
-                  {breakdown.map((b2, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: c.text, padding: "3px 0" }}>
-                      <span style={{ minWidth: 0, wordBreak: "break-word" }}>{b2.label}{b2.staff_id ? <span style={{ color: c.textMuted }}> · {staffNameOf(b2.staff_id)}</span> : null}</span>
-                      <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtT(startM + (b2.offset_min || 0))}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    // Prijs per deel (opgeslagen of uit de catalogus), zodat de
+                    // klant per stylist kan afrekenen. Onbekend → alleen de tijd.
+                    const partPrices = partPricesOf(a, salonData.services || [], salonData.staff || []);
+                    return breakdown.map((b2, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: c.text, padding: "3px 0" }}>
+                        <span style={{ minWidth: 0, wordBreak: "break-word" }}>{b2.label}{b2.staff_id ? <span style={{ color: c.textMuted }}> · {staffNameOf(b2.staff_id)}</span> : null}</span>
+                        <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0, textAlign: "right" }}>{fmtT(startM + (b2.offset_min || 0))}{partPrices && partPrices[i] != null ? <span style={{ color: c.text, fontWeight: 600 }}> · {cur}{partPrices[i].toFixed(2)}</span> : null}</span>
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <div style={rowStyle}>

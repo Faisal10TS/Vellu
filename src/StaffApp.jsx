@@ -10,7 +10,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, partPricesOf,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -375,7 +375,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Eigen aandeel in een gecombineerde boeking (staffShareOf): doet een
   // collega een ander deel, dan telt alleen wat déze stylist deed. Zonder
   // prijzen per deel (oudere boekingen) is dat gewoon de hele prijs.
-  const myShare = (a) => staffShareOf(a, staffMember.id);
+  // Met de catalogus erbij: ook oudere boekingen zonder opgeslagen deelprijs
+  // krijgen haar echte aandeel (gereconstrueerd uit dienst/variant/extra's).
+  const myShare = (a) => staffShareOf(a, staffMember.id, services, []);
   // Voor de door de chip bepaalde set (dashboard vandaag, agenda-balk): één
   // stylist gekozen → haar aandeel; "Iedereen" → de hele prijs.
   const scopedShareId = !seeAll ? staffMember.id : staffFilter;
@@ -733,7 +735,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(rpcNum).padStart(4, "0")}`;
       await sendEmails("invoice", {
         client_name: a.client_name, client_email: a.client_email,
-        service_name: a.service_name, date: a.date, price: a.service_price,
+        // Gedeelde boeking: alleen háár behandelingen en haar bedrag.
+        service_name: myInvoiceName(a), date: a.date, price: myShare(a),
         salon_name: `${salonProfile.business_name} — ${myStaff.name}`,
         invoice_number: invoiceNumber,
         salon_address: invoiceForm.address || salonProfile.address || "",
@@ -932,14 +935,26 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const [h, m] = (a.time || "0:0").split(":").map(Number);
     const baseMin = h * 60 + (m || 0);
     const pad = n => String(n).padStart(2, "0");
-    return mine.map(p => {
+    // Prijs per deel (alleen zinvol bij meerdere delen): opgeslagen of uit de
+    // catalogus; de klant rekent per stylist af, dus elk deel zijn bedrag.
+    const prices = breakdown.length >= 2 ? partPricesOf(a, services, []) : null;
+    return breakdown.map((p, i) => ({ p, i })).filter(({ p }) => p.staff_id === staffMember.id).map(({ p, i }) => {
       const startMin = baseMin + (p.offset_min || 0);
       return {
         time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
         duration: p.duration || a.service_duration,
         label: p.label || a.service_name,
+        price: prices ? prices[i] : null,
       };
     });
+  };
+  // Factuur vanuit de medewerkers-app: bij een gedeelde boeking alleen háár
+  // behandelingen en haar bedrag, niet de hele boeking van de collega erbij.
+  const myInvoiceName = (a) => {
+    const total = parseFloat(a.service_price || 0) || 0;
+    if (Math.abs(myShare(a) - total) < 0.005) return a.service_name;
+    const labels = mySlots(a).map(s => s.label).filter(Boolean);
+    return labels.length ? labels.join(" · ") : a.service_name;
   };
 
   const ApptCard = ({ a }) => {
@@ -961,7 +976,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
           )}
           {slots.map((s, i) => (
-            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}</div>
+            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}{showMoney && s.price != null && slots.length > 1 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {cur}{s.price.toFixed(2)}</span> : null}</div>
           ))}
           {showContact && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>}
           {showContact && a.client_phone && (
@@ -980,13 +995,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{statusLabelOf(a.status)}</span>
-          {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
-          {/* Gecombineerde boeking met een collega: de hele prijs staat erboven
-              (dat is wat de klant betaalt), hieronder wat déze stylist deed. */}
-          {showMoney && mine && (() => {
-            const share = staffShareOf(a, staffMember.id);
-            if (Math.abs(share - parseFloat(a.service_price || 0)) < 0.005) return null;
-            return <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "jouw deel" : lang === "es" ? "tu parte" : "your share"} {cur}{share.toFixed(2)}</div>;
+          {/* Gecombineerde boeking met een collega: JOUW bedrag groot (dat
+              rekent de klant bij jou af), het totaal van de boeking klein. */}
+          {showMoney && (() => {
+            const total = parseFloat(a.service_price || 0);
+            const share = mine ? myShare(a) : total;
+            const split = mine && Math.abs(share - total) >= 0.005;
+            return (<>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{(split ? share : total).toFixed(2)}</div>
+              {split && <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "jouw deel · totaal" : lang === "es" ? "tu parte · total" : "your part · total"} {cur}{total.toFixed(2)}</div>}
+            </>);
           })()}
         </div>
       </div>
