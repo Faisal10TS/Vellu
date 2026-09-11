@@ -4482,6 +4482,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // "all" = iedereen spaart; "selected" = alleen klanten met het vinkje
           // Stempelkaart op hun klantkaart (manual_clients.loyalty_opt_in).
           loyalty_scope: data.loyalty_scope === "selected" ? "selected" : "all",
+          // Voor de proefperiode-banner op het dashboard (zie renderDashboard).
+          subscription_status: data.subscription_status || null,
+          trial_ends_at: data.trial_ends_at || null,
+          plan_expires_at: data.plan_expires_at || null,
+          mollie_subscription_id: data.mollie_subscription_id || null,
           break_minutes: data.break_minutes || 0,
           slot_interval_minutes: data.slot_interval_minutes || 30,
           logo_url: data.logo_url || "",
@@ -9289,6 +9294,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 );
               })()}
 
+              {/* Proefperiode loopt af: banner vanaf 5 dagen vooraf, met knop naar
+                  het plan-scherm. Na afloop ziet de salon dit dashboard niet meer
+                  (PlanSelectionGate) — daarvoor zijn de mails van
+                  send-renewal-reminder. Tot 11-09 was er helemaal geen seintje. */}
+              {(() => {
+                if (salonData.subscription_status !== "trialing" || !salonData.trial_ends_at) return null;
+                const msLeft = new Date(salonData.trial_ends_at).getTime() - Date.now();
+                const days = Math.ceil(msLeft / 86400000);
+                if (msLeft <= 0 || days > 5) return null;
+                const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                return (
+                  <div data-trial-banner="1" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 14, marginBottom: 14, flexWrap: "wrap" }}>
+                    <NavIcon name="alerttri" size={14} color={c.warning} />
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: c.warning }}>{days <= 1 ? L("Je proefperiode eindigt vandaag", "Your trial ends today", "Tu prueba termina hoy") : L(`Je proefperiode eindigt over ${days} dagen`, `Your trial ends in ${days} days`, `Tu prueba termina en ${days} días`)}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, lineHeight: 1.45 }}>{L("Kies een plan om zonder onderbreking door te gaan. Je gegevens en je boekingspagina blijven bewaard.", "Choose a plan to continue without interruption. Your data and booking page stay.", "Elige un plan para continuar sin interrupción. Tus datos y tu página de reservas se conservan.")}</div>
+                    </div>
+                    <button className="btn-primary" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => { setView("settings"); setSettingsTab("billing"); }}>{L("Plan kiezen", "Choose a plan", "Elegir plan")}</button>
+                  </div>
+                );
+              })()}
               {/* Quick Actions — primary first, rest ghost */}
               <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""} 1fr`, gap: 8, marginBottom: 22 }}>
                 <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}

@@ -233,6 +233,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # Abonnement (Instellingen → Abonnement & account)
 - Twee plannen: Starter €19/maand en Professional €35/maand (incl. BTW). Jaarlijks = 10× maand (2 maanden gratis).
+- Proefperiode: 14 dagen gratis. Drie dagen voor het einde krijg je een mail, op het dashboard staat dan een gele balk "Je proefperiode eindigt over X dagen" met de knop Plan kiezen, en op de dag dat de proef afloopt nog een mail (en een push-melding als je die aan hebt). Na afloop blijft je boekingspagina gewoon online en kunnen klanten blijven boeken; alleen je dashboard staat op pauze tot je een plan kiest. Alle gegevens blijven bewaard.
 - Professional voegt toe: onbeperkt medewerkers met eigen login, analytics-dashboard, kortingscodes, nieuwsbrief & klant-export, meerdere locaties, eigen lettertype en prioriteit-support.
 - Upgraden naar Professional: je krijgt direct alle functies; het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven, daarna geldt €35/maand.
 - Opzeggen: je toegang loopt door tot het einde van de betaalde periode; je gegevens blijven altijd bewaard. Tijdens die periode kun je opnieuw abonneren (ook als Professional), eventueel met een andere bankrekening — handig als iemand anders de betaling overneemt. Er verandert niks aan je data.
