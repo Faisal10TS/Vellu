@@ -233,6 +233,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 16px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
                 {t.signIn}
               </button>
+              {/* "Maak je pagina" (Faisal 15-09): vaste aanmeld-knop in de balk,
+                  opent /owner meteen op het registratie-tabblad. Op mobiel
+                  past hij niet naast taalkeuze + inloggen; daar staat de
+                  hero-knop toch direct in beeld. */}
+              {!isMobile && (
+                <button className="btn-primary" data-create-page style={{ fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner?signup=1")}>
+                  {t.createPageNav}
+                </button>
+              )}
             </div>
           </div>
         </nav>

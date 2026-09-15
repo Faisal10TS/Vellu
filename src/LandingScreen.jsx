@@ -1378,8 +1378,12 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // Derive referral code from URL synchronously at mount. If present, initial
   // mode is "signup" directly — avoids the React warning about setState in an
   // effect causing a cascading render.
-  const urlRef = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("ref") || "") : "";
-  const [mode, setMode] = useState(urlRef ? "signup" : "signin");
+  const urlQuery = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const urlRef = urlQuery ? (urlQuery.get("ref") || "") : "";
+  // /owner?signup=1 (knop "Maak je pagina" in de landingsbalk) opent direct
+  // het registratie-tabblad, net als een referral-link.
+  const urlSignup = !!urlQuery && ["1", "true", "yes"].includes((urlQuery.get("signup") || "").toLowerCase());
+  const [mode, setMode] = useState(urlRef || urlSignup ? "signup" : "signin");
   // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
   // email field so they only type their password. Supabase itself already
   // persists the session (localStorage) — this flag only controls whether we
