@@ -2497,7 +2497,8 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
      de Boek-knop rechtsonder, zodat beide kaarten dezelfde opbouw houden. */
   .profile-team-card-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; }
   .profile-team-chips { display: flex; gap: 4px; min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; }
-  .profile-team-chips .profile-service-duration-pill { max-width: 46%; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+  .profile-team-chips .profile-service-duration-pill { max-width: 40%; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+  .profile-team-chips .profile-service-duration-pill.more { max-width: none; flex-shrink: 0; }
 
   /* Reviews (15-09): beoordelingstegel links, reviewkaarten rechts. */
   .profile-reviews-grid { display: flex; gap: 12px; align-items: flex-start; }
@@ -2638,8 +2639,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-mobile-bar-text { flex: 1; min-width: 0; font-size: 11px; color: ${c.textSub}; line-height: 1.3; }
   .profile-mobile-bar-text b { display: block; color: ${c.text}; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .profile-mobile-pill {
+    width: 100%;
     background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
-    padding: 12px 22px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 12px; font-weight: 600;
+    padding: 13px 22px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 12px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0;
     box-shadow: 0 4px 16px ${accent}44;
   }

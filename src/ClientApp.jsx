@@ -2858,7 +2858,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             <span key={s.id} className="profile-service-duration-pill">{svcLabel(s)}</span>
                           ))}
                           {rest > 0 && (
-                            <span className="profile-service-duration-pill" title={memberServices.slice(3).map(svcLabel).join(" · ")}>+{rest}</span>
+                            <span className="profile-service-duration-pill more" title={memberServices.slice(3).map(svcLabel).join(" · ")}>+{rest}</span>
                           )}
                         </div>
                         <button type="button" className="profile-service-book-btn" onClick={() => enterBooking()}>{t.book}</button>
@@ -2890,10 +2890,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         : <div className="profile-product-thumb" style={{ background: `${accent}14`, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={16} color={accent} /></div>}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: c.text }}>{prodNameOf(p)}</div>
-                        <div style={{ fontSize: 11.5, color: c.textSub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {pDesc ? <><Linkify text={pDesc} color={accent} /> · </> : null}<span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</span>
-                        </div>
+                        {pDesc && (
+                          <div style={{ fontSize: 11.5, color: c.textSub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={pDesc}>
+                            <Linkify text={pDesc} color={accent} />
+                          </div>
+                        )}
                       </div>
+                      {/* Prijs los van de (afgekapte) omschrijving, altijd zichtbaar. */}
+                      <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0, whiteSpace: "nowrap" }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
                     </div>
                     );
                   })}
@@ -3266,11 +3270,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             zwevende pil die over de kaarten hing ═══ */}
         {createPortal(
           <div className="profile-mobile-pill-wrap profile-mobile-bar" data-mobile-bar>
-            <div className="profile-mobile-bar-text">
-              {nextOpen
-                ? <><span>{nextAvailableLabel}</span><b>{nextOpen.dayLabel} · {nextOpen.hrs.open}</b></>
-                : <b>{initialSalon.name}</b>}
-            </div>
+            {/* Alleen de Boek-knop (Faisal 15-09: "dat eerstvolgende weghalen"). */}
             <button className="profile-mobile-pill" onClick={() => enterBooking()}>{t.book}</button>
           </div>,
           document.body
