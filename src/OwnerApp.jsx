@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase, supabaseUrl } from "./supabase.js";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
@@ -7679,6 +7679,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+  // Breedte van de snelle-actiebalk op het dashboard (ResizeObserver via een
+  // callback-ref, want de balk (de)mount bij het wisselen van weergave). De
+  // kolomverdeling rekent daarmee i.p.v. met de vensterbreedte: de
+  // inhoudskolom is smaller dan het venster en dat liet labels afbreken.
+  const [qaWidth, setQaWidth] = useState(0);
+  const qaObserver = useRef(null);
+  const qaRef = useCallback((el) => {
+    if (qaObserver.current) { qaObserver.current.disconnect(); qaObserver.current = null; }
+    if (el && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => { const w = entries[0]?.contentRect?.width || 0; setQaWidth(Math.round(w)); });
+      ro.observe(el);
+      qaObserver.current = ro;
+    }
+  }, []);
 
   // Load every display-font stylesheet when the Style picker is on screen, so
   // each option previews in its own font. Only fires on Settings → Salon, so
@@ -9323,28 +9337,42 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 );
               })()}
-              {/* Quick Actions — primary first, rest ghost */}
-              <div data-tour="quick-actions" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `1.2fr ${salonData.plan === "professional" && (salonData.products || []).some(p => p.active) ? "1fr " : ""}1fr 1fr${appts.length > 0 ? " 1fr" : ""} 1fr`, gap: 8, marginBottom: 22 }}>
-                <button className="btn-primary" style={{ padding: "12px 14px", fontSize: 11, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%" }}
+              {/* Quick Actions — primary first, rest ghost. Elk label op één
+                  regel en alle cellen even breed (Faisal 15-09: labels braken
+                  over twee regels in zes smalle kolommen). Zoveel kolommen als
+                  er cellen van ≥ 186px in de balk passen, daarna in balans
+                  verdeeld over de rijen (6 → 3+3, 5 → 3+2, nooit 5+1). */}
+              {(() => {
+                const heeftKassa = salonData.plan === "professional" && (salonData.products || []).some(p => p.active);
+                const heeftExport = appts.length > 0;
+                const aantal = 4 + (heeftKassa ? 1 : 0) + (heeftExport ? 1 : 0);
+                const gap = 8, minCel = isMobile ? 160 : 186;
+                const past = qaWidth > 0 ? Math.max(1, Math.floor((qaWidth + gap) / (minCel + gap))) : (isMobile ? 2 : 3);
+                const rijen = Math.ceil(aantal / Math.min(aantal, past));
+                const kolommen = Math.ceil(aantal / rijen);
+                const qa = { padding: "12px 10px", fontSize: 10.5, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+                return (
+              <div ref={qaRef} data-tour="quick-actions" data-quick-actions style={{ display: "grid", gridTemplateColumns: `repeat(${kolommen}, minmax(0, 1fr))`, gap, marginBottom: 22 }}>
+                <button className="btn-primary" style={qa}
                   onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
                   <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
                 </button>
                 {/* Kassa — walk-in verkoop rechtstreeks vanaf het dashboard,
                     zodat een productverkoop geen omweg via de agenda vergt. */}
-                {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
-                  <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: accent, borderColor: `${accent}44` }}
+                {heeftKassa && (
+                  <button className="btn-ghost" style={{ ...qa, color: accent, borderColor: `${accent}44` }}
                     onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
                     <NavIcon name="kassa" size={14} color="currentColor" /> {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
                   </button>
                 )}
-                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
+                <button className="btn-ghost" style={qa} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
                   <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
                 </button>
-                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center", color: copied ? c.success : undefined, borderColor: copied ? `${c.success}55` : undefined }} onClick={copyLink}>
+                <button className="btn-ghost" style={{ ...qa, color: copied ? c.success : undefined, borderColor: copied ? `${c.success}55` : undefined }} onClick={copyLink}>
                   <NavIcon name="link" size={14} color={copied ? c.success : c.textSub} /> {copied ? t.copied : t.copyLink}
                 </button>
-                {appts.length > 0 && (
-                  <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
+                {heeftExport && (
+                  <button className="btn-ghost" style={qa} onClick={() => {
                     const upcoming = appts.filter(a => a.status === "confirmed");
                     if (upcoming.length === 0) return;
                     exportCalendar(upcoming);
@@ -9355,15 +9383,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {/* Live telefoon-agenda: springt naar de abonnements-kaart in
                     Instellingen → Planning. Anders dan de eenmalige export
                     hierboven verschijnen nieuwe afspraken daar vanzelf. */}
-                <button className="btn-ghost" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+                <button className="btn-ghost" style={qa}
                   title={lang === "nl" ? "Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf" : lang === "es" ? "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas" : "Subscribe your phone's calendar — new appointments appear automatically"}
                   onClick={() => {
                     setView("instellingen"); setSettingsTab("planning");
                     setTimeout(() => { try { document.getElementById("cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400);
                   }}>
-                  <NavIcon name="calendar" size={14} color={c.textSub} /> {lang === "nl" ? "Koppel telefoon-agenda" : lang === "es" ? "Vincular calendario del móvil" : "Link phone calendar"}
+                  <NavIcon name="calendar" size={14} color={c.textSub} /> {isMobile
+                    ? (lang === "nl" ? "Telefoon-agenda" : lang === "es" ? "Calendario móvil" : "Phone calendar")
+                    : (lang === "nl" ? "Koppel telefoon-agenda" : lang === "es" ? "Vincular calendario del móvil" : "Link phone calendar")}
                 </button>
               </div>
+                );
+              })()}
 
               {/* Revenue Chart + Popular Services */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>

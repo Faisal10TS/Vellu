@@ -34,6 +34,14 @@ export const RELEASES = [
           es: "Tarjeta de cita: los botones están ahora en filas fijas — Completar a todo el ancho, debajo Reprogramar, Editar, No-show y Cancelar del mismo tamaño, y abajo Google Calendar, WhatsApp y los iconos pequeños en una sola fila.",
         },
       },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Snelle acties op het dashboard: alle knoppen even groot met het label op één regel; op een smaller scherm netjes verdeeld over twee of drie rijen.",
+          en: "Quick actions on the dashboard: all buttons the same size with the label on one line; on a narrower screen neatly split over two or three rows.",
+          es: "Acciones rápidas en el panel: todos los botones del mismo tamaño con la etiqueta en una sola línea; en una pantalla más estrecha, repartidos en dos o tres filas.",
+        },
+      },
     ],
   },
   {
