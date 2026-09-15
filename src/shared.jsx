@@ -2324,6 +2324,29 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-hero-meta-sep {
     width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.5);
   }
+  /* Boek-knop in de hero, naast Delen (15-09). */
+  .profile-hero-book {
+    height: 44px; padding: 0 22px; border-radius: 8px; cursor: pointer;
+    background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder};
+    font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.32); transition: transform 0.18s, box-shadow 0.18s;
+  }
+  .profile-hero-book:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(0,0,0,0.36); }
+  /* Logo half over de onderrand van de hero. */
+  .profile-hero-logo-wrap {
+    display: flex; justify-content: center; margin-top: -38px; margin-bottom: -6px;
+    position: relative; z-index: 3; pointer-events: none;
+  }
+  .profile-hero-logo {
+    width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+    border: 4px solid ${c.bg}; background: ${c.bgCard};
+    box-shadow: 0 12px 30px -14px rgba(0,0,0,0.5);
+  }
+  .profile-hero-logo-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 30px; font-weight: 300; color: ${c.text};
+  }
 
   /* Category pill scroll container. Arrows now indicate scrollability,
      so the previous right-edge fade gradient is no longer needed —
@@ -2365,72 +2388,42 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     margin-bottom: 18px; font-family: var(--body-font, 'Jost', sans-serif);
   }
 
-  /* Service rows — Setmore style */
+  /* Dienstkaarten (15-09, mockup): op elke breedte een zwevende kaart met
+     foto/icoontegel links, naam + omschrijving + chips in het midden en
+     prijs boven de Boek-knop rechts. Twee kolommen vanaf 1100px, op mobiel
+     een compacte rij zonder omschrijving. */
   .profile-services-grid {
-    display: grid; grid-template-columns: 1fr; gap: 0;
+    display: grid; grid-template-columns: 1fr; gap: 10px;
   }
-  /* Two-column card layout only kicks in when the viewport is wide enough
-     that each card can still fit the row nicely. Below this threshold we
-     stay single-column so the name never gets squeezed to zero and
-     overlapped by the price/booking button. */
-  @media (min-width: 1200px) {
-    .profile-services-grid {
-      grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 8px;
-    }
-    .profile-services-grid .profile-service-row {
-      border-bottom: none; background: ${c.bgCard}; border: 1px solid ${c.border};
-      border-radius: 14px; padding: 16px;
-    }
-    .profile-services-grid .profile-service-row:hover {
-      margin: 0; padding: 16px; border-color: ${accent}44;
-      box-shadow: 0 4px 20px ${accent}12;
-    }
+  @media (min-width: 1100px) {
+    .profile-services-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
   }
   .profile-service-row {
     display: grid;
     /* minmax(0, 1fr) instead of plain 1fr so the info column can actually
        shrink below its intrinsic content width; otherwise a long service
        name blows the layout up. */
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    align-items: center; gap: 16px;
-    padding: 18px 0; border-bottom: 1px solid ${c.border};
-    cursor: pointer; transition: background 0.2s;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center; gap: 14px;
+    padding: 14px; background: ${c.bgCard}; border: 1px solid ${c.border};
+    border-radius: 14px; cursor: pointer;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.2s;
   }
-  /* When the row itself is narrow (roughly tablet + 2-col-card mode)
-     collapse to a 2-row layout: thumb + name on top, price + book below.
-     This uses grid area assignments so the same JSX works everywhere. */
-  @media (max-width: 640px), (min-width: 1200px) and (max-width: 1400px) {
-    .profile-service-row {
-      grid-template-columns: auto minmax(0, 1fr);
-      grid-template-areas:
-        "thumb info"
-        "price price"
-        "book book";
-      row-gap: 10px;
-    }
-    .profile-service-row > .profile-service-thumb { grid-area: thumb; }
-    .profile-service-row > .profile-service-info { grid-area: info; }
-    .profile-service-row > .profile-service-price {
-      grid-area: price; text-align: left;
-      font-size: 20px;
-    }
-    .profile-service-row > .profile-service-book-btn {
-      grid-area: book; justify-self: stretch; text-align: center;
-    }
-  }
-  .profile-service-row:last-child { border-bottom: none; }
   @media (hover: hover) {
-    .profile-service-row:hover { background: ${c.bgCard}; margin: 0 -12px; padding: 18px 12px; border-radius: 12px; }
+    .profile-service-row:hover { transform: translateY(-3px); border-color: ${accent}55; box-shadow: 0 30px 50px -26px rgba(0,0,0,0.42), 0 2px 4px rgba(0,0,0,0.04); }
   }
   .profile-service-thumb {
-    width: 54px; height: 54px; border-radius: 10px; object-fit: cover;
+    width: 64px; height: 64px; border-radius: 10px; object-fit: cover;
     flex-shrink: 0; background: ${c.bgCard}; border: 1px solid ${c.border};
   }
   .profile-service-info { min-width: 0; overflow: hidden; }
   .profile-service-name {
-    font-size: 15px; font-weight: 500; color: ${c.text}; margin-bottom: 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+    font-size: 14px; font-weight: 600; color: ${c.text}; margin-bottom: 4px; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-width: 0;
   }
+  .profile-service-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+  .profile-service-from { font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; color: ${c.textMuted}; margin-right: 4px; }
   .profile-service-meta {
     font-size: 12px; color: ${c.textLabel};
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -2456,10 +2449,17 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-service-book-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px ${accent}44; }
   .profile-service-chevron { color: ${c.textMuted}; flex-shrink: 0; }
-  @media (max-width: 420px) {
-    .profile-service-row { gap: 12px; }
-    .profile-service-price { font-size: 20px; }
-    .profile-service-thumb { width: 48px; height: 48px; }
+  @media (max-width: 899px) {
+    /* Compacte rij op mobiel: naam + chips links, prijs + kleine Boek rechts. */
+    .profile-service-row { gap: 10px; padding: 10px 12px; border-radius: 12px; }
+    .profile-service-thumb { width: 44px; height: 44px; border-radius: 8px; }
+    .profile-service-desc { display: none !important; }
+    .profile-service-name { font-size: 13px; }
+    .profile-service-meta { gap: 5px; }
+    .profile-service-duration-pill { font-size: 10px; padding: 2px 7px; }
+    .profile-service-price { font-size: 18px; }
+    .profile-service-book-btn { padding: 6px 10px; font-size: 10px; }
+    .profile-service-side { gap: 5px; }
   }
 
   /* Team card — Setmore style */
@@ -2570,19 +2570,22 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-contact-row a { color: ${c.textSub}; text-decoration: underline; }
 
-  /* Mobile floating Boeken pill — same pattern as settings save pill */
+  /* Mobiele onderbalk (15-09): eerstvolgende slot links, Boek rechts; een
+     vaste balk i.p.v. een zwevende pil die over de kaarten hing. */
   .profile-mobile-pill-wrap {
-    position: fixed; left: 0; right: 0;
-    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-    display: none; justify-content: center; z-index: 100;
-    pointer-events: none;
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: none; align-items: center; gap: 12px; z-index: 100;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: ${c.bg}; border-top: 1px solid ${c.border};
+    box-shadow: 0 -12px 30px -18px rgba(0,0,0,0.35);
   }
+  .profile-mobile-bar-text { flex: 1; min-width: 0; font-size: 11px; color: ${c.textSub}; line-height: 1.3; }
+  .profile-mobile-bar-text b { display: block; color: ${c.text}; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .profile-mobile-pill {
     background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
-    padding: 14px 40px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
-    pointer-events: auto;
-    box-shadow: 0 4px 20px ${accent}55, 0 10px 32px rgba(0,0,0,0.55);
+    padding: 12px 22px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0;
+    box-shadow: 0 4px 16px ${accent}44;
   }
   .profile-mobile-pill:active { transform: scale(0.97); }
 
@@ -2619,6 +2622,11 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .profile-body { flex-direction: column; }
     .profile-mobile-pill-wrap { display: flex; }
     .profile-section { scroll-margin-top: 52px; }
+    .profile-hero-logo-wrap { margin-top: -32px; }
+    .profile-hero-logo { width: 64px; height: 64px; border-width: 3px; }
+    .profile-hero-book { height: 40px; padding: 0 16px; font-size: 11px; }
+    /* Categoriechips blijven bovenaan plakken tijdens het scrollen door de lijst. */
+    .profile-cat-scroll { position: sticky; top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 20; background: ${c.bg}; padding-top: 6px; margin-top: -6px; }
     .profile-reviews-summary { flex-direction: column-reverse; gap: 16px; }
     .profile-rating-big { min-width: 0; width: 100%; flex-direction: row; padding: 14px 18px; gap: 14px; justify-content: center; }
     .profile-rating-score { font-size: 28px; }

@@ -291,7 +291,8 @@ function PhoneContact({ salon, lang, c, compact = false }) {
 // on mobile — WhatsApp / SMS / Instagram DM etc.) and falls back to a
 // small popover with a "copy link" action and a direct WhatsApp share for
 // desktop browsers that don't expose navigator.share.
-function SalonShareButton({ salon, lang, open, setOpen, accent }) {
+// compact: korte tekst ("Deel") voor naast de Boek-knop op mobiel (15-09).
+function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false }) {
   const [copied, setCopied] = useState(false);
   const url = typeof window !== "undefined"
     ? `${window.location.origin}/${salon.id}`
@@ -352,7 +353,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
         aria-label={lang === "nl" ? "Deel deze pagina" : lang === "es" ? "Compartir esta página" : "Share this page"}
         title={lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share"}
         style={{
-          height: 44, padding: "0 22px 0 18px", borderRadius: 8,
+          height: compact ? 40 : 44, padding: compact ? "0 16px 0 14px" : "0 22px 0 18px", borderRadius: 8,
           background: "#fff", border: `1px solid rgba(255,255,255,0.9)`,
           color: "#111", cursor: "pointer",
           display: "inline-flex", alignItems: "center", gap: 8,
@@ -365,7 +366,9 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
         onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.32)"; }}
       >
         <NavIcon name="share" size={15} color={accent || "#c9a96e"} />
-        {lang === "nl" ? "Deel deze salon" : lang === "es" ? "Compartir este salón" : "Share this salon"}
+        {compact
+          ? (lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share")
+          : (lang === "nl" ? "Deel deze salon" : lang === "es" ? "Compartir este salón" : "Share this salon")}
       </button>
       {open && (
         <div
@@ -2499,6 +2502,48 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     { id: "contact", label: t.profileContact },
   ];
 
+  // Eerstvolgende dag met openingstijden (vandaag of later, max 14 dagen),
+  // rekening houdend met blokkades, uitzonderingen en de minimale aanlooptijd.
+  // Eén berekening voor hero, zijkolom-kaart en de mobiele onderbalk.
+  const nextOpen = (() => {
+    const now = new Date();
+    for (let offset = 0; offset < 14; offset++) {
+      const checkDate = new Date(now);
+      checkDate.setDate(now.getDate() + offset);
+      const dayIdx = checkDate.getDay();
+      const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
+      const override = initialSalon.day_overrides?.[fmt(checkDate)];
+      if (override?.type === "blocked") continue;
+      const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
+      if (hrs.closed) continue;
+      if (minAdvanceHours > 0) {
+        const [ch, cm] = String(hrs.close || "0:0").split(":").map(Number);
+        const dayClose = new Date(checkDate);
+        dayClose.setHours(ch || 0, cm || 0, 0, 0);
+        if (new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000) >= dayClose) continue;
+      }
+      const isToday = offset === 0, isTomorrow = offset === 1;
+      const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : lang === "es" ? "Mañana" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
+      return { dayLabel, hrs };
+    }
+    return null;
+  })();
+  const nextAvailableLabel = lang === "nl" ? "Eerstvolgend" : lang === "es" ? "Próxima disponibilidad" : "Next available";
+
+  // Icoon voor een dienst zonder foto, op basis van de categorienaam — niet
+  // overal dezelfde schaar (Bloom-demo, 15-09).
+  const svcIcon = (s) => {
+    const cat = categories.find(x => x.id === s.category_id);
+    const naam = `${cat?.name_nl || ""} ${cat?.name_en || ""} ${cat?.name || ""} ${svcName(s)}`.toLowerCase();
+    if (/nagel|nail|manicure|pedicure|biab|acryl|polygel|gel/.test(naam)) return "sparkle";
+    if (/wenkbrauw|brow|lash|wimper|eye/.test(naam)) return "eye";
+    if (/gezicht|facial|skin|huid|peel|glow/.test(naam)) return "beauty";
+    if (/wax|hars|sugar|suiker|onthar|laser/.test(naam)) return "diamond";
+    if (/massage|spa|relax/.test(naam)) return "wave";
+    if (/make-?up|visagie|lip|pmu|permanent|tattoo/.test(naam)) return "palette";
+    return "scissors";
+  };
+
   if (mode === "profile") return (
     <Layout accent={accent} rawAccent={initialSalon.accent}>
 
@@ -2549,9 +2594,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           // van de foto (TTNB, 29-08). Cap op 500 zodat de hero nooit meer
           // dan ± de halve viewport opeist.
           const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+          // Mobiel hoger sinds 15-09: naam, vertrouwensregel én Boek + Delen
+          // moeten erin passen (op 200px liep de naam uit beeld).
           const heroH = initialSalon.cover_image_url
-            ? (isMobile ? 200 : Math.min(Math.max(300, Math.round(vw / 3)), 500))
-            : (isMobile ? 160 : 220);
+            ? (isMobile ? 300 : Math.min(Math.max(300, Math.round(vw / 3)), 500))
+            : (isMobile ? 250 : 240);
           const coverTuned = (Number(initialSalon.cover_zoom) || 1) > 1.05
             || Math.abs((initialSalon.cover_focal_x ?? 50) - 50) > 6
             || Math.abs((initialSalon.cover_focal_y ?? 50) - 50) > 6;
@@ -2596,10 +2643,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
                   </span>
                 )}
-                {initialSalon.reviews?.length > 0 && initialSalon.services?.length > 0 && (
+                {/* Aantal diensten alleen op desktop: op mobiel houdt de regel
+                    ruimte voor beoordeling + eerstvolgende dag. */}
+                {!isMobile && initialSalon.reviews?.length > 0 && initialSalon.services?.length > 0 && (
                   <span className="profile-hero-meta-sep" />
                 )}
-                {initialSalon.services?.length > 0 && (
+                {!isMobile && initialSalon.services?.length > 0 && (
                   <span className="profile-hero-meta-item">
                     <NavIcon name="scissors" size={13} color="rgba(255,255,255,0.88)" />
                     <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
@@ -2619,20 +2668,41 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         : `${initialSalon.loyalty_discount_pct}% off after every ${initialSalon.loyalty_visits} visits`}</span>
                   </span>
                 )}
+                {/* Eerstvolgende dag: de vertrouwensregel uit de mockup (15-09). */}
+                {nextOpen && (
+                  <>
+                    <span className="profile-hero-meta-sep" />
+                    <span className="profile-hero-meta-item" data-hero-next>
+                      <NavIcon name="calendar" size={13} color="rgba(255,255,255,0.88)" />
+                      <span>{nextAvailableLabel} <b style={{ color: "#fff", fontWeight: 600 }}>{nextOpen.dayLabel} {nextOpen.hrs.open}</b></span>
+                    </span>
+                  </>
+                )}
               </div>
             )}
-            {/* Share pill — sits right under the salon name so it's the first
-                thing after the meta row, impossible to miss. */}
-            <div style={{ marginTop: 14, display: "flex", justifyContent: "center", position: "relative" }}>
+            {/* Boeken + Delen naast elkaar onder de naam (15-09): de hoofdactie
+                stond eerst alleen in de zijkolom en de zwevende pil. */}
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10, position: "relative", flexWrap: "wrap" }}>
+              <button type="button" className="profile-hero-book" data-hero-book onClick={() => enterBooking()}>
+                {isMobile ? t.book : (lang === "nl" ? "Afspraak boeken" : lang === "es" ? "Reservar cita" : "Book an appointment")}
+              </button>
               <SalonShareButton
                 salon={initialSalon}
                 lang={lang}
                 open={shareOpen}
                 setOpen={setShareOpen}
                 accent={accent}
+                compact={isMobile}
               />
             </div>
           </div>
+        </div>
+        {/* Logo half over de onderrand van de hero (15-09); staat buiten de
+            hero omdat die overflow: hidden heeft. */}
+        <div className="profile-hero-logo-wrap" aria-hidden="true">
+          {initialSalon.logo_url
+            ? <img src={initialSalon.logo_url} className="profile-hero-logo" alt="" />
+            : <div className="profile-hero-logo profile-hero-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>}
         </div>
         </>);
         })()}
@@ -2678,10 +2748,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               <div className="profile-services-grid">
                 {(servicesExpanded ? profileFilteredServices : profileFilteredServices.slice(0, 12)).map(s => (
-                  <div key={s.id} className="profile-service-row" onClick={() => enterBooking(s)}>
-                    <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
+                  <div key={s.id} className="profile-service-row" data-service-card onClick={() => enterBooking(s)}>
+                    <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", ...(s.photos?.length > 0 ? {} : { background: `${accent}14`, borderColor: `${accent}33` }) }}>
                       {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
-                      <NavIcon name="scissors" size={20} color={c.textMuted} />
+                      <NavIcon name={s.photos?.length > 0 ? "scissors" : svcIcon(s)} size={20} color={s.photos?.length > 0 ? c.textMuted : accent} />
                     </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
@@ -2692,11 +2762,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         // beschrijving? Dan tonen we de variantnamen als regel.
                         const desc = svcDesc(s);
                         const descStijl = { fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
-                        if (desc) return <div style={descStijl}><Linkify text={desc} color={accent} /></div>;
+                        if (desc) return <div className="profile-service-desc" style={descStijl}><Linkify text={desc} color={accent} /></div>;
                         if (s.variants?.length > 1) {
                           const vNaam = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
                           const lijst = s.variants.map(vNaam).filter(Boolean).join(" · ");
-                          if (lijst) return <div style={descStijl}>{lijst}</div>;
+                          if (lijst) return <div className="profile-service-desc" style={descStijl}>{lijst}</div>;
                         }
                         return null;
                       })()}
@@ -2712,12 +2782,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         )}
                       </div>
                     </div>
-                    <div className="profile-service-price">
-                      {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
+                    {/* Prijs boven de Boek-knop, rechts uitgelijnd (mockup 15-09). */}
+                    <div className="profile-service-side">
+                      <div className="profile-service-price">
+                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{cur}{Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}</> : `${cur}${parseFloat(s.price).toFixed(2)}`}
+                      </div>
+                      <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
+                        {t.book}
+                      </button>
                     </div>
-                    <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
-                      {t.book}
-                    </button>
                   </div>
                 ))}
               </div>
@@ -3068,13 +3141,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           {/* ─── SIDEBAR (desktop only via CSS) ─── */}
           <div className="profile-sidebar">
             <div className="profile-sidebar-inner">
-              {/* Circular logo */}
-              {initialSalon.logo_url ? (
-                <img src={initialSalon.logo_url} className="profile-sidebar-logo" alt={`${initialSalon.name} logo`} />
-              ) : (
-                <div className="profile-sidebar-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
-              )}
-              
+              {/* Geen logo meer in de kaart: dat hangt sinds 15-09 over de
+                  onderrand van de hero. */}
               <div className="profile-sidebar-name">{initialSalon.name}</div>
               
               {avgRating && (
@@ -3087,45 +3155,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
               <button className="profile-book-btn" onClick={() => enterBooking()}>{t.book}</button>
 
-              {/* Next availability hint */}
-              {(() => {
-                // Find next day with open hours (today or future)
-                const now = new Date();
-                for (let offset = 0; offset < 14; offset++) {
-                  const checkDate = new Date(now);
-                  checkDate.setDate(now.getDate() + offset);
-                  const dayIdx = checkDate.getDay();
-                  const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
-                  const override = initialSalon.day_overrides?.[fmt(checkDate)];
-                  if (override?.type === "blocked") continue;
-                  const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
-                  if (hrs.closed) continue;
-                  // Respect the booking window: with e.g. a 24h minimum advance,
-                  // "Vandaag beschikbaar" would promise a day the client can't
-                  // actually book. Skip days that fall before now + min advance
-                  // (a day only counts when a slot can still START before close).
-                  if (minAdvanceHours > 0) {
-                    const [ch, cm] = String(hrs.close || "0:0").split(":").map(Number);
-                    const dayClose = new Date(checkDate);
-                    dayClose.setHours(ch || 0, cm || 0, 0, 0);
-                    if (new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000) >= dayClose) continue;
-                  }
-                  // Found an open day
-                  const isToday = offset === 0;
-                  const isTomorrow = offset === 1;
-                  const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : lang === "es" ? "Mañana" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
-                  return (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 12 }}>
-                      <NavIcon name="calendar" size={13} color={accent} />
-                      <div style={{ fontSize: 12, color: c.text }}>
-                        <span style={{ fontWeight: 600, color: accent }}>{dayLabel}</span>
-                        <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {fmtDayHours(hrs)}</span>
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
+              {/* Eerstvolgende dag (zelfde berekening als hero en onderbalk) */}
+              {nextOpen && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 8 }}>
+                  <NavIcon name="calendar" size={13} color={accent} />
+                  <div style={{ fontSize: 12, color: c.text }}>
+                    <span style={{ fontWeight: 600, color: accent }}>{nextOpen.dayLabel}</span>
+                    <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {fmtDayHours(nextOpen.hrs)}</span>
+                  </div>
+                </div>
+              )}
 
               {/* Open/Closed status + hours — always show today, expand for full week */}
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
@@ -3197,9 +3236,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         </div>
         </div> {/* close profile-scroll-area */}
 
-        {/* ═══ MOBILE FLOATING BOEKEN PILL — same pattern as settings save pill ═══ */}
+        {/* ═══ MOBIELE ONDERBALK (15-09): eerstvolgende slot + Boek, i.p.v. een
+            zwevende pil die over de kaarten hing ═══ */}
         {createPortal(
-          <div className="profile-mobile-pill-wrap">
+          <div className="profile-mobile-pill-wrap profile-mobile-bar" data-mobile-bar>
+            <div className="profile-mobile-bar-text">
+              {nextOpen
+                ? <><span>{nextAvailableLabel}</span><b>{nextOpen.dayLabel} · {nextOpen.hrs.open}</b></>
+                : <b>{initialSalon.name}</b>}
+            </div>
             <button className="profile-mobile-pill" onClick={() => enterBooking()}>{t.book}</button>
           </div>,
           document.body
