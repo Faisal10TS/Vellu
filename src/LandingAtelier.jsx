@@ -138,28 +138,23 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   ];
   const featOf = (f) => (lang === "nl" ? f.nl : lang === "es" ? f.es : f.en);
 
+  // Zes vragen i.p.v. tien (Faisal 15-09: "te veel vragen, voeg samen"):
+  // wat+voor wie, kosten+commissie+verschil met platformen, proberen, team,
+  // herinneringen+annuleren, klanten meenemen. Spaans valt terug op Engels.
   const faqs = lang === "nl" ? [
-    ["Wat is Vellu precies?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij. Jij beheert alles vanuit je dashboard."],
-    ["Voor wie is Vellu?", "Voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers, en beautysalons. Of je nu solo werkt of een team hebt."],
-    ["Hoeveel kost het?", "Starter is €19/maand, Professional €35/maand. Vast tarief, 0% commissie per boeking. Geen verborgen kosten."],
-    ["Waarom geen commissie?", "Wij geloven dat jouw omzet van jou is. Je betaalt een vast bedrag per maand en houdt 100% van elke boeking."],
-    ["Kan ik het eerst uitproberen?", "Ja, je kan je pagina gratis opzetten en alles instellen. Je betaalt pas als je live wilt gaan."],
-    ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja! Met het Professional plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
-    ["Krijgen klanten herinneringen?", "Ja, automatisch. Bevestiging bij het boeken, herinnering 24 uur van tevoren, en een follow-up na het bezoek voor een review."],
-    ["Hoe annuleren klanten?", "Via de annuleringslink in hun bevestigingsmail. Jij bepaalt tot wanneer ze kunnen annuleren."],
-    ["Hoe verschilt Vellu van andere booking platformen?", "De meeste booking platformen rekenen 5–10% commissie per boeking — bij 50 boekingen á €45 betaal je al snel €100–€225 per maand. Vellu is een vast tarief vanaf €19/maand, 0% commissie. Daarnaast krijg je je eigen merk-pagina (vellu.cc/jouw-naam) in plaats van een profiel in een zoekplatform; jouw klanten blijven jouw klanten."],
-    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV) van je huidige booking platform? Importeer 'm direct in je dashboard onder Klanten → Importeer. Vellu herkent de gangbare kolomnamen (naam, e-mail, telefoon, notities) automatisch. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
+    ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons — solo of met een team."],
+    ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten. De meeste boekingsplatformen rekenen 5–10% per boeking — bij 50 boekingen à €45 is dat al snel €100–€225 per maand. Bij Vellu blijft je omzet van jou, en je krijgt je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
+    ["Kan ik het eerst uitproberen?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional."],
+    ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja. Met het Professional-plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
+    ["Krijgen klanten herinneringen, en hoe annuleren ze?", "Ja, automatisch: een bevestiging bij het boeken, een herinnering 24 uur van tevoren en na het bezoek een follow-up voor een review. Annuleren gaat via de link in hun bevestigingsmail; jij bepaalt tot wanneer dat kan."],
+    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV) van je huidige platform? Importeer die direct in je dashboard onder Klanten → Importeer. Vellu herkent de gangbare kolomnamen (naam, e-mail, telefoon, notities) automatisch. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
   ] : [
-    ["What is Vellu exactly?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman. You manage everything from your dashboard."],
-    ["Who is Vellu for?", "For independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers, and beauty salons. Whether you work solo or have a team."],
-    ["How much does it cost?", "Starter is €19/month, Professional €35/month. Fixed price, 0% commission per booking. No hidden fees."],
-    ["Why no commission?", "We believe your revenue is yours. You pay a fixed monthly fee and keep 100% of every booking."],
-    ["Can I try it first?", "Yes, you can set up your page for free and configure everything. You only pay when you want to go live."],
-    ["Can my staff manage their own agenda?", "Yes! With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
-    ["Do clients receive reminders?", "Yes, automatically. Confirmation when booking, reminder 24 hours before, and a follow-up after the visit for a review."],
-    ["How do clients cancel?", "Via the cancellation link in their confirmation email. You decide the cancellation deadline."],
-    ["How is Vellu different from other booking platforms?", "Most booking platforms charge 5–10% commission per booking — at 50 bookings of €45 that quickly adds up to €100–€225/month. Vellu is a flat fee from €19/month, 0% commission. You also get your own branded page (vellu.cc/your-name) instead of a profile in a marketplace; your clients stay your clients."],
-    ["Can I bring my clients from another system?", "Yes. Got a CSV export from your current booking platform? Import it directly in your dashboard under Customers → Import. Vellu auto-detects common column names (name, email, phone, notes). Stuck? Send it to Contact and we'll help you for free."],
+    ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons — solo or with a team."],
+    ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees. Most booking platforms take 5–10% per booking — at 50 bookings of €45 that quickly adds up to €100–€225 a month. With Vellu your revenue stays yours, and you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
+    ["Can I try it first?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional."],
+    ["Can my staff manage their own agenda?", "Yes. With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
+    ["Do clients get reminders, and how do they cancel?", "Yes, automatically: a confirmation when they book, a reminder 24 hours before, and a follow-up after the visit asking for a review. Cancelling goes through the link in their confirmation email; you set the cancellation deadline."],
+    ["Can I bring my clients from another system?", "Yes. Got a CSV export from your current platform? Import it directly in your dashboard under Customers → Import. Vellu auto-detects common column names (name, email, phone, notes). Stuck? Send it to Contact and we'll help you for free."],
   ];
 
   const plans = [
@@ -242,6 +237,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-price-card { box-shadow: 0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-price-card:hover { transform: translateY(-6px); box-shadow: 0 40px 60px -28px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
           @media (prefers-reduced-motion: reduce) { .at-price-card, .at-price-card:hover { transform: none; } }
+          /* FAQ-kaarten: bone op earth, plusje in een earth-tegel; open kaart
+             blijft iets opgetild met diepere schaduw. */
+          .at-faq-card { background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-faq-card:hover, .at-faq-card.open { transform: translateY(-4px); box-shadow: 0 32px 52px -26px rgba(69,58,43,0.62), 0 2px 4px rgba(69,58,43,0.05); }
+          .at-faq-plus { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 20px; line-height: 1; flex-shrink: 0; transition: transform 0.25s ease, background 0.2s ease, color 0.2s ease; }
+          .at-faq-card.open .at-faq-plus { background: ${INK}; color: ${BONE}; }
+          @media (prefers-reduced-motion: reduce) { .at-faq-card, .at-faq-card:hover, .at-faq-card.open { transform: none; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
@@ -505,21 +507,28 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
           <AtHead title={t.faqTitle} tone="earth" />
+          {/* Elke vraag een zwevende bone-kaart op de earth-band (Faisal 15-09):
+              past bij stappen/functies/prijzen én lost het contrast op — bone
+              op earth haalde voor kleine tekst geen AA, espresso op bone wel. */}
           <Reveal delay={80}>
-            <div style={{ maxWidth: 760, margin: "0 auto" }}>
-              {faqs.map(([q, a], i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${BONE}3d` }}>
-                  <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: BONE }}>{q}</div>
-                    <div style={{ fontSize: 20, color: BONE, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
-                    <div style={{ overflow: "hidden" }}>
-                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: `${BONE}e6`, lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
+              {faqs.map(([q, a], i) => {
+                const open = faqOpen === i;
+                const toggle = () => setFaqOpen(open ? null : i);
+                return (
+                  <div key={i} className={`at-faq-card vl-glow${open ? " open" : ""}`} data-faq-card onMouseMove={glowMove}>
+                    <div role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }} style={{ padding: "16px 16px 16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
+                      <span aria-hidden="true" className="at-faq-plus" style={{ transform: open ? "rotate(45deg)" : "none" }}>+</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
+                      <div style={{ overflow: "hidden" }}>
+                        <div className="at-faq-answer" style={{ padding: "0 24px 20px", fontSize: 13.5, color: "#5f5240", lineHeight: 1.75, maxWidth: 640 }}>{a}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Reveal>
           <Reveal delay={140}>
