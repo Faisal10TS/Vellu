@@ -268,7 +268,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   </button>
                 ))}
               </div>
-              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 16px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
+              {/* Inloggen in dezelfde espresso-vulling als de trialknop
+                  (Faisal 15-09); width:auto omdat .btn-primary 100% breed is. */}
+              <button className="btn-primary" data-nav-signin style={{ width: "auto", fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
                 {t.signIn}
               </button>
               {/* Géén "Maak je pagina"-knop in de balk: Faisal (15-09) wil die
