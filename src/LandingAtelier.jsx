@@ -307,15 +307,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <Marquee items={marqueeWords} c={{ ...P, textSub: ESPRESSO, border: `${EARTH}3d` }} accent={EARTH} />
         </div>
 
-        {/* ── 01 · SALON VINDEN — op bone. ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 8px`, position: "relative", zIndex: 10 }}>
-          <AtHead title={t.findSalonTitle} sub={t.findSalonSub} />
+        {/* ── 01 · SALON VINDEN — op de putty-band, in één stuk met de marquee.
+              Kleurenladder (Faisal 15-09): hero bone → putty → earth, en daarna
+              nog eens bone → putty → mushroom → earth → espresso. ── */}
+        <div style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} 8px` }}>
+            <AtHead title={t.findSalonTitle} sub={t.findSalonSub} tone="putty" />
+          </div>
+          <div style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
+            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} />
+          </div>
         </div>
-        <SalonFinder lang={lang} t={t} c={P} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} />
 
-        {/* ── 02 · DE REKENSOM — de rijke earth-band; de rekentool zelf staat
-              in een bone-paneel zodat de kleine cijfers leesbaar blijven. ── */}
-        <div style={{ background: EARTH, position: "relative", zIndex: 10, marginTop: "clamp(36px, 6vw, 60px)" }}>
+        {/* ── 02 · DE REKENSOM — de rijke earth-band, direct onder de putty-band;
+              de rekentool zelf staat in een bone-paneel zodat de kleine cijfers
+              leesbaar blijven. ── */}
+        <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 90% at 85% 0%, ${MUSHROOM}33 0%, transparent 60%)`, pointerEvents: "none" }} />
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
             <AtHead title={t.calcTitle} tone="earth" />
@@ -347,7 +354,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </div>
 
         {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, tweekoloms checklijst.
-              Putty is licht genoeg voor espresso-tekst er direct op. ── */}
+              Putty is licht genoeg voor espresso-tekst er direct op. Hierna
+              lopen de banden door: mushroom (prijzen) → earth (FAQ) → espresso. ── */}
         <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
             <AtHead title={t.everythingNeeded} tone="putty" />
@@ -370,9 +378,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 05 · PRIJZEN — Starter op bone, Professional in espresso. ── */}
-        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
-          <AtHead title={t.simplePricing} />
+        {/* ── 05 · PRIJZEN — mushroom-band direct onder putty (de tweede ladder
+              loopt door naar earth en espresso). Starter-kaart bone,
+              Professional espresso. ── */}
+        <div style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
+        <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
+          <AtHead title={t.simplePricing} tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
               <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 4 }}>
@@ -433,29 +444,30 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               );
             })}
           </div>
-          <div style={{ fontSize: 11.5, color: P.textLabel, marginTop: 16, lineHeight: 1.6, maxWidth: 560, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
+          <div style={{ fontSize: 11.5, color: ESPRESSO_DEEP, marginTop: 16, lineHeight: 1.6, maxWidth: 560, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
             {lang === "nl"
               ? "Alle prijzen in euro's, incl. btw. Betaal je van buiten de eurozone? Je kaart rekent automatisch om."
               : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
           </div>
         </div>
+        </div>
 
-        {/* ── 06 · FAQ — mushroom-band; loopt direct door in de finale. Tekst
-              hier in verdiept espresso (ESPRESSO_DEEP) voor AA-contrast. ── */}
-        <div style={{ background: MUSHROOM, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
+        {/* ── 06 · FAQ — earth-band tussen mushroom en de espresso-finale; tekst
+              in bone. ── */}
+        <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
-          <AtHead title={t.faqTitle} tone="mushroom" />
+          <AtHead title={t.faqTitle} tone="earth" />
           <Reveal delay={80}>
             <div style={{ maxWidth: 760, margin: "0 auto" }}>
               {faqs.map(([q, a], i) => (
-                <div key={i} style={{ borderBottom: `1px solid ${ESPRESSO_DEEP}30` }}>
+                <div key={i} style={{ borderBottom: `1px solid ${BONE}3d` }}>
                   <div role="button" tabIndex={0} aria-expanded={faqOpen === i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFaqOpen(faqOpen === i ? null : i); } }} style={{ padding: "20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: ESPRESSO_DEEP }}>{q}</div>
-                    <div style={{ fontSize: 20, color: ESPRESSO_DEEP, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: BONE }}>{q}</div>
+                    <div style={{ fontSize: 20, color: BONE, transition: "transform 0.25s ease", transform: faqOpen === i ? "rotate(45deg)" : "none", flexShrink: 0 }}>+</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateRows: faqOpen === i ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                     <div style={{ overflow: "hidden" }}>
-                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: ESPRESSO_DEEP, lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
+                      <div style={{ paddingBottom: 20, fontSize: 13.5, color: `${BONE}e6`, lineHeight: 1.75, maxWidth: 620 }}>{a}</div>
                     </div>
                   </div>
                 </div>
@@ -463,10 +475,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
           </Reveal>
           <Reveal delay={140}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, maxWidth: 760, margin: "0 auto", color: ESPRESSO_DEEP }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap", padding: "26px 0 0", fontSize: 13, maxWidth: 760, margin: "0 auto", color: `${BONE}e6` }}>
               <span>{lang === "nl" ? "Nog vragen? Stel ze in de chat linksonder, of mail ons —" : lang === "es" ? "¿Aún tienes preguntas? Pregunta en el chat abajo a la izquierda, o escríbenos —" : "Still have questions? Ask in the chat bottom-left, or email us —"}</span>
-              <a href="mailto:mirahventures@vellu.cc" style={{ color: ESPRESSO_DEEP, borderBottom: `1px solid ${ESPRESSO_DEEP}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
-              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px", borderColor: ESPRESSO_DEEP, color: ESPRESSO_DEEP }} onClick={() => navigate("/contact")}>
+              <a href="mailto:mirahventures@vellu.cc" style={{ color: BONE, borderBottom: `1px solid ${BONE}`, textDecoration: "none" }}>mirahventures@vellu.cc</a>
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 18px", borderColor: BONE, color: BONE }} onClick={() => navigate("/contact")}>
                 {lang === "nl" ? "Neem contact op" : lang === "es" ? "Contáctanos" : "Contact us"}
               </button>
             </div>
