@@ -7489,28 +7489,63 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <span style={{ flex: 1, lineHeight: 1.4 }}>{clientNote}</span>
         </div>
       )}
-      {a.status === "confirmed" && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          {/* Alle pillen in deze rij delen 8px verticale padding: de
-              btn-ghost-default (11px) maakte Afronden een dikke oval die
-              over twee regels wrapte, terwijl "0 14px" de rest platsloeg. */}
-          <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize:10, padding: "8px 14px", whiteSpace: "nowrap", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
-          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
-          {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
-            <button className="btn-ghost" style={{ fontSize:10, padding: "8px 12px", color: accent, borderColor: `${accent}44`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
-          )}
-          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
-          {/* Annuleren: klant krijgt bericht, rij blijft uitgegrijsd staan.
-              Verwijderen (de X hiernaast) is voor foutieve invoer. */}
-          <button className="btn-ghost" style={{ fontSize:10, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId}
-            title={lang === "nl" ? "Afspraak annuleren — de klant krijgt bericht" : lang === "es" ? "Cancelar la cita — se avisa al cliente" : "Cancel the appointment — the client is notified"}
-            onClick={() => cancelAppt(a)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
-          <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => deleteAppt(a)}>
-            <NavIcon name="xmark" size={11} color="currentColor" />
-          </button>
-        </div>
-      )}
+      {a.status === "confirmed" && (() => {
+        // Vaste rijen i.p.v. een omlopende flex-rij (Faisal 15-09: "niet
+        // symmetrisch, de knoppen onderaan passen niet"): 1) Afronden op
+        // volle breedte, 2) vier gelijke knoppen (2×2 op mobiel),
+        // 3) Google Agenda + WhatsApp + de kleine icoonknoppen.
+        const dis = !!processingApptId;
+        const cel = { width: "100%", minWidth: 0, fontSize: 10, padding: "8px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dis ? 0.5 : 1 };
+        // 33px = de hoogte van de tekstknoppen (8px padding + regel + rand),
+        // zodat de icoonknoppen exact in de rij vallen.
+        const icoon = { width: 33, height: 33, flexShrink: 0, borderRadius: 8, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: dis ? 0.5 : 1 };
+        const dur = parseInt(a.service_duration || a.duration || 60);
+        return (
+          <div data-appt-actions style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button className="btn-ghost" data-appt-primary style={{ width: "100%", fontSize: 10, padding: "9px 14px", whiteSpace: "nowrap", opacity: dis ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
+            <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 6 }}>
+              <button className="btn-ghost" style={cel} disabled={dis} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
+              <button className="btn-ghost" style={cel} disabled={dis} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+              {/* Annuleren: klant krijgt bericht, rij blijft uitgegrijsd staan.
+                  Verwijderen (de X in de rij eronder) is voor foutieve invoer. */}
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis}
+                title={lang === "nl" ? "Afspraak annuleren — de klant krijgt bericht" : lang === "es" ? "Cancelar la cita — se avisa al cliente" : "Cancel the appointment — the client is notified"}
+                onClick={() => cancelAppt(a)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+            </div>
+            <div data-appt-tools style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button className="btn-ghost" style={{ flex: 1, minWidth: 0, fontSize: 10, padding: "8px 8px", color: c.textLabel, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} onClick={() => {
+                window.open(getGoogleCalUrl({
+                  title: `${a.client_name} — ${a.service_name}`,
+                  date: a.date, time: a.time, duration: dur,
+                  description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${cur}${a.service_price}`,
+                  location: salonData.name + (salonData.city ? ", " + salonData.city : "")
+                }), "_blank");
+              }}>{t.addToGoogleCal}</button>
+              {/* WhatsApp de KLANT direct (alleen haar nummer nodig, niet het
+                  salonnummer): opent WhatsApp met een ingevulde bevestiging. */}
+              {a.client_phone && (
+                <button className="btn-ghost" aria-label="WhatsApp" title="WhatsApp" style={{ flexShrink: 0, fontSize: 10, padding: isMobile ? 0 : "8px 10px", ...(isMobile ? { width: 33, height: 33, justifyContent: "center" } : {}), color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
+                  const msg = getWhatsAppBookingMsg(lang, {
+                    clientName: a.client_name, salonName: salonData.name,
+                    date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
+                    time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2), countryCode: salonData.country_code
+                  });
+                  window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>{isMobile ? null : " WhatsApp"}
+                </button>
+              )}
+              {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
+                <button style={{ ...icoon, border: `1px solid ${accent}44`, color: accent }} disabled={dis} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
+              )}
+              <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ ...icoon, border: `1px solid ${c.danger}26`, color: c.danger }} disabled={dis} onClick={() => deleteAppt(a)}>
+                <NavIcon name="xmark" size={11} color="currentColor" />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {/* Vooruitbetalen: reservering die het slot vasthoudt tot de termijn.
           "Betaling ontvangen" maakt er een bevestigde afspraak van (en mailt de
           klant haar bevestiging); niet betaald → prepay-watch laat hem vervallen. */}
@@ -7631,35 +7666,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         );
       })()}
       {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
-      {/* Quick actions: Google Calendar + WhatsApp */}
-      {a.status === "confirmed" && (
-        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 8px", color: c.textLabel }} onClick={() => {
-            const dur = parseInt(a.service_duration || a.duration || 60);
-            window.open(getGoogleCalUrl({
-              title: `${a.client_name} — ${a.service_name}`,
-              date: a.date, time: a.time, duration: dur,
-              description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${cur}${a.service_price}`,
-              location: salonData.name + (salonData.city ? ", " + salonData.city : "")
-            }), "_blank");
-          }}>{t.addToGoogleCal}</button>
-          {/* WhatsApp the CLIENT directly. Only needs the client's phone —
-              NOT the salon's own whatsapp_number (that's for clients messaging
-              the salon). Opens WhatsApp with a pre-filled confirmation. */}
-          {a.client_phone && (
-            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 10px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
-              const msg = getWhatsAppBookingMsg(lang, {
-                clientName: a.client_name, salonName: salonData.name,
-                date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
-                time: a.time, serviceName: a.service_name, price: parseFloat(a.service_price || 0).toFixed(2), countryCode: salonData.country_code
-              });
-              window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
-            }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg> WhatsApp
-            </button>
-          )}
-        </div>
-      )}
+      {/* Google Agenda + WhatsApp zitten sinds 15-09 in de derde rij van het
+          bevestigd-blok hierboven (samen met de icoonknoppen). */}
     </div>
     );
   };

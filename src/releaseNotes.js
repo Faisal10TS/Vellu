@@ -26,6 +26,14 @@ export const RELEASES = [
           es: "Los botones, filtros y etiquetas tienen ahora esquinas cuadradas suaves en lugar de forma de píldora, en la app y en tu página de reservas, en el mismo estilo que la web de Vellu. Los interruptores y los iconos redondos siguen redondos.",
         },
       },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Afspraakkaart: de knoppen staan in vaste rijen — Afronden op volle breedte, daaronder Verplaats, Bewerk, No-show en Annuleer even groot, en onderaan Google Agenda, WhatsApp en de kleine icoontjes op één rij.",
+          en: "Appointment card: the buttons now sit in fixed rows — Mark complete full width, then Reschedule, Edit, No-show and Cancel at equal size, and Google Calendar, WhatsApp and the small icons on one row at the bottom.",
+          es: "Tarjeta de cita: los botones están ahora en filas fijas — Completar a todo el ancho, debajo Reprogramar, Editar, No-show y Cancelar del mismo tamaño, y abajo Google Calendar, WhatsApp y los iconos pequeños en una sola fila.",
+        },
+      },
     ],
   },
   {
