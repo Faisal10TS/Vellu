@@ -219,8 +219,18 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-ctas { justify-content: flex-start; }
             .at-stats { justify-content: start; }
           }
-          .at-feat-grid { display: grid; grid-template-columns: 1fr; gap: 0 44px; }
-          @media (min-width: 760px) { .at-feat-grid { grid-template-columns: 1fr 1fr; } }
+          /* Functiekaarten (Faisal 15-09: "de tekst zweeft los, geef ze boxen
+             met een zwevend effect"): bone-kaarten op de putty-band met een
+             zachte, brede slagschaduw en een lift bij hover. */
+          .at-feat-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
+          @media (min-width: 600px) { .at-feat-grid { grid-template-columns: 1fr 1fr; gap: 16px; } }
+          @media (min-width: 1000px) { .at-feat-grid { grid-template-columns: repeat(4, 1fr); gap: 18px; } }
+          .at-feat-card { height: 100%; box-sizing: border-box; background: ${P.bgCard}; border: 1px solid ${EARTH}26; border-radius: 16px; padding: 22px 20px 24px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-feat-card:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
+          .at-feat-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 12px; margin-bottom: 16px; }
+          .at-feat-title { font-size: 14px; font-weight: 600; color: ${INK}; margin-bottom: 6px; letter-spacing: 0.01em; }
+          .at-feat-desc { font-size: 12.5px; color: #5f5240; line-height: 1.65; }
+          @media (prefers-reduced-motion: reduce) { .at-feat-card, .at-feat-card:hover { transform: none; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           .at-step { transition: background 0.25s ease; }
@@ -395,13 +405,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               {feats.map((f, i) => {
                 const [title, desc] = featOf(f);
                 return (
-                  <Reveal key={i} delay={(i % 2) * 70 + Math.floor(i / 2) * 60}>
-                    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "20px 4px", borderBottom: `1px solid ${EARTH}3d` }}>
-                      <span aria-hidden="true" style={{ color: EARTH, fontSize: 11, lineHeight: "22px" }}>◆</span>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 4, letterSpacing: "0.01em" }}>{title}</div>
-                        <div style={{ fontSize: 12.5, color: "#5f5240", lineHeight: 1.65 }}>{desc}</div>
-                      </div>
+                  <Reveal key={i} delay={(i % 4) * 70 + Math.floor(i / 4) * 90}>
+                    <div className="at-feat-card vl-glow" data-feat-card onMouseMove={glowMove}>
+                      <span aria-hidden="true" className="at-feat-icon">◆</span>
+                      <div className="at-feat-title">{title}</div>
+                      <div className="at-feat-desc">{desc}</div>
                     </div>
                   </Reveal>
                 );
