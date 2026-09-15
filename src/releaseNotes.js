@@ -35,6 +35,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Je boekingspagina heeft een nieuwe look: een Boek-knop bovenin naast Delen met de eerstvolgende beschikbare dag, je logo over de rand van je foto, diensten als kaarten met foto of icoon, teamkaarten met een Boek-knop per medewerker, een fotoraster, reviewkaarten, en openingstijden van de hele week naast je contactgegevens. Op de telefoon staat onderaan een vaste balk met het eerstvolgende slot en Boek. Alles in je eigen kleur en licht/donker-keuze.",
+          en: "Your booking page has a new look: a Book button at the top next to Share with the next available day, your logo over the edge of your photo, services as cards with a photo or icon, team cards with a Book button per team member, a photo grid, review cards, and the full week of opening hours next to your contact details. On phones a fixed bar at the bottom shows the next slot and Book. All in your own colour and light/dark choice.",
+          es: "Tu página de reservas tiene un nuevo aspecto: un botón Reservar arriba junto a Compartir con el próximo día disponible, tu logo sobre el borde de tu foto, servicios como tarjetas con foto o icono, tarjetas de equipo con un botón Reservar por persona, una cuadrícula de fotos, tarjetas de reseñas y el horario de toda la semana junto a tus datos de contacto. En el móvil, una barra fija abajo muestra el próximo hueco y Reservar. Todo en tu propio color y modo claro/oscuro.",
+        },
+      },
+      {
         kind: "improved", audience: ["owner"],
         text: {
           nl: "Snelle acties op het dashboard: alle knoppen even groot met het label op één regel; op een smaller scherm netjes verdeeld over twee of drie rijen.",

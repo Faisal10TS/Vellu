@@ -2479,42 +2479,92 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-team-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* Reviews — Setmore style */
-  .profile-reviews-summary {
-    display: flex; gap: 24px; align-items: flex-start;
-    margin-bottom: 20px;
+  /* Teamkaarten (15-09): foto, naam, rol, bio op 2 regels, chips + Boek. */
+  .profile-team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .profile-team-card {
+    display: flex; flex-direction: column; gap: 12px;
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 16px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
   }
-  .profile-rating-bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .profile-team-card-top { display: flex; gap: 14px; align-items: flex-start; }
+  .profile-team-photo { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+  .profile-team-avatar.profile-team-photo { border-radius: 12px; font-size: 24px; }
+  .profile-team-bio {
+    font-size: 12px; color: ${c.textSub}; line-height: 1.5; margin-top: 6px; cursor: pointer;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .profile-team-bio.open { display: block; -webkit-line-clamp: unset; }
+  .profile-team-card-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+
+  /* Reviews (15-09): beoordelingstegel links, reviewkaarten rechts. */
+  .profile-reviews-grid { display: flex; gap: 12px; align-items: flex-start; }
+  .profile-rating-tile {
+    width: 220px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center;
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 18px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+  }
+  .profile-rating-bars { width: 100%; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
   .profile-rating-bar-row {
-    display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${c.textLabel};
+    display: flex; align-items: center; gap: 8px; font-size: 11px; color: ${c.textLabel};
   }
   .profile-rating-bar-track { flex: 1; height: 6px; background: ${c.inputBg}; border-radius: 3px; overflow: hidden; }
-  .profile-rating-bar-fill { height: 100%; background: ${c.text}; border-radius: 3px; transition: width 0.8s ease; }
-  .profile-rating-big {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 20px 28px; border: 1px solid ${c.border}; border-radius: 14px;
-    text-align: center; min-width: 180px;
-  }
-  .profile-rating-score { font-size: 36px; font-weight: 700; color: ${c.text}; }
+  .profile-rating-bar-fill { height: 100%; background: ${accent}; border-radius: 3px; transition: width 0.8s ease; }
+  .profile-rating-score { font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 42px; font-weight: 400; color: ${c.text}; line-height: 1; margin-bottom: 6px; }
+  .profile-review-cards { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .profile-review-card {
-    padding: 16px 0; border-bottom: 1px solid ${c.border};
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 14px 16px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
   }
-  .profile-review-card:last-child { border-bottom: none; }
+  .profile-review-head { display: flex; align-items: center; gap: 10px; }
+  .profile-review-avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: ${accent}1a; color: ${accent}; display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 12px;
+  }
   .profile-write-review-btn {
-    display: inline-block; padding: 10px 24px; border: 1px solid ${c.border};
-    border-radius: 8px; font-size: 13px; font-weight: 500; color: ${c.text};
-    cursor: pointer; transition: all 0.2s; background: transparent;
-    font-family: var(--body-font, 'Jost', sans-serif); margin-top: 8px;
+    display: inline-block; width: 100%; padding: 10px 16px; border: 1px solid ${c.border};
+    border-radius: 8px; font-size: 12px; font-weight: 600; color: ${c.text}; letter-spacing: 0.04em;
+    cursor: pointer; transition: all 0.2s; background: transparent; white-space: nowrap;
+    font-family: var(--body-font, 'Jost', sans-serif); margin-top: 12px;
   }
-  .profile-write-review-btn:hover { background: ${c.bgCard}; border-color: ${c.borderHover}; }
+  .profile-write-review-btn:hover { background: ${c.inputBg}; border-color: ${c.borderHover}; }
 
-  /* Gallery grid */
+  /* Galerij (15-09): raster met "+N"-tegel. */
+  .profile-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .profile-gallery-item {
-    aspect-ratio: 1; border-radius: 8px; overflow: hidden;
-    border: 1px solid ${c.border}; cursor: pointer; transition: all 0.2s;
+    aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative;
+    border: 1px solid ${c.border}; cursor: pointer; transition: transform 0.2s ease, opacity 0.2s;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35);
   }
-  .profile-gallery-item:hover { opacity: 0.85; }
-  .profile-gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+  .profile-gallery-item:hover { transform: translateY(-3px); }
+  .profile-gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .profile-gallery-item.more::after { content: ""; position: absolute; inset: 0; background: rgba(20,18,16,0.55); }
+  .profile-gallery-more {
+    position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 600; font-size: 14px; letter-spacing: 0.06em;
+  }
+
+  /* Producten (15-09): compacte kaarten. */
+  .profile-products-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .profile-product-card {
+    display: flex; align-items: center; gap: 12px;
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 12px; padding: 12px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+  }
+  .profile-product-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+
+  /* Contact (15-09): openingstijden + contactgegevens als twee kaarten. */
+  .profile-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .profile-contact-card {
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 18px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+  }
+  .profile-hours-list div {
+    display: flex; justify-content: space-between; gap: 12px; padding: 6px 0;
+    border-bottom: 1px dashed ${c.border}; font-size: 12.5px; color: ${c.textSub};
+  }
+  .profile-hours-list div:last-child { border-bottom: none; }
+  .profile-hours-list div.today span:first-child { font-weight: 600; color: ${c.text}; }
 
   /* Sidebar */
   .profile-sidebar-logo {
@@ -2627,9 +2677,13 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .profile-hero-book { height: 40px; padding: 0 16px; font-size: 11px; }
     /* Categoriechips blijven bovenaan plakken tijdens het scrollen door de lijst. */
     .profile-cat-scroll { position: sticky; top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 20; background: ${c.bg}; padding-top: 6px; margin-top: -6px; }
-    .profile-reviews-summary { flex-direction: column-reverse; gap: 16px; }
-    .profile-rating-big { min-width: 0; width: 100%; flex-direction: row; padding: 14px 18px; gap: 14px; justify-content: center; }
-    .profile-rating-score { font-size: 28px; }
+    .profile-team-grid { grid-template-columns: 1fr; gap: 10px; }
+    .profile-gallery-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .profile-products-grid { grid-template-columns: 1fr; gap: 8px; }
+    .profile-reviews-grid { flex-direction: column; }
+    .profile-rating-tile { width: 100%; }
+    .profile-review-cards { grid-template-columns: 1fr; gap: 10px; }
+    .profile-contact-grid { grid-template-columns: 1fr; gap: 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

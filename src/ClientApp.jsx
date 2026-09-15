@@ -2814,21 +2814,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {initialSalon.staff?.length > 0 && (
               <section ref={el => profileSectionRefs.current.team = el} className="profile-section">
                 <h2 className="profile-section-title">{t.profileTeam}</h2>
+                {/* Teamkaarten (15-09, mockup): foto, naam, rol, bio op twee regels
+                    (tik voor de hele tekst), diensten als chips en een Boek-knop. */}
+                <div className="profile-team-grid">
                 {initialSalon.staff.map(member => {
                   const isExpanded = expandedTeamMember === member.id;
                   const memberServices = member.service_ids?.length > 0
                     ? initialSalon.services.filter(s => member.service_ids.includes(s.id))
                     : initialSalon.services;
+                  const svcLabel = (s) => lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
+                  const chips = isExpanded ? memberServices : memberServices.slice(0, 3);
+                  const rest = memberServices.length - chips.length;
                   return (
-                    <div key={member.id}>
-                      <div className="profile-team-row" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)}>
+                    <div key={member.id} className="profile-team-card" data-team-card>
+                      <div className="profile-team-card-top">
                         {member.avatar_url ? (
-                          <img src={member.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt={member.name} />
+                          <img src={member.avatar_url} className="profile-team-photo" alt={member.name} />
                         ) : (
-                          <div className="profile-team-avatar">{member.name?.[0] || "?"}</div>
+                          <div className="profile-team-avatar profile-team-photo">{member.name?.[0] || "?"}</div>
                         )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 500, fontSize: 14, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             {member.name}
                             {/* Owner tag only surfaces when the salon opted in via
                                 Settings → Team. Clients otherwise see all team
@@ -2839,31 +2845,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               </span>
                             )}
                           </div>
-                          {member.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
-                        </div>
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="1.5"
-                          style={{ transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }}><path d="M7 5l5 5-5 5" /></svg>
-                      </div>
-                      {isExpanded && (
-                        <div style={{ padding: "12px 0 16px 52px", animation: "fadeUp 0.2s ease" }}>
-                          {member.bio && <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 12 }}>{member.bio}</div>}
-                          {memberServices.length > 0 && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                                {memberServices.map(s => (
-                                  <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
-                                    {lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}
-                                  </span>
-                                ))}
-                              </div>
+                          {member.role && <div style={{ fontSize: 11.5, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
+                          {member.bio && (
+                            <div className={`profile-team-bio${isExpanded ? " open" : ""}`} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)} title={isExpanded ? undefined : (lang === "nl" ? "Tik voor meer" : lang === "es" ? "Toca para ver más" : "Tap for more")}>
+                              {member.bio}
                             </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                      <div className="profile-team-card-foot">
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, minWidth: 0, flex: 1 }}>
+                          {chips.map(s => (
+                            <span key={s.id} className="profile-service-duration-pill">{svcLabel(s)}</span>
+                          ))}
+                          {rest > 0 && (
+                            <span className="profile-service-duration-pill" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(member.id)}>+{rest}</span>
+                          )}
+                        </div>
+                        <button type="button" className="profile-service-book-btn" onClick={() => enterBooking()}>{t.book}</button>
+                      </div>
                     </div>
                   );
                 })}
+                </div>
               </section>
             )}
 
@@ -2875,23 +2879,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 14 }}>
                   {lang === "nl" ? "Verkrijgbaar in de salon — voeg ze toe bij het boeken van je afspraak." : lang === "es" ? "Disponibles en el salón — añádelos al reservar tu cita." : "Available in the salon — add them when booking your appointment."}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 10 }}>
-                  {(initialSalon.products || []).map(p => (
-                    <div key={p.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                {/* Compacte productkaarten (15-09): kleine tegel, naam, één regel
+                    omschrijving en prijs — geen groot grijs vlak meer. */}
+                <div className="profile-products-grid">
+                  {(initialSalon.products || []).map(p => {
+                    const pDesc = lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl);
+                    return (
+                    <div key={p.id} className="profile-product-card" data-product-card>
                       {p.photo_url
-                        ? <img src={p.photo_url} alt={prodNameOf(p)} loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
-                        : <div style={{ width: "100%", aspectRatio: "1", background: c.inputBg, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={26} color={c.textMuted} /></div>}
-                      <div style={{ padding: "10px 12px 12px" }}>
-                        <div style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.3 }}>{prodNameOf(p)}</div>
-                        {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
-                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                            <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
-                          </div>
-                        )}
-                        <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, marginTop: 6 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                        ? <img src={p.photo_url} alt={prodNameOf(p)} loading="lazy" className="profile-product-thumb" />
+                        : <div className="profile-product-thumb" style={{ background: `${accent}14`, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={16} color={accent} /></div>}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: c.text }}>{prodNameOf(p)}</div>
+                        <div style={{ fontSize: 11.5, color: c.textSub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {pDesc ? <><Linkify text={pDesc} color={accent} /> · </> : null}<span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>{cur}{parseFloat(p.price).toFixed(2)}</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -2900,25 +2906,24 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             {allPhotos.length > 0 && (
               <section ref={el => profileSectionRefs.current.gallery = el} className="profile-section">
                 <h2 className="profile-section-title">{t.profileGallery}</h2>
+                {/* Raster van 6 (mobiel 4) foto's; de laatste tegel toont "+N" en
+                    opent de lightbox met de rest (15-09). */}
                 {(() => {
-                  const initialCount = isMobile ? 4 : 3;
+                  const max = isMobile ? 4 : 6;
+                  const shown = allPhotos.slice(0, max);
+                  const rest = allPhotos.length - shown.length;
                   return (
-                    <>
-                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 2 : 3}, 1fr)`, gap: 8 }}>
-                        {(galleryExpanded ? allPhotos : allPhotos.slice(0, initialCount)).map((photo, idx) => (
-                          <div key={photo.id || idx} className="profile-gallery-item" onClick={() => setGallery({ photos: allPhotos, idx })}>
+                    <div className="profile-gallery-grid">
+                      {shown.map((photo, idx) => {
+                        const isMore = rest > 0 && idx === shown.length - 1;
+                        return (
+                          <div key={photo.id || idx} className={`profile-gallery-item${isMore ? " more" : ""}`} data-gallery-item onClick={() => setGallery({ photos: allPhotos, idx })}>
                             <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
+                            {isMore && <span className="profile-gallery-more">+{rest} {lang === "nl" ? "foto's" : lang === "es" ? "fotos" : "photos"}</span>}
                           </div>
-                        ))}
-                      </div>
-                      {allPhotos.length > initialCount && (
-                        <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
-                          <button className="btn-ghost" onClick={() => setGalleryExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
-                            {galleryExpanded ? t.showLess : `${t.showMore} (${allPhotos.length - initialCount})`}
-                          </button>
-                        </div>
-                      )}
-                    </>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
               </section>
@@ -2936,46 +2941,50 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </select>
                 </h2>
                 
-                {/* Rating summary — Setmore style: bars left, big score right */}
-                <div className="profile-reviews-summary">
-                  <div className="profile-rating-bars">
-                    {ratingBreakdown.map(rb => (
-                      <div key={rb.stars} className="profile-rating-bar-row">
-                        <StarRow rating={rb.stars} size={12} />
-                        <div className="profile-rating-bar-track">
-                          <div className="profile-rating-bar-fill" style={{ width: `${initialSalon.reviews.length > 0 ? (rb.count / initialSalon.reviews.length) * 100 : 0}%` }} />
-                        </div>
-                        <span style={{ width: 18, textAlign: "right" }}>{rb.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="profile-rating-big">
+                {/* Beoordelingstegel links, reviewkaarten rechts (15-09, mockup). */}
+                <div className="profile-reviews-grid">
+                  <div className="profile-rating-tile" data-rating-tile>
                     <div className="profile-rating-score">{avgRating}</div>
                     <StarRow rating={Math.round(parseFloat(avgRating))} size={16} />
-                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 6 }}>{initialSalon.reviews.length} {t.reviews.toLowerCase()}</div>
+                    <div style={{ fontSize: 12, color: c.textLabel, marginTop: 4 }}>{initialSalon.reviews.length} {t.reviews.toLowerCase()}</div>
+                    <div className="profile-rating-bars">
+                      {ratingBreakdown.map(rb => (
+                        <div key={rb.stars} className="profile-rating-bar-row">
+                          <span style={{ width: 8, textAlign: "right" }}>{rb.stars}</span>
+                          <div className="profile-rating-bar-track">
+                            <div className="profile-rating-bar-fill" style={{ width: `${initialSalon.reviews.length > 0 ? (rb.count / initialSalon.reviews.length) * 100 : 0}%` }} />
+                          </div>
+                          <span style={{ width: 18, textAlign: "right" }}>{rb.count}</span>
+                        </div>
+                      ))}
+                    </div>
                     <button className="profile-write-review-btn" onClick={() => setShowReviewForm(true)}>{t.writeAReview}</button>
                   </div>
-                </div>
-
-                {/* Review list */}
-                {(reviewsExpanded ? sortedReviews : sortedReviews.slice(0, 5)).map(review => (
-                  <div key={review.id} className="profile-review-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: review.anonymous ? c.textSub : c.text, fontStyle: review.anonymous ? "italic" : "normal" }}>{review.anonymous ? t.anonymousClient : (review.client_name?.split(" ")[0] || "Klant")}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                          <StarRow rating={review.rating} size={12} />
-                          <span style={{ fontSize: 12, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
+                  <div className="profile-review-cards">
+                    {(reviewsExpanded ? sortedReviews : sortedReviews.slice(0, isMobile ? 4 : 6)).map(review => {
+                      const naam = review.anonymous ? t.anonymousClient : (review.client_name?.split(" ")[0] || "Klant");
+                      return (
+                        <div key={review.id} className="profile-review-card" data-review-card>
+                          <div className="profile-review-head">
+                            <div className="profile-review-avatar">{review.anonymous ? "?" : (naam[0] || "?").toUpperCase()}</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: review.anonymous ? c.textSub : c.text, fontStyle: review.anonymous ? "italic" : "normal" }}>{naam}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
+                                <StarRow rating={review.rating} size={11} />
+                                <span style={{ fontSize: 11, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          {review.comment && <p style={{ fontSize: 13, color: c.textSub, lineHeight: 1.55, margin: "8px 0 0" }}>{review.comment}</p>}
                         </div>
-                      </div>
-                    </div>
-                    {review.comment && <p style={{ fontSize: 14, color: c.textSub, lineHeight: 1.5, marginTop: 6 }}>{review.comment}</p>}
+                      );
+                    })}
                   </div>
-                ))}
-                {sortedReviews.length > 5 && (
+                </div>
+                {sortedReviews.length > (isMobile ? 4 : 6) && (
                   <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
                     <button className="btn-ghost" onClick={() => setReviewsExpanded(v => !v)} style={{ fontSize: 12, padding: "10px 22px" }}>
-                      {reviewsExpanded ? t.showLess : `${t.showMore} (${sortedReviews.length - 5})`}
+                      {reviewsExpanded ? t.showLess : `${t.showMore} (${sortedReviews.length - (isMobile ? 4 : 6)})`}
                     </button>
                   </div>
                 )}
@@ -2986,11 +2995,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <section ref={el => profileSectionRefs.current.contact = el} className="profile-section" style={{ borderBottom: "none" }}>
               <h2 className="profile-section-title">{t.profileContact}</h2>
               
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 20 }}>
+              {/* Twee kaarten (15-09): openingstijden van de hele week en de
+                  contactgegevens (altijd als zichtbare gegevens, geen losse
+                  knoppen — Faisal). Daaronder het adres met de kaart. */}
+              <div className="profile-contact-grid">
+                <div className="profile-contact-card" data-hours-card>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, margin: "0 0 8px" }}>{t.openingHours}</h3>
+                  <div className="profile-hours-list">
+                    {[1, 2, 3, 4, 5, 6, 0].map(dayIdx => {
+                      const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
+                      const isToday = dayIdx === todayDayIndex;
+                      return (
+                        <div key={dayIdx} className={isToday ? "today" : ""}>
+                          <span>{FULL_DAYS[dayIdx]}{isToday ? ` · ${lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today"}` : ""}</span>
+                          <span style={{ color: dayHrs.closed ? c.textMuted : (isToday ? accent : c.textSub) }}>{dayHrs.closed ? t.closed : fmtDayHours(dayHrs)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
                 {/* Contact details */}
-                {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.whatsapp_number || initialSalon.salon_instagram) && (
-                  <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.contactUs}</h3>
+                {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.whatsapp_number || initialSalon.salon_instagram || effectivePolicy) && (
+                  <div className="profile-contact-card">
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, margin: "0 0 6px" }}>{t.contactUs}</h3>
                     {(initialSalon.salon_email) && (
                       <div className="profile-contact-row">
                         <NavIcon name="mail" size={14} color={c.textSub} />
@@ -3006,13 +3033,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         </a>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Booking policy */}
+                {/* Booking policy, in dezelfde kaart */}
                 {effectivePolicy && (
-                  <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 10 }}>{t.goodToKnow}</h3>
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: c.text, margin: "0 0 4px" }}>{t.goodToKnow}</h3>
                     <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
                       <NavIcon name="clipboard" size={14} color={c.textSub} />
                       <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
@@ -3020,10 +3045,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         style={{ transition: "transform 0.2s", transform: expandedPolicy ? "rotate(180deg)" : "none" }}><path d="M5 8l5 5 5-5" /></svg>
                     </div>
                     {expandedPolicy && (
-                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "12px 0 4px 28px", whiteSpace: "pre-wrap" }}>
+                      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.7, padding: "8px 0 4px 24px", whiteSpace: "pre-wrap" }}>
                         {effectivePolicy}
                       </div>
                     )}
+                  </div>
+                )}
                   </div>
                 )}
               </div>
