@@ -127,14 +127,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     { n: "03", title: t.step3, desc: t.step3d },
   ];
   const feats = [
-    { nl: ["Eigen boekingspagina", "Jouw merk, jouw kleuren, jouw link — vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij."], en: ["Your own booking page", "Your brand, your colors, your link — vellu.cc/your-name. Clients book directly with you, no middleman."], es: ["Tu propia página de reservas", "Tu marca, tus colores, tu enlace — vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios."] },
-    { nl: ["0% commissie", "Vast maandtarief. Elke cent van elke boeking blijft van jou."], en: ["0% commission", "Flat monthly fee. Every cent of every booking stays yours."], es: ["0% de comisión", "Tarifa mensual fija. Cada centavo de cada reserva es tuyo."] },
-    { nl: ["Team accounts", "Elke medewerker een eigen login, agenda en diensten."], en: ["Team accounts", "Each staff member gets their own login, schedule and services."], es: ["Cuentas de equipo", "Cada miembro del equipo tiene su propio acceso, agenda y servicios."] },
-    { nl: ["Automatische e-mails", "Bevestigingen, herinneringen, follow-ups — en de factuur gaat automatisch mee bij het afrekenen."], en: ["Automatic emails", "Confirmations, reminders, follow-ups — and the invoice is emailed automatically at checkout."], es: ["Correos automáticos", "Confirmaciones, recordatorios, seguimientos — y la factura se envía automáticamente al cobrar."] },
-    { nl: ["Reviews", "Automatisch reviews verzamelen na elk bezoek."], en: ["Reviews", "Automatically collect reviews after every visit."], es: ["Reseñas", "Recoge reseñas automáticamente tras cada visita."] },
-    { nl: ["Eigen branding", "Jouw logo, kleuren en stijl — tot op de bevestigingsmail."], en: ["Custom branding", "Your logo, colors and style — down to the confirmation email."], es: ["Tu propia marca", "Tu logo, colores y estilo — hasta en el correo de confirmación."] },
-    { nl: ["Portfolio", "Foto's per behandeling tonen."], en: ["Portfolio", "Show photos per treatment."], es: ["Portafolio", "Muestra fotos por tratamiento."] },
-    { nl: ["Kortingscodes", "Maak en deel korting met je klanten."], en: ["Discount codes", "Create and share discounts with clients."], es: ["Códigos de descuento", "Crea y comparte descuentos con tus clientes."] },
+    { icon: "link", nl: ["Eigen boekingspagina","Jouw merk, jouw kleuren, jouw link — vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij."], en: ["Your own booking page", "Your brand, your colors, your link — vellu.cc/your-name. Clients book directly with you, no middleman."], es: ["Tu propia página de reservas", "Tu marca, tus colores, tu enlace — vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios."] },
+    { icon: "money", nl: ["0% commissie","Vast maandtarief. Elke cent van elke boeking blijft van jou."], en: ["0% commission", "Flat monthly fee. Every cent of every booking stays yours."], es: ["0% de comisión", "Tarifa mensual fija. Cada centavo de cada reserva es tuyo."] },
+    { icon: "team", nl: ["Team accounts","Elke medewerker een eigen login, agenda en diensten."], en: ["Team accounts", "Each staff member gets their own login, schedule and services."], es: ["Cuentas de equipo", "Cada miembro del equipo tiene su propio acceso, agenda y servicios."] },
+    { icon: "mail", nl: ["Automatische e-mails","Bevestigingen, herinneringen, follow-ups — en de factuur gaat automatisch mee bij het afrekenen."], en: ["Automatic emails", "Confirmations, reminders, follow-ups — and the invoice is emailed automatically at checkout."], es: ["Correos automáticos", "Confirmaciones, recordatorios, seguimientos — y la factura se envía automáticamente al cobrar."] },
+    { icon: "star2", nl: ["Reviews","Automatisch reviews verzamelen na elk bezoek."], en: ["Reviews", "Automatically collect reviews after every visit."], es: ["Reseñas", "Recoge reseñas automáticamente tras cada visita."] },
+    { icon: "palette", nl: ["Eigen branding","Jouw logo, kleuren en stijl — tot op de bevestigingsmail."], en: ["Custom branding", "Your logo, colors and style — down to the confirmation email."], es: ["Tu propia marca", "Tu logo, colores y estilo — hasta en el correo de confirmación."] },
+    { icon: "image", nl: ["Portfolio","Foto's per behandeling tonen."], en: ["Portfolio", "Show photos per treatment."], es: ["Portafolio", "Muestra fotos por tratamiento."] },
+    { icon: "tag", nl: ["Kortingscodes","Maak en deel korting met je klanten."], en: ["Discount codes", "Create and share discounts with clients."], es: ["Códigos de descuento", "Crea y comparte descuentos con tus clientes."] },
   ];
   const featOf = (f) => (lang === "nl" ? f.nl : lang === "es" ? f.es : f.en);
 
@@ -407,7 +407,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 return (
                   <Reveal key={i} delay={(i % 4) * 70 + Math.floor(i / 4) * 90}>
                     <div className="at-feat-card vl-glow" data-feat-card onMouseMove={glowMove}>
-                      <span aria-hidden="true" className="at-feat-icon">◆</span>
+                      {/* Passend icoon per functie (Faisal 15-09) uit de NavIcon-set. */}
+                      <span aria-hidden="true" className="at-feat-icon"><NavIcon name={f.icon} size={16} color={EARTH} /></span>
                       <div className="at-feat-title">{title}</div>
                       <div className="at-feat-desc">{desc}</div>
                     </div>
