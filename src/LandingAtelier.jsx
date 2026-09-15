@@ -23,7 +23,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
-import { useSEO, T, Layout, NavIcon, AT, AT_COLORS } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
@@ -158,6 +158,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   const maxW = 1080;
   const pad = "clamp(20px, 5vw, 44px)";
+  // Hoekradius (Faisal 15-09): vierkante knoppen zoals vev.co, geen pillen.
+  const R = AT_RADIUS;
 
   return (
     <Layout>
@@ -172,9 +174,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* Scoped stijlen: knoppen/inputs los van het app-thema + de
             bewegingsklassen die anders in LandingScreen's stylesheet wonen. */}
         <style>{`
-          .atelier .btn-primary { background: ${INK}; color: ${BONE}; border: 1px solid ${INK}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
+          .atelier .btn-primary { background: ${INK}; color: ${BONE}; border: 1px solid ${INK}; border-radius: ${R}px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
           .atelier .btn-primary:hover { transform: translateY(-1px); background: #4a3e2f; box-shadow: 0 14px 28px -16px ${INK}; }
-          .atelier .btn-ghost { background: transparent; color: ${INK}; border: 1px solid ${MUSHROOM}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+          .atelier .btn-ghost { background: transparent; color: ${INK}; border: 1px solid ${MUSHROOM}; border-radius: ${R}px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
           .atelier .btn-ghost:hover { border-color: ${EARTH}; background: ${PUTTY}55; }
           .atelier .input-field { background: ${P.inputBg}; border: 1px solid ${P.inputBorder}; color: ${INK}; font-family: 'Jost', sans-serif; outline: none; }
           .atelier .input-field::placeholder { color: ${EARTH}; }
@@ -226,9 +228,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               <button className="at-nav-find" onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
                 {t.findSalonNav}
               </button>
-              <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 3, background: P.bgCard }}>
+              <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 3, background: P.bgCard }}>
                 {["nl", "en", "es"].map(l => (
-                  <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? INK : "transparent", color: lang === l ? BONE : EARTH }}>
+                  <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: R - 2, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? INK : "transparent", color: lang === l ? BONE : EARTH }}>
                     {l}
                   </button>
                 ))}
@@ -333,7 +335,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <AtHead title={t.findSalonTitle} sub={t.findSalonSub} tone="putty" />
           </div>
           <div style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
-            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} />
+            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} />
           </div>
         </div>
 
@@ -404,15 +406,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <AtHead title={t.simplePricing} tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
-              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 4 }}>
+              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
                 {[{ key: "monthly", label: t.billingMonthly }, { key: "yearly", label: t.billingYearly }].map(opt => {
                   const active = billingCycle === opt.key;
                   return (
                     <button key={opt.key} role="radio" aria-checked={active} onClick={() => setBillingCycle(opt.key)}
-                      style={{ padding: "9px 20px", borderRadius: 100, border: "none", background: active ? INK : "transparent", color: active ? BONE : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}>
+                      style={{ padding: "9px 20px", borderRadius: R - 2, border: "none", background: active ? INK : "transparent", color: active ? BONE : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}>
                       {opt.label}
                       {opt.key === "yearly" && (
-                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 100, background: active ? PUTTY : `${EARTH}26`, color: active ? INK : EARTH }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 4, background: active ? PUTTY : `${EARTH}26`, color: active ? INK : EARTH }}>
                           {t.twoMonthsFree}
                         </span>
                       )}
@@ -432,7 +434,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 <Reveal key={i} delay={i * 130}>
                   <div className="vl-glow" onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 26, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
                     {dark && (
-                      <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: PUTTY, borderRadius: 100, padding: "5px 12px" }}>
+                      <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: PUTTY, borderRadius: 4, padding: "5px 12px" }}>
                         {t.popular}
                       </div>
                     )}
@@ -454,7 +456,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                       ))}
                     </div>
                     <button onClick={() => navigate("/owner")}
-                      style={{ width: "100%", padding: "15px 20px", borderRadius: 100, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
+                      style={{ width: "100%", padding: "15px 20px", borderRadius: R, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
                       {t.getStarted}
                     </button>
                   </div>
@@ -518,7 +520,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </Reveal>
             <Reveal delay={200}>
               <button onClick={() => navigate("/owner")}
-                style={{ padding: "18px 46px", borderRadius: 100, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
+                style={{ padding: "18px 46px", borderRadius: R, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
                 {t.startFree}
               </button>
             </Reveal>
@@ -544,7 +546,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </footer>
         </div>
 
-        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} />
+        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} radius={R} />
         <SupportChat
           lang={lang}
           c={P}

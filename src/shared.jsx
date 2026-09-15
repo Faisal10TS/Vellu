@@ -2956,6 +2956,11 @@ const AT = {
   BONE: "#F4EFE6",
   DEEP: "#453A2B", // verdiept espresso: lopende tekst óp mushroom (AA)
 };
+// Hoekradius van knoppen, toggles en velden in de Atelier-huid. Faisal 15-09:
+// geen pillen meer maar "vierkant zoals vev.co" — één zachte hoek van 8px
+// (compacte segmentknoppen 6px, badges 4px). Het app-dashboard houdt zijn
+// eigen pilvormen; dit geldt voor de website en de login/plan-schermen.
+const AT_RADIUS = 8;
 
 // Thema-vormig kleurenobject zodat bestaande componenten (c.bg, c.border, …)
 // zonder verbouwing op de Atelier-huid kunnen draaien. textSub/textLabel zijn
@@ -2982,16 +2987,17 @@ const AT_COLORS = {
 function AtelierSkin() {
   return (
     <style>{`
-      .atelier .btn-primary { background: ${AT.ESPRESSO}; color: ${AT.BONE}; border: 1px solid ${AT.ESPRESSO}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
+      .atelier .btn-primary { background: ${AT.ESPRESSO}; color: ${AT.BONE}; border: 1px solid ${AT.ESPRESSO}; border-radius: ${AT_RADIUS}px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
       .atelier .btn-primary:hover { transform: translateY(-1px); background: #4a3e2f; box-shadow: 0 14px 28px -16px ${AT.ESPRESSO}; }
-      .atelier .btn-ghost { background: transparent; color: ${AT.ESPRESSO}; border: 1px solid ${AT.MUSHROOM}; border-radius: 100px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+      .atelier .btn-ghost { background: transparent; color: ${AT.ESPRESSO}; border: 1px solid ${AT.MUSHROOM}; border-radius: ${AT_RADIUS}px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
       .atelier .btn-ghost:hover { border-color: ${AT.EARTH}; background: ${AT.PUTTY}55; }
       .atelier .input-field { background: ${AT_COLORS.inputBg}; border: 1px solid ${AT_COLORS.inputBorder}; color: ${AT.ESPRESSO}; font-family: 'Jost', sans-serif; outline: none; }
       .atelier .input-field::placeholder { color: ${AT.EARTH}; }
       .atelier .input-field:focus { border-color: ${AT.EARTH}; }
       .atelier select, .atelier option { color: ${AT.ESPRESSO}; }
       .atelier ::selection { background: ${AT.PUTTY}; }
-      .atelier .lang-toggle { background: ${AT_COLORS.bgCard}; border: 1px solid ${AT.PUTTY}; }
+      .atelier .lang-toggle { background: ${AT_COLORS.bgCard}; border: 1px solid ${AT.PUTTY}; border-radius: ${AT_RADIUS}px; }
+      .atelier .lang-btn { border-radius: ${AT_RADIUS - 2}px; }
       .atelier .lang-btn.active { background: ${AT.ESPRESSO}; color: ${AT.BONE}; }
       .atelier .lang-btn.inactive { background: transparent; color: ${AT.EARTH}; }
       .vl-marquee-track { animation: vlMarquee 32s linear infinite; }
@@ -3019,7 +3025,7 @@ export {
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
-  AT, AT_COLORS, AtelierSkin,
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,

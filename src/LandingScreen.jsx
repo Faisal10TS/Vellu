@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
-  AT, AT_COLORS, AtelierSkin, readableAccent, accentEdge
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -638,7 +638,10 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // filters as the visitor types. Each card is painted with the salon's own
 // accent colour, cover and logo. A dashed "your salon here?" card at the
 // end turns the section into an acquisition surface too.
-function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT }) {
+// radius: hoekradius van zoekveld en knopjes — de Atelier-landing geeft 8
+// (vierkant, Faisal 15-09); zonder prop blijft het de oude pilvorm.
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT, radius = 100 }) {
+  const smallRadius = radius >= 100 ? 100 : Math.max(4, radius - 2);
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
@@ -725,7 +728,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
             onChange={e => setQ(e.target.value)}
             placeholder={t.findSalonPh}
             aria-label={t.findSalonTitle}
-            style={{ width: "100%", borderRadius: 100, padding: "13px 20px 13px 44px", fontSize: 13 }}
+            style={{ width: "100%", borderRadius: radius, padding: "13px 20px 13px 44px", fontSize: 13 }}
           />
         </div>
 
@@ -770,7 +773,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
                         {s.cats.map(cat => catLabel(cat, lang)).filter(Boolean).join(" · ")}
                       </div>
                     )}
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: 100, border: `1px solid ${accPillEdge !== "transparent" ? accPillEdge : `${accInk}55`}`, fontSize: 10, color: accInk, fontWeight: 600 }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: smallRadius, border: `1px solid ${accPillEdge !== "transparent" ? accPillEdge : `${accInk}55`}`, fontSize: 10, color: accInk, fontWeight: 600 }}>
                       {t.findSalonBook} →
                     </div>
                   </div>
@@ -783,7 +786,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${accent}88`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 18, marginBottom: 10 }}>+</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
-              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: 100, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
+              <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: smallRadius, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
             </button>
           </div>
         )}
@@ -811,7 +814,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
 // Renders a floating "Start trial" pill bottom-right once the visitor has
 // scrolled past the hero. Hidden while in the hero so it doesn't compete
 // with the primary CTA there.
-function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff" }) {
+function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff", radius = 100 }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 600);
@@ -825,7 +828,7 @@ function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff" }) {
       aria-label={label}
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 50,
-        padding: "12px 22px", borderRadius: 100, border: "none",
+        padding: "12px 22px", borderRadius: radius, border: "none",
         background: bg, color: fg,
         fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600,
         boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
@@ -1553,9 +1556,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
         {/* Taalkeuze — same safe-area offset. Geen thema-toggle: deze pagina
             draagt de vaste Atelier-huid. */}
-        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", gap: 2, border: `1px solid ${AT.PUTTY}`, borderRadius: 100, padding: 3, background: c.bgCard }}>
+        <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", right: 32, display: "flex", gap: 2, border: `1px solid ${AT.PUTTY}`, borderRadius: AT_RADIUS, padding: 3, background: c.bgCard }}>
           {["nl", "en", "es"].map(l => (
-            <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: 100, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? AT.ESPRESSO : "transparent", color: lang === l ? AT.BONE : AT.EARTH }}>
+            <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: AT_RADIUS - 2, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost',sans-serif", background: lang === l ? AT.ESPRESSO : "transparent", color: lang === l ? AT.BONE : AT.EARTH }}>
               {l}
             </button>
           ))}
