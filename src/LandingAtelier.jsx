@@ -244,6 +244,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-faq-plus { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 20px; line-height: 1; flex-shrink: 0; transition: background 0.2s ease, color 0.2s ease; }
           .at-faq-card.open .at-faq-plus { background: ${INK}; color: ${BONE}; }
           @media (prefers-reduced-motion: reduce) { .at-faq-card, .at-faq-card:hover, .at-faq-card.open { transform: none; } }
+          /* Rekensom: schuiven links, uitkomst rechts vanaf 720px. */
+          .at-calc-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
+          @media (min-width: 720px) { .at-calc-grid { grid-template-columns: 1fr 1fr; gap: 18px; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
@@ -368,9 +371,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
             <AtHead title={t.calcTitle} tone="earth" />
             <Reveal>
-              <div style={{ maxWidth: 700, margin: "0 auto", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 24, padding: "26px clamp(20px, 4vw, 36px) 30px", boxShadow: "0 26px 60px -34px rgba(0,0,0,0.45)" }}>
+              {/* Rekensom als zwevend paneel (Faisal 15-09): zelfde schaduwfamilie
+                  als de kaarten, breder voor de tweekoloms indeling; geen lift
+                  (schuiven verslepen op een bewegende kaart voelt onrustig). */}
+              <div className="vl-glow" data-calc-card onMouseMove={glowMove} style={{ maxWidth: 880, margin: "0 auto", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 20, padding: "26px clamp(20px, 4vw, 36px) 30px", boxShadow: "0 26px 46px -28px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05)" }}>
                 <div style={{ fontSize: 12.5, color: P.textLabel, lineHeight: 1.6, marginBottom: 20, maxWidth: 520 }}>{t.calcSub}</div>
-                <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} />
+                <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} atelier />
               </div>
             </Reveal>
           </div>

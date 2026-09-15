@@ -1315,7 +1315,11 @@ function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
 // Interactive bookings × avg-price calculator that contrasts a fixed Vellu
 // fee against an approximate Treatwell commission. Kept intentionally simple
 // (two sliders, three result lines) so the takeaway lands at a glance.
-function SavingsCalculator({ lang, t, c, accent = ACCENT }) {
+// atelier=true (Faisal 15-09, "upgrade de rekensom"): tweekoloms indeling —
+// links de twee schuiven als eigen tegels met het getal groot in serif,
+// rechts de rekenregels en de besparing als espresso-tegel (zelfde taal als
+// de Professional-prijskaart). Zonder de prop blijft de oude opmaak staan.
+function SavingsCalculator({ lang, t, c, accent = ACCENT, atelier = false }) {
   const [bookings, setBookings] = useState(50);
   const [avgPrice, setAvgPrice] = useState(45);
   const revenue = bookings * avgPrice;
@@ -1325,14 +1329,56 @@ function SavingsCalculator({ lang, t, c, accent = ACCENT }) {
   const fmt = (n) => "€" + Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
   const slider = {
     width: "100%", appearance: "none", WebkitAppearance: "none",
-    height: 4, borderRadius: 100, background: c.border, outline: "none", cursor: "pointer",
+    height: 4, borderRadius: 100, background: atelier ? AT.PUTTY : c.border, outline: "none", cursor: "pointer",
   };
-  return (
-    <div>
-      <style>{`
+  const thumbCss = `
         input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: ${accent}; cursor: pointer; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-      `}</style>
+      `;
+  const perMonth = lang === "nl" ? "/mnd" : lang === "es" ? "/mes" : "/mo";
+  if (atelier) {
+    const tile = { background: AT.BONE, border: `1px solid ${AT.PUTTY}`, borderRadius: 14, padding: "18px 18px 16px" };
+    const lbl = { fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: AT.EARTH };
+    const big = { fontFamily: "'Cormorant Garamond',serif", fontSize: 34, fontWeight: 300, color: AT.ESPRESSO, lineHeight: 1 };
+    return (
+      <div data-calc-atelier>
+        <style>{thumbCss}</style>
+        <div className="at-calc-grid">
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={tile} data-calc-input>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, marginBottom: 14 }}>
+                <span style={lbl}>{t.calcBookings}</span><span style={big}>{bookings}</span>
+              </div>
+              <input type="range" min={5} max={300} step={5} value={bookings} aria-label={t.calcBookings} onChange={e => setBookings(parseInt(e.target.value))} style={slider} />
+            </div>
+            <div style={tile} data-calc-input>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, marginBottom: 14 }}>
+                <span style={lbl}>{t.calcAvgPrice}</span><span style={big}>€{avgPrice}</span>
+              </div>
+              <input type="range" min={10} max={200} step={5} value={avgPrice} aria-label={t.calcAvgPrice} onChange={e => setAvgPrice(parseInt(e.target.value))} style={slider} />
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ ...tile, display: "flex", flexDirection: "column", gap: 10 }} data-calc-rows>
+              <Row label={t.calcRevenue} value={fmt(revenue)} c={c} />
+              <Row label={t.calcTreatwellCost} value={`− ${fmt(treatwellMonthly)}${perMonth}`} c={c} negative />
+              <Row label={t.calcVelluCost} value={`− €${velluMonthly}${perMonth}`} c={c} negative />
+            </div>
+            <div data-calc-savings style={{ background: AT.ESPRESSO, color: AT.BONE, borderRadius: 14, padding: "20px 20px 22px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center" }}>
+              <div style={{ ...lbl, color: AT.MUSHROOM, marginBottom: 8 }}>{t.calcSavingsYear}</div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: AT.PUTTY, lineHeight: 1.05 }}>
+                <TweenedNumber value={savingsYear} format={fmt} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>{t.calcFootnote}</div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <style>{thumbCss}</style>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 22 }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textLabel, marginBottom: 8, letterSpacing: "0.04em" }}>
