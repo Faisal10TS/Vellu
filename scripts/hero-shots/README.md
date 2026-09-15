@@ -31,7 +31,15 @@ Details die in de scripts zitten en die je anders vergeet:
   script navigeert daar expliciet heen nadat supabase-js de sessie heeft gezet.
 - localStorage-presets vóór load: `vellu_lang=en`, `vellu-theme=light` (default
   is dark!), `vellu_cookies_accepted=true`, `vellu_install_dismissed=true`
-  (PWA-banner) en `vellu_tour_v1_<salon-id>=1` (rondleiding).
+  (PWA-banner), `vellu_tour_v1_<salon-id>=1` (rondleiding) en
+  `vellu_release_seen_<salon-id>=9999-99-99` (anders staat het "Wat is er
+  nieuw"-venster over het dashboard; als vangnet klikt het script ook "Got it").
+- De boekingspagina (shot 6 en 7) wordt in een VERSE browsercontext zonder
+  eigenaarsessie geschoten: zo ziet een klant hem, zonder de zwevende
+  "Terug naar dashboard"-knop. Het demosalon staat op `booking_theme=light`.
+- Sinds 15-09-2026 draagt het demosalon het website-accent (earth `#8A7356`)
+  en een cover in bone→mushroom→earth, zodat de shots bij de Atelier-landing
+  passen.
 - Viewport is 390×797 @3x; de ontbrekende 47px is de iOS-statusbalk die
   `compose.mjs` erboven plakt (achtergrondkleur gesampled per shot).
 - Op de boekingspagina verbergt het script de zwevende BOOK-pil alleen voor
