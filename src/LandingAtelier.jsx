@@ -238,6 +238,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-step { display: grid; grid-template-columns: clamp(56px, 9vw, 104px) 1fr; gap: clamp(14px, 3vw, 30px); align-items: start; padding: clamp(20px, 3vw, 30px) clamp(18px, 3vw, 30px); background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-step:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
           @media (prefers-reduced-motion: reduce) { .at-step, .at-step:hover { transform: none; } }
+          /* Prijskaarten: zelfde zwevende effect als stappen en functies (Faisal 15-09). */
+          .at-price-card { box-shadow: 0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-price-card:hover { transform: translateY(-6px); box-shadow: 0 40px 60px -28px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
+          @media (prefers-reduced-motion: reduce) { .at-price-card, .at-price-card:hover { transform: none; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
@@ -456,7 +460,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               const dark = plan.popular;
               return (
                 <Reveal key={i} delay={i * 130}>
-                  <div className="vl-glow" onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 26, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
+                  <div className="at-price-card vl-glow" data-price-card onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 20, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
                     {dark && (
                       <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: PUTTY, borderRadius: 4, padding: "5px 12px" }}>
                         {t.popular}
