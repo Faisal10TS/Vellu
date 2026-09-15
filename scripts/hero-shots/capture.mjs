@@ -64,6 +64,8 @@ try {
       localStorage.setItem("vellu_cookies_accepted", "true");
       localStorage.setItem("vellu_install_dismissed", "true");
       localStorage.setItem(`vellu_tour_v1_${sid}`, "1");
+      // Releasenotes-venster: gezien-stand ver in de toekomst → niets "nieuw".
+      localStorage.setItem(`vellu_release_seen_${sid}`, "9999-99-99");
     } catch {}
   }, SALON_ID);
 
@@ -89,6 +91,14 @@ try {
     throw e;
   }
   await sleep(3200);
+  // "Wat is er nieuw"-venster (releasenotes) wegklikken als het toch open
+  // staat — de gezien-sleutel wordt ook al vooraf gezet, dit is de vangnet.
+  const dismissed = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(x => /^(got it|begrepen|entendido)$/i.test((x.textContent || "").trim()));
+    if (b) { b.click(); return true; }
+    return false;
+  });
+  if (dismissed) { console.log("release notes dismissed"); await sleep(900); }
   await shot(1); // dashboard
 
   const tabs = [["agenda", 2, 1600], ["klanten", 3, 1600], ["analytics", 4, 2400], ["facturen", 5, 1600]];
@@ -99,13 +109,32 @@ try {
   }
 
   console.log("public booking page...");
-  await page.goto("https://vellu.cc/bloomstudio", { waitUntil: "load", timeout: 90000 });
+  // Boekingspagina in een VERSE context zonder eigenaarsessie: zo ziet een
+  // klant hem (geen zwevende "Terug naar dashboard"-knop). Zelfde presets.
+  const ctx = await browser.createBrowserContext();
+  const pub = await ctx.newPage();
+  await pub.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1");
+  await pub.setViewport({ width: 390, height: 797, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  await pub.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem("vellu_lang", "en");
+      localStorage.setItem("vellu-theme", "light");
+      localStorage.setItem("vellu_cookies_accepted", "true");
+      localStorage.setItem("vellu_install_dismissed", "true");
+    } catch {}
+  });
+  const shotPub = async n => {
+    await pub.evaluate(() => document.fonts.ready);
+    await pub.screenshot({ path: join(OUT, `shot-${n}.jpg`), type: "jpeg", quality: 92 });
+    console.log(`shot-${n} done`);
+  };
+  await pub.goto("https://vellu.cc/bloomstudio", { waitUntil: "load", timeout: 90000 });
   await sleep(3500);
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await pub.evaluate(() => window.scrollTo(0, 0));
   // hide the floating BOOK pill for the services shot — it lands exactly on an
   // inline BOOK button there and reads as a glitch; every service card has its
   // own BOOK button. Shot 7 keeps the pill (it floats over clear footer space).
-  const hidden = await page.evaluate(() => {
+  const hidden = await pub.evaluate(() => {
     const el = [...document.querySelectorAll("button,a,div")].find(e => {
       const r = e.getBoundingClientRect();
       return getComputedStyle(e).position === "fixed" && /^book/i.test((e.textContent || "").trim()) &&
@@ -116,14 +145,14 @@ try {
   });
   console.log(`sticky pill hidden: ${hidden}`);
   await sleep(400);
-  await shot(6); // services
-  await page.evaluate(() => {
+  await shotPub(6); // services
+  await pub.evaluate(() => {
     const el = document.querySelector("[data-prev-display]");
     if (el) el.style.display = el.dataset.prevDisplay || "";
   });
 
   // scroll to the contact/map section
-  await page.evaluate(() => {
+  await pub.evaluate(() => {
     const heads = [...document.querySelectorAll("h1,h2,h3,h4,div,span")].filter(el =>
       /^(contact|location|find us|contacto)$/i.test((el.textContent || "").trim()) && el.getBoundingClientRect().height < 90);
     const target = heads[heads.length - 1];
@@ -131,7 +160,8 @@ try {
     else window.scrollTo(0, document.body.scrollHeight);
   });
   await sleep(2800); // map tiles
-  await shot(7);
+  await shotPub(7);
+  await ctx.close();
 
   // status bar strips (transparent PNG, dark + light ink)
   await page.setViewport({ width: 390, height: 47, deviceScaleFactor: 3 });
