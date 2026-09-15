@@ -229,7 +229,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           /* Stappen als zwevende kaarten (Faisal 15-09), zelfde rij-indeling
              als eerst: groot cijfer links, titel + tekst rechts. */
-          .at-step { display: grid; grid-template-columns: clamp(56px, 9vw, 104px) 1fr; gap: clamp(14px, 3vw, 30px); align-items: start; padding: clamp(20px, 3vw, 30px) clamp(18px, 3vw, 30px); background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-step { display: grid; grid-template-columns: clamp(64px, 11vw, 128px) 1fr; gap: clamp(14px, 3vw, 30px); align-items: center; padding: clamp(20px, 3vw, 30px) clamp(18px, 3vw, 30px); background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-step:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
           @media (prefers-reduced-motion: reduce) { .at-step, .at-step:hover { transform: none; } }
           /* Prijskaarten: zelfde zwevende effect als stappen en functies (Faisal 15-09). */
@@ -390,10 +390,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             {steps.map((s, i) => (
               <Reveal key={i} delay={i * 110}>
                 <div className="at-step vl-glow" data-step-card onMouseMove={glowMove}>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9 }}>{s.n}</div>
-                  <div>
+                  {/* Cijfer in het midden van zijn kolom, tekst in het midden van
+                      de hare (Faisal 15-09: "niet naar links gedrukt"). */}
+                  <div data-step-num style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9, textAlign: "center" }}>{s.n}</div>
+                  <div data-step-text style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(21px, 3vw, 28px)", fontWeight: 400, color: INK, marginBottom: 8 }}>{s.title}</div>
-                    <div style={{ fontSize: 13.5, color: P.textLabel, lineHeight: 1.75, maxWidth: 560 }}>{s.desc}</div>
+                    <div style={{ fontSize: 13.5, color: P.textLabel, lineHeight: 1.75, maxWidth: 560, margin: "0 auto" }}>{s.desc}</div>
                   </div>
                 </div>
               </Reveal>
