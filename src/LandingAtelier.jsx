@@ -210,10 +210,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-stats { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; }
           @media (min-width: 900px) {
             .at-hero-grid { grid-template-columns: 1.15fr 0.85fr; gap: 30px; }
-            /* Kop en intro links; de knop-cluster eronder (knop, "Hoe werkt
-               het?", cijfers, "Gebruikt door…") blijft ook op desktop
-               gecentreerd (Faisal 15-09: "in het midden i.p.v. links"). */
-            .at-hero-copy { text-align: left; }
+            /* De hele tekstkolom gecentreerd, ook op desktop (Faisal 15-09):
+               eerst de knop-cluster, daarna ook kop, wenkbrauw en intro. */
           }
           /* Functiekaarten (Faisal 15-09: "de tekst zweeft los, geef ze boxen
              met een zwevend effect"): bone-kaarten op de putty-band met een
@@ -295,7 +293,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 <KineticLine ready={heroReady} delay={400}><em style={{ fontStyle: "italic", color: EARTH, fontWeight: 400 }}>{t.heroBrand}</em></KineticLine>
               </h1>
               <HeroEnter ready={heroReady} delay={580}>
-                <p style={{ fontSize: "clamp(14px, 2vw, 16px)", color: P.textSub, lineHeight: 1.75, maxWidth: 460, marginBottom: 26, marginLeft: isMobile ? "auto" : 0, marginRight: isMobile ? "auto" : 0 }}>
+                <p data-hero-intro style={{ fontSize: "clamp(14px, 2vw, 16px)", color: P.textSub, lineHeight: 1.75, maxWidth: 460, marginBottom: 26, marginLeft: "auto", marginRight: "auto" }}>
                   {t.heroSub}
                 </p>
               </HeroEnter>
