@@ -2339,15 +2339,20 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-main {
     flex: 1; min-width: 0;
-    border-right: 1px solid ${c.border};
     padding: 0 40px 0 8px;
   }
+  /* Zijkolom als zwevende kaart (Faisal 15-09: "een box in plaats van los
+     open"): logo, naam, beoordeling, Boek-knop, eerstvolgende dag, openings-
+     tijden, adres en contact in één kaart; de scheidingslijn ernaast is weg. */
   .profile-sidebar {
-    width: 340px; flex-shrink: 0; padding: 0 28px;
+    width: 352px; flex-shrink: 0; padding: 0 0 0 32px;
     position: relative;
   }
   .profile-sidebar-inner {
-    position: sticky; top: 72px; padding-top: 28px;
+    position: sticky; top: 84px; margin-top: 28px;
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 16px;
+    padding: 26px 22px 20px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.38), 0 2px 4px rgba(0,0,0,0.05);
   }
 
   .profile-section {
