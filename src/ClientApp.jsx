@@ -31,6 +31,31 @@ function TeamPhoto({ src, name, accent }) {
   );
 }
 
+// Bio op de teamkaart: drie regels, en alleen als de tekst daar echt niet in
+// past een "Lees meer" (Faisal 15-09: "ik kan de hele tekst nergens lezen").
+// Gemeten via scrollHeight — een vaste tekenlimiet klopt op geen enkele
+// breedte. De kaarten blijven even hoog; de hele tekst opent in een venster.
+function ClampedBio({ text, moreLabel, onMore }) {
+  const ref = useRef(null);
+  const [clamped, setClamped] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <>
+      <div ref={ref} className="profile-team-bio" onClick={clamped ? onMore : undefined} style={clamped ? { cursor: "pointer" } : undefined}>{text}</div>
+      {clamped && <button type="button" className="profile-team-more" data-team-more onClick={onMore}>{moreLabel}</button>}
+    </>
+  );
+}
+
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
 // boeken heeft ~180 dagchips; zonder deze balk moet een klant daar helemaal
 // doorheen vegen om bij februari te komen. Verschijnt alleen als het
@@ -928,6 +953,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const [submitting, setSubmitting] = useState(false);
   const [errorToast, setErrorToast] = useState("");
   const [gallery, setGallery] = useState(null);
+  // Teamlid-venster met de volledige bio en alle diensten; Escape sluit.
+  const [teamDetail, setTeamDetail] = useState(null);
+  useEffect(() => {
+    if (!teamDetail) return;
+    const onKey = (e) => { if (e.key === "Escape") setTeamDetail(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [teamDetail]);
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(null);
@@ -2897,7 +2930,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                           {member.role && <div style={{ fontSize: 11.5, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
                           {member.bio && (
-                            <div className="profile-team-bio" title={member.bio}>{member.bio}</div>
+                            <ClampedBio text={member.bio} moreLabel={lang === "nl" ? "Lees meer" : lang === "es" ? "Leer más" : "Read more"} onMore={() => setTeamDetail(member)} />
                           )}
                         </div>
                       </div>
@@ -3324,6 +3357,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           </div>,
           document.body
         )}
+
+        {/* Teamlid-venster: de hele bio + alle diensten. De kaart zelf blijft
+            op drie regels zodat de kaarten even hoog blijven. */}
+        {teamDetail && (() => {
+          const m = teamDetail;
+          const mServices = m.service_ids?.length > 0 ? initialSalon.services.filter(s => m.service_ids.includes(s.id)) : initialSalon.services;
+          const lbl = (s) => lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
+          return (
+            <div className="profile-team-modal-backdrop" data-team-modal role="dialog" aria-modal="true" aria-label={m.name} onClick={() => setTeamDetail(null)}>
+              <div className="profile-team-modal" onClick={e => e.stopPropagation()}>
+                <button type="button" className="profile-team-modal-close" aria-label={t.close} onClick={() => setTeamDetail(null)}>&times;</button>
+                <div className="profile-team-card-top" style={{ paddingRight: 40 }}>
+                  <TeamPhoto src={m.avatar_url} name={m.name} accent={accent} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 16, color: c.text }}>{m.name}</div>
+                    {m.role && <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{m.role}</div>}
+                  </div>
+                </div>
+                {m.bio && <div className="profile-team-modal-bio" data-team-modal-bio>{m.bio}</div>}
+                {mServices.length > 0 && (
+                  <div className="profile-team-modal-chips">
+                    {mServices.map(s => <span key={s.id} className="profile-service-duration-pill">{lbl(s)}</span>)}
+                  </div>
+                )}
+                <button type="button" className="btn-primary" style={{ marginTop: 18 }} onClick={() => { setTeamDetail(null); enterBooking(); }}>{t.book}</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Gallery overlay */}
         {gallery && (() => {

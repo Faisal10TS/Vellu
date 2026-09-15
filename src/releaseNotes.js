@@ -51,6 +51,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Teamkaart: past de bio niet in drie regels, dan staat er Lees meer. Dat opent een venster met de hele tekst, alle diensten van die medewerker en een Boek-knop. De kaarten blijven even hoog.",
+          en: "Team card: if the bio does not fit in three lines, a Read more link appears. It opens a window with the full text, all of that team member's services and a Book button. The cards stay the same height.",
+          es: "Tarjeta de equipo: si la bio no cabe en tres líneas, aparece Leer más. Abre una ventana con el texto completo, todos los servicios de esa persona y un botón Reservar. Las tarjetas mantienen la misma altura.",
+        },
+      },
+      {
         kind: "fix", audience: ["owner", "staff"],
         text: {
           nl: "Teamkaart: laadt een teamfoto niet, dan staat er een persoon-icoon in je kleur in plaats van het kapotte plaatje van de browser.",

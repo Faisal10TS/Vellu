@@ -2429,7 +2429,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
      prijs boven de Boek-knop rechts. Twee kolommen vanaf 1100px, op mobiel
      een compacte rij zonder omschrijving. */
   .profile-services-grid {
-    display: grid; grid-template-columns: 1fr; gap: 10px;
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
   }
   @media (min-width: 1100px) {
     .profile-services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -2540,6 +2540,26 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-team-chips { display: flex; gap: 4px; min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; }
   .profile-team-chips .profile-service-duration-pill { max-width: 40%; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
   .profile-team-chips .profile-service-duration-pill.more { max-width: none; flex-shrink: 0; }
+  /* "Lees meer" onder een afgekapte bio + het venster met de hele tekst (15-09). */
+  .profile-team-more { background: none; border: none; padding: 0; margin-top: 4px; font-family: inherit; font-size: 12px; font-weight: 500; color: ${accent}; cursor: pointer; }
+  .profile-team-more:hover { text-decoration: underline; }
+  .profile-team-modal-backdrop {
+    position: fixed; inset: 0; z-index: 250; background: ${c.overlay};
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .profile-team-modal {
+    position: relative; width: 100%; max-width: 480px; max-height: 88vh; overflow: auto;
+    background: ${c.bg}; border: 1px solid ${c.border}; border-radius: 14px; padding: 24px;
+    box-shadow: 0 30px 60px -30px rgba(0,0,0,0.5);
+  }
+  .profile-team-modal-close {
+    position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid ${c.border}; background: ${c.bgCard}; color: ${c.textSub};
+    font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .profile-team-modal-bio { font-size: 13.5px; color: ${c.textSub}; line-height: 1.6; margin-top: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .profile-team-modal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
 
   /* Reviews (15-09): beoordelingstegel links, reviewkaarten rechts. */
   .profile-reviews-grid { display: flex; gap: 12px; align-items: flex-start; }
@@ -2575,7 +2595,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-write-review-btn:hover { background: ${c.inputBg}; border-color: ${c.borderHover}; }
 
   /* Galerij (15-09): raster met "+N"-tegel. */
-  .profile-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .profile-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .profile-gallery-item {
     aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative;
     border: 1px solid ${c.border}; cursor: pointer; transition: transform 0.2s ease, opacity 0.2s;
@@ -2726,13 +2746,16 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .profile-hero-book { height: 40px; padding: 0 16px; font-size: 11px; }
     /* Categoriechips blijven bovenaan plakken tijdens het scrollen door de lijst. */
     .profile-cat-scroll { position: sticky; top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 20; background: ${c.bg}; padding-top: 6px; margin-top: -6px; }
-    .profile-team-grid { grid-template-columns: 1fr; gap: 10px; }
-    .profile-gallery-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .profile-products-grid { grid-template-columns: 1fr; gap: 8px; }
+    /* minmax(0, 1fr), nooit kaal 1fr: een 1fr-kolom heeft min-content als
+       ondergrens en groeide met de nowrap-chipsrij van een teamkaart tot 635px
+       op een scherm van 390px — de kaart viel rechts van het scherm af (15-09). */
+    .profile-team-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .profile-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .profile-products-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .profile-reviews-grid { flex-direction: column; }
     .profile-rating-tile { width: 100%; }
-    .profile-review-cards { grid-template-columns: 1fr; gap: 10px; }
-    .profile-contact-grid { grid-template-columns: 1fr; gap: 10px; }
+    .profile-review-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .profile-contact-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
