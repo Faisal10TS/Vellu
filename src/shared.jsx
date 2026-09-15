@@ -2203,7 +2203,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .flow-next-slot.chosen { border-color: ${accent}; }
   .flow-next-slot-icon { width: 40px; height: 40px; border-radius: 10px; background: ${accent}18; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .flow-next-slot-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${accent}; }
+  .flow-next-slot-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, ${accent} 45%, ${c.text}); }
   .flow-next-slot-when { font-size: 14px; font-weight: 500; color: ${c.text}; margin-top: 2px; line-height: 1.3; }
   .flow-next-slot-when b { font-weight: 500; text-transform: capitalize; }
   .flow-next-slot-btn {
@@ -2221,7 +2221,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .flow-done-row-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: ${c.textLabel}; }
   .flow-done-row-value { font-size: 14px; font-weight: 500; color: ${c.text}; margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
   .flow-done-row-sub { font-size: 12px; color: ${c.textSub}; margin-top: 2px; line-height: 1.4; }
-  .flow-done-link { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 500; color: ${accent}; text-decoration: none; }
+  .flow-done-link { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 600; color: color-mix(in srgb, ${accent} 45%, ${c.text}); text-decoration: underline; text-decoration-color: ${accent}; text-underline-offset: 3px; }
   .flow-done-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; max-width: 460px; margin: 0 auto 14px; }
   .flow-done-actions .btn-ghost { flex: 1 1 150px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 14px; }
   .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
@@ -2541,7 +2541,10 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-team-chips .profile-service-duration-pill { max-width: 40%; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
   .profile-team-chips .profile-service-duration-pill.more { max-width: none; flex-shrink: 0; }
   /* "Lees meer" onder een afgekapte bio + het venster met de hele tekst (15-09). */
-  .profile-team-more { background: none; border: none; padding: 0; margin-top: 4px; font-family: inherit; font-size: 12px; font-weight: 500; color: ${accent}; cursor: pointer; }
+  /* Kleine tekst in het accent haalt AA niet op lichte accenten (TTNB-roze
+     ~1.5:1): 45% accent gemengd met de tekstkleur blijft "in de kleur van de
+     salon" en komt ruim boven 4.5:1, in licht én donker thema. */
+  .profile-team-more { background: none; border: none; padding: 0; margin-top: 4px; font-family: inherit; font-size: 12px; font-weight: 600; color: color-mix(in srgb, ${accent} 45%, ${c.text}); cursor: pointer; }
   .profile-team-more:hover { text-decoration: underline; }
   .profile-team-modal-backdrop {
     position: fixed; inset: 0; z-index: 250; background: ${c.overlay};
