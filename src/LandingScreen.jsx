@@ -143,7 +143,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         <style>{`
           @media (min-width: 720px) { [data-show-on-desktop] { display: inline-flex !important; } }
           /* ── Signatuur-laag: marquee, cursor-ring, kaartgloed, ademlicht ── */
-          .vl-marquee-track { animation: vlMarquee 30s linear infinite; }
+          .vl-marquee-track { animation: vlMarquee calc(var(--vl-marquee-copies, 1) * 30s) linear infinite; }
           .vl-marquee:hover .vl-marquee-track { animation-play-state: paused; }
           @keyframes vlMarquee { to { transform: translateX(-50%); } }
           .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${ACCENT}99; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
@@ -955,9 +955,30 @@ function HeroEnter({ children, delay = 0, ready }) {
 // Doorlopende woordenband — twee identieke helften, -50% translate = naadloze
 // lus. Puur CSS-animatie (goedkoop, ook mobiel); pauzeert bij hover en staat
 // stil bij beperk-beweging (zie de klassen in LandingScreen).
+// Elke helft herhaalt de woordenlijst zo vaak als nodig om het scherm te
+// vullen (Faisal 15-09: op een breed scherm was één lijst smaller dan het
+// venster, dus na "Makeup artists" viel er een gat tot de lus opnieuw begon).
+// De omloopduur schaalt mee (--vl-marquee-copies), zodat het tempo gelijk blijft.
 function Marquee({ items, c, accent = ACCENT }) {
-  const half = (key) => (
-    <div key={key} style={{ display: "flex", flexShrink: 0 }}>
+  const wrapRef = useRef(null);
+  const firstRef = useRef(null);
+  const [copies, setCopies] = useState(1);
+  useEffect(() => {
+    const wrap = wrapRef.current, first = firstRef.current;
+    if (!wrap || !first || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const one = first.getBoundingClientRect().width, w = wrap.clientWidth;
+      if (!one || !w) return;
+      const need = Math.min(6, Math.max(1, Math.ceil(w / one)));
+      setCopies((cur) => (cur === need ? cur : need));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrap); ro.observe(first);
+    return () => ro.disconnect();
+  }, [items]);
+  const list = (key, ref) => (
+    <div key={key} ref={ref} style={{ display: "flex", flexShrink: 0 }}>
       {items.map((w, i) => (
         <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 26, padding: "0 13px", fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(20px, 3vw, 28px)", fontWeight: 300, letterSpacing: "0.06em", color: c.textSub, whiteSpace: "nowrap" }}>
           {w}
@@ -966,11 +987,16 @@ function Marquee({ items, c, accent = ACCENT }) {
       ))}
     </div>
   );
+  const half = (key) => (
+    <div key={key} style={{ display: "flex", flexShrink: 0 }}>
+      {Array.from({ length: copies }, (_, i) => list(i, key === 0 && i === 0 ? firstRef : undefined))}
+    </div>
+  );
   return (
     // Bewust GEEN mask-image/randvervaging: Faisal vond het "infadende licht"
     // aan de randen niks — de woorden lopen op volle sterkte de rand in en uit.
-    <div aria-hidden="true" className="vl-marquee" style={{ overflow: "hidden", padding: "26px 0", borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}` }}>
-      <div className="vl-marquee-track" style={{ display: "flex", width: "max-content" }}>
+    <div aria-hidden="true" ref={wrapRef} className="vl-marquee" style={{ overflow: "hidden", padding: "26px 0", borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}` }}>
+      <div className="vl-marquee-track" style={{ display: "flex", width: "max-content", "--vl-marquee-copies": copies }}>
         {half(0)}{half(1)}
       </div>
     </div>
@@ -1055,8 +1081,29 @@ function CursorRing() {
     if (prefersReducedMotion() || !finePointer()) return;
     setOn(true);
     let tx = -100, ty = -100, rx = -100, ry = -100, raf, grow = false;
+    // Ringkleur volgt de band ónder de muis (Faisal 15-09: op de earth- en
+    // espresso-banden van de Atelier-landing was de ring half onzichtbaar).
+    // Eén keer per frame het element onder de cursor opzoeken, omhoog lopen
+    // tot een echte achtergrondkleur, en die naar licht/midden/donker
+    // vertalen. De stylesheet van de pagina kiest per klasse de ringkleur;
+    // een pagina zonder die regels merkt er niets van.
+    let needSample = false, lastEl = null, shade = "light";
+    const shadeOf = (x, y) => {
+      let el = document.elementFromPoint(x, y);
+      if (!el) return shade;
+      if (el === lastEl) return shade;
+      lastEl = el;
+      for (let i = 0; el && el !== document.documentElement && i < 14; i++, el = el.parentElement) {
+        const bg = getComputedStyle(el).backgroundColor;
+        const m = bg && bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (!m || (m[4] !== undefined && parseFloat(m[4]) < 0.5)) continue;
+        const lum = (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255;
+        return lum < 0.55 ? "dark" : lum < 0.78 ? "mid" : "light";
+      }
+      return "light";
+    };
     const move = (e) => {
-      tx = e.clientX; ty = e.clientY;
+      tx = e.clientX; ty = e.clientY; needSample = true;
       if (dotRef.current) dotRef.current.style.transform = `translate(${tx}px, ${ty}px)`;
     };
     const over = (e) => {
@@ -1066,6 +1113,18 @@ function CursorRing() {
     const loop = () => {
       rx += (tx - rx) * 0.16; ry += (ty - ry) * 0.16;
       if (ringRef.current) ringRef.current.style.transform = `translate(${rx.toFixed(1)}px, ${ry.toFixed(1)}px)`;
+      if (needSample) {
+        needSample = false;
+        const s = shadeOf(tx, ty);
+        if (s !== shade) {
+          shade = s;
+          for (const el of [ringRef.current, dotRef.current]) {
+            if (!el) continue;
+            el.classList.toggle("on-dark", s === "dark");
+            el.classList.toggle("on-mid", s === "mid");
+          }
+        }
+      }
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener("mousemove", move, { passive: true });

@@ -2997,6 +2997,9 @@ function AtelierSkin() {
       .vl-cursor { position: fixed; top: 0; left: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1px solid ${AT.EARTH}; border-radius: 50%; pointer-events: none; z-index: 80; transition: width 0.25s ease, height 0.25s ease, margin 0.25s ease, border-color 0.25s ease; }
       .vl-cursor.grow { width: 46px; height: 46px; margin: -23px 0 0 -23px; border-color: ${AT.ESPRESSO}; }
       .vl-cursor-dot { position: fixed; top: 0; left: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: ${AT.ESPRESSO}; pointer-events: none; z-index: 80; }
+      .vl-cursor.on-mid { border-color: ${AT.ESPRESSO}; }
+      .vl-cursor.on-dark, .vl-cursor.on-dark.grow { border-color: ${AT.BONE}; }
+      .vl-cursor-dot.on-dark { background: ${AT.BONE}; }
       .vl-glow { position: relative; }
       .vl-glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), ${AT.MUSHROOM}40, transparent 65%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
       .vl-glow:hover::after { opacity: 1; }
