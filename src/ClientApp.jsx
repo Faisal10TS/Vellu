@@ -14,6 +14,23 @@ import {
   getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
 } from "./shared.jsx";
 
+// Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
+// naar een verdwenen bestand wijst liet de browser een kapot plaatje met de
+// alt-tekst ernaast tekenen. Laadt de foto niet, dan komt hier hetzelfde
+// persoon-icoon als bij een teamlid zonder foto — nooit het kapotte plaatje.
+function TeamPhoto({ src, name, accent }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => { setBroken(false); }, [src]);
+  if (src && !broken) {
+    return <img src={src} className="profile-team-photo" alt={name || ""} loading="lazy" onError={() => setBroken(true)} />;
+  }
+  return (
+    <div className="profile-team-photo profile-team-photo-placeholder" aria-hidden="true">
+      <NavIcon name="user" size={28} color={accent} />
+    </div>
+  );
+}
+
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
 // boeken heeft ~180 dagchips; zonder deze balk moet een klant daar helemaal
 // doorheen vegen om bij februari te komen. Verschijnt alleen als het
@@ -2829,11 +2846,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   return (
                     <div key={member.id} className="profile-team-card" data-team-card>
                       <div className="profile-team-card-top">
-                        {member.avatar_url ? (
-                          <img src={member.avatar_url} className="profile-team-photo" alt={member.name} />
-                        ) : (
-                          <div className="profile-team-avatar profile-team-photo">{member.name?.[0] || "?"}</div>
-                        )}
+                        <TeamPhoto src={member.avatar_url} name={member.name} accent={accent} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: 14, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             {member.name}

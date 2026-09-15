@@ -43,6 +43,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "fix", audience: ["owner", "staff"],
+        text: {
+          nl: "Teamkaart: laadt een teamfoto niet, dan staat er een persoon-icoon in je kleur in plaats van het kapotte plaatje van de browser.",
+          en: "Team card: if a team photo fails to load, a person icon in your colour is shown instead of the browser's broken-image glyph.",
+          es: "Tarjeta de equipo: si una foto del equipo no carga, se muestra un icono de persona en tu color en lugar del símbolo de imagen rota del navegador.",
+        },
+      },
+      {
         kind: "improved", audience: ["owner"],
         text: {
           nl: "Snelle acties op het dashboard: alle knoppen even groot met het label op één regel; op een smaller scherm netjes verdeeld over twee of drie rijen.",

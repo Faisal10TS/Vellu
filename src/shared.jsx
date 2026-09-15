@@ -2488,7 +2488,12 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-team-card-top { display: flex; gap: 14px; align-items: flex-start; }
   .profile-team-photo { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
-  .profile-team-avatar.profile-team-photo { border-radius: 12px; font-size: 24px; }
+  /* Geen (laadbare) foto: persoon-icoon in het accent, nooit het kapotte
+     plaatje van de browser (Beauty By Eydy, 15-09). */
+  .profile-team-photo-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    background: ${accent}12; border: 1px solid ${accent}30;
+  }
   .profile-team-bio {
     font-size: 12px; color: ${c.textSub}; line-height: 1.5; margin-top: 6px;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
