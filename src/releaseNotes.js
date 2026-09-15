@@ -43,6 +43,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Boeken zelf is ook vernieuwd: bovenaan de datumkeuze staat een kaart met de eerstvolgende vrije tijd (één tik kiest dag én tijd), diensten, tijden en het overzicht zijn kaarten in dezelfde stijl, en het bevestigingsscherm toont wanneer, wat, waar en het bedrag, met knoppen voor je agenda, WhatsApp en de route.",
+          en: "Booking itself is refreshed too: the date step opens with a card showing the next free time (one tap picks day and time), services, times and the overview are cards in the same style, and the confirmation screen shows when, what, where and the amount, with buttons for your calendar, WhatsApp and directions.",
+          es: "Reservar también se ha renovado: el paso de fecha empieza con una tarjeta con la próxima hora libre (un toque elige día y hora), los servicios, horas y el resumen son tarjetas del mismo estilo, y la pantalla de confirmación muestra cuándo, qué, dónde y el importe, con botones para tu calendario, WhatsApp y cómo llegar.",
+        },
+      },
+      {
         kind: "fix", audience: ["owner", "staff"],
         text: {
           nl: "Teamkaart: laadt een teamfoto niet, dan staat er een persoon-icoon in je kleur in plaats van het kapotte plaatje van de browser.",

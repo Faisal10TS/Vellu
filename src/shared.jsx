@@ -2126,7 +2126,8 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   .service-card {
     background: ${c.bgCard}; border: 1px solid ${c.border};
-    border-radius: 20px; padding: 17px 19px; cursor: pointer; margin-bottom: 10px;
+    border-radius: 14px; padding: 17px 19px; cursor: pointer; margin-bottom: 10px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
     transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
   }
   .service-card:hover { border-color: ${accent}44; background: ${accent}08; transform: translateY(-1px); }
@@ -2134,7 +2135,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   .time-chip {
     background: ${c.bgCard}; border: 1px solid ${c.inputBorder};
-    border-radius: 11px; padding: 10px 4px; font-size: 11px; font-weight: 500;
+    border-radius: 8px; padding: 10px 4px; font-size: 11px; font-weight: 500;
     cursor: pointer; transition: all 0.18s; text-align: center; color: ${c.textSub};
   }
   .time-chip:hover { border-color: ${accent}55; color: ${accent}; background: ${accent}09; }
@@ -2142,7 +2143,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   .day-chip {
     display: flex; flex-direction: column; align-items: center;
-    padding: 10px 12px; border-radius: 15px; cursor: pointer; min-width: 44px;
+    padding: 10px 12px; border-radius: 10px; cursor: pointer; min-width: 44px;
     border: 1px solid transparent; flex-shrink: 0; transition: all 0.2s;
   }
   .day-scroll { -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%); mask-image: linear-gradient(to right, black 85%, transparent 100%); }
@@ -2164,7 +2165,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .nav-item:hover { background: ${c.inputBg}; }
 
   .pay-opt {
-    border: 1px solid ${c.inputBorder}; border-radius: 15px; padding: 13px 16px;
+    border: 1px solid ${c.inputBorder}; border-radius: 12px; padding: 13px 16px;
     cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 12px;
   }
   .pay-opt:hover { border-color: ${accent}44; background: ${accent}06; }
@@ -2190,6 +2191,39 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   .confirm-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid ${c.bgCardHover}; }
   .confirm-row:last-child { border-bottom: none; }
+
+  /* Boekflow (fase 3, 15-09): dezelfde zwevende kaarttaal als de boekingspagina. */
+  .flow-card {
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+  }
+  .flow-next-slot {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 18px;
+    background: ${accent}10; border: 1px solid ${accent}40; border-radius: 14px; transition: border-color 0.2s;
+  }
+  .flow-next-slot.chosen { border-color: ${accent}; }
+  .flow-next-slot-icon { width: 40px; height: 40px; border-radius: 10px; background: ${accent}18; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .flow-next-slot-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${accent}; }
+  .flow-next-slot-when { font-size: 14px; font-weight: 500; color: ${c.text}; margin-top: 2px; line-height: 1.3; }
+  .flow-next-slot-when b { font-weight: 500; text-transform: capitalize; }
+  .flow-next-slot-btn {
+    flex-shrink: 0; background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
+    padding: 10px 16px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  }
+  .flow-next-slot-chosen { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${accent}; }
+  .flow-done { text-align: center; padding-top: 40px; }
+  .flow-done-icon { width: 64px; height: 64px; border-radius: 50%; background: ${accent}16; border: 1px solid ${accent}44; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
+  .flow-done-card { text-align: left; padding: 6px 20px; margin: 22px auto 20px; max-width: 460px; }
+  .flow-done-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid ${c.border}; }
+  .flow-done-row:last-child { border-bottom: none; }
+  .flow-done-row-icon { width: 30px; height: 30px; border-radius: 8px; background: ${accent}14; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .flow-done-row-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: ${c.textLabel}; }
+  .flow-done-row-value { font-size: 14px; font-weight: 500; color: ${c.text}; margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
+  .flow-done-row-sub { font-size: 12px; color: ${c.textSub}; margin-top: 2px; line-height: 1.4; }
+  .flow-done-link { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 500; color: ${accent}; text-decoration: none; }
+  .flow-done-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; max-width: 460px; margin: 0 auto 14px; }
+  .flow-done-actions .btn-ghost { flex: 1 1 150px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 14px; }
   .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
 
   .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 8px; padding: 4px; display: flex; gap: 2px; }
@@ -2210,7 +2244,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .gallery-overlay { position: fixed; inset: 0; background: ${c.overlay}; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; padding: 24px; }
 
   @media (max-width: 520px) {
-    .service-card { border-radius: 16px; padding: 15px 16px; }
+    .service-card { border-radius: 12px; padding: 15px 16px; }
+    .flow-done { padding-top: 24px; }
+    .flow-done-card { padding: 4px 16px; }
     .appt-card { padding: 14px 14px; border-radius: 16px; }
     .btn-primary { padding: 14px 20px; font-size: 13px; }
     .btn-ghost { font-size: 11px; }

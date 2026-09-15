@@ -2020,6 +2020,19 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayAvailability]);
 
+  // Eerstvolgende vrije slot (dag + tijd) in het hele venster. Staat als kaart
+  // bovenaan stap 2 (fase 3, 15-09): wie "zo snel mogelijk" wil, hoeft niet
+  // eerst door de dagen te vegen. Zelfde toets als de dagbeschikbaarheid.
+  const firstOpenSlot = useMemo(() => {
+    if (!firstOpenDate) return null;
+    const booked = rangeBooked[firstOpenDate] || [];
+    const tt = getAvailableTimes(firstOpenDate).find(x => !isTimeSlotBooked(x, booked));
+    return tt ? { date: firstOpenDate, time: tt } : null;
+    // getAvailableTimes/isTimeSlotBooked ontstaan elke render opnieuw (zie
+    // dayAvailability hierboven); wat werkelijk kan veranderen zit erin.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayAvailability, firstOpenDate, rangeBooked]);
+
   // A tappable "first available: <date>" hint. Jumps the picker to that day.
   const FirstAvailableHint = () => {
     if (!firstOpenDate || firstOpenDate === date) return null;
@@ -2546,6 +2559,29 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return null;
   })();
   const nextAvailableLabel = lang === "nl" ? "Eerstvolgend" : lang === "es" ? "Próxima disponibilidad" : "Next available";
+
+  // Kaart "Eerstvolgend beschikbaar" bovenaan stap 2: één tik zet dag én tijd.
+  // Als functie aangeroepen (geen element), anders speelt de fade-up bij elke
+  // render opnieuw af.
+  const NextSlotCard = () => {
+    if (!firstOpenSlot) return null;
+    const chosen = date === firstOpenSlot.date && time === firstOpenSlot.time;
+    const label = parseDate(firstOpenSlot.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+    return (
+      <div className={`flow-next-slot${chosen ? " chosen" : ""}`} data-next-slot={chosen ? "chosen" : "open"}>
+        <div className="flow-next-slot-icon"><NavIcon name="calendar" size={18} color={accent} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="flow-next-slot-label">{nextAvailableLabel}</div>
+          <div className="flow-next-slot-when"><b>{label}</b> {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {firstOpenSlot.time}</div>
+        </div>
+        {chosen ? (
+          <span className="flow-next-slot-chosen"><NavIcon name="check" size={12} color={accent} /> {lang === "nl" ? "Gekozen" : lang === "es" ? "Elegido" : "Chosen"}</span>
+        ) : (
+          <button type="button" className="flow-next-slot-btn" onClick={() => { setDate(firstOpenSlot.date); setTime(firstOpenSlot.time); }}>{lang === "nl" ? "Kies" : lang === "es" ? "Elegir" : "Pick"}</button>
+        )}
+      </div>
+    );
+  };
 
   // Icoon voor een dienst zonder foto, op basis van de categorienaam — niet
   // overal dezelfde schaar (Bloom-demo, 15-09).
@@ -3370,13 +3406,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
   // Summary component
   const Summary = () => (
-    <div style={{ 
-      background: c.bgCard, 
-      border: "1px solid " + c.border, 
-      borderRadius: 16, 
-      padding: 20,
-      marginTop: isMobile ? 0 : 20
-    }}>
+    <div className="flow-card" data-flow-summary style={{ padding: 20, marginTop: isMobile ? 0 : 20 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
         {t.yourBooking}
         {selectedServices.length > 0 && <span style={{ color: accent, marginLeft: 6 }}>({selectedServices.length})</span>}
@@ -3445,6 +3475,127 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       )}
     </div>
   );
+
+  // Succes-scherm (fase 3, 15-09) — één opbouw voor desktop en telefoon:
+  // vinkje, kaart met wanneer / wat / waar / bedrag, agenda-knoppen, WhatsApp
+  // (stond op de telefoon niet), route en nieuwe boeking. De .ics kreeg op de
+  // telefoon geen omschrijving en locatie; nu delen beide dezelfde bestanden.
+  const DoneScreen = () => {
+    const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US";
+    const dateLabel = parseDate(date).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+    const vName = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
+    const where = selectedLocation || null;
+    const addr = ((where && where.address) || initialSalon.address || "").trim();
+    const city = ((where && where.city) || initialSalon.city || "").trim();
+    const mapsQuery = addr ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr) : city;
+    const mapsHref = mapsQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}` : null;
+    const calStart = new Date(date + "T" + time + ":00");
+    const calEnd = new Date(calStart.getTime() + getDuration() * 60000);
+    const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const calTitle = `${getServiceLabel()} @ ${initialSalon.name}`;
+    const calDetails = `${t.treatment}: ${getServiceLabel()}\n${t.total}: ${cur}${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`;
+    const calLocation = [initialSalon.name, addr, city].filter(Boolean).join(", ");
+    const openGoogleCal = () => window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(calTitle)}&dates=${stamp(calStart)}/${stamp(calEnd)}&details=${encodeURIComponent(calDetails)}&location=${encodeURIComponent(calLocation)}`, "_blank");
+    const downloadIcs = () => {
+      const ics = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vellu//Beauty Booking//EN", "BEGIN:VEVENT",
+        `DTSTART:${stamp(calStart)}`, `DTEND:${stamp(calEnd)}`, `SUMMARY:${calTitle}`,
+        `DESCRIPTION:${calDetails.replace(/\n/g, "\\n")}`, `LOCATION:${calLocation}`,
+        "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR",
+      ].join("\r\n");
+      const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
+      a.click(); URL.revokeObjectURL(url);
+    };
+    const openWhatsApp = () => {
+      const msg = getWhatsAppBookingMsg(lang, {
+        clientName: form.firstName, salonName: initialSalon.name, date: dateLabel, time,
+        serviceName: getServiceLabel(), price: getPrice().toFixed(2), countryCode: initialSalon.country_code,
+      });
+      window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
+    };
+    const products = chosenProducts();
+    return (
+      <div className="fade-up flow-done" data-done-screen>
+        <div className="flow-done-icon"><NavIcon name="check" size={26} color={accent} /></div>
+        <div style={{ fontFamily: displayFont, fontSize: isMobile ? 26 : 28, fontWeight: 300, marginBottom: 8 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
+        <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.5, maxWidth: 420, margin: "0 auto" }}>
+          {prepayInfo
+            ? (lang === "nl" ? `Je reservering staat vast zodra je betaling binnen is. De betaalgegevens staan ook in de mail naar ${form.email}.` : lang === "es" ? `Tu reserva será definitiva en cuanto llegue tu pago. Los datos de pago también están en el correo a ${form.email}.` : `Your reservation is final as soon as your payment is in. The payment details are also in the email to ${form.email}.`)
+            : `${t.confirmationSent} ${form.email}`}
+        </div>
+        {prepayInfo && <div style={{ marginTop: 16 }}><PrepayBlock info={prepayInfo} lang={lang} accent={accent} c={c} /></div>}
+
+        <div className="flow-card flow-done-card">
+          <div className="flow-done-row">
+            <div className="flow-done-row-icon"><NavIcon name="calendar" size={14} color={accent} /></div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="flow-done-row-label">{lang === "nl" ? "Wanneer" : lang === "es" ? "Cuándo" : "When"}</div>
+              <div className="flow-done-row-value" style={{ textTransform: "capitalize" }}>{dateLabel}</div>
+              <div className="flow-done-row-sub">{time} · {getDuration()} {t.min}</div>
+            </div>
+          </div>
+          <div className="flow-done-row">
+            <div className="flow-done-row-icon"><NavIcon name="scissors" size={14} color={accent} /></div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="flow-done-row-label">{t.treatment}</div>
+              {selectedServices.map(item => (
+                <div key={item.service.id} className="flow-done-row-value">
+                  {svcName(item.service)}{item.variant ? ` — ${vName(item.variant)}` : ""}
+                  {item.staff && <span style={{ color: c.textSub, fontWeight: 400 }}> · {item.staff.name}</span>}
+                  {item.extras.length > 0 && <div className="flow-done-row-sub">+ {item.extras.map(e => `${vName(e)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
+                </div>
+              ))}
+              {products.length > 0 && <div className="flow-done-row-sub">{products.map(({ p, qty }) => `${qty > 1 ? `${qty}× ` : ""}${prodNameOf(p)}`).join(", ")}</div>}
+            </div>
+          </div>
+          {(addr || city) && (
+            <div className="flow-done-row">
+              <div className="flow-done-row-icon"><NavIcon name="mappin" size={14} color={accent} /></div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="flow-done-row-label">{(where && where.name) || initialSalon.name}</div>
+                <div className="flow-done-row-value">{addr}{addr && city ? ", " : ""}{city}</div>
+                {mapsHref && <a href={mapsHref} target="_blank" rel="noopener" className="flow-done-link">{lang === "nl" ? "Route" : lang === "es" ? "Cómo llegar" : "Directions"} →</a>}
+              </div>
+            </div>
+          )}
+          <div className="flow-done-row" style={{ alignItems: "center" }}>
+            <div className="flow-done-row-icon"><NavIcon name="tag" size={14} color={accent} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="flow-done-row-label">{t.total}</div>
+              <div className="flow-done-row-sub">{form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival}</div>
+            </div>
+            <div style={{ fontFamily: displayFont, fontSize: 24, color: accent, flexShrink: 0 }}>{cur}{getPrice().toFixed(2)}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
+        <div className="flow-done-actions">
+          <button type="button" className="btn-ghost" onClick={openGoogleCal}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
+          <button type="button" className="btn-ghost" onClick={downloadIcs}><NavIcon name="calendar" size={13} color="currentColor" /> {t.appleCalendar}</button>
+        </div>
+        {initialSalon.whatsapp_number && (
+          <div className="flow-done-actions">
+            <button type="button" className="btn-ghost" style={{ color: "#25d366", borderColor: "rgba(37,211,102,0.35)" }} onClick={openWhatsApp}><NavIcon name="chat" size={13} color="currentColor" /> {t.whatsappBookingConfirm}</button>
+          </div>
+        )}
+        <button className="btn-primary" style={{ maxWidth: 240, margin: "0 auto 22px" }} onClick={reset}>{t.newBooking}</button>
+
+        {/* Geen reviewformulier direct na het boeken: het bezoek moet nog
+            plaatsvinden en de token die de opslag toestaat bestaat pas bij
+            de uitnodigingsmail achteraf. */}
+        <div className="flow-card" style={{ maxWidth: 460, margin: "0 auto", padding: 16, fontSize: 12.5, color: c.textSub, lineHeight: 1.5, boxShadow: "none" }}>
+          {lang === "nl"
+            ? "Na je bezoek sturen we je een e-mail met een link om een review achter te laten."
+            : lang === "es"
+              ? "Después de tu visita te enviaremos un correo con un enlace para dejar una reseña."
+              : "After your visit we'll email you a link to leave a review."}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Layout accent={accent} rawAccent={initialSalon.accent}>
@@ -3536,7 +3687,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         color: step >= s ? c.btnOnDark : c.textLabel,
                         transition: "all 0.3s"
                       }}>
-                        {step > s ? <NavIcon name="check" size={12} color={accent} /> : (hasLocations ? s : s)}
+                        {/* Vinkje in de inktkleur van de knop — in het accent
+                            zelf viel het weg tegen de gevulde cirkel. */}
+                        {step > s ? <NavIcon name="check" size={12} color={c.btnOnDark} /> : s}
                       </div>
                       <span style={{ fontSize: 13, color: step >= s ? c.text : c.textLabel }}>
                         {stepTitles[idx]}
@@ -3662,7 +3815,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         padding: "14px 16px",
                         background: isSel ? `${accent}10` : c.bgCard,
                         border: `1.5px solid ${isSel ? accent : c.border}`,
-                        borderRadius: 16, cursor: "pointer",
+                        borderRadius: 14, cursor: "pointer",
+                        boxShadow: "0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04)",
                         transition: "all 0.2s",
                       }}
                     >
@@ -3726,7 +3880,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 <div key={v.id} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}
                                   style={{
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                                    padding: "10px 14px", borderRadius: 8, cursor: "pointer",
                                     background: vSel ? `${accent}14` : "transparent",
                                     border: `1px solid ${vSel ? accent : c.border}`,
                                     transition: "all 0.15s"
@@ -3808,7 +3962,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               {!requireStaffPick && (
                                 <div onClick={() => updateServiceItem(s.id, { staff: null })}
                                   style={{
-                                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer",
                                     background: !item?.staff ? `${accent}14` : "transparent",
                                     border: `1px solid ${!item?.staff ? accent : c.border}`,
                                     fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
@@ -3827,7 +3981,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 return (
                                 <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
                                   style={{
-                                    padding: "8px 16px", borderRadius: 10, cursor: "pointer",
+                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer",
                                     background: item?.staff?.id === m.id ? `${accent}14` : "transparent",
                                     border: `1px solid ${item?.staff?.id === m.id ? accent : c.border}`,
                                     transition: "all 0.15s", textAlign: "center"
@@ -3912,7 +4066,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Step 2 — Date & Time */}
               {step === 2 && <>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
@@ -3933,6 +4087,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" }); };
                   return (
                     <>
+                    {NextSlotCard()}
                     <MonthJumpBar months={monthsInWindow} activeKey={activeMonthKey}
                       onPick={key => jumpToMonth(scrollRef.current, key)} c={c} accent={accent} />
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
@@ -3959,7 +4114,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }}
                               style={{
                                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                                padding: "10px 14px", borderRadius: 12, cursor: isClosed ? "not-allowed" : "pointer",
+                                padding: "10px 14px", borderRadius: 10, cursor: isClosed ? "not-allowed" : "pointer",
                                 background: isSel ? accent : c.bgCard,
                                 border: `1.5px solid ${isSel ? accent : isToday ? `${accent}55` : c.border}`,
                                 opacity: isClosed ? 0.3 : isFull ? 0.5 : 1,
@@ -4064,7 +4219,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   onClick={() => setTime(tt)}
                                   onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTime(tt); } }}
                                   style={{
-                                    padding: "10px 20px", borderRadius: 10, cursor: "pointer",
+                                    padding: "10px 20px", borderRadius: 8, cursor: "pointer",
                                     background: isSel ? accent : c.bgCard,
                                     border: `1.5px solid ${isSel ? accent : c.border}`,
                                     color: isSel ? c.btnOnDark : c.text,
@@ -4086,7 +4241,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Step 3 — Details */}
               {step === 3 && <>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
@@ -4206,7 +4361,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {/* Step 4 — Confirm */}
               {step === 4 && <>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <button onClick={goBack} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </button>
                   <div>
@@ -4214,7 +4369,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.confirmSub}</div>
                   </div>
                 </div>
-                <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
+                <div className="flow-card" data-confirm-card style={{ padding: "4px 18px", marginBottom: 20 }}>
                   {/* Services list */}
                   <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
                     <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
@@ -4274,85 +4429,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </>}
             </div>
           ) : (
-            <div className="fade-up" style={{ textAlign: "center", paddingTop: 60 }}>
-              <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${accent}18`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", fontSize: 28 }}><NavIcon name="beauty" size={28} color={accent} /></div>
-              <div style={{ fontFamily: displayFont, fontSize: 28, fontWeight: 300, marginBottom: 10 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
-              <div style={{ fontSize: 12, color: c.textSub, marginBottom: 6 }}>{prepayInfo ? (lang === "nl" ? "Je reservering voor" : lang === "es" ? "Tu reserva para el" : "Your reservation for") : t.confirmedSub} <strong style={{ color: accent }}>{date}</strong> {t.at} <strong style={{ color: accent }}>{time}</strong>{prepayInfo ? (lang === "nl" ? " staat vast zodra je betaling binnen is." : lang === "es" ? " será definitiva en cuanto llegue tu pago." : " is final as soon as your payment is in.") : ""}</div>
-              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: prepayInfo ? 16 : 28 }}>{prepayInfo ? (lang === "nl" ? "De betaalgegevens staan ook in de mail naar" : lang === "es" ? "Los datos de pago también están en el correo a" : "The payment details are also in the email to") : t.confirmationSent} {form.email}</div>
-              {prepayInfo && <PrepayBlock info={prepayInfo} lang={lang} accent={accent} c={c} />}
-
-              {/* Calendar sync buttons */}
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
-                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                    const dur = getDuration();
-                    const [h, m] = time.split(":").map(Number);
-                    const start = new Date(date + "T" + time + ":00");
-                    const end = new Date(start.getTime() + dur * 60000);
-                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                    const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
-                    const details = encodeURIComponent(`${t.treatment}: ${getServiceLabel()}\n${t.total}: ${cur}${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`);
-                    const loc = encodeURIComponent(initialSalon.name + ", " + initialSalon.city);
-                    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}&details=${details}&location=${loc}`, "_blank");
-                  }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
-                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                    const dur = getDuration();
-                    const start = new Date(date + "T" + time + ":00");
-                    const end = new Date(start.getTime() + dur * 60000);
-                    const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                    const ics = [
-                      "BEGIN:VCALENDAR",
-                      "VERSION:2.0",
-                      "PRODID:-//Vellu//Beauty Booking//EN",
-                      "BEGIN:VEVENT",
-                      `DTSTART:${fmt2(start)}`,
-                      `DTEND:${fmt2(end)}`,
-                      `SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,
-                      `DESCRIPTION:${t.treatment}: ${getServiceLabel()}\\n${t.total}: ${cur}${getPrice().toFixed(2)}\\nvellu.cc/${initialSalon.id}`,
-                      `LOCATION:${initialSalon.name}, ${initialSalon.city}`,
-                      "STATUS:CONFIRMED",
-                      "END:VEVENT",
-                      "END:VCALENDAR"
-                    ].join("\r\n");
-                    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
-                    a.click(); URL.revokeObjectURL(url);
-                  }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.appleCalendar}</button>
-                </div>
-              </div>
-
-              {/* WhatsApp confirmation */}
-              {initialSalon.whatsapp_number && (
-                <div style={{ marginBottom: 32 }}>
-                  <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 20px", color: "#25d366", borderColor: "rgba(37,211,102,0.3)" }} onClick={() => {
-                    const msg = getWhatsAppBookingMsg(lang, {
-                      clientName: form.firstName,
-                      salonName: initialSalon.name,
-                      date: parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
-                      time, serviceName: getServiceLabel(), price: getPrice().toFixed(2), countryCode: initialSalon.country_code
-                    });
-                    window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
-                  }}><NavIcon name="chat" size={13} color="currentColor" /> {t.whatsappBookingConfirm}</button>
-                </div>
-              )}
-
-              <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
-
-              {/* Geen reviewformulier direct na het boeken: het bezoek moet nog
-                  plaatsvinden en de token die de opslag toestaat bestaat pas bij
-                  de uitnodigingsmail achteraf. Een formulier dat gegarandeerd
-                  faalt is slechter dan deze mededeling. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, fontSize: 12.5, color: c.textSub, lineHeight: 1.5, textAlign: "center" }}>
-                {lang === "nl"
-                  ? "Na je bezoek sturen we je een e-mail met een link om een review achter te laten."
-                  : lang === "es"
-                    ? "Después de tu visita te enviaremos un correo con un enlace para dejar una reseña."
-                    : "After your visit we'll email you a link to leave a review."}
-              </div>
-            </div>
+            DoneScreen()
           )}
 
           </div> {/* close scroll area */}
@@ -4760,6 +4837,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {/* Step 2 — Date & Time (mobile) */}
                   {step === 2 && <>
                     <PTitle sub={t.selectDateSub}>{t.selectDate}</PTitle>
+                    {NextSlotCard()}
                     <MonthJumpBar months={monthsInWindow} activeKey={activeMonthKey}
                       onPick={key => jumpToMonth(dayStripRef.current, key)} c={c} accent={accent} />
                     <div ref={dayStripRef} onScroll={handleStripScroll} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 20, WebkitMaskImage: "linear-gradient(to right, black 88%, transparent)", maskImage: "linear-gradient(to right, black 88%, transparent)" }}>
@@ -4934,7 +5012,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {/* Step 4 — Confirm (mobile) */}
                   {step === 4 && <>
                     <PTitle sub={t.confirmSub}>{t.confirmBooking}</PTitle>
-                    <div style={{ background: `${accent}09`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "4px 18px", marginBottom: 20 }}>
+                    <div className="flow-card" data-confirm-card style={{ padding: "4px 18px", marginBottom: 20 }}>
                       {/* Services list */}
                       <div className="confirm-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
                         <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{t.treatment} ({selectedServices.length})</span>
@@ -5019,45 +5097,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 </div>
               ) : (
                 /* Done screen mobile */
-                <div className="fade-up" style={{ textAlign: "center", paddingTop: 40 }}>
-                  <div style={{ marginBottom: 20, opacity: 0.6 }}><NavIcon name="sparkle" size={44} color={accent} /></div>
-                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 300, marginBottom: 10 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
-                  <p style={{ color: c.textSub, fontSize: 14, marginBottom: prepayInfo ? 12 : 30 }}>
-                    {prepayInfo ? (lang === "nl" ? "Je reservering voor" : lang === "es" ? "Tu reserva para el" : "Your reservation for") : t.confirmedSub} {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })} {t.at} {time}{prepayInfo ? (lang === "nl" ? " staat vast zodra je betaling binnen is." : lang === "es" ? " será definitiva en cuanto llegue tu pago." : " is final as soon as your payment is in.") : ""}
-                  </p>
-                  <p style={{ fontSize: 12, color: c.textLabel, marginBottom: prepayInfo ? 16 : 30 }}>{prepayInfo ? (lang === "nl" ? "De betaalgegevens staan ook in de mail naar" : lang === "es" ? "Los datos de pago también están en el correo a" : "The payment details are also in the email to") : t.confirmationSent} {form.email}</p>
-                  {prepayInfo && <PrepayBlock info={prepayInfo} lang={lang} accent={accent} c={c} />}
-                  <div style={{ marginBottom: 32 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textMuted, marginBottom: 10 }}>{t.addToCalendar}</div>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
-                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                        const title = encodeURIComponent(getServiceLabel() + " @ " + initialSalon.name);
-                        window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt2(start)}/${fmt2(end)}`, "_blank");
-                      }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.googleCalendar}</button>
-                      <button className="btn-ghost" style={{ fontSize: 11, padding: "10px 16px" }} onClick={() => {
-                        const dur = getDuration(); const start = new Date(date + "T" + time + ":00"); const end = new Date(start.getTime() + dur * 60000);
-                        const fmt2 = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                        const ics = ["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT",`DTSTART:${fmt2(start)}`,`DTEND:${fmt2(end)}`,`SUMMARY:${getServiceLabel()} @ ${initialSalon.name}`,"END:VEVENT","END:VCALENDAR"].join("\r\n");
-                        const blob = new Blob([ics], { type: "text/calendar" }); const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a"); a.href = url; a.download = `booking.ics`; a.click();
-                      }}><NavIcon name="calendar" size={13} color="currentColor" /> {t.appleCalendar}</button>
-                    </div>
-                  </div>
-                  <button className="btn-primary" style={{ maxWidth: 200, margin: "0 auto", marginBottom: 28 }} onClick={reset}>{t.newBooking}</button>
-
-                                    
-                  {/* Zelfde reden als op desktop: zonder token uit de
-                      uitnodigingsmail kan er niets worden opgeslagen. */}
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, fontSize: 12.5, color: c.textSub, lineHeight: 1.5, textAlign: "center" }}>
-                    {lang === "nl"
-                      ? "Na je bezoek sturen we je een e-mail met een link om een review achter te laten."
-                      : lang === "es"
-                        ? "Después de tu visita te enviaremos un correo con un enlace para dejar una reseña."
-                        : "After your visit we'll email you a link to leave a review."}
-                  </div>
-                </div>
+                DoneScreen()
               )}
             </div>
 
