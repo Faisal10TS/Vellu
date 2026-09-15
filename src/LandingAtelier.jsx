@@ -359,7 +359,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <AtHead title={t.findSalonTitle} sub={t.findSalonSub} tone="putty" />
           </div>
           <div style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
-            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} />
+            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier />
           </div>
         </div>
 

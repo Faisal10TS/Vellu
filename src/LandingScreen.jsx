@@ -640,7 +640,9 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // end turns the section into an acquisition surface too.
 // radius: hoekradius van zoekveld en knopjes — de Atelier-landing geeft 8
 // (vierkant, Faisal 15-09); zonder prop blijft het de oude pilvorm.
-function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT, radius = 100 }) {
+// atelier: zwevende kaarten + zoekbalk met schaduw (Faisal 15-09), zoals de
+// rest van de Atelier-landing; zonder de prop blijft de oude landing gelijk.
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT, radius = 100, atelier = false }) {
   const smallRadius = radius >= 100 ? 100 : Math.max(4, radius - 2);
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
@@ -718,17 +720,20 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
         )}
 
         {/* Search pill */}
-        <div style={{ maxWidth: 460, margin: "0 auto 20px", position: "relative" }}>
-          <div style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+        <div style={{ maxWidth: atelier ? 520 : 460, margin: "0 auto 24px", position: "relative" }}>
+          <div style={{ position: "absolute", left: atelier ? 20 : 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}>
+            <svg width={atelier ? 17 : 15} height={atelier ? 17 : 15} viewBox="0 0 24 24" fill="none" stroke={atelier ? accent : c.textMuted} strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
           </div>
           <input
             className="input-field"
+            data-salon-search
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder={t.findSalonPh}
             aria-label={t.findSalonTitle}
-            style={{ width: "100%", borderRadius: radius, padding: "13px 20px 13px 44px", fontSize: 13 }}
+            style={atelier
+              ? { width: "100%", borderRadius: 10, padding: "16px 20px 16px 50px", fontSize: 14, boxShadow: "0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05)" }
+              : { width: "100%", borderRadius: radius, padding: "13px 20px 13px 44px", fontSize: 13 }}
           />
         </div>
 
@@ -738,13 +743,19 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
           .salon-strip { display: flex; gap: 14px; overflow-x: auto; padding: 4px 4px 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
           .salon-card { scroll-snap-align: start; flex: 0 0 206px; text-align: left; cursor: pointer; border-radius: 20px; overflow: hidden; transition: transform .22s ease; padding: 0; font-family: inherit; }
           .salon-card:hover { transform: translateY(-3px); }
+          /* Atelier: zwevende salonkaart (schaduwfamilie van de landing). Op
+             mobiel is de strook horizontaal scrollbaar en knipt dus ook
+             verticaal: extra ruimte onderin zodat de schaduw niet afbreekt. */
+          .salon-strip-float { padding: 8px 8px 44px; margin-bottom: -32px; }
+          .salon-card-float { border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform .28s ease, box-shadow .28s ease; }
+          .salon-card-float:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
           @media (min-width: 720px) { .salon-strip { justify-content: center; flex-wrap: wrap; overflow-x: visible; } }
-          @media (prefers-reduced-motion: reduce) { .salon-card, .salon-card:hover { transition: none; transform: none; } }
+          @media (prefers-reduced-motion: reduce) { .salon-card, .salon-card:hover, .salon-card-float, .salon-card-float:hover { transition: none; transform: none; } }
         `}</style>
         {salons === null ? (
           <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, padding: "16px 0" }}>…</div>
         ) : (
-          <div className="salon-strip">
+          <div className={atelier ? "salon-strip salon-strip-float" : "salon-strip"}>
             {list.map(s => {
               const acc = s.accent_color || accent;
               // Zelfde leesbaarheid als op de boekingspagina (27-08): tekst in
@@ -754,7 +765,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               const accInk = readableAccent(acc, "light");
               const accPillEdge = accentEdge(acc, "light");
               return (
-                <button key={s.slug} className="salon-card" onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
+                <button key={s.slug} className={atelier ? "salon-card salon-card-float vl-glow" : "salon-card"} data-salon-card onMouseMove={atelier ? glowMove : undefined} onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
                   {/* Cover / brand band — the salon's own colours, not ours */}
                   <div style={{ height: 66, background: s.cover_image_url ? `url(${s.cover_image_url}) center/cover` : `linear-gradient(120deg, ${acc}55, ${acc}18 60%, transparent), linear-gradient(160deg, ${acc}22, transparent)` }} />
