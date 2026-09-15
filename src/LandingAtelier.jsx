@@ -96,6 +96,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Naar een sectie scrollen mét de plakkende balk verrekend. scrollIntoView
+  // zette de sectietop onder de balk, en bij "Vind een salon" belandde je
+  // zelfs voorbij de kop en het zoekveld, midden in de kaarten (Faisal 15-09).
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const navH = el.closest(".atelier")?.querySelector("nav")?.offsetHeight || 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - navH;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+
   const goToSlug = (slug) => {
     let clean = slug.toLowerCase().trim().replace(/^https?:\/\//, "").replace(/^(www\.)?vellu\.cc\//, "");
     clean = clean.replace(/[^a-z0-9-]/g, "");
@@ -214,9 +225,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           .at-step { transition: background 0.25s ease; }
           .at-step:hover { background: ${PUTTY}44; }
-          .at-nav-find, .at-nav-create { display: none; }
-          @media (min-width: 768px) { .at-nav-create { display: inline-block; } }
-          @media (min-width: 900px) { .at-nav-find { display: inline; } }
+          .at-nav-find { display: none; }
+          @media (min-width: 768px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
@@ -225,7 +235,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
             <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 24px)", fontWeight: 400, letterSpacing: "0.22em", color: INK }}>vellu</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button className="at-nav-find" onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
+              <button className="at-nav-find" onClick={() => scrollToSection("find-salon-section")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
                 {t.findSalonNav}
               </button>
               <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 3, background: P.bgCard }}>
@@ -238,16 +248,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               <button className="btn-ghost" style={{ fontSize: 10, padding: "9px 16px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
                 {t.signIn}
               </button>
-              {/* "Maak je pagina" (Faisal 15-09): vaste aanmeld-knop in de balk,
-                  opent /owner meteen op het registratie-tabblad. Op mobiel
-                  past hij niet naast taalkeuze + inloggen (daar staat de
-                  hero-knop toch direct in beeld); tussen 768 en 900px wijkt
-                  de klant-link, niet deze knop — zie .at-nav-find/.at-nav-create.
-                  width:auto: .btn-primary is standaard 100% breed, wat hier de
-                  rest van de balk platdrukte. */}
-              <button className="btn-primary at-nav-create" data-create-page style={{ width: "auto", fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner?signup=1")}>
-                {t.createPageNav}
-              </button>
+              {/* Géén "Maak je pagina"-knop in de balk: Faisal (15-09) wil die
+                  onder "In 3 stappen live", zie sectie 03. */}
             </div>
           </div>
         </nav>
@@ -277,7 +279,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => navigate("/owner")}>
                     {t.startFree}
                   </button>
-                  <button onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
+                  <button onClick={() => scrollToSection("how-it-works")}
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, paddingBottom: 4 }}>
                     {t.howItWork} ↓
                   </button>
@@ -330,7 +332,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* ── 01 · SALON VINDEN — op de putty-band, in één stuk met de marquee.
               Kleurenladder (Faisal 15-09): hero bone → putty → earth, en daarna
               nog eens bone → putty → mushroom → earth → espresso. ── */}
-        <div style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
+        <div id="find-salon-section" style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} 8px` }}>
             <AtHead title={t.findSalonTitle} sub={t.findSalonSub} tone="putty" />
           </div>
@@ -371,6 +373,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </Reveal>
             ))}
           </div>
+          {/* "Maak je pagina" onder de drie stappen (Faisal 15-09: niet in de
+              balk). Opent /owner direct op het registratie-tabblad. width:auto,
+              want .btn-primary is standaard 100% breed. */}
+          <Reveal delay={steps.length * 110}>
+            <div style={{ display: "flex", justifyContent: "center", marginTop: "clamp(28px, 4vw, 40px)" }}>
+              <button className="btn-primary" data-create-page style={{ width: "auto", padding: "17px 40px", fontSize: 11 }} onClick={() => navigate("/owner?signup=1")}>
+                {t.createPageNav} →
+              </button>
+            </div>
+          </Reveal>
         </div>
 
         {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, tweekoloms checklijst.
