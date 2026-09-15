@@ -210,9 +210,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-stats { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; }
           @media (min-width: 900px) {
             .at-hero-grid { grid-template-columns: 1.15fr 0.85fr; gap: 30px; }
+            /* Kop en intro links; de knop-cluster eronder (knop, "Hoe werkt
+               het?", cijfers, "Gebruikt door…") blijft ook op desktop
+               gecentreerd (Faisal 15-09: "in het midden i.p.v. links"). */
             .at-hero-copy { text-align: left; }
-            .at-ctas { justify-content: flex-start; }
-            .at-stats { justify-content: start; }
           }
           /* Functiekaarten (Faisal 15-09: "de tekst zweeft los, geef ze boxen
              met een zwevend effect"): bone-kaarten op de putty-band met een
@@ -301,7 +302,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => navigate("/owner")}>
                     {t.startFree}
                   </button>
-                  <button onClick={() => scrollToSection("how-it-works")}
+                  <button onClick={() => scrollToSection("how-it-works")} data-hero-how
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, paddingBottom: 4 }}>
                     {t.howItWork} ↓
                   </button>
@@ -322,7 +323,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 </div>
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={1080}>
-                <div style={{ marginTop: 16, fontSize: 11, color: EARTH, letterSpacing: "0.05em" }}>
+                <div data-hero-usedby style={{ marginTop: 16, fontSize: 11, color: EARTH, letterSpacing: "0.05em", textAlign: "center" }}>
                   {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
                     : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
                     : "Used by salons in the Netherlands and the Caribbean"}
