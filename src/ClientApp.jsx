@@ -2818,12 +2818,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     (tik voor de hele tekst), diensten als chips en een Boek-knop. */}
                 <div className="profile-team-grid">
                 {initialSalon.staff.map(member => {
-                  const isExpanded = expandedTeamMember === member.id;
+                  // Geen uitklappen meer (Faisal 15-09: kaarten moeten symmetrisch
+                  // blijven): bio op max. 3 regels, drie diensten + "+N".
                   const memberServices = member.service_ids?.length > 0
                     ? initialSalon.services.filter(s => member.service_ids.includes(s.id))
                     : initialSalon.services;
                   const svcLabel = (s) => lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
-                  const chips = isExpanded ? memberServices : memberServices.slice(0, 3);
+                  const chips = memberServices.slice(0, 3);
                   const rest = memberServices.length - chips.length;
                   return (
                     <div key={member.id} className="profile-team-card" data-team-card>
@@ -2847,19 +2848,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           </div>
                           {member.role && <div style={{ fontSize: 11.5, color: c.textLabel, marginTop: 2 }}>{member.role}</div>}
                           {member.bio && (
-                            <div className={`profile-team-bio${isExpanded ? " open" : ""}`} onClick={() => setExpandedTeamMember(isExpanded ? null : member.id)} title={isExpanded ? undefined : (lang === "nl" ? "Tik voor meer" : lang === "es" ? "Toca para ver más" : "Tap for more")}>
-                              {member.bio}
-                            </div>
+                            <div className="profile-team-bio" title={member.bio}>{member.bio}</div>
                           )}
                         </div>
                       </div>
                       <div className="profile-team-card-foot">
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, minWidth: 0, flex: 1 }}>
+                        <div className="profile-team-chips">
                           {chips.map(s => (
                             <span key={s.id} className="profile-service-duration-pill">{svcLabel(s)}</span>
                           ))}
                           {rest > 0 && (
-                            <span className="profile-service-duration-pill" style={{ cursor: "pointer" }} onClick={() => setExpandedTeamMember(member.id)}>+{rest}</span>
+                            <span className="profile-service-duration-pill" title={memberServices.slice(3).map(svcLabel).join(" · ")}>+{rest}</span>
                           )}
                         </div>
                         <button type="button" className="profile-service-book-btn" onClick={() => enterBooking()}>{t.book}</button>
