@@ -562,12 +562,40 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             <Reveal delay={110}>
               <p style={{ fontSize: 14, color: MUSHROOM, marginBottom: 34, lineHeight: 1.7 }}>{t.ctaSub}</p>
             </Reveal>
+            {/* Twee uitgangen (Faisal 15-09): de bone trialknop én de stille
+                link naar de voorbeeldpagina voor wie nog niet wil aanmelden;
+                daaronder één regel geruststelling met claims die al op de
+                pagina staan. */}
             <Reveal delay={200}>
-              <button onClick={() => navigate("/owner")}
-                style={{ padding: "18px 46px", borderRadius: R, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
-                {t.startFree}
-              </button>
+              <div className="at-ctas" style={{ justifyContent: "center", gap: 22 }} data-finale-ctas>
+                <button onClick={() => navigate("/owner")}
+                  style={{ padding: "18px 46px", borderRadius: R, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
+                  {t.startFree}
+                </button>
+                <button onClick={() => navigate("/bloomstudio")} data-finale-example
+                  style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: PUTTY, borderBottom: `1px solid ${MUSHROOM}88`, padding: "6px 2px" }}>
+                  {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+                </button>
+              </div>
             </Reveal>
+            <Reveal delay={280}>
+              <div data-finale-reassure style={{ marginTop: 26, fontSize: 12, color: MUSHROOM, letterSpacing: "0.04em", lineHeight: 1.8 }}>
+                {(lang === "nl"
+                  ? ["14 dagen gratis", "0% commissie", "jouw klanten blijven jouw klanten"]
+                  : lang === "es"
+                    ? ["14 días gratis", "0% de comisión", "tus clientes siguen siendo tuyos"]
+                    : ["14 days free", "0% commission", "your clients stay yours"]
+                ).join("  ·  ")}
+              </div>
+            </Reveal>
+          </div>
+          {/* Signatuur: een groot omlijnd "vellu"-woordmerk in mushroom, in de
+              lege espresso-ruimte boven de voetregels. Zit in een eigen strook
+              met overflow hidden, dus het overlapt nooit knoppen of tekst. */}
+          <div aria-hidden="true" data-finale-mark style={{ position: "relative", height: "clamp(70px, 12.1vw, 165px)", overflow: "hidden", pointerEvents: "none" }}>
+            <div style={{ position: "absolute", left: "50%", bottom: "-0.2em", transform: "translateX(-50%)", fontFamily: "'Jost',sans-serif", fontWeight: 400, fontSize: "clamp(128px, 22vw, 300px)", lineHeight: 1, letterSpacing: "0.18em", whiteSpace: "nowrap", color: "transparent", WebkitTextStroke: `1.5px ${MUSHROOM}`, opacity: 0.32, userSelect: "none" }}>
+              vellu
+            </div>
           </div>
           {/* Footer op het espresso-vlak — zelfde juridische regels als altijd. */}
           <footer style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
