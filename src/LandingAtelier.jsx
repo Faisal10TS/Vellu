@@ -122,9 +122,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   // Zelfde inhoud als de andere richting; alleen de vorm verschilt.
   const steps = [
-    { n: "01", title: t.step1, desc: t.step1d },
-    { n: "02", title: t.step2, desc: t.step2d },
-    { n: "03", title: t.step3, desc: t.step3d },
+    { n: "1", title: t.step1, desc: t.step1d },
+    { n: "2", title: t.step2, desc: t.step2d },
+    { n: "3", title: t.step3, desc: t.step3d },
   ];
   const feats = [
     { icon: "link", nl: ["Eigen boekingspagina","Jouw merk, jouw kleuren, jouw link — vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij."], en: ["Your own booking page", "Your brand, your colors, your link — vellu.cc/your-name. Clients book directly with you, no middleman."], es: ["Tu propia página de reservas", "Tu marca, tus colores, tu enlace — vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios."] },
@@ -233,8 +233,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (prefers-reduced-motion: reduce) { .at-feat-card, .at-feat-card:hover { transform: none; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
-          .at-step { transition: background 0.25s ease; }
-          .at-step:hover { background: ${PUTTY}44; }
+          /* Stappen als zwevende kaarten (Faisal 15-09), zelfde rij-indeling
+             als eerst: groot cijfer links, titel + tekst rechts. */
+          .at-step { display: grid; grid-template-columns: clamp(56px, 9vw, 104px) 1fr; gap: clamp(14px, 3vw, 30px); align-items: start; padding: clamp(20px, 3vw, 30px) clamp(18px, 3vw, 30px); background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-step:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
+          @media (prefers-reduced-motion: reduce) { .at-step, .at-step:hover { transform: none; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
@@ -370,10 +373,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* ── 03 · HOE HET WERKT — terug op bone, redactionele rijen. ── */}
         <div id="how-it-works" style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
           <AtHead title={t.liveIn3} />
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {steps.map((s, i) => (
               <Reveal key={i} delay={i * 110}>
-                <div className="at-step" style={{ display: "grid", gridTemplateColumns: "clamp(64px, 10vw, 120px) 1fr", gap: "clamp(14px, 3vw, 34px)", alignItems: "start", padding: "clamp(20px, 3.4vw, 34px) 8px", borderBottom: `1px solid ${PUTTY}`, borderRadius: 10 }}>
+                <div className="at-step vl-glow" data-step-card onMouseMove={glowMove}>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9 }}>{s.n}</div>
                   <div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(21px, 3vw, 28px)", fontWeight: 400, color: INK, marginBottom: 8 }}>{s.title}</div>
