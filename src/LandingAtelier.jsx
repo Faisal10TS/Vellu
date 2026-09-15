@@ -592,8 +592,19 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           {/* Signatuur: een groot omlijnd "vellu"-woordmerk in mushroom, in de
               lege espresso-ruimte boven de voetregels. Zit in een eigen strook
               met overflow hidden, dus het overlapt nooit knoppen of tekst. */}
-          <div aria-hidden="true" data-finale-mark style={{ position: "relative", height: "clamp(70px, 12.1vw, 165px)", overflow: "hidden", pointerEvents: "none" }}>
-            <div style={{ position: "absolute", left: "50%", bottom: "-0.2em", transform: "translateX(-50%)", fontFamily: "'Jost',sans-serif", fontWeight: 400, fontSize: "clamp(128px, 22vw, 300px)", lineHeight: 1, letterSpacing: "0.18em", whiteSpace: "nowrap", color: "transparent", WebkitTextStroke: `1.5px ${MUSHROOM}`, opacity: 0.32, userSelect: "none" }}>
+          {/* Strookhoogte 0.867em en bottom -0.087em (gemeten: Jost-baseline
+              ligt 0.153em boven de lijnvak-onderkant, de "l" reikt 0.78em boven
+              de baseline, de inkt tot 0.047em eronder): het hele woord staat
+              in beeld, baseline 0.067em boven de voetlijn — eerst werden de
+              l's bovenaan afgesneden. */}
+          <div aria-hidden="true" data-finale-mark style={{ position: "relative", height: "clamp(111px, 19.1vw, 260px)", overflow: "hidden", pointerEvents: "none" }}>
+            {/* Omlijning zonder binnenlijnen: Jost heeft overlappende contouren
+                (de dwarsbalk van de "e" loopt door de buik), en text-stroke
+                tekent élke contour. Daarom: vulling in de achtergrondkleur
+                bovenop een dubbel zo dikke lijn (paint-order: stroke fill) —
+                de vulling dekt de binnenste helft én de overlappingen af, zodat
+                alleen de buitenrand van 1,5px overblijft (Faisal 15-09). */}
+            <div style={{ position: "absolute", left: "50%", bottom: "-0.087em", transform: "translateX(-50%)", fontFamily: "'Jost',sans-serif", fontWeight: 400, fontSize: "clamp(128px, 22vw, 300px)", lineHeight: 1, letterSpacing: "0.18em", whiteSpace: "nowrap", color: INK, WebkitTextStroke: `3px ${MUSHROOM}`, paintOrder: "stroke fill", opacity: 0.32, userSelect: "none" }}>
               vellu
             </div>
           </div>
