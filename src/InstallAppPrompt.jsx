@@ -145,7 +145,7 @@ export default function InstallAppPrompt({
           onClick={install}
           style={{
             background: accent, color: "#0d0b0a", border: "none",
-            borderRadius: 100, padding: "8px 16px",
+            borderRadius: 8, padding: "8px 16px",
             fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
             textTransform: "uppercase", cursor: "pointer",
             fontFamily: "'Jost',sans-serif", flexShrink: 0,
@@ -232,7 +232,7 @@ export default function InstallAppPrompt({
               onClick={() => { setShowIosGuide(false); dismiss(); }}
               style={{
                 width: "100%", background: accent, color: "#0d0b0a", border: "none",
-                borderRadius: 100, padding: "14px", fontSize: 13, fontWeight: 600,
+                borderRadius: 8, padding: "14px", fontSize: 13, fontWeight: 600,
                 letterSpacing: "0.08em", textTransform: "uppercase",
                 cursor: "pointer", fontFamily: "'Jost',sans-serif",
               }}

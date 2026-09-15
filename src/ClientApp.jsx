@@ -29,7 +29,7 @@ function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
           <button key={m.key} type="button" onClick={() => onPick(m.key)}
             aria-current={on ? "true" : undefined}
             style={{
-              flexShrink: 0, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+              flexShrink: 0, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
               fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
               background: on ? `${accent}18` : "transparent",
               border: `1px solid ${on ? accent : c.border}`,
@@ -263,7 +263,7 @@ function PhoneContact({ salon, lang, c, compact = false }) {
     );
   }
   const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
-  const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 100, border: `1px solid ${c.inputBorder}`, background: c.bgCard, color: c.text, fontSize: 12, textDecoration: "none", fontWeight: 500 };
+  const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: c.bgCard, color: c.text, fontSize: 12, textDecoration: "none", fontWeight: 500 };
   return (
     <div className={compact ? undefined : "profile-contact-row"} style={{ ...rowStyle, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
       <div role="button" tabIndex={0} aria-expanded={open} aria-label={L("Bellen of WhatsApp", "Call or WhatsApp", "Llamar o WhatsApp")}
@@ -352,7 +352,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent }) {
         aria-label={lang === "nl" ? "Deel deze pagina" : lang === "es" ? "Compartir esta página" : "Share this page"}
         title={lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share"}
         style={{
-          height: 44, padding: "0 22px 0 18px", borderRadius: 100,
+          height: 44, padding: "0 22px 0 18px", borderRadius: 8,
           background: "#fff", border: `1px solid rgba(255,255,255,0.9)`,
           color: "#111", cursor: "pointer",
           display: "inline-flex", alignItems: "center", gap: 8,
@@ -2761,7 +2761,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 Settings → Team. Clients otherwise see all team
                                 members as equals. */}
                             {initialSalon.show_owner_on_booking && (member.is_owner === true || (member.user_id && member.user_id === initialSalon.owner_id)) && (
-                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Eigenaar" : lang === "es" ? "Propietario" : "Owner"}
                               </span>
                             )}
@@ -2779,7 +2779,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 6 }}>{t.services}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                                 {memberServices.map(s => (
-                                  <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
+                                  <span key={s.id} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>
                                     {lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)}
                                   </span>
                                 ))}
@@ -2988,7 +2988,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 style={{
                                   position: "absolute", top: 8, right: 8,
                                   background: c.bg, color: c.text, fontSize: 10, fontWeight: 500,
-                                  padding: "5px 10px", borderRadius: 100,
+                                  padding: "5px 10px", borderRadius: 8,
                                   textDecoration: "none",
                                   border: `1px solid ${c.border}`,
                                   boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
@@ -3038,7 +3038,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               style={{
                                 position: "absolute", top: 10, right: 10,
                                 background: c.bg, color: c.text, fontSize: 11, fontWeight: 500,
-                                padding: "6px 12px", borderRadius: 100,
+                                padding: "6px 12px", borderRadius: 8,
                                 textDecoration: "none",
                                 border: `1px solid ${c.border}`,
                                 boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
@@ -3513,7 +3513,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         <div
                           onClick={() => setActiveCategory("all")}
                           style={{
-                            padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                            padding: "8px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
                             background: activeCategory === "all" ? accent : c.inputBg,
                             border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
                             color: activeCategory === "all" ? c.btnOnDark : c.textSub,
@@ -3525,7 +3525,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             key={cat.id}
                             onClick={() => setActiveCategory(cat.id)}
                             style={{
-                              padding: "8px 16px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                              padding: "8px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
                               background: activeCategory === cat.id ? accent : c.inputBg,
                               border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
                               color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
@@ -3688,7 +3688,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 return (
                                   <div key={e.id} onClick={() => toggleExtraForService(s.id, e)}
                                     style={{
-                                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                                      padding: "8px 14px", borderRadius: 8, cursor: "pointer",
                                       background: extraSel ? `${accent}14` : "transparent",
                                       border: `1px solid ${extraSel ? accent : c.border}`,
                                       fontSize: 12, fontWeight: 500, color: extraSel ? accent : c.textSub,
@@ -3925,7 +3925,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                         <FirstAvailableHint />
                         {initialSalon.waitlist_enabled !== false && (
-                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                         )}
                       </div>
                     </div>
@@ -3942,7 +3942,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                         <FirstAvailableHint />
                         {initialSalon.waitlist_enabled !== false && (
-                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                         )}
                       </div>
                     </div>
@@ -4431,7 +4431,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             <div
                               onClick={() => setActiveCategory("all")}
                               style={{
-                                padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                                padding: "7px 14px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
                                 background: activeCategory === "all" ? accent : c.inputBg,
                                 border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
                                 color: activeCategory === "all" ? c.btnOnDark : c.textSub,
@@ -4443,7 +4443,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 key={cat.id}
                                 onClick={() => setActiveCategory(cat.id)}
                                 style={{
-                                  padding: "7px 14px", borderRadius: 100, cursor: "pointer", flexShrink: 0,
+                                  padding: "7px 14px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
                                   background: activeCategory === cat.id ? accent : c.inputBg,
                                   border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
                                   color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
@@ -4735,7 +4735,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                             <FirstAvailableHint />
                             {initialSalon.waitlist_enabled !== false && (
-                              <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 999, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                              <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                             )}
                           </div>
                         </div>
@@ -5104,7 +5104,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                             return (
                               <button key={ds} type="button" onClick={() => toggleWaitlistDate(ds)}
                                 style={{
-                                  display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 100,
+                                  display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8,
                                   border: `1.5px solid ${on ? accent : c.inputBorder}`,
                                   background: on ? `${accent}18` : "transparent",
                                   color: on ? accent : c.textSub, fontSize: 12, fontWeight: on ? 600 : 500, cursor: "pointer",

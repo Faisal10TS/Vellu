@@ -51,7 +51,7 @@ function CrashScreen({ error, resetError }) {
           background: "#c9a96e",
           color: "#0d0b0a",
           border: "none",
-          borderRadius: 100,
+          borderRadius: 8,
           padding: "12px 28px",
           fontSize: 13,
           fontWeight: 600,

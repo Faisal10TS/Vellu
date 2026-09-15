@@ -390,7 +390,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const staffChips = seeAll && salonStaff.length > 1 ? (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
       <div onClick={() => setStaffFilter(null)} style={{
-        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+        padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
         background: !staffFilter ? accent : "transparent",
         color: !staffFilter ? c.btnOnDark : c.textSub,
@@ -398,7 +398,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       }}>{lang === "nl" ? "Iedereen" : lang === "es" ? "Todos" : "Everyone"}</div>
       {salonStaff.map(m => (
         <div key={m.id} onClick={() => setStaffFilter(staffFilter === m.id ? null : m.id)} style={{
-          padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+          padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
           letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
           background: staffFilter === m.id ? accent : "transparent",
           color: staffFilter === m.id ? c.btnOnDark : c.textSub,
@@ -973,7 +973,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
           {showStaffChip && (
-            <div style={{ fontSize: 9, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 700, letterSpacing: "0.04em", marginTop: 4 }}>
+            <div style={{ fontSize: 9, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 700, letterSpacing: "0.04em", marginTop: 4 }}>
               <NavIcon name="user" size={8} color={accent} /> {a.staff_name}
             </div>
           )}
@@ -1394,7 +1394,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
                       {weekChange !== 0 && (
-                        <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                        <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                           {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
                         </div>
                       )}
@@ -1656,10 +1656,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {/* Top toolbar — view toggle + export + period navigator */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}` }}>
                     {["week", "month", "year"].map(mode => (
                       <div key={mode} onClick={() => { setCalViewMode(mode); setStaffWeekOffset(0); }} style={{
-                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: calViewMode === mode ? accent : "transparent",
                         color: calViewMode === mode ? c.btnOnDark : c.textSub,
@@ -1674,7 +1674,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setBlockForm({ mode: "time", variant: "generic", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
                       setBlockModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
                     title={lang === "nl" ? "Blokkeer een dag of tijdvak" : lang === "es" ? "Bloquear un día o una franja horaria" : "Block a day or time window"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
@@ -1689,7 +1689,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setBlockForm({ mode: "day", variant: "service", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
                       setBlockModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
                     title={lang === "nl" ? "Blokkeer één behandeling op een dag, evt. elke week" : lang === "es" ? "Bloquear un tratamiento en un día, o cada semana" : "Block one treatment on a day, optionally weekly"}
                   >
                     <NavIcon name="scissors" size={11} color="currentColor" />
@@ -1701,7 +1701,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setExcForm({ date: calDate || todayFmt, open: "09:00", close: "17:00" });
                       setExcModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
                     title={lang === "nl" ? "Werk eenmalig op een dag die normaal vrij is" : lang === "es" ? "Trabaja una vez en un día que normalmente libras" : "Work once on a day you're normally off"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -1709,7 +1709,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   </button>
                   {staffWeekOffset !== 0 && (
                     <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
-                      padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase",
                       background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
                     }}>{lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today"}</div>
@@ -1921,7 +1921,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               )}
                               {count > 0 && (
-                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
+                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
                               )}
                             </>)}
                           </div>
@@ -1962,7 +1962,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, color: c.text }}>{monthName}</div>
-                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : lang === "es" ? "Ahora" : "Now"}</div>}
+                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : lang === "es" ? "Ahora" : "Now"}</div>}
                           </div>
                           <div>
                             <div style={{ height: 4, borderRadius: 3, background: c.inputBg, overflow: "hidden" }}>
@@ -2155,12 +2155,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             <div style={{ fontSize: 13, fontWeight: 500, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                               {cl.name}
                               {cl.visitCount >= 3 && (
-                                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                                   {lang === "nl" ? "Vaste klant" : lang === "es" ? "Habitual" : "Regular"}
                                 </span>
                               )}
                               {note && (
-                                <span title={note} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: `${c.warning}18`, color: c.warning, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                <span title={note} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: `${c.warning}18`, color: c.warning, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                                   {lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}
                                 </span>
                               )}
@@ -2175,7 +2175,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           )}
                           <div style={{ textAlign: "right" }}>
                             {cl.next ? (
-                              <div style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, whiteSpace: "nowrap" }}>
+                              <div style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: `${accent}18`, color: accent, fontWeight: 600, whiteSpace: "nowrap" }}>
                                 {fmtDate(cl.next.date)} · {cl.next.time}
                               </div>
                             ) : (
@@ -2332,21 +2332,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </button>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}` }}>
                     {[
                       ["all", lang === "nl" ? "Alles" : lang === "es" ? "Todos" : "All", completedAppts.length],
                       ["unsent", lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length],
                       ["sent", lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", sent.length]
                     ].map(([key, label, count]) => (
                       <div key={key} onClick={() => setInvoiceFilter(key)} style={{
-                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: invoiceFilter === key ? accent : "transparent",
                         color: invoiceFilter === key ? c.btnOnDark : c.textSub,
                         display: "inline-flex", alignItems: "center", gap: 6
                       }}>
                         {label}
-                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700 }}>{count}</span>
+                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700 }}>{count}</span>
                       </div>
                     ))}
                   </div>
@@ -2405,7 +2405,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
                             {!a.invoice_sent && (
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent"}
                               </span>
                             )}
@@ -2423,7 +2423,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         {/* Action */}
                         <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
                           {a.invoice_sent ? (
-                            <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                            <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                               <NavIcon name="check" size={10} color={c.success} /> {t.sent}
                             </span>
                           ) : (
@@ -2472,14 +2472,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* Tab bar */}
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}`, maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}`, maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {[
                     ["werktijden", "planning", lang === "nl" ? "Werktijden" : lang === "es" ? "Horario" : "Hours"],
                     ...(canInvoice ? [["facturatie", "facturen", lang === "nl" ? "Facturatie" : lang === "es" ? "Facturación" : "Invoicing"]] : []),
                     ...(canEditServices ? [["diensten", "diensten", lang === "nl" ? "Diensten" : lang === "es" ? "Servicios" : "Services"]] : []),
                   ].map(([key, icon, label]) => (
                     <div key={key} onClick={() => setStaffSettingsTab(key)} style={{
-                      padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 100, cursor: "pointer", fontSize: isMobile ? 10 : 11, fontWeight: 600,
+                      padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: isMobile ? 10 : 11, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                       background: staffSettingsTab === key ? accent : "transparent",
                       color: staffSettingsTab === key ? c.btnOnDark : c.textSub,

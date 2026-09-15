@@ -123,7 +123,7 @@ export default function AppTour({ steps, lang = "nl", c, accent, onFinish }) {
   }
 
   const btn = {
-    padding: "9px 18px", borderRadius: 100, fontSize: 12, fontWeight: 600,
+    padding: "9px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600,
     letterSpacing: "0.04em", cursor: "pointer", border: "1px solid transparent",
     fontFamily: "'Jost', sans-serif"
   };
@@ -167,7 +167,7 @@ export default function AppTour({ steps, lang = "nl", c, accent, onFinish }) {
           <div style={{
             fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase",
             color: accent, background: `${accent}14`, border: `1px solid ${accent}2a`,
-            borderRadius: 100, padding: "4px 10px"
+            borderRadius: 8, padding: "4px 10px"
           }}>
             {lang === "nl" ? "Rondleiding" : "Tour"} · {i + 1}/{steps.length}
           </div>

@@ -2081,7 +2081,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .scale-in { animation: scaleIn 0.3s cubic-bezier(0.16,1,0.3,1) both; }
 
   .btn-primary {
-    background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 100px;
+    background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
     padding: 15px 28px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; width: 100%;
     /* iOS: lang indrukken van een knop selecteerde de tekst ernaast en zette
@@ -2095,7 +2095,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   .btn-ghost {
     background: transparent; color: ${c.textSub};
-    border: 1px solid ${c.borderHover}; border-radius: 100px;
+    border: 1px solid ${c.borderHover}; border-radius: 8px;
     padding: 11px 20px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 500;
     letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer; transition: all 0.2s;
   }
@@ -2181,7 +2181,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     outline: 2px solid ${accent}; outline-offset: 2px;
   }
 
-  .badge { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .badge { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
   .badge-confirmed { background: rgba(59,130,246,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#93c5fd" : "#2563eb"}; border: 1px solid rgba(59,130,246,${c === THEMES.dark ? "0.2" : "0.15"}); }
   .badge-completed { background: rgba(34,197,94,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#86efac" : "#16a34a"}; border: 1px solid rgba(34,197,94,${c === THEMES.dark ? "0.2" : "0.15"}); }
   .badge-cancelled { background: rgba(239,68,68,${c === THEMES.dark ? "0.1" : "0.08"}); color: ${c === THEMES.dark ? "#f87171" : "#dc2626"}; border: 1px solid rgba(239,68,68,${c === THEMES.dark ? "0.2" : "0.15"}); }
@@ -2192,8 +2192,8 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .confirm-row:last-child { border-bottom: none; }
   .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
 
-  .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 100px; padding: 4px; display: flex; gap: 2px; }
-  .lang-btn { padding: 7px 12px; border-radius: 100px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
+  .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 8px; padding: 4px; display: flex; gap: 2px; }
+  .lang-btn { padding: 7px 12px; border-radius: 6px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
   .lang-btn.active { background: ${surface}; color: ${surfaceInk}; box-shadow: inset 0 0 0 1px ${edge}; }
   .lang-btn.inactive { background: transparent; color: ${c.textLabel}; }
 
@@ -2432,7 +2432,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-service-duration-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 9px; border-radius: 100px;
+    padding: 3px 9px; border-radius: 6px;
     background: ${c.inputBg}; border: 1px solid ${c.inputBorder};
     font-size: 11px; color: ${c.textSub}; white-space: nowrap;
   }
@@ -2443,7 +2443,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     color: ${c.text}; text-align: right; white-space: nowrap; line-height: 1;
   }
   .profile-service-book-btn {
-    padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 600;
+    padding: 8px 18px; border-radius: 8px; font-size: 11px; font-weight: 600;
     letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
     background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder};
     transition: all 0.2s; flex-shrink: 0; white-space: nowrap;
@@ -2497,7 +2497,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-review-card:last-child { border-bottom: none; }
   .profile-write-review-btn {
     display: inline-block; padding: 10px 24px; border: 1px solid ${c.border};
-    border-radius: 100px; font-size: 13px; font-weight: 500; color: ${c.text};
+    border-radius: 8px; font-size: 13px; font-weight: 500; color: ${c.text};
     cursor: pointer; transition: all 0.2s; background: transparent;
     font-family: var(--body-font, 'Jost', sans-serif); margin-top: 8px;
   }
@@ -2531,7 +2531,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     margin-top: 6px; font-size: 13px; color: ${c.textSub};
   }
   .profile-book-btn {
-    width: 100%; padding: 13px; border-radius: 100px; border: 1px solid ${surfaceBorder};
+    width: 100%; padding: 13px; border-radius: 8px; border: 1px solid ${surfaceBorder};
     background: ${surface}; color: ${surfaceInk}; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s; font-family: var(--body-font, 'Jost', sans-serif);
     margin-top: 16px;
@@ -2573,7 +2573,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     pointer-events: none;
   }
   .profile-mobile-pill {
-    background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 100px;
+    background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
     padding: 14px 40px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 13px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
     pointer-events: auto;
@@ -2583,7 +2583,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
   /* Category pills */
   .profile-cat-pill {
-    padding: 7px 16px; border-radius: 100px; font-size: 12px; font-weight: 500;
+    padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
     border: 1px solid ${c.inputBorder}; background: transparent;
     color: ${c.textSub}; cursor: pointer; transition: all 0.2s;
     font-family: var(--body-font, 'Jost', sans-serif); white-space: nowrap; flex-shrink: 0;

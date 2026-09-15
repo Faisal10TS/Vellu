@@ -50,7 +50,7 @@ export default function WhatsNewModal({ releases, lang: appLang, c, accent, onCl
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {r.items.map((it, i) => (
                   <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 100, border: `1px solid ${kindColor(it.kind)}55`, color: kindColor(it.kind), background: `${kindColor(it.kind)}14`, flexShrink: 0, marginTop: 1, minWidth: 66, textAlign: "center" }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 6, border: `1px solid ${kindColor(it.kind)}55`, color: kindColor(it.kind), background: `${kindColor(it.kind)}14`, flexShrink: 0, marginTop: 1, minWidth: 66, textAlign: "center" }}>
                       {L(KIND[it.kind] || KIND.new)}
                     </span>
                     <div style={{ fontSize: 13, lineHeight: 1.5, color: c.text }}>{L(it.text)}</div>

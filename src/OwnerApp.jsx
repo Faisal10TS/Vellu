@@ -762,10 +762,10 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
                 <span style={{ fontSize: 10, color: c.textSub, flex: 1, minWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.client_email}</span>
                 <span style={{ fontSize: 10, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{parseFloat(r.discount_pct)}%</span>
                 <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "verloopt" : lang === "es" ? "caduca" : "expires"} {fmtD(r.expires_on)}</span>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 100, color: st.color, border: `1px solid ${st.border}`, background: st.bg }}>{st.label}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 6, color: st.color, border: `1px solid ${st.border}`, background: st.bg }}>{st.label}</span>
                 {!r.used_at && r.expires_on >= today && (
                   <button type="button" onClick={() => copyText(r.code)} title={lang === "nl" ? "Code kopiëren" : lang === "es" ? "Copiar código" : "Copy code"}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 100, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer", background: "transparent", color: accent, border: `1px solid ${accent}55`, fontFamily: "'Jost',sans-serif" }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 6, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer", background: "transparent", color: accent, border: `1px solid ${accent}55`, fontFamily: "'Jost',sans-serif" }}>
                     <NavIcon name="copy" size={10} color="currentColor" />{lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy"}
                   </button>
                 )}
@@ -773,7 +773,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
                     een telefoonnummer van deze klant kennen. */}
                 {!r.used_at && r.expires_on >= today && contact[String(r.client_email || "").toLowerCase()]?.phone && (
                   <a href={getWhatsAppUrl(contact[String(r.client_email || "").toLowerCase()].phone, waMsg(r))} target="_blank" rel="noopener noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 100, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", textDecoration: "none", color: "#25D366", border: "1px solid #25D36655", background: "transparent", fontFamily: "'Jost',sans-serif" }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 6, fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", textDecoration: "none", color: "#25D366", border: "1px solid #25D36655", background: "transparent", fontFamily: "'Jost',sans-serif" }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
                     WhatsApp
                   </a>
@@ -874,7 +874,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
               type="button"
               onClick={() => setSegment(s.key)}
               style={{
-                padding: "7px 12px", borderRadius: 100, fontSize: 11, fontWeight: 600,
+                padding: "7px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
                 letterSpacing: "0.04em", cursor: "pointer", whiteSpace: "nowrap", textAlign: "center",
                 background: active ? accent : "transparent",
                 color: active ? c.btnOnDark : c.textSub,
@@ -1365,7 +1365,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
             onClick={() => setPeriod(p.key)}
             style={{
               padding: mobiel ? "8px 4px" : "8px 14px",
-              borderRadius: 100,
+              borderRadius: 8,
               fontSize: mobiel ? 10 : 11,
               whiteSpace: "nowrap",
               textAlign: "center",
@@ -1392,7 +1392,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
                 onClick={() => setStaffFilter(st.id)}
                 style={{
                   padding: "8px 14px",
-                  borderRadius: 100,
+                  borderRadius: 8,
                   fontSize: 11,
                   fontWeight: staffFilter === st.id ? 600 : 400,
                   background: staffFilter === st.id ? `${accent}18` : c.inputBg,
@@ -1909,7 +1909,7 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours }) {
               const isOn = selServices.includes(s.id);
               return (
                 <div key={s.id} onClick={() => setSelServices(prev => isOn ? prev.filter(x => x !== s.id) : [...prev, s.id])}
-                  style={{ fontSize: 10, padding: "5px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
+                  style={{ fontSize: 10, padding: "5px 10px", borderRadius: 8, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s" }}>
                   {/* Zelfde taalkeuze als op de medewerkerkaart — anders stonden
                       de aan te vinken diensten hier altijd in het Nederlands. */}
                   {lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}
@@ -2241,7 +2241,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                   borderRadius: 24, padding: "28px 24px", position: "relative", transition: "all 0.3s"
                 }}>
                   {plan.popular && (
-                    <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 100 }}>
+                    <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 8 }}>
                       {lang === "nl" ? "POPULAIR" : "POPULAR"}
                     </div>
                   )}
@@ -3474,7 +3474,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 0", borderTop: i === 0 ? "none" : `1px solid ${c.border}` }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: c.text, width: 52, flexShrink: 0 }}>{fmtDate(a.date).replace(/ \d{4}$/, "")}</div>
                     <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: c.textSub }}>{a.service_name}</div>
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 100, background: b.bg, color: b.color, whiteSpace: "nowrap", flexShrink: 0 }}>{b.label}</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: b.bg, color: b.color, whiteSpace: "nowrap", flexShrink: 0 }}>{b.label}</span>
                   </div>
                 );
               })}
@@ -3728,7 +3728,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{g.name}</div>
                         {g.allNotified && (
-                          <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 999, background: `${c.success || accent}22`, color: c.success || accent, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
+                          <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 6, background: `${c.success || accent}22`, color: c.success || accent, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
                             {lang === "nl" ? "Benaderd" : lang === "es" ? "Contactado" : "Contacted"}
                           </span>
                         )}
@@ -7391,13 +7391,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ fontWeight: 500, fontSize: 14, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {a.client_name}
             {showWarn && (
-              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.warning}22`, color: c.warning, border: `1px solid ${c.warning}44`, fontWeight: 600, letterSpacing: "0.04em" }}
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${c.warning}22`, color: c.warning, border: `1px solid ${c.warning}44`, fontWeight: 600, letterSpacing: "0.04em" }}
                 title={lang === "nl" ? `${noShowInfo.no_show_count} no-shows bij jouw salon` : lang === "es" ? `${noShowInfo.no_show_count} ausencias en tu salón` : `${noShowInfo.no_show_count} no-shows at your salon`}>
                 <NavIcon name="alerttri" size={10} color="currentColor" /> {noShowInfo.no_show_count}× NO-SHOW
               </span>
             )}
             {showBlocked && (
-              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${c.danger}22`, color: c.danger, border: `1px solid ${c.danger}44`, fontWeight: 600, letterSpacing: "0.04em" }}
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${c.danger}22`, color: c.danger, border: `1px solid ${c.danger}44`, fontWeight: 600, letterSpacing: "0.04em" }}
                 title={lang === "nl" ? "Deze klant is geblokkeerd voor nieuwe boekingen" : lang === "es" ? "Este cliente está bloqueado para nuevas reservas" : "This client is blocked from new bookings"}>
                 {lang === "nl" ? "GEBLOKKEERD" : lang === "es" ? "BLOQUEADO" : "BLOCKED"}
               </span>
@@ -7446,7 +7446,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // hele lijst zoals opgeslagen ("Esther, Lady").
             const name = agendaStaff ? ((salonData.staff || []).find(s => s.id === agendaStaff)?.name || a.staff_name) : a.staff_name;
             return name ? (
-              <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
+              <div style={{ fontSize: 10, marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600 }}>
                 <NavIcon name="user" size={9} color={accent} /> {name}
               </div>
             ) : null;
@@ -8315,7 +8315,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {/* Betaalstatus is handmatig: Vellu ziet geen pinautomaat, dus
                     dit vinkje is de administratie van de salon zelf. */}
                 <button type="button" onClick={() => togglePaid(sale)}
-                  style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 999, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1px solid ${sale.paid_at ? `${c.success}55` : c.inputBorder}`, background: sale.paid_at ? `${c.success}14` : "transparent", color: sale.paid_at ? c.success : c.textMuted }}>
+                  style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 8, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1px solid ${sale.paid_at ? `${c.success}55` : c.inputBorder}`, background: sale.paid_at ? `${c.success}14` : "transparent", color: sale.paid_at ? c.success : c.textMuted }}>
                   {sale.paid_at ? (lang === "nl" ? "Betaald" : lang === "es" ? "Pagada" : "Paid") : (lang === "nl" ? "Markeer als betaald" : lang === "es" ? "Marcar como pagada" : "Mark as paid")}
                 </button>
               </div>
@@ -8486,7 +8486,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", color: c.text, maxHeight: "85dvh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, minWidth: 0, wordBreak: "break-word" }}>{a.client_name}</div>
-              <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: `${statusColor}1f`, color: statusColor, border: `1px solid ${statusColor}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0, marginTop: 6 }}>{statusLabel}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 6, background: `${statusColor}1f`, color: statusColor, border: `1px solid ${statusColor}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0, marginTop: 6 }}>{statusLabel}</span>
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, textTransform: "capitalize" }}>{dateLabel}</div>
 
@@ -8701,7 +8701,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               return (
                                 <button key={ex.id} type="button" onClick={() => toggleRowExtra(r.key, ex)}
                                   style={{
-                                    padding: "6px 11px", borderRadius: 100, fontSize: 10, cursor: "pointer",
+                                    padding: "6px 11px", borderRadius: 8, fontSize: 10, cursor: "pointer",
                                     fontWeight: on ? 600 : 400, fontFamily: "'Jost',sans-serif", transition: "all 0.2s",
                                     background: on ? `${accent}18` : c.inputBg,
                                     border: `1px solid ${on ? accent : c.inputBorder}`,
@@ -8741,7 +8741,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <span style={{ display: "inline-flex", gap: 2, marginLeft: "auto" }}>
                       {[[false, cur], [true, "%"]].map(([pct, sym]) => (
                         <span key={sym} onClick={() => setEditApptForm((f) => ({ ...f, discount_pct: pct }))}
-                          style={{ padding: "1px 8px", borderRadius: 100, cursor: "pointer", fontSize: 9, fontWeight: 700, letterSpacing: 0, textTransform: "none",
+                          style={{ padding: "1px 8px", borderRadius: 6, cursor: "pointer", fontSize: 9, fontWeight: 700, letterSpacing: 0, textTransform: "none",
                             background: editApptForm.discount_pct === pct ? `${accent}18` : "transparent",
                             border: `1px solid ${editApptForm.discount_pct === pct ? accent : c.inputBorder}`,
                             color: editApptForm.discount_pct === pct ? accent : c.textMuted }}>{sym}</span>
@@ -9031,7 +9031,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {(salonData.staff || []).length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                   <div onClick={() => setDashStaff(null)} style={{
-                    padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                     letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                     background: !dashStaff ? accent : "transparent",
                     color: !dashStaff ? c.btnOnDark : c.textSub,
@@ -9039,7 +9039,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   }}>{t.everyone}</div>
                   {(salonData.staff || []).map(m => (
                     <div key={m.id} onClick={() => setDashStaff(dashStaff === m.id ? null : m.id)} style={{
-                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                       background: dashStaff === m.id ? accent : "transparent",
                       color: dashStaff === m.id ? c.btnOnDark : c.textSub,
@@ -9221,7 +9221,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(2)}</div>
                           {weekChange !== 0 && (
-                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                               {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
                             </div>
                           )}
@@ -9416,7 +9416,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(2)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : lang === "es" ? "últimas 8 semanas" : "last 8 weeks"}</div>
                         </div>
-                        <span style={{ fontSize: 10, color: accent, cursor: "pointer", padding: "6px 12px", borderRadius: 100, border: `1px solid ${accent}33`, letterSpacing: "0.06em" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
+                        <span style={{ fontSize: 10, color: accent, cursor: "pointer", padding: "6px 12px", borderRadius: 8, border: `1px solid ${accent}33`, letterSpacing: "0.06em" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
                       </div>
                       {/* Chart area — flex grows to fill card */}
                       <div style={{ flex: 1, display: "flex", alignItems: "stretch", marginTop: 14, minHeight: 180 }}>
@@ -9861,7 +9861,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, flex: 1 }}>{lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"}</span>
                           {[[false, cur], [true, "%"]].map(([pct, sym]) => (
                             <span key={sym} onClick={() => setKassaDiscountPct(pct)}
-                              style={{ padding: "2px 9px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 700,
+                              style={{ padding: "2px 9px", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 700,
                                 background: kassaDiscountPct === pct ? `${accent}18` : "transparent",
                                 border: `1px solid ${kassaDiscountPct === pct ? accent : c.inputBorder}`,
                                 color: kassaDiscountPct === pct ? accent : c.textMuted }}>{sym}</span>
@@ -10044,10 +10044,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Top toolbar — view toggle (left) + period navigator (right) */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 100, border: `1px solid ${c.inputBorder}` }}>
+                  <div style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}` }}>
                     {["day", "week", "month", "year"].map(mode => (
                       <div key={mode} onClick={() => { setCalViewMode(mode); setCalWeekOffset(0); if (mode === "day") setCalDate(fmt(getToday())); }} style={{
-                        padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: calViewMode === mode ? accent : "transparent",
                         color: calViewMode === mode ? c.btnOnDark : c.textSub,
@@ -10060,7 +10060,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <button
                     onClick={() => openBlockModal()}
                     style={{
-                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                      padding: "8px 14px", borderRadius: 8, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
                       background: `${c.danger}10`, color: c.danger,
                       border: `1px solid ${c.danger}33`,
@@ -10079,7 +10079,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <button
                     onClick={() => openBlockModal({ mode: "day", variant: "service" })}
                     style={{
-                      padding: "8px 14px", borderRadius: 100, cursor: "pointer",
+                      padding: "8px 14px", borderRadius: 8, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
                       background: `${c.danger}10`, color: c.danger,
                       border: `1px solid ${c.danger}33`,
@@ -10113,7 +10113,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <>
                         {showBackToToday && (
                           <div onClick={() => { setCalWeekOffset(0); setCalDate(fmt(getToday())); }} style={{
-                            padding: "7px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                            padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                             letterSpacing: "0.06em", textTransform: "uppercase",
                             background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
                           }}>{t.backToToday}</div>
@@ -10135,7 +10135,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {(salonData.staff || []).length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
                   <div onClick={() => setAgendaStaff(null)} style={{
-                    padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                     letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                     background: !agendaStaff ? accent : "transparent",
                     color: !agendaStaff ? c.btnOnDark : c.textSub,
@@ -10143,7 +10143,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   }}>{t.everyone}</div>
                   {(salonData.staff || []).map(m => (
                     <div key={m.id} onClick={() => setAgendaStaff(agendaStaff === m.id ? null : m.id)} style={{
-                      padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                       background: agendaStaff === m.id ? accent : "transparent",
                       color: agendaStaff === m.id ? c.btnOnDark : c.textSub,
@@ -10551,7 +10551,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // de tooltip.
                           const timeLabel = (compact && chipInHeader) ? a.time : `${a.time}–${endTime}`;
                           const staffChip = hasChip ? (
-                            <div style={{ fontSize: 9, height: 17, display: "inline-flex", alignItems: "center", gap: 4, padding: "0 7px", borderRadius: 100, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", minWidth: 0, lineHeight: "11px" }}>
+                            <div style={{ fontSize: 9, height: 17, display: "inline-flex", alignItems: "center", gap: 4, padding: "0 7px", borderRadius: 6, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", minWidth: 0, lineHeight: "11px" }}>
                               <NavIcon name="user" size={8} color={accent} />
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{a.staff_name}</span>
                             </div>
@@ -10912,7 +10912,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 </div>
                               )}
                               {count > 0 && (
-                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 100, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
+                                <div style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: `${accent}22`, color: accent, alignSelf: "flex-end" }}>{count}</div>
                               )}
                             </>)}
                           </div>
@@ -10953,7 +10953,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, color: c.text }}>{monthName}</div>
-                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : lang === "es" ? "Ahora" : "Now"}</div>}
+                            {isCurrent && <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Nu" : lang === "es" ? "Ahora" : "Now"}</div>}
                           </div>
                           <div>
                             <div style={{ height: 4, borderRadius: 3, background: c.inputBg, overflow: "hidden" }}>
@@ -11227,7 +11227,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         key={st.id || "all"}
                         onClick={() => setInvoiceStaffFilter(st.id)}
                         style={{
-                          padding: "8px 14px", borderRadius: 100, fontSize: 11,
+                          padding: "8px 14px", borderRadius: 8, fontSize: 11,
                           fontWeight: invoiceStaffFilter === st.id ? 600 : 400,
                           background: invoiceStaffFilter === st.id ? `${accent}18` : c.inputBg,
                           border: `1px solid ${invoiceStaffFilter === st.id ? accent : c.inputBorder}`,
@@ -11314,7 +11314,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         justifyContent: isMobile ? "space-between" : "flex-start", minWidth: 0
                       }}>
                         <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 100, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700, flexShrink: 0 }}>{count}</span>
+                        <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700, flexShrink: 0 }}>{count}</span>
                       </div>
                     ))}
                   </div>
@@ -11382,7 +11382,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
                             {!a.invoice_sent && (
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent"}
                               </span>
                             )}
@@ -11407,7 +11407,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {(() => {
                           const wie = a.staff_name ? [...new Set(String(a.staff_name).split(",").map(s => s.trim()).filter(Boolean))].join(", ") : "";
                           return wie ? (
-                            <div style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600, minWidth: 0, flexShrink: 1 }}>
+                            <div style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, fontWeight: 600, minWidth: 0, flexShrink: 1 }}>
                               <NavIcon name="user" size={9} color={accent} />
                               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wie}</span>
                             </div>
@@ -11418,7 +11418,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
                           {a.invoice_view_state === "hidden" ? (
                             <>
-                              <span style={{ fontSize: 10, color: c.textMuted, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 100, background: c.inputBg, border: `1px solid ${c.inputBorder}`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                              <span style={{ fontSize: 10, color: c.textMuted, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, background: c.inputBg, border: `1px solid ${c.inputBorder}`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                                 <NavIcon name="eye" size={10} color="currentColor" /> {lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden"}
                               </span>
                               <button
@@ -11441,7 +11441,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           ) : (
                             <>
                               {a.invoice_sent ? (
-                                <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: isMobile ? 4 : 5, padding: isMobile ? "6px 9px" : "6px 12px", borderRadius: 100, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
+                                <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: isMobile ? 4 : 5, padding: isMobile ? "6px 9px" : "6px 12px", borderRadius: 8, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
                                   <NavIcon name="check" size={10} color={c.success} /> {t.sent}
                                 </span>
                               ) : (
@@ -11695,7 +11695,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(2)}</div>
                           {weekChange !== 0 && (
-                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 100, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                               {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
                             </div>
                           )}
@@ -12485,7 +12485,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div key={key} role="radio" aria-checked={sel} tabIndex={0}
                         onClick={() => update(d => { d.booking_theme = key; return d; })}
                         onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); update(d => { d.booking_theme = key; return d; }); } }}
-                        style={{ padding: "10px 6px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: `1px solid ${sel ? accent : c.inputBorder}`, background: sel ? `${accent}18` : c.bg, color: sel ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                        style={{ padding: "10px 6px", borderRadius: 8, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: `1px solid ${sel ? accent : c.inputBorder}`, background: sel ? `${accent}18` : c.bg, color: sel ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
                     );
                   })}
                 </div>
@@ -12532,7 +12532,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Eigen lettertype" : lang === "es" ? "Tu propia fuente" : "Your own font"}</div>
                         <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Kies elk Google Fonts-lettertype met Professional." : lang === "es" ? "Elige cualquier tipografía de Google Fonts con Professional." : "Pick any Google Fonts typeface with Professional."}</div>
                       </div>
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: accent, background: `${accent}14`, border: `1px solid ${accent}33`, borderRadius: 100, padding: "4px 10px", flexShrink: 0 }}>Professional</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: accent, background: `${accent}14`, border: `1px solid ${accent}33`, borderRadius: 6, padding: "4px 10px", flexShrink: 0 }}>Professional</span>
                     </div>
                   );
                   return (
@@ -12764,7 +12764,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                         <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Hoofdlocatie" : lang === "es" ? "Ubicación principal" : "Main location"}</span>
-                        <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}22`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                           {lang === "nl" ? "Uit profiel" : lang === "es" ? "Del perfil" : "From profile"}
                         </span>
                       </div>
@@ -13572,12 +13572,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 {/* Zonder dit label lijkt een verborgen dienst gewoon
                                     "aan" — het oogje alleen is te makkelijk te missen. */}
                                 {s.visible === false && (
-                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 999, border: `1px solid ${c.border}`, color: c.textMuted }}>
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 6, border: `1px solid ${c.border}`, color: c.textMuted }}>
                                     {lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden"}
                                   </span>
                                 )}
                                 {(salonData.staff || []).some(mm => (mm.price_overrides || []).some(o => o.service_id === s.id)) && (
-                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 999, border: `1px solid ${accent}55`, color: accent, background: `${accent}10` }}>
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 6, border: `1px solid ${accent}55`, color: accent, background: `${accent}10` }}>
                                     {lang === "nl" ? "Teamprijzen" : lang === "es" ? "Precios de equipo" : "Team prices"}
                                   </span>
                                 )}
@@ -13596,7 +13596,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                         update(d => { d.services = d.services.map(sv => sv.id === s.id ? {...sv, category_id: newCatId} : sv); return d; });
                                       }}
                                       style={{
-                                        fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 999,
+                                        fontSize: 10, fontWeight: 600, padding: "3px 8px", borderRadius: 6,
                                         border: `1px solid ${s.category_id ? `${accent}55` : c.border}`,
                                         background: s.category_id ? `${accent}14` : "transparent",
                                         color: s.category_id ? accent : c.textMuted,
@@ -13652,10 +13652,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   { k: "fotos", nl: "Foto's", en: "Photos", es: "Fotos" },
                                 ];
                                 return (
-                                  <div style={{ display: "flex", gap: 4, background: c.inputBg, border: `1px solid ${c.border}`, borderRadius: 100, padding: 4, marginTop: 14 }}>
+                                  <div style={{ display: "flex", gap: 4, background: c.inputBg, border: `1px solid ${c.border}`, borderRadius: 8, padding: 4, marginTop: 14 }}>
                                     {segs.map(sg => (
                                       <button key={sg.k} type="button" onClick={() => setSvcSeg(sg.k)}
-                                        style={{ flex: 1, border: "none", borderRadius: 100, padding: "7px 0", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif",
+                                        style={{ flex: 1, border: "none", borderRadius: 6, padding: "7px 0", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif",
                                           background: svcSeg === sg.k ? accent : "transparent", color: svcSeg === sg.k ? c.btnOnDark : c.textSub, transition: "all 0.15s" }}>
                                         {lang === "nl" ? sg.nl : lang === "es" ? sg.es : sg.en}
                                       </button>
@@ -13984,7 +13984,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                     }
                                                     update(d => { d.services = d.services.map(svc => svc.id === s.id ? { ...svc, extras: svc.extras.map(x => x.id === ex.id ? { ...x, excluded_staff_ids: uit ? (x.excluded_staff_ids || []).filter(id => id !== m.id) : [...(x.excluded_staff_ids || []), m.id] } : x) } : svc); return d; });
                                                   }}
-                                                    style={{ padding: "5px 11px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 500,
+                                                    style={{ padding: "5px 11px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 500,
                                                       border: `1px solid ${uit ? c.border : accent}`,
                                                       background: uit ? "transparent" : `${accent}14`,
                                                       color: uit ? c.textMuted : accent,
@@ -14065,7 +14065,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                         return { ...f, excluded_staff_ids: off ? cur.filter(x => x !== m.id) : [...cur, m.id] };
                                                       })}
                                                         style={{
-                                                          padding: "6px 12px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 500,
+                                                          padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 500,
                                                           border: `1px solid ${off ? c.border : accent}`,
                                                           background: off ? "transparent" : `${accent}14`,
                                                           color: off ? c.textMuted : accent,
@@ -14218,7 +14218,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             const actief = svcCatFilter === chp.id;
                             return (
                               <button key={chp.id} type="button" onClick={() => setSvcCatFilter(actief && chp.id !== "all" ? "all" : chp.id)}
-                                style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 100, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'Jost',sans-serif", whiteSpace: "nowrap",
+                                style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'Jost',sans-serif", whiteSpace: "nowrap",
                                   background: actief ? accent : "transparent", color: actief ? c.btnOnDark : c.textSub,
                                   border: `1px solid ${actief ? accent : c.border}`, transition: "all 0.15s" }}>
                                 {chp.label}
@@ -15040,13 +15040,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             <div style={{ fontSize: 14, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                               {m.name}
                               {m.user_id === salonData.owner_id && (
-                                <span title={lang === "nl" ? "Eigenaar van deze salon" : lang === "es" ? "Propietario del salón" : "Salon owner"} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <span title={lang === "nl" ? "Eigenaar van deze salon" : lang === "es" ? "Propietario del salón" : "Salon owner"} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
                                   <NavIcon name="crown" size={9} color={accent} />
                                   {lang === "nl" ? "Eigenaar" : lang === "es" ? "Propietario" : "Owner"}
                                 </span>
                               )}
                               {m.email && m.user_id !== salonData.owner_id && (
-                                <span title={m.user_id ? (lang === "nl" ? "Gekoppeld aan login" : lang === "es" ? "Vinculado al acceso" : "Linked to login") : (lang === "nl" ? "Wacht op inloggen" : lang === "es" ? "Esperando el primer acceso" : "Waiting for first login")} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: m.user_id ? `${c.success}18` : `${c.warning}18`, color: m.user_id ? c.success : c.warning, border: `1px solid ${m.user_id ? `${c.success}33` : `${c.warning}33`}`, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                <span title={m.user_id ? (lang === "nl" ? "Gekoppeld aan login" : lang === "es" ? "Vinculado al acceso" : "Linked to login") : (lang === "nl" ? "Wacht op inloggen" : lang === "es" ? "Esperando el primer acceso" : "Waiting for first login")} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: m.user_id ? `${c.success}18` : `${c.warning}18`, color: m.user_id ? c.success : c.warning, border: `1px solid ${m.user_id ? `${c.success}33` : `${c.warning}33`}`, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                   {m.user_id ? (lang === "nl" ? "Gekoppeld" : lang === "es" ? "Vinculado" : "Linked") : (lang === "nl" ? "Uitgenodigd" : lang === "es" ? "Invitado" : "Invited")}
                                 </span>
                               )}
@@ -15060,7 +15060,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 8 }}>
                             {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
                               const svc = salonData.services.find(s => s.id === sid);
-                              return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
+                              return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
                             }) : (
                               <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : lang === "es" ? "Todos los servicios" : "All services"}</span>
                             )}
@@ -15117,7 +15117,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: m.bio ? 8 : 0 }}>
                           {(m.service_ids?.length > 0) ? m.service_ids.map(sid => {
                             const svc = salonData.services.find(s => s.id === sid);
-                            return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
+                            return svc ? <span key={sid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: `${accent}12`, color: accent, border: `1px solid ${accent}22` }}>{lang === "nl" ? (svc.name_nl || svc.name) : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl || svc.name) : (svc.name_en || svc.name_nl || svc.name)}</span> : null;
                           }) : (
                             <span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{lang === "nl" ? "Alle diensten" : lang === "es" ? "Todos los servicios" : "All services"}</span>
                           )}
@@ -15172,7 +15172,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                   // Mobiel groeien de chips mee zodat elke rij de
                                   // volle breedte vult — geen rafelige gaten meer
                                   // achter een lange chip.
-                                  style={{ fontSize: 10, padding: "4px 10px", borderRadius: 100, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s", ...(isMobile ? { flex: "1 0 auto", textAlign: "center" } : {}) }}>
+                                  style={{ fontSize: 10, padding: "4px 10px", borderRadius: 8, cursor: "pointer", border: `1px solid ${isOn ? accent : c.inputBorder}`, background: isOn ? `${accent}18` : "transparent", color: isOn ? accent : c.textSub, transition: "all 0.2s", ...(isMobile ? { flex: "1 0 auto", textAlign: "center" } : {}) }}>
                                   {lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name)}</div>);
                               })}
                             </div>
@@ -15363,7 +15363,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                             </select>
                             <button type="button" onClick={toggleBreak}
-                              style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 100, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", cursor: "pointer", border: `1px solid ${hasBreak ? accent : c.inputBorder}`, background: hasBreak ? `${accent}14` : "transparent", color: hasBreak ? accent : c.textMuted, whiteSpace: "nowrap" }}>
+                              style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 6, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", cursor: "pointer", border: `1px solid ${hasBreak ? accent : c.inputBorder}`, background: hasBreak ? `${accent}14` : "transparent", color: hasBreak ? accent : c.textMuted, whiteSpace: "nowrap" }}>
                               {lang === "nl" ? "Middagpauze" : lang === "es" ? "Pausa de mediodía" : "Midday break"}
                             </button>
                           </div>
@@ -15657,11 +15657,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span>{parseDate(x.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}</span>
                           {x.staff_id ? (
-                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}18`, color: accent, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                               {(salonData.staff || []).find(sm => sm.id === x.staff_id)?.name || (lang === "nl" ? "Medewerker" : lang === "es" ? "Personal" : "Staff")}
                             </span>
                           ) : (
-                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 100, background: c.inputBg, color: c.textMuted, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: c.inputBg, color: c.textMuted, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                               {lang === "nl" ? "Iedereen" : lang === "es" ? "Todos" : "Everyone"}
                             </span>
                           )}
@@ -15805,7 +15805,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             in the agenda modal so it's the same wording. */}
                         <span style={{
                           fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase",
-                          padding: "2px 7px", borderRadius: 100,
+                          padding: "2px 7px", borderRadius: 6,
                           background: v.staff_id ? `${accent}18` : `${c.danger}18`,
                           color: v.staff_id ? accent : c.danger,
                           border: `1px solid ${v.staff_id ? `${accent}44` : `${c.danger}44`}`,
@@ -16140,7 +16140,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <div key={v}
                         onClick={() => update(d => { d.auto_block_no_show_threshold = v; return d; })}
                         style={{
-                          padding: "8px 14px", borderRadius: 100, cursor: "pointer", fontSize: 11,
+                          padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11,
                           fontWeight: active ? 600 : 400,
                           background: active ? `${accent}18` : c.inputBg,
                           border: `1px solid ${active ? accent : c.inputBorder}`,
@@ -16268,7 +16268,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                       </div>
                       <div style={{
-                        padding: "5px 12px", borderRadius: 100, fontSize: 10, fontWeight: 700,
+                        padding: "5px 12px", borderRadius: 8, fontSize: 10, fontWeight: 700,
                         letterSpacing: "0.1em", textTransform: "uppercase",
                         background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}44`,
                         whiteSpace: "nowrap",
@@ -17084,7 +17084,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const VIS = [5, 8, 10, 12], PCT = [10, 15, 20, 25], DAYS = [30, 60, 90, 180];
                 const chip = (active, label, onClick) => (
                   <div key={label} onClick={onClick} role="radio" aria-checked={active}
-                    style={{ padding: "9px 4px", borderRadius: 100, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                    style={{ padding: "9px 4px", borderRadius: 8, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
                 );
                 const setNum = (key, min, max) => (e) => update(d => { const v = parseInt(e.target.value); if (Number.isFinite(v)) d[key] = Math.max(min, Math.min(max, v)); return d; });
                 const lbl = (txt, first) => <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6, marginTop: first ? 16 : 14 }}>{txt}</div>;
@@ -17276,7 +17276,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
             wisselen loopt via eigen edge-function-knoppen). */}
         {view === "instellingen" && settingsTab !== "diensten" && settingsTab !== "billing" && (
           <div style={{ position: "fixed", bottom: isMobile ? "calc(80px + env(safe-area-inset-bottom, 0px))" : 24, left: isMobile ? 0 : 260, right: 0, display: "flex", justifyContent: "center", zIndex: 99, pointerEvents: "none" }}>
-            <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 100, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", pointerEvents: "auto", boxShadow: `0 4px 20px ${accent}44, 0 8px 32px rgba(0,0,0,0.5)` }} onClick={async () => {
+            <button style={{ background: accent, color: c.btnOnDark, border: "none", borderRadius: 8, padding: isMobile ? "12px 36px" : "14px 48px", fontFamily: "'Jost',sans-serif", fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", pointerEvents: "auto", boxShadow: `0 4px 20px ${accent}44, 0 8px 32px rgba(0,0,0,0.5)` }} onClick={async () => {
                 // De salonnaam staat op de publieke boekingspagina, in elke
                 // e-mail en op elke factuur. Leeg opslaan kon gewoon, en dan
                 // stond er nergens meer een naam.
@@ -17525,7 +17525,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                       cursor: "pointer", border: `1px solid ${on ? accent : c.inputBorder}`,
                                       background: on ? `${accent}18` : "transparent",
                                       color: on ? accent : c.textSub, fontSize: 11, padding: "6px 10px",
-                                      borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 4,
+                                      borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 4,
                                       fontWeight: on ? 600 : 500,
                                     }}>
                                     {on && <NavIcon name="check" size={10} color={accent} />}

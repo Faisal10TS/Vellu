@@ -689,7 +689,7 @@ function SalonRoute({ lang, setLang }) {
         .vl-preview-back {
           position: fixed; left: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 360;
           display: inline-flex; align-items: center; gap: 7px;
-          padding: 11px 16px; border-radius: 100px; text-decoration: none;
+          padding: 11px 16px; border-radius: 8px; text-decoration: none;
           background: rgba(22,19,16,0.92); color: #f6f2ec;
           border: 1px solid rgba(255,255,255,0.18);
           backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);

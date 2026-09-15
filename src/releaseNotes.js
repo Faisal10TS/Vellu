@@ -14,6 +14,21 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-15",
+    date: "2026-09-15",
+    title: { nl: "Vierkante knoppen", en: "Square buttons", es: "Botones cuadrados" },
+    items: [
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Knoppen, filters en labels hebben nu zachte vierkante hoeken in plaats van pilvormen, in de app én op je boekingspagina, in dezelfde stijl als de Vellu-website. Schakelaars en ronde iconen blijven rond.",
+          en: "Buttons, filters and labels now have soft square corners instead of pill shapes, in the app and on your booking page, in the same style as the Vellu website. Switches and round icons stay round.",
+          es: "Los botones, filtros y etiquetas tienen ahora esquinas cuadradas suaves en lugar de forma de píldora, en la app y en tu página de reservas, en el mismo estilo que la web de Vellu. Los interruptores y los iconos redondos siguen redondos.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-09",
     date: "2026-09-09",
     title: { nl: "Prijs per behandeling bij een gedeelde boeking", en: "Price per treatment in a shared booking", es: "Precio por tratamiento en una reserva compartida" },
