@@ -212,6 +212,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           .at-step { transition: background 0.25s ease; }
           .at-step:hover { background: ${PUTTY}44; }
+          .at-nav-find, .at-nav-create { display: none; }
+          @media (min-width: 768px) { .at-nav-create { display: inline-block; } }
+          @media (min-width: 900px) { .at-nav-find { display: inline; } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
@@ -220,7 +223,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
             <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 24px)", fontWeight: 400, letterSpacing: "0.22em", color: INK }}>vellu</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, display: isMobile ? "none" : "inline" }}>
+              <button className="at-nav-find" onClick={() => document.getElementById("find-salon")?.scrollIntoView({ behavior: "smooth" })} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
                 {t.findSalonNav}
               </button>
               <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: 100, padding: 3, background: P.bgCard }}>
@@ -235,13 +238,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </button>
               {/* "Maak je pagina" (Faisal 15-09): vaste aanmeld-knop in de balk,
                   opent /owner meteen op het registratie-tabblad. Op mobiel
-                  past hij niet naast taalkeuze + inloggen; daar staat de
-                  hero-knop toch direct in beeld. */}
-              {!isMobile && (
-                <button className="btn-primary" data-create-page style={{ fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner?signup=1")}>
-                  {t.createPageNav}
-                </button>
-              )}
+                  past hij niet naast taalkeuze + inloggen (daar staat de
+                  hero-knop toch direct in beeld); tussen 768 en 900px wijkt
+                  de klant-link, niet deze knop — zie .at-nav-find/.at-nav-create.
+                  width:auto: .btn-primary is standaard 100% breed, wat hier de
+                  rest van de balk platdrukte. */}
+              <button className="btn-primary at-nav-create" data-create-page style={{ width: "auto", fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner?signup=1")}>
+                {t.createPageNav}
+              </button>
             </div>
           </div>
         </nav>
