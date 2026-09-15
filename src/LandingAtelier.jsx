@@ -241,7 +241,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
              blijft iets opgetild met diepere schaduw. */
           .at-faq-card { background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-faq-card:hover, .at-faq-card.open { transform: translateY(-4px); box-shadow: 0 32px 52px -26px rgba(69,58,43,0.62), 0 2px 4px rgba(69,58,43,0.05); }
-          .at-faq-plus { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 20px; line-height: 1; flex-shrink: 0; transition: transform 0.25s ease, background 0.2s ease, color 0.2s ease; }
+          .at-faq-plus { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 20px; line-height: 1; flex-shrink: 0; transition: background 0.2s ease, color 0.2s ease; }
           .at-faq-card.open .at-faq-plus { background: ${INK}; color: ${BONE}; }
           @media (prefers-reduced-motion: reduce) { .at-faq-card, .at-faq-card:hover, .at-faq-card.open { transform: none; } }
           .at-nav-find { display: none; }
@@ -519,7 +519,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <div key={i} className={`at-faq-card vl-glow${open ? " open" : ""}`} data-faq-card onMouseMove={glowMove}>
                     <div role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }} style={{ padding: "16px 16px 16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
-                      <span aria-hidden="true" className="at-faq-plus" style={{ transform: open ? "rotate(45deg)" : "none" }}>+</span>
+                      {/* Alleen het plusje draait naar een kruisje; de tegel blijft recht. */}
+                      <span aria-hidden="true" className="at-faq-plus"><span style={{ display: "inline-block", transition: "transform 0.25s ease", transform: open ? "rotate(45deg)" : "none" }}>+</span></span>
                     </div>
                     <div style={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                       <div style={{ overflow: "hidden" }}>
