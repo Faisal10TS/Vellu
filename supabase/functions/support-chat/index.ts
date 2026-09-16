@@ -196,6 +196,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 # Wachtlijst
 - Als er geen tijd vrij is, kan een klant zich op de wachtlijst zetten (per gewenste dag). De eigenaar ziet de wachtlijst gegroepeerd per klant, met dienst en gewenste medewerker.
 - De klant krijgt een bevestigingsmail en de salon een melding zodra iemand zich aanmeldt. Komt er een plek vrij (bijv. door een annulering), dan kan de eerste op de wachtlijst automatisch een mail krijgen.
+- Is de dag waarvoor iemand wachtte voorbij, dan verdwijnt die aanmelding vanzelf uit de wachtlijst (sinds 16-09-2026; 's nachts definitief opgeruimd). De eigenaar hoeft verlopen aanmeldingen niet zelf weg te halen.
 - Je markeert per aanmelding "benaderd" of verwijdert 'm.
 
 # Valuta & regio (Instellingen → Salon → "Regio & valuta")

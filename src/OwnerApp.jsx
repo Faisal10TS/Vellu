@@ -2664,6 +2664,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .select("id, staff_id, date, client_name, client_email, client_phone, service_ids, notes, status, created_at, notified_at")
           .eq("owner_id", ownerId)
           .in("status", ["waiting", "notified"])
+          // Een dag die voorbij is telt niet meer (Faisal 16-09): de rij verdwijnt
+          // hier meteen uit beeld; de nachtelijke cron-job ruimt hem écht op.
+          .gte("date", fmt(getToday()))
           .order("created_at", { ascending: false }),
         supabase
           .from("profiles")
@@ -5638,6 +5641,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       if (salonData.waitlist_enabled === false) return null;
       if (!salonData.owner_id || !a.date) return null;
+      // Een afspraak in het verleden annuleren maakt geen plek vrij voor de wachtlijst.
+      if (a.date < fmt(getToday())) return null;
       const { data: entries } = await supabase
         .from("waitlist").select("id, client_name, client_email")
         .eq("owner_id", salonData.owner_id)

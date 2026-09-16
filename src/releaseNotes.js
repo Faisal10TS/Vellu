@@ -35,6 +35,14 @@ export const RELEASES = [
           es: "Cuando el cliente vuelve, el bloque se abre en la pestaña La última vez con lo que escribiste entonces y la pregunta ¿Lo hizo? con Sí o No. Así sabes al entrar qué le aconsejaste y si lo siguió. El equipo ve las notas de sus propias citas.",
         },
       },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Wachtlijst: aanmeldingen voor een dag die al voorbij is verdwijnen nu vanzelf. Je hoeft ze niet meer zelf weg te halen.",
+          en: "Waitlist: sign-ups for a day that has already passed now disappear by themselves. You no longer have to remove them yourself.",
+          es: "Lista de espera: las inscripciones para un día que ya pasó desaparecen solas. Ya no tienes que quitarlas tú.",
+        },
+      },
     ],
   },
   {
