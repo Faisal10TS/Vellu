@@ -17462,12 +17462,18 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
             );
             return (<>
               {moreOpen && rest.length > 0 && (
-                <div data-more-sheet onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.18)" }}>
-                  <div onClick={e => e.stopPropagation()} className="vl-card" style={{ position: "absolute", left: 12, right: 12, bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", padding: 8 }}>
+                /* Meer-menu: dekkend paneel (c.bg, niet de doorschijnende kaarttint)
+                   op een gedimde, vervaagde pagina, met een icoontegel per keuze —
+                   Faisal 16-09: "not really clear what you're clicking". */
+                <div data-more-sheet onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.42)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+                  <div role="menu" aria-label={lang === "nl" ? "Meer" : lang === "es" ? "Más" : "More"} onClick={e => e.stopPropagation()} data-more-panel style={{ position: "absolute", left: 12, right: 12, bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", padding: 8, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, boxShadow: "0 24px 60px -18px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.12)" }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, padding: "8px 12px 6px" }}>{lang === "nl" ? "Meer" : lang === "es" ? "Más" : "More"}</div>
                     {rest.map(([k, icon, label]) => (
-                      <div key={k} data-tour={`nav-${k}`} role="tab" tabIndex={0} aria-selected={view === k} onClick={() => { setView(k); setMoreOpen(false); }} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); setMoreOpen(false); } }}
-                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", color: view === k ? accent : c.text, background: view === k ? `${accent}12` : "transparent", fontWeight: view === k ? 600 : 400 }}>
-                        <NavIcon name={icon} size={16} color={view === k ? accent : c.textSub} /> {label}
+                      <div key={k} data-tour={`nav-${k}`} role="menuitem" tabIndex={0} aria-current={view === k ? "page" : undefined} onClick={() => { setView(k); setMoreOpen(false); }} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); setMoreOpen(false); } }}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", minHeight: 52, borderRadius: 10, fontSize: 14, cursor: "pointer", color: view === k ? accent : c.text, background: view === k ? `${accent}12` : "transparent", fontWeight: view === k ? 600 : 500 }}>
+                        <span className="vl-ico-tile" style={view === k ? undefined : { background: c.inputBg, color: c.textSub }}><NavIcon name={icon} size={16} color="currentColor" /></span>
+                        <span style={{ flex: 1 }}>{label}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                       </div>
                     ))}
                   </div>
