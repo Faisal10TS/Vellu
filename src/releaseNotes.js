@@ -69,6 +69,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Stempelkaart per teamlid: op de klantkaart staat nu bij elk teamlid een eigen schakelaar. Zet je die uit, dan tellen bezoeken bij dat teamlid niet mee en krijgt de klant daar geen code voor; bij de anderen spaart ze gewoon door.",
+          en: "Loyalty card per team member: the client card now has a switch next to each team member. Turn it off and visits with that team member no longer count and no code is issued for them; with the others the client keeps collecting.",
+          es: "Tarjeta de fidelidad por miembro del equipo: la ficha del cliente tiene ahora un interruptor junto a cada miembro. Si lo desactivas, las visitas con esa persona no cuentan y no se emite código; con los demás sigue acumulando.",
+        },
+      },
+      {
         kind: "improved", audience: ["staff"],
         text: {
           nl: "Ook in jouw app hebben kaarten en afspraken nu dezelfde zachte vierkante hoeken en zwevende schaduw als de website en de boekingspagina.",
