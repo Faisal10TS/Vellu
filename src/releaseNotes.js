@@ -14,6 +14,38 @@
 
 export const RELEASES = [
   {
+    // Vierde blok op 16-09 (dagweergave), zelfde achtervoegsel-truc.
+    id: "2026-09-16d",
+    date: "2026-09-16",
+    title: { nl: "Dagweergave vernieuwd", en: "Day view redesigned", es: "Vista de día renovada" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Agenda, dagweergave: één datumregel met het aantal afspraken en de verwachte omzet, daaronder een weekstrook om snel een dag te kiezen (stipje = afspraken) en drie knoppen: Afspraak, Blokkeer tijd, Blokkeer behandeling. Op de telefoon én op de computer.",
+          en: "Calendar, day view: one date line with the number of appointments and the expected revenue, below it a week strip to pick a day quickly (dot = appointments) and three buttons: Appointment, Block time, Block treatment. On the phone and on the computer.",
+          es: "Agenda, vista de día: una línea de fecha con el número de citas y los ingresos previstos, debajo una tira semanal para elegir un día rápidamente (punto = citas) y tres botones: Cita, Bloquear hora, Bloquear tratamiento. En el móvil y en el ordenador.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Tijdlijn: elke afspraak toont de prijs, vrije gaten van minstens een half uur staan gestippeld met de tijd erin en openen met één tik een nieuwe afspraak op dat tijdstip, pauzes en blokkades zijn grijs gearceerd, en de nu-lijn staat in je eigen kleur met de tijd erbij.",
+          en: "Timeline: every appointment shows the price, free gaps of at least half an hour appear dotted with the time in them and open a new appointment at that time with one tap, breaks and blocks are hatched grey, and the now line is in your own colour with the time next to it.",
+          es: "Línea de tiempo: cada cita muestra el precio, los huecos libres de al menos media hora aparecen punteados con la hora y abren una nueva cita a esa hora con un toque, las pausas y bloqueos van rayados en gris, y la línea de ahora está en tu color con la hora al lado.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Tik op een afspraak in de tijdlijn en er opent een paneel met de volledige afspraakkaart en al haar knoppen (Markeer voltooid, Verplaats, Bewerk, No-show, Annuleer, agenda, WhatsApp). De lange lijst met kaarten onder de tijdlijn staat ingeklapt achter Lijst met alle knoppen.",
+          en: "Tap an appointment in the timeline and a panel opens with the full appointment card and all its buttons (Mark complete, Reschedule, Edit, No-show, Cancel, calendar, WhatsApp). The long list of cards under the timeline is collapsed behind List with all buttons.",
+          es: "Toca una cita en la línea de tiempo y se abre un panel con la tarjeta completa y todos sus botones (Completar, Reprogramar, Editar, No-show, Cancelar, calendario, WhatsApp). La larga lista de tarjetas bajo la línea de tiempo queda plegada tras Lista con todos los botones.",
+        },
+      },
+    ],
+  },
+  {
     // Derde blok op 16-09 (medewerkersapp), zelfde achtervoegsel-truc.
     id: "2026-09-16c",
     date: "2026-09-16",

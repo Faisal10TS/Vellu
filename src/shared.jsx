@@ -2193,6 +2193,8 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   /* Label: hoogstens twee regels (langere NL/ES-teksten breken af in plaats
      van "PHONE CALEN…"); min-height van de tegel houdt alle tegels even hoog. */
   .vl-tile .vl-tile-label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; max-width: 100%; overflow-wrap: anywhere; }
+  /* Afspraakkaart binnen het agenda-paneel (16-09): het paneel is al de kaart. */
+  [data-sheet-card] .appt-card { border: none; box-shadow: none; padding: 0; margin: 0; background: transparent; }
   .vl-tile:hover { transform: translateY(-2px); border-color: ${c.borderHover}; }
   .vl-tile.primary { background: ${surface}; color: ${surfaceInk}; border-color: ${surfaceBorder}; }
   .vl-tile .vl-tile-ico { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: flex; align-items: center; justify-content: center; }
