@@ -3991,10 +3991,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const noShowFeeSentence = (pct, l) => l === "nl"
     ? `Niet verschijnen zonder afmelding (no-show): wij brengen ${pct}% van het afspraakbedrag in rekening.`
     : `No-show without cancelling: we charge ${pct}% of the appointment price.`;
-  const policyMentionsNoShowFee = (pct) => {
-    const txt = `${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`;
-    return /no[- ]?show/i.test(txt) && txt.includes(`${pct}%`);
-  };
+  // Alleen of het beleid no-shows noemt (in eigen woorden mag ook — "Staat al
+  // in mijn beleid"); niet de exacte zin of het percentage.
+  const policyMentionsNoShowFee = () => /no[- ]?show/i.test(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`);
   const addNoShowFeeToPolicy = (pct) => update(d => {
     const nl = (d.booking_policy || "").trim(), en = (d.booking_policy_en || "").trim();
     if (!nl.includes(noShowFeeSentence(pct, "nl"))) d.booking_policy = (nl ? nl + "\n" : "") + noShowFeeSentence(pct, "nl");
@@ -7943,6 +7942,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button className="btn-primary" data-no-show-fee-add onClick={() => { addNoShowFeeToPolicy(noShowFeeAsk); update(d => { d.no_show_fee_enabled = true; d.no_show_fee_pct = noShowFeeAsk; return d; }); setNoShowFeeAsk(null); }}>
                 {lang === "nl" ? "Zin toevoegen en aanzetten" : lang === "es" ? "Añadir la frase y activar" : "Add the sentence and turn on"}
+              </button>
+              {/* Staat het er al in eigen woorden in (Faisal 16-09)? Dan alleen
+                  aanzetten; de waarschuwing kijkt alleen of het beleid no-shows
+                  überhaupt noemt, niet naar de exacte zin. */}
+              <button className="btn-ghost" data-no-show-fee-already onClick={() => { update(d => { d.no_show_fee_enabled = true; d.no_show_fee_pct = noShowFeeAsk; return d; }); setNoShowFeeAsk(null); }}>
+                {lang === "nl" ? "Staat al in mijn beleid" : lang === "es" ? "Ya está en mi política" : "It's already in my policy"}
               </button>
               <button className="btn-ghost" data-no-show-fee-self onClick={() => { update(d => { d.no_show_fee_enabled = true; d.no_show_fee_pct = noShowFeeAsk; return d; }); setNoShowFeeAsk(null); }}>
                 {lang === "nl" ? "Ik zet het er zelf in" : lang === "es" ? "Lo pongo yo" : "I'll add it myself"}
@@ -16348,11 +16353,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     );
                   })}
                 </div>
-                {salonData.no_show_fee_enabled && !policyMentionsNoShowFee(salonData.no_show_fee_pct ?? 20) && (
+                {salonData.no_show_fee_enabled && !policyMentionsNoShowFee() && (
                   <div data-no-show-fee-warn style={{ marginTop: 12, padding: "10px 12px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 10, fontSize: 11, color: c.textSub, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <NavIcon name="alerttri" size={12} color={c.warning} />
                     <span style={{ flex: 1, minWidth: 160, lineHeight: 1.5 }}>
-                      {lang === "nl" ? `Je boekingsbeleid noemt de vergoeding van ${salonData.no_show_fee_pct ?? 20}% nog niet. Zonder die zin kun je hem niet in rekening brengen.` : lang === "es" ? `Tu política de reservas aún no menciona la tarifa del ${salonData.no_show_fee_pct ?? 20}%. Sin esa frase no puedes cobrarla.` : `Your booking policy does not mention the ${salonData.no_show_fee_pct ?? 20}% fee yet. Without that sentence you cannot charge it.`}
+                      {lang === "nl" ? `Je boekingsbeleid noemt no-shows nog niet. Zonder die zin kun je de vergoeding van ${salonData.no_show_fee_pct ?? 20}% niet in rekening brengen.` : lang === "es" ? `Tu política de reservas aún no menciona las ausencias. Sin esa frase no puedes cobrar la tarifa del ${salonData.no_show_fee_pct ?? 20}%.` : `Your booking policy does not mention no-shows yet. Without that sentence you cannot charge the ${salonData.no_show_fee_pct ?? 20}% fee.`}
                     </span>
                     <button type="button" className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }} onClick={() => addNoShowFeeToPolicy(salonData.no_show_fee_pct ?? 20)}>
                       {lang === "nl" ? "Zin toevoegen" : lang === "es" ? "Añadir frase" : "Add sentence"}
