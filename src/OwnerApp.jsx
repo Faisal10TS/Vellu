@@ -8968,7 +8968,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div data-tour="salon-link" style={{ display: "flex", alignItems: "center", gap: 4, background: c.inputBg, border: `1px solid ${c.border}`, borderRadius: 8, padding: "4px 4px 4px 10px", fontSize: 11, color: c.textSub, minWidth: 0 }}>
                   <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>vellu.cc/{salonData.id}</span>
                   <button type="button" aria-label={t.preview} title={t.preview} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${c.border}`, background: c.bgCard, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}><NavIcon name="eye" size={13} color="currentColor" /></button>
-                  <button type="button" aria-label={t.copyLink} title={copied ? t.copied : t.copyLink} onClick={copyLink} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${copied ? c.success : c.border}`, background: c.bgCard, color: copied ? c.success : c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}><NavIcon name={copied ? "check" : "link"} size={13} color="currentColor" /></button>
+                  <button type="button" aria-label={lang === "nl" ? "Kopieer boekingslink" : lang === "es" ? "Copiar enlace de reservas" : "Copy booking link"} title={copied ? t.copied : (lang === "nl" ? "Kopieer boekingslink" : lang === "es" ? "Copiar enlace de reservas" : "Copy booking link")} onClick={copyLink} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${copied ? c.success : c.border}`, background: c.bgCard, color: copied ? c.success : c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}><NavIcon name={copied ? "check" : "link"} size={13} color="currentColor" /></button>
                 </div>
               </div>
             </div>
@@ -9340,9 +9340,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                       ) : <div style={{ fontSize: 10, color: c.textMuted, padding: "4px 0" }}>{lang === "nl" ? "Nog geen reviews" : lang === "es" ? "Aún no hay reseñas" : "No reviews yet"}</div> })}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.55fr 1fr", gap: isMobile ? 14 : 18, marginBottom: 22, alignItems: "start" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.45fr 1fr", gap: isMobile ? 14 : 18, marginBottom: 22, alignItems: "stretch" }}>
                     {/* Left: Today's appointments — the hero */}
-                    <div className="vl-card" data-dash-today style={{ padding: isMobile ? "16px 14px" : "20px 22px", position: "relative", overflow: "hidden" }}>
+                    <div className="vl-card" data-dash-today style={{ padding: isMobile ? "16px 14px" : "20px 22px", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
                       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
                         <div>
@@ -9360,7 +9360,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         )}
                       </div>
                       {todayAppts.length === 0 ? (
-                        <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative" }}>
+                        <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
                           <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
                           <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
                           <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : lang === "es" ? "Ver agenda →" : "View agenda →"}</div>
@@ -9378,7 +9378,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
 
                     {/* Right: snelle acties als zwevende tegels (restyle 16-09);
-                        de KPI-kaarten staan sindsdien als tegelrij bovenaan. */}
+                        de KPI-kaarten staan sindsdien als tegelrij bovenaan.
+                        Daaronder de populaire diensten, zodat de kolom de
+                        Vandaag-kaart in hoogte volgt. */}
+                    <div data-dash-right style={{ display: "flex", flexDirection: "column", gap: isMobile ? 14 : 18, minWidth: 0 }}>
                     {(() => {
                       const heeftKassa = salonData.plan === "professional" && (salonData.products || []).some(p => p.active);
                       const heeftExport = appts.length > 0;
@@ -9387,8 +9390,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         { key: "add", primary: true, icon: "plus", label: isMobile ? L("+ Afspraak", "+ Booking", "+ Cita") : t.addAppointment, onClick: openAddAppt },
                         ...(heeftKassa ? [{ key: "kassa", icon: "kassa", label: isMobile ? L("Kassa", "Sale", "Caja") : L("Verkoop / kassa", "Sale / checkout", "Venta / caja"),
                           onClick: () => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); } }] : []),
-                        { key: "preview", icon: "eye", label: isMobile ? L("Bekijk", "Preview", "Ver") : t.previewPage, onClick: () => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer") },
-                        { key: "copy", icon: copied ? "check" : "link", label: copied ? t.copied : (isMobile ? L("Kopieer", "Copy", "Copiar") : t.copyLink), onClick: copyLink },
+                        { key: "preview", icon: "eye", label: isMobile ? L("Bekijk", "Preview", "Ver") : L("Bekijk boekingspagina", "View booking page", "Ver página de reservas"), title: L("Open je boekingspagina in een nieuw tabblad", "Open your booking page in a new tab", "Abre tu página de reservas en una pestaña nueva"), onClick: () => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer") },
+                        { key: "copy", icon: copied ? "check" : "link", label: copied ? t.copied : (isMobile ? L("Kopieer link", "Copy link", "Copiar enlace") : L("Kopieer boekingslink", "Copy booking link", "Copiar enlace de reservas")), title: L("Kopieer de link naar je boekingspagina", "Copy the link to your booking page", "Copiar el enlace a tu página de reservas"), onClick: copyLink },
                         ...(heeftExport ? [{ key: "export", icon: "download", label: isMobile ? "Export" : t.exportCalendar,
                           onClick: () => { const upcoming = appts.filter(a => a.status === "confirmed"); if (upcoming.length === 0) return; exportCalendar(upcoming); } }] : []),
                         // Live telefoon-agenda: springt naar de abonnements-kaart in
@@ -9405,13 +9408,68 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {acties.map(x => (
                               <button key={x.key} type="button" className={`vl-tile${x.primary ? " primary" : ""}`} title={x.title} onClick={x.onClick}>
                                 <span className="vl-tile-ico"><NavIcon name={x.icon} size={15} color="currentColor" /></span>
-                                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{x.label}</span>
+                                <span className="vl-tile-label">{x.label}</span>
                               </button>
                             ))}
                           </div>
                         </div>
                       );
                     })()}
+                    {/* Populaire diensten — onder de snelle acties, zodat de rechterkolom
+                        net zo hoog wordt als de Vandaag-kaart (Faisal 16-09: "empty spot"). */}
+                    <div className="vl-card" data-dash-popular style={{ padding: isMobile ? "16px 14px" : "18px 18px", display: "flex", flexDirection: "column", flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
+                        <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Top 5" : "Top 5"}</div>
+                      </div>
+                      {(() => {
+                        const svcStats = {};
+                        appts.forEach(a => {
+                          if (a.status !== "completed" && a.status !== "confirmed") return;
+                          const n = a.service_name?.split(" — ")[0] || "?";
+                          if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
+                          svcStats[n].count += 1;
+                          svcStats[n].revenue += parseFloat(a.service_price || 0);
+                        });
+                        const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                        if (sorted.length === 0) return (
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
+                            <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
+                            <div style={{ fontSize: 12 }}>{t.noAppts}</div>
+                          </div>
+                        );
+                        const max = sorted[0][1].count;
+                        return (
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                            {sorted.map(([name, stats], idx) => {
+                              const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
+                              const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
+                              return (
+                                <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                  <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                                    {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                                    {!thumb && <NavIcon name="scissors" size={16} color={c.textMuted} />}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(2)}</span>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                      <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    </div>
                   </div>
                   </>
                 );
@@ -9438,8 +9496,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 );
               })()}
-              {/* Revenue Chart + Popular Services */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
+              {/* Omzetgrafiek over de volle breedte (populaire diensten staan
+                  sinds 16-09 rechts onder de snelle acties). */}
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
                 {/* Revenue area chart */}
                 {(() => {
                   const weeks = [];
@@ -9570,59 +9629,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   );
                 })()}
 
-                {/* Popular services — thumbnails + revenue */}
-                <div className="vl-card" style={{ padding: "20px 22px", display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
-                    <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Top 5" : "Top 5"}</div>
-                  </div>
-                  {(() => {
-                    const svcStats = {};
-                    appts.forEach(a => {
-                      if (a.status !== "completed" && a.status !== "confirmed") return;
-                      const n = a.service_name?.split(" — ")[0] || "?";
-                      if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
-                      svcStats[n].count += 1;
-                      svcStats[n].revenue += parseFloat(a.service_price || 0);
-                    });
-                    const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
-                    if (sorted.length === 0) return (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
-                        <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
-                        <div style={{ fontSize: 12 }}>{t.noAppts}</div>
-                      </div>
-                    );
-                    const max = sorted[0][1].count;
-                    return (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                        {sorted.map(([name, stats], idx) => {
-                          const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
-                          const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
-                          return (
-                            <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
-                                {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
-                                {!thumb && <NavIcon name="scissors" size={16} color={c.textMuted} />}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(2)}</span>
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
-                                  </div>
-                                  <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
               </div>
 
             </div>

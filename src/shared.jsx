@@ -2186,10 +2186,13 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .vl-tile {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     padding: 14px 10px; border-radius: 12px; border: 1px solid ${c.border}; background: ${c.bgCard};
-    box-shadow: 0 10px 22px -18px rgba(0,0,0,0.35); cursor: pointer; min-width: 0;
+    box-shadow: 0 10px 22px -18px rgba(0,0,0,0.35); cursor: pointer; min-width: 0; min-height: 98px;
     font-family: var(--body-font, 'Jost', sans-serif); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${c.textSub}; text-align: center;
     transition: transform 0.2s, border-color 0.2s;
   }
+  /* Label: hoogstens twee regels (langere NL/ES-teksten breken af in plaats
+     van "PHONE CALEN…"); min-height van de tegel houdt alle tegels even hoog. */
+  .vl-tile .vl-tile-label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; max-width: 100%; overflow-wrap: anywhere; }
   .vl-tile:hover { transform: translateY(-2px); border-color: ${c.borderHover}; }
   .vl-tile.primary { background: ${surface}; color: ${surfaceInk}; border-color: ${surfaceBorder}; }
   .vl-tile .vl-tile-ico { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: flex; align-items: center; justify-content: center; }
