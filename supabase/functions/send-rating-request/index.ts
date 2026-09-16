@@ -45,34 +45,42 @@ function cors(origin: string | null) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-function render(lang: "nl" | "en", salon: string, link: string) {
+// `again` = de salon kreeg de mail al eerder (Resend): ander onderwerp en een
+// regel bovenaan. Gmail zet een mail met hetzelfde onderwerp in dezelfde
+// conversatie en verbergt dan alles wat letterlijk gelijk is aan de vorige
+// mail achter "…" (Faisal zag bij zijn tweede testmail alleen de aanhef en de
+// eerste alinea). Een eigen onderwerp houdt de herhaling uit die conversatie.
+function render(lang: "nl" | "en", salon: string, link: string, again = false) {
   const eS = esc(salon), eL = esc(link);
   const t = lang === "nl" ? {
-    subject: "Hoe bevalt Vellu? Geef je cijfer in één minuut",
+    subject: (again ? "Herinnering: " : "") + "Hoe bevalt Vellu? Geef je cijfer in één minuut",
     fromName: "Vellu",
     hi: `Hoi ${eS},`,
+    again: "Je kreeg deze mail al eerder. Hierbij nog een keer je persoonlijke link, voor als hij was weggezakt.",
     p1: "Je werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat vind je van Vellu, en wat mis je?",
     btn: "Geef je cijfer",
     p2: "Je cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.",
     p3: "Liever direct antwoorden? Reageer gewoon op deze mail.",
     thanks: "Dankjewel,",
     fallback: "Werkt de knop niet? Kopieer deze link in je browser:",
-    plain: `Hoi ${salon},\n\nJe werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat vind je van Vellu, en wat mis je?\n\nGeef je cijfer: ${link}\n\nJe cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.\n\nLiever direct antwoorden? Reageer gewoon op deze mail.\n\nDankjewel,\nTeam Vellu\nvellu.cc`,
+    plain: `Hoi ${salon},\n\n${again ? "Je kreeg deze mail al eerder. Hierbij nog een keer je persoonlijke link, voor als hij was weggezakt.\n\n" : ""}Je werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat vind je van Vellu, en wat mis je?\n\nGeef je cijfer: ${link}\n\nJe cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.\n\nLiever direct antwoorden? Reageer gewoon op deze mail.\n\nDankjewel,\nTeam Vellu\nvellu.cc`,
   } : {
-    subject: "How is Vellu working for you? Rate it in one minute",
+    subject: (again ? "Reminder: " : "") + "How is Vellu working for you? Rate it in one minute",
     fromName: "Vellu",
     hi: `Hi ${eS},`,
+    again: "You received this email before. Here is your personal link once more, in case it slipped away.",
     p1: "You have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What do you think of Vellu, and what do you miss?",
     btn: "Give your score",
     p2: "Your score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.",
     p3: "Prefer to answer directly? Just reply to this email.",
     thanks: "Thank you,",
     fallback: "Button not working? Copy this link into your browser:",
-    plain: `Hi ${salon},\n\nYou have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What do you think of Vellu, and what do you miss?\n\nGive your score: ${link}\n\nYour score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.\n\nPrefer to answer directly? Just reply to this email.\n\nThank you,\nTeam Vellu\nvellu.cc`,
+    plain: `Hi ${salon},\n\n${again ? "You received this email before. Here is your personal link once more, in case it slipped away.\n\n" : ""}You have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What do you think of Vellu, and what do you miss?\n\nGive your score: ${link}\n\nYour score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.\n\nPrefer to answer directly? Just reply to this email.\n\nThank you,\nTeam Vellu\nvellu.cc`,
   };
   const html = `<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">
   <div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:#8A7356;margin:12px auto;"></div></div>
   <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${t.hi}</p>
+  ${again ? `<p style="font-size:14px;line-height:1.7;margin:0 0 16px;color:#8A7356;">${t.again}</p>` : ""}
   <p style="font-size:15px;line-height:1.7;margin:0 0 24px;color:#333;">${t.p1}</p>
   <div style="text-align:center;margin:0 0 24px;"><a href="${eL}" style="display:inline-block;background:#5B4C3A;color:#F4EFE6;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:15px 34px;border-radius:8px;">${t.btn}</a></div>
   <p style="font-size:14px;line-height:1.7;margin:0 0 14px;color:#333;">${t.p2}</p>
@@ -120,9 +128,13 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
   if (job.mode === "test") {
     const to = String(job.test_to || "delivered@resend.dev");
     const out: any[] = [];
+    // Tijd in het onderwerp: elke testmail een eigen conversatie in Gmail,
+    // anders verbergt Gmail bij de tweede test alles wat gelijk is aan de
+    // eerste achter "…" (zie render).
+    const stamp = new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" }).format(new Date());
     for (const lang of ["nl", "en"] as const) {
       const m = render(lang, lang === "nl" ? "TTNB Den Haag" : "Beauty by Eydy", `${SITE}/beoordeel/voorbeeld`);
-      const r = await sendResend(to, m.fromName, `[TEST ${lang}] ${m.subject}`, m.html, m.text);
+      const r = await sendResend(to, m.fromName, `[TEST ${lang} ${stamp}] ${m.subject}`, m.html, m.text);
       out.push({ lang, to, subject: m.subject, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body, html: m.html, text: m.text });
     }
     return { result: { mode: "test", to, sent: out.filter((x) => x.ok).length, results: out }, status: 200 };
@@ -154,7 +166,7 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
 
   const results: any[] = [];
   for (const r of list) {
-    const m = render(r.lang, r.salon, r.link);
+    const m = render(r.lang, r.salon, r.link, r.sent_count > 0);
     const sent = await sendResend(r.to, m.fromName, m.subject, m.html, m.text);
     if (sent.ok) await supabase.from("app_rating_invites").update({ sent_at: new Date().toISOString(), sent_count: r.sent_count + 1 }).eq("owner_id", r.id);
     results.push({ id: r.id, salon: r.salon, to: r.to, lang: r.lang, ok: sent.ok, status: sent.status, body: sent.ok ? undefined : sent.body });
