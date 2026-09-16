@@ -3256,8 +3256,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map((cl) => (
-            <div key={cl.key} onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, cursor: "pointer" }}>
-              <div style={{ width: 42, height: 42, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
+            <div key={cl.key} data-client-row onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 10, background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
                 <div style={{ fontSize: 11, color: cl.next ? accent : c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -9489,7 +9489,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
                   const gradId = "rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
                   return (
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                    <div className="vl-card" style={{ padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                       {/* Header */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
@@ -9571,7 +9571,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 })()}
 
                 {/* Popular services — thumbnails + revenue */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                <div className="vl-card" style={{ padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
                     <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Top 5" : "Top 5"}</div>
@@ -9640,7 +9640,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               ) : (
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.4fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* Links: zoeken/scannen + product-grid */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 16 }}>
+                <div className="vl-card" style={{ padding: 16 }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                     <input className="input-field" autoFocus={!isMobile} value={kassaSearch}
                       placeholder={lang === "nl" ? "Zoek of scan barcode…" : lang === "es" ? "Busca o escanea…" : "Search or scan barcode…"}
@@ -9815,7 +9815,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   })()}
                 </div>
                 {/* Rechts: mandje + afrekenen */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
+                <div className="vl-card" style={{ padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
                   <SL>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Checkout"}</SL>
                   {(() => {
                     // Net afgerekend? Dan wordt dit vak de bevestiging: bedrag,
@@ -11328,26 +11328,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     invoices live in their own bucket; deleted ones are excluded
                     everywhere. */}
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(2)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{visibleCompleted.length} {t.treatments}</div>
-                  </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(2)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
-                  </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(2)}</div>
-                  </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%</div>
-                  </div>
+                  {/* Tegels met icoontegel, zoals op het dashboard (restyle 16-09). */}
+                  {[
+                    { key: "total", icon: "money", label: t.totalEarnings, value: `${cur}${visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(2)}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
+                    { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${cur}${thisMonthTotal.toFixed(2)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
+                    { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${cur}${unsentTotal.toFixed(2)}` },
+                    { key: "sent", icon: "check", label: lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", value: sent.length, color: c.success, sub: `${visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%` },
+                  ].map(x => (
+                    <div key={x.key} className="stat-card" data-invoice-tile={x.key} style={{ padding: isMobile ? "12px 12px" : "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span className="vl-ico-tile"><NavIcon name={x.icon} size={15} color="currentColor" /></span>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, textAlign: "right" }}>{x.label}</div>
+                      </div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 24 : 26, fontWeight: 300, color: x.color, lineHeight: 1 }}>{x.value}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted }}>{x.sub}</div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Revenue report (PDF) — generate a tax/accountant-ready PDF
@@ -11380,7 +11376,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                   {/* Mobiel: 2×2-raster met gelijke vakken — de losse pill-rij
                       wrapte daar ongelijk (3 chips boven, 1 zwevend eronder). */}
-                  <div style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined, width: isMobile ? "100%" : undefined, gap: 4, padding: 3, background: c.inputBg, borderRadius: isMobile ? 16 : 100, border: `1px solid ${c.inputBorder}`, flexWrap: isMobile ? undefined : "wrap" }}>
+                  <div style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined, width: isMobile ? "100%" : undefined, gap: 4, padding: 3, background: c.inputBg, borderRadius: isMobile ? 12 : 8, border: `1px solid ${c.inputBorder}`, flexWrap: isMobile ? undefined : "wrap" }}>
                     {[
                       ["all", lang === "nl" ? "Alles" : lang === "es" ? "Todos" : "All", visibleCompleted.length],
                       ["unsent", lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length],
@@ -11388,7 +11384,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       ["hidden", lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden", hiddenAppts.length],
                     ].map(([key, label, count]) => (
                       <div key={key} onClick={() => setInvoiceFilter(key)} style={{
-                        padding: isMobile ? "8px 10px" : "6px 14px", borderRadius: isMobile ? 12 : 100, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                        padding: isMobile ? "8px 10px" : "6px 14px", borderRadius: isMobile ? 8 : 6, cursor: "pointer", fontSize: 10, fontWeight: 600,
                         letterSpacing: "0.06em", textTransform: "uppercase", transition: "all 0.2s",
                         background: invoiceFilter === key ? accent : (isMobile ? c.bgCard : "transparent"),
                         // Mobiel: elk vak z'n eigen omlijning zodat het raster als
@@ -11450,12 +11446,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 10 : 14,
                         padding: "14px 18px", background: c.bgCard,
                         border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
-                        borderRadius: 14, transition: "border-color 0.15s"
-                      }}>
+                        borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", transition: "border-color 0.15s"
+                      }} data-invoice-row>
                         <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
                         {/* Avatar */}
                         <div style={{
-                          width: 42, height: 42, borderRadius: "50%",
+                          width: 42, height: 42, borderRadius: 10,
                           background: `${accent}14`, border: `1px solid ${accent}22`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 12, fontWeight: 600, color: accent, flexShrink: 0,
@@ -11773,9 +11769,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                       {/* Week */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.weeklyRevenue}</div>
-                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7d" : "7d"}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span className="vl-ico-tile"><NavIcon name="money" size={15} color="currentColor" /></span>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{isMobile ? (lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week") : t.weeklyRevenue}</div>
+                            <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days"}</div>
+                          </div>
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(2)}</div>
@@ -11789,16 +11788,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                       {/* Month */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
-                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30d" : "30d"}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span className="vl-ico-tile"><NavIcon name="analytics" size={15} color="currentColor" /></span>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{isMobile ? (lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month") : t.monthlyRevenue}</div>
+                            <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days"}</div>
+                          </div>
                         </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(2)}</div>
                         <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div>
                       </div>
                       {/* Total appointments */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalAppts}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span className="vl-ico-tile"><NavIcon name="calendar" size={15} color="currentColor" /></span>
+                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, textAlign: "right" }}>{t.totalAppts}</div>
+                        </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{apptsNoSales.length}</div>
                         <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 6 }}>
                           <div>
@@ -11814,9 +11819,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                       {/* Rating */}
                       <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
-                          <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{salonData.reviews?.length || 0}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <span className="vl-ico-tile"><NavIcon name="star2" size={15} color="currentColor" /></span>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
+                            <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{salonData.reviews?.length || 0} {t.reviews?.toLowerCase?.() || "reviews"}</span>
+                          </div>
                         </div>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, display: "flex", alignItems: "center", gap: 6, lineHeight: 1, marginTop: 6 }}>
                           {avgRating}
@@ -11845,7 +11853,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
 
                     {/* Revenue area chart — big hero */}
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "22px 24px", marginBottom: 14, display: "flex", flexDirection: "column" }}>
+                    <div className="vl-card" style={{ padding: "22px 24px", marginBottom: 14, display: "flex", flexDirection: "column" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
