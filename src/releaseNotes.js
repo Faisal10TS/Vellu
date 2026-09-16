@@ -53,6 +53,14 @@ export const RELEASES = [
       {
         kind: "improved", audience: ["owner", "staff"],
         text: {
+          nl: "Categorieknoppen boven je diensten: de pijlen links en rechts staan er alleen nog als niet alle categorieën op één rij passen. Op de boekingspagina én in de boekflow.",
+          en: "Category buttons above your services: the left and right arrows only appear when not all categories fit on one row. On the booking page and in the booking flow.",
+          es: "Botones de categoría sobre tus servicios: las flechas izquierda y derecha solo aparecen cuando no caben todas las categorías en una fila. En la página de reservas y en el flujo de reserva.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
           nl: "Teamkaart: past de bio niet in drie regels, dan staat er Lees meer. Dat opent een venster met de hele tekst, alle diensten van die medewerker en een Boek-knop. De kaarten blijven even hoog.",
           en: "Team card: if the bio does not fit in three lines, a Read more link appears. It opens a window with the full text, all of that team member's services and a Book button. The cards stay the same height.",
           es: "Tarjeta de equipo: si la bio no cabe en tres líneas, aparece Leer más. Abre una ventana con el texto completo, todos los servicios de esa persona y un botón Reservar. Las tarjetas mantienen la misma altura.",

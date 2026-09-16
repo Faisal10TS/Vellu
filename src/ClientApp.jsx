@@ -56,6 +56,62 @@ function ClampedBio({ text, moreLabel, onMore }) {
   );
 }
 
+// Chipstrook (categorieën) met pijlen die alléén verschijnen als de chips
+// niet op één rij passen (Faisal 16-09: "die knoppen zijn daar niet nodig").
+// Meet scrollWidth tegen clientWidth (ResizeObserver + MutationObserver voor
+// taalwissel/andere chips); de pijl die niet verder kan wordt gedimd. Vegen
+// en trackpad blijven altijd werken, de pijlen zijn alleen een extra.
+function ChipScroller({ children, className, size = 28, step = 220, gap = 7, paddingBottom = 14, style, lang, c, ...rest }) {
+  const ref = useRef(null);
+  const [st, setSt] = useState({ overflow: false, atStart: true, atEnd: true });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const meet = () => {
+      const overflow = el.scrollWidth > el.clientWidth + 1;
+      const atStart = el.scrollLeft <= 1;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+      setSt(s => (s.overflow === overflow && s.atStart === atStart && s.atEnd === atEnd) ? s : { overflow, atStart, atEnd });
+    };
+    meet();
+    el.addEventListener("scroll", meet, { passive: true });
+    window.addEventListener("resize", meet);
+    let ro = null, mo = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(meet);
+      const observeAll = () => { ro.disconnect(); ro.observe(el); for (const ch of el.children) ro.observe(ch); };
+      observeAll();
+      if (typeof MutationObserver !== "undefined") {
+        mo = new MutationObserver(() => { observeAll(); meet(); });
+        mo.observe(el, { childList: true, subtree: true, characterData: true });
+      }
+    }
+    return () => { el.removeEventListener("scroll", meet); window.removeEventListener("resize", meet); ro && ro.disconnect(); mo && mo.disconnect(); };
+  }, []);
+  const pijl = (dir) => {
+    const uit = dir < 0 ? st.atStart : st.atEnd;
+    const label = dir < 0 ? (lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous") : (lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next");
+    return (
+      <button type="button" data-chip-arrow={dir < 0 ? "left" : "right"} aria-label={label} disabled={uit}
+        onClick={() => ref.current?.scrollBy({ left: dir * step, behavior: "smooth" })}
+        style={{ width: size, height: size, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: uit ? "default" : "pointer", opacity: uit ? 0.35 : 1, transition: "opacity 0.2s", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>
+        <svg width={size < 28 ? 10 : 12} height={size < 28 ? 10 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points={dir < 0 ? "15 18 9 12 15 6" : "9 18 15 12 9 6"} /></svg>
+      </button>
+    );
+  };
+  return (
+    <div className={className} data-chip-scroller={st.overflow ? "overflow" : "fits"} style={{ display: "flex", alignItems: "center", gap: size < 28 ? 6 : 8, ...style }} {...rest}>
+      {st.overflow && pijl(-1)}
+      {/* contain:paint — zonder harde paint-clip schoof een chip visueel
+          ónder het pijltje door (TTNB-screenshot 31-08). */}
+      <div ref={ref} style={{ display: "flex", gap, overflowX: "auto", paddingBottom, flex: 1, minWidth: 0, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
+        {children}
+      </div>
+      {st.overflow && pijl(1)}
+    </div>
+  );
+}
+
 // Maandsprong boven de datumstrip. Een salon die zes maanden vooruit laat
 // boeken heeft ~180 dagchips; zonder deze balk moet een klant daar helemaal
 // doorheen vegen om bij februari te komen. Verschijnt alleen als het
@@ -2806,29 +2862,17 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               {(() => {
                 const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
                 if (usedCats.length === 0) return null;
-                const scrollRef = { current: null };
-                const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
                 return (
-                  <div className="profile-cat-scroll" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
-                    </button>
-                    {/* contain:paint — zonder harde paint-clip schoof een pil
-                        visueel ónder het pijltje door (TTNB-screenshot 31-08). */}
-                    <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 14, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
-                      <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
-                        onClick={() => { setProfileCategory("all"); setServicesExpanded(false); }}>{t.allCategories}</button>
-                      {usedCats.map(cat => (
-                        <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
-                          onClick={() => { setProfileCategory(cat.id); setServicesExpanded(false); }}>
-                          {lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
-                    </button>
-                  </div>
+                  <ChipScroller className="profile-cat-scroll" data-profile-cats lang={lang} c={c} size={28} step={220} gap={7} paddingBottom={14}>
+                    <button className={`profile-cat-pill ${profileCategory === "all" ? "active" : ""}`}
+                      onClick={() => { setProfileCategory("all"); setServicesExpanded(false); }}>{t.allCategories}</button>
+                    {usedCats.map(cat => (
+                      <button key={cat.id} className={`profile-cat-pill ${profileCategory === cat.id ? "active" : ""}`}
+                        onClick={() => { setProfileCategory(cat.id); setServicesExpanded(false); }}>
+                        {lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}
+                      </button>
+                    ))}
+                  </ChipScroller>
                 );
               })()}
 
@@ -3801,42 +3845,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 {(() => {
                   const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
                   if (usedCats.length === 0) return null;
-                  const scrollRef = { current: null };
-                  const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 220, behavior: "smooth" }); };
                   return (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
-                      </button>
-                      <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
+                    <ChipScroller data-flow-cats lang={lang} c={c} size={28} step={220} gap={6} paddingBottom={12} style={{ marginBottom: 8 }}>
+                      <div
+                        onClick={() => setActiveCategory("all")}
+                        style={{
+                          padding: "8px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
+                          background: activeCategory === "all" ? accent : c.inputBg,
+                          border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                          color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                          fontSize: 12, fontWeight: 500, transition: "all 0.2s"
+                        }}
+                      >{t.allCategories}</div>
+                      {usedCats.map(cat => (
                         <div
-                          onClick={() => setActiveCategory("all")}
+                          key={cat.id}
+                          onClick={() => setActiveCategory(cat.id)}
                           style={{
                             padding: "8px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                            background: activeCategory === "all" ? accent : c.inputBg,
-                            border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
-                            color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                            background: activeCategory === cat.id ? accent : c.inputBg,
+                            border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                            color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                             fontSize: 12, fontWeight: 500, transition: "all 0.2s"
                           }}
-                        >{t.allCategories}</div>
-                        {usedCats.map(cat => (
-                          <div
-                            key={cat.id}
-                            onClick={() => setActiveCategory(cat.id)}
-                            style={{
-                              padding: "8px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                              background: activeCategory === cat.id ? accent : c.inputBg,
-                              border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
-                              color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
-                              fontSize: 12, fontWeight: 500, transition: "all 0.2s"
-                            }}
-                          >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
-                        ))}
-                      </div>
-                      <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 28, height: 28, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
-                      </button>
-                    </div>
+                        >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                      ))}
+                    </ChipScroller>
                   );
                 })()}
 
@@ -4643,42 +4677,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {(() => {
                       const usedCats = categories.filter(cat => initialSalon.services.some(s => s.category_id === cat.id));
                       if (usedCats.length === 0) return null;
-                      const scrollRef = { current: null };
-                      const scrollBy = (dir) => { scrollRef.current?.scrollBy({ left: dir * 180, behavior: "smooth" }); };
                       return (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                          <button onClick={() => scrollBy(-1)} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
-                          </button>
-                          <div ref={el => scrollRef.current = el} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, flex: 1, scrollbarWidth: "none", msOverflowStyle: "none", contain: "paint" }}>
+                        <ChipScroller data-flow-cats lang={lang} c={c} size={24} step={180} gap={6} paddingBottom={10} style={{ marginBottom: 6 }}>
+                          <div
+                            onClick={() => setActiveCategory("all")}
+                            style={{
+                              padding: "7px 14px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
+                              background: activeCategory === "all" ? accent : c.inputBg,
+                              border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
+                              color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                              fontSize: 11, fontWeight: 500, transition: "all 0.2s"
+                            }}
+                          >{t.allCategories}</div>
+                          {usedCats.map(cat => (
                             <div
-                              onClick={() => setActiveCategory("all")}
+                              key={cat.id}
+                              onClick={() => setActiveCategory(cat.id)}
                               style={{
                                 padding: "7px 14px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                                background: activeCategory === "all" ? accent : c.inputBg,
-                                border: `1px solid ${activeCategory === "all" ? accent : c.inputBorder}`,
-                                color: activeCategory === "all" ? c.btnOnDark : c.textSub,
+                                background: activeCategory === cat.id ? accent : c.inputBg,
+                                border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
+                                color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
                                 fontSize: 11, fontWeight: 500, transition: "all 0.2s"
                               }}
-                            >{t.allCategories}</div>
-                            {usedCats.map(cat => (
-                              <div
-                                key={cat.id}
-                                onClick={() => setActiveCategory(cat.id)}
-                                style={{
-                                  padding: "7px 14px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                                  background: activeCategory === cat.id ? accent : c.inputBg,
-                                  border: `1px solid ${activeCategory === cat.id ? accent : c.inputBorder}`,
-                                  color: activeCategory === cat.id ? c.btnOnDark : c.textSub,
-                                  fontSize: 11, fontWeight: 500, transition: "all 0.2s"
-                                }}
-                              >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
-                            ))}
-                          </div>
-                          <button onClick={() => scrollBy(1)} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} style={{ width: 24, height: 24, borderRadius: "50%", background: c.bgCard, border: `1px solid ${c.border}`, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
-                          </button>
-                        </div>
+                            >{lang === "nl" ? (cat.name_nl || cat.name) : lang === "es" ? (cat.name_es || cat.name_en || cat.name_nl || cat.name) : (cat.name_en || cat.name_nl || cat.name)}</div>
+                          ))}
+                        </ChipScroller>
                       );
                     })()}
 
