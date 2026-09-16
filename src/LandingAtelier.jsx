@@ -249,7 +249,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
           .at-footer-inner { padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px)); }
-          @media (max-width: 768px) { .at-footer-inner { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); } }
+          @media (max-width: 768px) {
+            .at-finale { min-height: calc(100dvh - 64px); display: flex; flex-direction: column; }
+            .at-footer { margin-top: auto; }
+            .at-footer-inner { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+          }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
@@ -556,9 +560,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         </div>
 
         {/* ── FINALE — espresso-vlak, sluit direct aan op de putty-band. ── */}
-        <div style={{ background: INK, position: "relative", zIndex: 10 }}>
+        {/* Op de telefoon vult finale + woordmerk + voetregels precies het scherm
+            onder de balk (.at-finale: min-height 100dvh - balk, voetregels
+            onderaan) — helemaal onderaan staat de kop dan net onder de balk
+            i.p.v. erachter (Faisal 16-09, "ik wil dat het eindigt zoals ss2"). */}
+        <div className="at-finale" style={{ background: INK, position: "relative", zIndex: 10 }}>
           <div aria-hidden="true" style={{ position: "absolute", top: "-30%", right: "6%", width: "40%", height: "80%", background: `radial-gradient(ellipse at center, ${EARTH}55 0%, transparent 65%)`, pointerEvents: "none" }} />
-          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(64px, 10vw, 110px) ${pad}`, textAlign: "center", position: "relative" }}>
+          <div style={{ maxWidth: maxW, margin: "0 auto", paddingTop: "clamp(44px, 10vw, 110px)", paddingBottom: "clamp(36px, 8vw, 110px)", paddingLeft: pad, paddingRight: pad, textAlign: "center", position: "relative" }}>
             <Reveal>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(32px, 6vw, 54px)", fontWeight: 300, color: BONE, lineHeight: 1.12, marginBottom: 16 }}>
                 {t.ctaTitle}
@@ -602,19 +610,19 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               de baseline, de inkt tot 0.047em eronder): het hele woord staat
               in beeld, baseline 0.067em boven de voetlijn — eerst werden de
               l's bovenaan afgesneden. */}
-          <div aria-hidden="true" data-finale-mark style={{ position: "relative", height: "clamp(111px, 19.1vw, 260px)", overflow: "hidden", pointerEvents: "none" }}>
+          <div aria-hidden="true" data-finale-mark style={{ position: "relative", height: "clamp(84px, 19.1vw, 260px)", overflow: "hidden", pointerEvents: "none" }}>
             {/* Omlijning zonder binnenlijnen: Jost heeft overlappende contouren
                 (de dwarsbalk van de "e" loopt door de buik), en text-stroke
                 tekent élke contour. Daarom: vulling in de achtergrondkleur
                 bovenop een dubbel zo dikke lijn (paint-order: stroke fill) —
                 de vulling dekt de binnenste helft én de overlappingen af, zodat
                 alleen de buitenrand van 1,5px overblijft (Faisal 15-09). */}
-            <div style={{ position: "absolute", left: "50%", bottom: "-0.087em", transform: "translateX(-50%)", fontFamily: "'Jost',sans-serif", fontWeight: 400, fontSize: "clamp(128px, 22vw, 300px)", lineHeight: 1, letterSpacing: "0.18em", whiteSpace: "nowrap", color: INK, WebkitTextStroke: `3px ${MUSHROOM}`, paintOrder: "stroke fill", opacity: 0.32, userSelect: "none" }}>
+            <div style={{ position: "absolute", left: "50%", bottom: "-0.087em", transform: "translateX(-50%)", fontFamily: "'Jost',sans-serif", fontWeight: 400, fontSize: "clamp(96px, 22vw, 300px)", lineHeight: 1, letterSpacing: "0.18em", whiteSpace: "nowrap", color: INK, WebkitTextStroke: `3px ${MUSHROOM}`, paintOrder: "stroke fill", opacity: 0.32, userSelect: "none" }}>
               vellu
             </div>
           </div>
           {/* Footer op het espresso-vlak — zelfde juridische regels als altijd. */}
-          <footer style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
+          <footer className="at-footer" style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
             {/* Onderrand via .at-footer-inner: op de telefoon extra ruimte zodat
                 de voetregels boven de chat-bubbel uit kunnen scrollen. */}
             <div className="at-footer-inner" style={{ maxWidth: maxW, margin: "0 auto", paddingTop: 22, paddingLeft: pad, paddingRight: pad, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center" }}>
