@@ -559,7 +559,7 @@ export default function AdminDashboard({ onLogout }) {
                       <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>{stars(Number(r.rating))}<span style={{ fontSize: 11, color: c.textSub }}>{r.rating}/5</span></div>
                     </div>
                     <div style={{ fontSize: 12, lineHeight: 1.55 }}>
-                      <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Works well</div>
+                      <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>What they think of Vellu</div>
                       <div style={{ color: r.liked ? c.text : c.textMuted }}>{r.liked || "—"}</div>
                       <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 8 }}>Missing / would change</div>
                       <div style={{ color: r.missing ? c.text : c.textMuted }}>{r.missing || "—"}</div>

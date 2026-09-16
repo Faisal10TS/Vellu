@@ -51,24 +51,24 @@ function render(lang: "nl" | "en", salon: string, link: string) {
     subject: "Hoe bevalt Vellu? Geef je cijfer in één minuut",
     fromName: "Vellu",
     hi: `Hoi ${eS},`,
-    p1: "Je werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat werkt goed, en wat mis je?",
+    p1: "Je werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat vind je van Vellu, en wat mis je?",
     btn: "Geef je cijfer",
     p2: "Je cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.",
     p3: "Liever direct antwoorden? Reageer gewoon op deze mail.",
     thanks: "Dankjewel,",
     fallback: "Werkt de knop niet? Kopieer deze link in je browser:",
-    plain: `Hoi ${salon},\n\nJe werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat werkt goed, en wat mis je?\n\nGeef je cijfer: ${link}\n\nJe cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.\n\nLiever direct antwoorden? Reageer gewoon op deze mail.\n\nDankjewel,\nTeam Vellu\nvellu.cc`,
+    plain: `Hoi ${salon},\n\nJe werkt nu een tijdje met Vellu, en we willen graag weten wat je ervan vindt. Het kost je één minuut: een cijfer van 1 tot 5 en twee korte vragen. Wat vind je van Vellu, en wat mis je?\n\nGeef je cijfer: ${link}\n\nJe cijfer telt mee in het gemiddelde op vellu.cc. Je salonnaam en je woorden komen er alleen als je dat op de pagina aanvinkt.\n\nLiever direct antwoorden? Reageer gewoon op deze mail.\n\nDankjewel,\nTeam Vellu\nvellu.cc`,
   } : {
     subject: "How is Vellu working for you? Rate it in one minute",
     fromName: "Vellu",
     hi: `Hi ${eS},`,
-    p1: "You have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What works well, and what do you miss?",
+    p1: "You have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What do you think of Vellu, and what do you miss?",
     btn: "Give your score",
     p2: "Your score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.",
     p3: "Prefer to answer directly? Just reply to this email.",
     thanks: "Thank you,",
     fallback: "Button not working? Copy this link into your browser:",
-    plain: `Hi ${salon},\n\nYou have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What works well, and what do you miss?\n\nGive your score: ${link}\n\nYour score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.\n\nPrefer to answer directly? Just reply to this email.\n\nThank you,\nTeam Vellu\nvellu.cc`,
+    plain: `Hi ${salon},\n\nYou have been using Vellu for a while now, and we would love to hear what you think. It takes one minute: a score from 1 to 5 and two short questions. What do you think of Vellu, and what do you miss?\n\nGive your score: ${link}\n\nYour score counts towards the average on vellu.cc. Your salon name and your words only appear there if you tick the box on the page.\n\nPrefer to answer directly? Just reply to this email.\n\nThank you,\nTeam Vellu\nvellu.cc`,
   };
   const html = `<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">
   <div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:#8A7356;margin:12px auto;"></div></div>
