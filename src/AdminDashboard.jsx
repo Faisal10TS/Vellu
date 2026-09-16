@@ -77,6 +77,10 @@ export default function AdminDashboard({ onLogout }) {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendMsg, setSendMsg] = useState("");
   const [me, setMe] = useState(null); // e-mail van de ingelogde beheerder (voor de testmail)
+  // Schakelaar: staat het gemiddelde (+ gepubliceerde citaten) op vellu.cc?
+  // Standaard uit — antwoorden zijn nooit publiek, alleen hier te lezen.
+  const [siteOn, setSiteOn] = useState(false);
+  const [siteBusy, setSiteBusy] = useState(false);
   const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | ratings | cron
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
@@ -97,7 +101,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -107,6 +111,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_subscriptions_list"),
         supabase.rpc("admin_app_ratings"),
         supabase.rpc("admin_rating_invites"),
+        supabase.rpc("admin_rating_site_visibility"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -118,6 +123,7 @@ export default function AdminDashboard({ onLogout }) {
       setSubs(sb.data || []);
       setRatings(ar.data || []);
       setInvites(ai.data || []);
+      setSiteOn(!!sv.data);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -149,7 +155,19 @@ export default function AdminDashboard({ onLogout }) {
   // JWT van de beheerder). mode: "test" (naar mijn eigen adres), "send"
   // (alle salons die 'm nog niet kregen), of "send" met only = [owner_id]
   // (één salon, ook opnieuw). Daarna de uitnodigingslijst verversen.
-  const sendInvites = async (mode, only, testLang = "nl") => {
+  const toggleSite = async () => {
+    if (siteBusy) return;
+    const next = !siteOn;
+    if (next && !window.confirm("Show the average rating (and any quotes you published) on vellu.cc? Individual answers stay private either way.")) return;
+    setSiteBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("admin_set_rating_site_visibility", { p_on: next });
+      if (error) { window.alert(error.message); return; }
+      setSiteOn(!!data);
+    } finally { setSiteBusy(false); }
+  };
+
+  const sendInvites = async (mode, only, testLang = "en") => {
     if (sendBusy) return;
     if (mode === "send") {
       const n = only ? only.length : invites.filter(i => !i.sent_at).length;
@@ -508,8 +526,18 @@ export default function AdminDashboard({ onLogout }) {
                 <StatCard label="Allowed public" value={real.filter(r => r.allow_public).length} sub="salon ticked the box" accent={accent} c={c} />
                 <StatCard label="Published" value={real.filter(r => r.published).length} sub="quotes live on vellu.cc" accent={accent} c={c} />
               </div>
-              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-                Salons rate Vellu on the page behind the personal link in the "Hoe bevalt Vellu?" email (vellu.cc/beoordeel/…, the same link also lets them change their answer later). The average and the count go to vellu.cc automatically from 3 ratings; a salon's name and words only appear there if the salon allowed it AND you publish it here.
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+                Salons rate Vellu on the page behind the personal link in the rating email (vellu.cc/beoordeel/…, the same link also lets them change their answer later). Their answers are private: only you see them, here. Nothing appears on vellu.cc unless you switch it on below, and even then only the average (from 3 ratings) plus quotes a salon allowed AND you published.
+              </div>
+              {/* Schakelaar voor de website: standaard uit. */}
+              <div data-admin-site-toggle style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: c.bgCard, border: `1px solid ${siteOn ? `${accent}55` : c.border}`, borderRadius: 16, padding: "12px 18px", marginBottom: 16 }}>
+                <div style={{ fontSize: 12 }}>
+                  <span style={{ fontWeight: 600 }}>vellu.cc: </span>
+                  <span style={{ color: siteOn ? accent : c.textSub }}>{siteOn ? "average rating is shown on the homepage (from 3 ratings)" : "nothing is shown on the homepage"}</span>
+                </div>
+                <button className="btn-ghost" disabled={siteBusy} onClick={toggleSite} style={{ fontSize: 10, padding: "8px 12px", color: siteOn ? c.danger : accent }}>
+                  {siteBusy ? "Working…" : siteOn ? "Hide from vellu.cc" : "Show on vellu.cc"}
+                </button>
               </div>
               {/* De mail: eerst een test naar jezelf, dan naar de salons die
                   'm nog niet kregen; per salon opnieuw sturen kan altijd
@@ -520,11 +548,11 @@ export default function AdminDashboard({ onLogout }) {
                     Rating email — {invites.filter(i => i.sent_at).length} of {invites.length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "nl")} style={{ fontSize: 10, padding: "8px 12px" }}>
+                    <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "en")} style={{ fontSize: 10, padding: "8px 12px" }}>
                       {sendBusy ? "Working…" : `Send me a test${me ? ` (${me})` : ""}`}
                     </button>
-                    <button className="btn-ghost" data-admin-send-test-en disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "en")} style={{ fontSize: 10, padding: "8px 12px" }}>
-                      English test
+                    <button className="btn-ghost" data-admin-send-test-nl disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "nl")} style={{ fontSize: 10, padding: "8px 12px" }}>
+                      Dutch test
                     </button>
                     <button className="btn-primary" data-admin-send-all disabled={sendBusy || invites.every(i => i.sent_at)} onClick={() => sendInvites("send")} style={{ width: "auto", fontSize: 10, padding: "8px 14px", opacity: invites.every(i => i.sent_at) ? 0.5 : 1 }}>
                       {`Send to salons not yet invited (${invites.filter(i => !i.sent_at).length})`}
@@ -532,7 +560,7 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
-                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. A test is one mail; all current salons get the Dutch version. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
+                  Every salon gets the English mail, subject "How is Vellu working for you? Rate it in one minute", sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. The page behind the link opens in English with a Dutch switch. A test is one mail. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
                 </div>
                 {sendMsg && <div data-admin-send-msg style={{ fontSize: 12, color: /^Failed/.test(sendMsg) ? c.danger : c.success, marginBottom: 10 }}>{sendMsg}</div>}
                 {invites.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No active salons.</div>}

@@ -90,7 +90,7 @@ export default function RateVelluPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
-  const T = TXT[lang || "nl"];
+  const T = TXT[lang || "en"];
   useSEO({ title: lang === "en" ? "Rate Vellu" : "Beoordeel Vellu", description: T.sub, url: "https://vellu.cc/beoordeel" });
 
   useEffect(() => {
@@ -98,9 +98,13 @@ export default function RateVelluPage() {
     (async () => {
       const { data } = await supabase.rpc("app_rating_invite", { p_token: token || "" });
       if (off) return;
-      if (!data) { setInvite(null); setLang((l) => l || "nl"); return; }
+      if (!data) { setInvite(null); setLang((l) => l || "en"); return; }
       setInvite(data);
-      setLang((l) => l || (DUTCH.has(String(data.country_code || "NL").toUpperCase()) ? "nl" : "en"));
+      // Faisal 16-09: de mail is Engels voor iedereen, dus de pagina opent ook
+      // in het Engels; de NL-knop staat rechtsboven. (DUTCH blijft staan voor
+      // als het ooit weer per land moet.)
+      void DUTCH;
+      setLang((l) => l || "en");
       const ex = data.existing;
       if (ex) { setRating(ex.rating || 0); setLiked(ex.liked || ""); setMissing(ex.missing || ""); setAllowPublic(!!ex.allow_public); }
     })();
@@ -137,8 +141,8 @@ export default function RateVelluPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <a href="/" style={{ fontFamily: "'Jost', sans-serif", fontSize: 22, fontWeight: 400, letterSpacing: "0.22em", color: AT.ESPRESSO, textDecoration: "none" }}>vellu</a>
           <div data-rate-lang style={{ display: "flex", gap: 2, border: `1px solid ${AT.PUTTY}`, borderRadius: R, padding: 3, background: c.bgCard }}>
-            {["nl", "en"].map((l) => (
-              <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: R - 2, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost', sans-serif", background: (lang || "nl") === l ? AT.ESPRESSO : "transparent", color: (lang || "nl") === l ? AT.BONE : AT.EARTH }}>
+            {["en", "nl"].map((l) => (
+              <button key={l} onClick={() => setLang(l)} style={{ border: "none", cursor: "pointer", borderRadius: R - 2, padding: "5px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Jost', sans-serif", background: (lang || "en") === l ? AT.ESPRESSO : "transparent", color: (lang || "en") === l ? AT.BONE : AT.EARTH }}>
                 {l}
               </button>
             ))}

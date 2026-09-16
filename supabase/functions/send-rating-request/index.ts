@@ -32,8 +32,14 @@ const FROM_ADDRESS = "noreply@vellu.cc";
 const REPLY_TO = "mirahventures@vellu.cc";
 const ALLOWED_ORIGINS = ["https://vellu.cc", "https://www.vellu.cc", "http://localhost:5173", "http://localhost:4173"];
 
+// Faisal 16-09-2026: álle salons krijgen de Engelse mail ("i want them in
+// english instead of dutch"). De pagina achter de link opent ook in het
+// Engels, met een NL-knop. De landentabel blijft staan voor als dat ooit
+// weer per land moet.
+const MAIL_LANG: "nl" | "en" = "en";
 const DUTCH = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
-const langOf = (cc: unknown): "nl" | "en" => DUTCH.has(String(cc || "NL").toUpperCase()) ? "nl" : "en";
+const langOf = (_cc: unknown): "nl" | "en" => MAIL_LANG;
+void DUTCH;
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] as string));
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -128,7 +134,7 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
   // standaard nl); geen salon, geen token.
   if (job.mode === "test") {
     const to = String(job.test_to || "delivered@resend.dev");
-    const lang: "nl" | "en" = job.test_lang === "en" ? "en" : "nl";
+    const lang: "nl" | "en" = job.test_lang === "nl" ? "nl" : "en";
     // Tijd in het onderwerp: elke testmail een eigen conversatie in Gmail,
     // anders verbergt Gmail bij de tweede test alles wat gelijk is aan de
     // eerste achter "…" (zie render).
@@ -202,7 +208,7 @@ serve(async (req) => {
     const testTo = mode === "test" ? String(body?.test_to || "").trim().toLowerCase() : null;
     if (mode === "test" && !EMAIL_RE.test(testTo || "")) return json({ error: "invalid_test_to" }, 400);
     const only = Array.isArray(body?.only_owners) ? body.only_owners.map((x: unknown) => String(x)).filter((x: string) => UUID_RE.test(x)) : [];
-    const testLang = body?.test_lang === "en" ? "en" : "nl";
+    const testLang = body?.test_lang === "nl" ? "nl" : "en";
     const { data: made, error } = await supabase.from("app_rating_send_jobs")
       .insert({ mode, test_to: testTo, test_lang: testLang, only_owners: only.length ? only : null, started_at: new Date().toISOString() })
       .select("*").single();
