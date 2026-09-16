@@ -143,7 +143,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Team: medewerkers.
 - Planning & boekingen: openingstijden, pauze, tijdslot-interval, boekingsvenster + annuleringstermijn, boekingsvoorwaarden, telefoonnummer verplicht, wachtlijst, herinnering-timing, herboek-herinnering, uitzonderingsdagen, blokkades, Google Agenda-koppeling, "Agenda in je telefoon" (iCal-feed), push-meldingen ("Meldingen op je telefoon"), no-show-blokkade, no-show-vergoeding.
 - Klanten & marketing: reviews en Google Reviews, verjaardagsactie, stempelkaart (spaarkaart), kortingscodes, nieuwsbrief, klanten importeren/exporteren.
-- Abonnement & account: abonnement, facturen van Vellu (met downloadlink), referral, e-mail/wachtwoord, rondleiding, uitloggen.
+- Abonnement & account: abonnement, facturen van Vellu (met downloadlink), referral, e-mail/wachtwoord, rondleiding, "Beoordeel Vellu" (jouw mening over de app), uitloggen.
 
 # Diensten (Instellingen → Diensten & producten)
 - Diensten staan ONDER hun categorie in één uitklapbare lijst: tik op een categorienaam en hij klapt open met de diensten eronder. Bovenaan staan filterchips per categorie. Slepen (het handvat) bepaalt de volgorde van categorieën, diensten, varianten én extra's.
@@ -250,6 +250,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Upgraden naar Professional: je krijgt direct alle functies; het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven, daarna geldt €35/maand.
 - Opzeggen: je toegang loopt door tot het einde van de betaalde periode; je gegevens blijven altijd bewaard. Tijdens die periode kun je opnieuw abonneren (ook als Professional), eventueel met een andere bankrekening — handig als iemand anders de betaling overneemt. Er verandert niks aan je data.
 - Facturen van Vellu (voor je eigen boekhouding) staan ook bij Abonnement & account, met een downloadlink per factuur.
+- Beoordeel Vellu (sinds 16-09-2026): onder Abonnement & account staat de kaart "Jouw mening" met de knop "Beoordeel Vellu": een cijfer van 1 tot 5, wat werkt goed, wat mis je of zou je veranderen, en een vinkje of je salonnaam met je woorden op vellu.cc mag staan. Het cijfer telt altijd anoniem mee in het gemiddelde op vellu.cc; naam en tekst komen er alleen met dat vinkje én nadat Vellu ze plaatst. Later bijwerken kan op dezelfde plek ("Beoordeling bijwerken"). De app vraagt er ook één keer vanzelf om (een venster na het openen, bij accounts ouder dan twee weken); "Later" = over een week opnieuw. Vellu leest elke reactie; wie liever mailt kan naar mirahventures@vellu.cc.
 - Referral: nodig je een andere salon uit met je persoonlijke link, dan krijgen jullie allebei 2 weken gratis. De kopieerknop kopieert een kant-en-klaar aanbevelingsbericht met je link erin; delen kan ook direct via de deelknop.
 
 # Analytics (Professional)

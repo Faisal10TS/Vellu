@@ -11,6 +11,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle } from "./shared.jsx";
+import { Star } from "./RateVellu.jsx";
 
 const fmtEur = (n) => `€${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -66,7 +67,11 @@ export default function AdminDashboard({ onLogout }) {
   const [timeline, setTimeline] = useState([]);
   const [billing, setBilling] = useState(null);
   const [subs, setSubs] = useState([]);
-  const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | cron
+  // "Beoordeel Vellu" (16-09-2026): cijfers + toelichting van saloneigenaren,
+  // met de knop om een citaat op vellu.cc te zetten (alleen als de salon dat
+  // toestond). Zie RateVellu.jsx en migratie beoordeel_vellu.
+  const [ratings, setRatings] = useState([]);
+  const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | ratings | cron
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
   // state en niet los in de JSX: met Date.now() midden in de render schoof de
@@ -86,7 +91,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -94,6 +99,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_revenue_timeline", { p_days: 30 }),
         supabase.rpc("admin_billing_overview"),
         supabase.rpc("admin_subscriptions_list"),
+        supabase.rpc("admin_app_ratings"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -103,6 +109,7 @@ export default function AdminDashboard({ onLogout }) {
       setTimeline(tl.data || []);
       setBilling(bo.data?.[0] || null);
       setSubs(sb.data || []);
+      setRatings(ar.data || []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -211,6 +218,7 @@ export default function AdminDashboard({ onLogout }) {
             ["billing", "Revenue"],
             ["salons", "Salons"],
             ["signups", "Signups (30d)"],
+            ["ratings", `Ratings${ratings.length ? ` (${ratings.length})` : ""}`],
             ["cron", "Cron health"],
           ].map(([k, label]) => (
             <button
@@ -440,6 +448,63 @@ export default function AdminDashboard({ onLogout }) {
             ))}
           </div>
         )}
+
+        {/* ── RATINGS TAB — "Beoordeel Vellu": what salon owners think ── */}
+        {tab === "ratings" && (() => {
+          const real = ratings.filter(r => !r.is_demo);
+          const avg = real.length ? real.reduce((s, r) => s + Number(r.rating), 0) / real.length : 0;
+          const togglePublished = async (r) => {
+            const { data, error } = await supabase.rpc("admin_set_app_rating_published", { p_owner_id: r.owner_id, p_published: !r.published });
+            if (error) { window.alert(error.message); return; }
+            setRatings(list => list.map(x => x.owner_id === r.owner_id ? { ...x, published: !!data } : x));
+          };
+          const stars = (n) => (
+            <span style={{ display: "inline-flex", gap: 2, verticalAlign: "middle" }} aria-label={`${n} of 5`}>
+              {[1, 2, 3, 4, 5].map(i => <Star key={i} size={14} filled={i <= n} color={accent} stroke={i <= n ? accent : c.textMuted} />)}
+            </span>
+          );
+          return (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+                <StatCard label="Average" value={real.length ? avg.toFixed(1) : "—"} sub={`${real.length} rating${real.length === 1 ? "" : "s"} · demo excluded · on vellu.cc from 3`} accent={accent} c={c} />
+                <StatCard label="5 stars" value={real.filter(r => Number(r.rating) === 5).length} sub={`${real.filter(r => Number(r.rating) <= 3).length} at 3 or lower`} accent={accent} c={c} />
+                <StatCard label="Allowed public" value={real.filter(r => r.allow_public).length} sub="salon ticked the box" accent={accent} c={c} />
+                <StatCard label="Published" value={real.filter(r => r.published).length} sub="quotes live on vellu.cc" accent={accent} c={c} />
+              </div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+                Owners rate Vellu under Settings → Subscription & account (and once via a prompt in the dashboard). The average and the count go to vellu.cc automatically from 3 ratings; a salon's name and words only appear there if the salon allowed it AND you publish it here.
+              </div>
+              <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                {ratings.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 24, textAlign: "center" }}>No ratings yet.</div>}
+                {ratings.map(r => (
+                  <div key={r.owner_id} data-admin-rating style={{ padding: "16px 18px", borderBottom: `1px solid ${c.border}`, display: "grid", gridTemplateColumns: "minmax(160px, 1fr) 2fr auto", gap: 16, alignItems: "start" }}>
+                    <div>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>
+                        <a href={`/${r.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none" }}>{r.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                        {r.is_demo && <span style={{ marginLeft: 6, fontSize: 9, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>demo</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{(r.city || "—").trim()} · {r.country_code || "—"} · {relTime(r.updated_at)}</div>
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>{stars(Number(r.rating))}<span style={{ fontSize: 11, color: c.textSub }}>{r.rating}/5</span></div>
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.55 }}>
+                      <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Works well</div>
+                      <div style={{ color: r.liked ? c.text : c.textMuted }}>{r.liked || "—"}</div>
+                      <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 8 }}>Missing / would change</div>
+                      <div style={{ color: r.missing ? c.text : c.textMuted }}>{r.missing || "—"}</div>
+                    </div>
+                    <div style={{ textAlign: "right", fontSize: 11 }}>
+                      <div style={{ color: r.allow_public ? c.success : c.textMuted, marginBottom: 8 }}>{r.allow_public ? "may be public" : "private"}</div>
+                      <button className="btn-ghost" data-admin-publish disabled={!r.allow_public} onClick={() => togglePublished(r)}
+                        style={{ fontSize: 10, padding: "8px 12px", opacity: r.allow_public ? 1 : 0.4, color: r.published ? c.danger : accent, whiteSpace: "nowrap" }}>
+                        {r.published ? "Unpublish" : "Publish on vellu.cc"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
 
         {/* ── CRON HEALTH TAB ── */}
         {tab === "cron" && (

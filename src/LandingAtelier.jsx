@@ -23,6 +23,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
+import { supabase } from "./supabase.js";
 import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
@@ -64,9 +65,89 @@ function AtHead({ title, sub, tone = "bone" }) {
   );
 }
 
+// Beoordeling door salons (Faisal 16-09-2026): gemiddelde en aantal uit
+// app_rating_summary (de demo-salon telt niet mee), citaten uit
+// public_app_ratings (alleen met toestemming van de salon én gepubliceerd
+// door Vellu in het beheer). De regel in de hero verschijnt pas vanaf drie
+// beoordelingen: met één of twee cijfers is een "gemiddelde" geen eerlijk
+// beeld. Citaten verschijnen zodra er één gepubliceerd is.
+const MIN_RATINGS = 3;
+function StarRow({ value, size = 16, on = EARTH, off = MUSHROOM }) {
+  const pct = Math.max(0, Math.min(100, (Number(value) / 5) * 100));
+  const stars = (col, fill) => [0, 1, 2, 3, 4].map((i) => (
+    <svg key={i} width={size} height={size} viewBox="0 0 24 24" fill={fill ? col : "none"} stroke={col} strokeWidth="1.5" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+      <polygon points="12 2.5 15 8.6 21.7 9.5 16.8 14.2 18 20.9 12 17.7 6 20.9 7.2 14.2 2.3 9.5 9 8.6 12 2.5" />
+    </svg>
+  ));
+  // Onder: vijf omtrekken; erover: vijf volle sterren, afgeknipt op het
+  // percentage — zo klopt 4,6 ook optisch (geen afronding naar vijf).
+  return (
+    <span style={{ position: "relative", display: "inline-flex", gap: 2, lineHeight: 0 }} aria-hidden="true">
+      <span style={{ display: "inline-flex", gap: 2 }}>{stars(off, false)}</span>
+      <span style={{ position: "absolute", left: 0, top: 0, display: "inline-flex", gap: 2, overflow: "hidden", width: `${pct}%`, whiteSpace: "nowrap" }}>{stars(on, true)}</span>
+    </span>
+  );
+}
+function SalonRatingLine({ lang, sum }) {
+  const n = Number(sum?.rating_count || 0);
+  const avg = Number(sum?.avg_rating || 0);
+  if (n < MIN_RATINGS || !avg) return null;
+  const avgStr = lang === "en" ? avg.toFixed(1) : avg.toFixed(1).replace(".", ",");
+  const rest = lang === "nl" ? ` van 5 · beoordeeld door ${n} salons die Vellu gebruiken`
+    : lang === "es" ? ` de 5 · valorado por ${n} salones que usan Vellu`
+    : ` out of 5 · rated by ${n} salons using Vellu`;
+  return (
+    // flex-wrap: op de telefoon springen de sterren op een eigen regel boven
+    // de tekst, allebei gecentreerd, i.p.v. sterren links naast twee regels.
+    <div data-hero-rating style={{ marginTop: 12, display: "inline-flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: "6px 10px", fontSize: 12, color: INK, letterSpacing: "0.03em" }}>
+      <StarRow value={avg} />
+      <span><strong style={{ fontWeight: 600 }}>{avgStr}</strong>{rest}</span>
+    </div>
+  );
+}
+function SalonRatingQuotes({ lang, quotes }) {
+  if (!quotes || quotes.length === 0) return null;
+  const title = lang === "nl" ? "Wat salons zeggen" : lang === "es" ? "Lo que dicen los salones" : "What salons say";
+  return (
+    <div data-rating-quotes style={{ marginTop: "clamp(40px, 6vw, 64px)" }}>
+      <Reveal>
+        <div style={{ textAlign: "center", fontSize: 10, fontWeight: 600, letterSpacing: "0.3em", textTransform: "uppercase", color: EARTH, marginBottom: 18 }}>{title}</div>
+      </Reveal>
+      <div className="at-quote-grid">
+        {quotes.map((q, i) => (
+          <Reveal key={q.owner_id} delay={i * 90}>
+            <div className="at-quote-card vl-glow" data-quote-card onMouseMove={glowMove}>
+              <StarRow value={q.rating} size={14} />
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1.35, color: INK, margin: "12px 0 14px" }}>“{q.liked}”</div>
+              <div style={{ fontSize: 11, color: EARTH, letterSpacing: "0.08em", textTransform: "uppercase" }}>{q.business_name}{q.city ? ` · ${String(q.city).trim()}` : ""}</div>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
   const navigate = useNavigate();
   const t = T[lang];
+  // Beoordelingen voor de regel in de hero en de citaten onder de stappen.
+  // Eén keer laden; mislukt het, dan blijft de pagina gewoon zonder.
+  const [ratings, setRatings] = useState({ sum: null, quotes: [] });
+  useEffect(() => {
+    let off = false;
+    (async () => {
+      try {
+        const [s, q] = await Promise.all([
+          supabase.rpc("app_rating_summary"),
+          supabase.from("public_app_ratings").select("owner_id, rating, liked, business_name, city").order("updated_at", { ascending: false }).limit(3),
+        ]);
+        if (off) return;
+        setRatings({ sum: s.data?.[0] || null, quotes: (q.data || []).filter((x) => x.liked && String(x.liked).trim()) });
+      } catch { /* geen beoordelingen: pagina blijft zoals hij was */ }
+    })();
+    return () => { off = true; };
+  }, []);
   useSEO({
     title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : lang === "es" ? "Vellu - Plataforma de reservas de belleza | 0% de comisión" : "Vellu - Beauty Booking Platform | 0% Commission",
     description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
@@ -225,6 +306,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-feat-title { font-size: 14px; font-weight: 600; color: ${INK}; margin-bottom: 6px; letter-spacing: 0.01em; }
           .at-feat-desc { font-size: 12.5px; color: #5f5240; line-height: 1.65; }
           @media (prefers-reduced-motion: reduce) { .at-feat-card, .at-feat-card:hover { transform: none; } }
+          /* Citaten van salons (Beoordeel Vellu, 16-09): dezelfde zwevende
+             bone-kaarten, gecentreerd, één tot drie naast elkaar. */
+          .at-quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
+          .at-quote-card { height: 100%; box-sizing: border-box; background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; padding: 22px 22px 20px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
+          .at-quote-card:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
+          @media (prefers-reduced-motion: reduce) { .at-quote-card, .at-quote-card:hover { transform: none; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           /* Stappen als zwevende kaarten (Faisal 15-09), zelfde rij-indeling
@@ -335,6 +422,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     : "Used by salons in the Netherlands and the Caribbean"}
                 </div>
               </HeroEnter>
+              <HeroEnter ready={heroReady} delay={1160}>
+                <SalonRatingLine lang={lang} sum={ratings.sum} />
+              </HeroEnter>
             </div>
             <HeroEnter ready={heroReady} delay={460}>
               <ParallaxLayer speed={-0.035}>
@@ -417,6 +507,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </button>
             </div>
           </Reveal>
+          <SalonRatingQuotes lang={lang} quotes={ratings.quotes} />
         </div>
 
         {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, tweekoloms checklijst.

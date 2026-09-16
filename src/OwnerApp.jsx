@@ -23,6 +23,7 @@ import {
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
+import RateVelluModal from "./RateVellu.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import PushSettingsCard from "./PushSettings.jsx";
 // Belastingmotor: de enige plek waar netto/belasting wordt uitgerekend. Klein
@@ -4426,6 +4427,40 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setWhatsNew(null);
     try { localStorage.setItem(seenKey(user?.id), LATEST_RELEASE_ID); } catch { /* private mode */ }
   };
+  // "Beoordeel Vellu" (Faisal 16-09-2026): één rij per salon in app_ratings.
+  // Vanzelf één keer vragen zodra het dashboard staat, het account minstens
+  // veertien dagen oud is, er nog geen beoordeling is en er in deze sessie
+  // geen wizard, rondleiding of "Wat is er nieuw" is geweest (twee vensters
+  // achter elkaar is te veel; dan de volgende keer). "Later" = een week stil
+  // (localStorage, per apparaat). De demo-salon vraagt niet vanzelf (hero-
+  // screenshots), behalve met ?rate=1 voor de tests; het formulier staat
+  // altijd onder Instellingen → Abonnement & account.
+  const [myRating, setMyRating] = useState(undefined); // undefined = laden, null = nog geen
+  const [rateOpen, setRateOpen] = useState(false);
+  const whatsNewShown = useRef(false);
+  useEffect(() => { if (whatsNew) whatsNewShown.current = true; }, [whatsNew]);
+  const rateSnoozeKey = `vellu_rate_snooze_${user?.id || "new"}`;
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    supabase.from("app_ratings").select("*").eq("owner_id", user.id).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setMyRating(data || null); });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+  useEffect(() => {
+    if (myRating !== null || !dataLoaded || showOnboarding || tourOpen || whatsNew || whatsNewShown.current || rateOpen) return;
+    const forced = /[?&]rate=1(&|$)/.test(window.location.search);
+    if (salonData.is_demo && !forced) return;
+    const ageDays = user?.created_at ? (Date.now() - new Date(user.created_at).getTime()) / 864e5 : 0;
+    if (ageDays < 14 && !forced) return;
+    try { if (Number(localStorage.getItem(rateSnoozeKey) || 0) > Date.now()) return; } catch { /* private mode */ }
+    const t = setTimeout(() => setRateOpen(true), 1200);
+    return () => clearTimeout(t);
+  }, [myRating, dataLoaded, showOnboarding, tourOpen, whatsNew, rateOpen]);
+  const closeRate = (saved) => {
+    setRateOpen(false);
+    if (!saved) { try { localStorage.setItem(rateSnoozeKey, String(Date.now() + 7 * 864e5)); } catch { /* private mode */ } }
+  };
   const startTour = () => { setView("dashboard"); setTourRun(n => n + 1); setTourOpen(true); };
   const endTour = () => {
     setTourOpen(false);
@@ -8118,12 +8153,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
       {tourOpen && <AppTour key={tourRun} steps={tourSteps} lang={lang} c={c} accent={accent} onFinish={endTour} />}
       {whatsNew && !tourOpen && <WhatsNewModal releases={whatsNew} lang={lang} c={c} accent={accent} onClose={closeWhatsNew} />}
+      {rateOpen && !tourOpen && !whatsNew && <RateVelluModal lang={lang} c={c} accent={accent} ownerId={user.id} existing={myRating || null} onClose={closeRate} onSaved={(row) => setMyRating(row)} />}
 
       {/* Floating AI help assistant — knowledge-only support for the owner.
           Hidden while the guided tour is running so they don't overlap. */}
       {/* Chatknop weg zolang de rondleiding of "Wat is er nieuw" open is — hij
           zweefde anders over de feedbackregel van dat venster (Faisal, 07-09). */}
-      {!tourOpen && !whatsNew && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
+      {!tourOpen && !whatsNew && !rateOpen && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
@@ -17099,6 +17135,29 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 <button className="btn-ghost" style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={startTour}>
                   <NavIcon name="check" size={14} color={accent} />
                   {lang === "nl" ? "Start de rondleiding" : lang === "es" ? "Iniciar la visita" : "Start the tour"}
+                </button>
+              </div>
+
+              {/* Beoordeel Vellu (16-09-2026): cijfer + toelichting, hier ook
+                  later te wijzigen. Zie RateVellu.jsx. */}
+              <div data-rate-card style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                  {lang === "nl" ? "Jouw mening" : lang === "es" ? "Tu opinión" : "Your opinion"}
+                </div>
+                <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 14 }}>
+                  {myRating
+                    ? (lang === "nl" ? `Je gaf Vellu ${myRating.rating} van 5 op ${fmtDate(myRating.updated_at)}. Veranderd van mening, of iets nieuws te melden? Werk je beoordeling bij.`
+                      : lang === "es" ? `Le diste a Vellu un ${myRating.rating} de 5 el ${fmtDate(myRating.updated_at)}. ¿Has cambiado de opinión o tienes algo nuevo que contar? Actualiza tu valoración.`
+                      : `You gave Vellu ${myRating.rating} out of 5 on ${fmtDate(myRating.updated_at)}. Changed your mind, or something new to tell us? Update your rating.`)
+                    : (lang === "nl" ? "Geef Vellu een cijfer en vertel wat goed werkt en wat je mist. We lezen elke reactie. Je cijfer telt mee in het gemiddelde op vellu.cc; je salonnaam alleen als je dat aanvinkt."
+                      : lang === "es" ? "Dale una nota a Vellu y cuéntanos qué funciona bien y qué echas de menos. Leemos cada respuesta. Tu nota cuenta para la media en vellu.cc; el nombre de tu salón solo si lo marcas."
+                      : "Give Vellu a score and tell us what works well and what you miss. We read every reply. Your score counts towards the average on vellu.cc; your salon name only if you tick the box.")}
+                </div>
+                <button className="btn-ghost" data-rate-open style={{ display: "flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}44` }} onClick={() => setRateOpen(true)}>
+                  <NavIcon name="star2" size={14} color={accent} />
+                  {myRating
+                    ? (lang === "nl" ? "Beoordeling bijwerken" : lang === "es" ? "Actualizar valoración" : "Update rating")
+                    : (lang === "nl" ? "Beoordeel Vellu" : lang === "es" ? "Valora Vellu" : "Rate Vellu")}
                 </button>
               </div>
 
