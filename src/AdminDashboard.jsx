@@ -149,7 +149,7 @@ export default function AdminDashboard({ onLogout }) {
   // JWT van de beheerder). mode: "test" (naar mijn eigen adres), "send"
   // (alle salons die 'm nog niet kregen), of "send" met only = [owner_id]
   // (één salon, ook opnieuw). Daarna de uitnodigingslijst verversen.
-  const sendInvites = async (mode, only) => {
+  const sendInvites = async (mode, only, testLang = "nl") => {
     if (sendBusy) return;
     if (mode === "send") {
       const n = only ? only.length : invites.filter(i => !i.sent_at).length;
@@ -159,9 +159,9 @@ export default function AdminDashboard({ onLogout }) {
     }
     setSendBusy(true); setSendMsg("");
     try {
-      const { data, error } = await supabase.functions.invoke("send-rating-request", { body: { mode, only_owners: only || null, test_to: mode === "test" ? me : null } });
+      const { data, error } = await supabase.functions.invoke("send-rating-request", { body: { mode, only_owners: only || null, test_to: mode === "test" ? me : null, test_lang: testLang } });
       if (error || data?.error) { setSendMsg(`Failed: ${error?.message || data?.error}`); return; }
-      if (mode === "test") setSendMsg(`Test sent to ${me} (NL + EN).`);
+      if (mode === "test") setSendMsg(`Test (${testLang.toUpperCase()}) sent to ${me}.`);
       else {
         const failed = (data?.results || []).filter(r => !r.ok);
         setSendMsg(`Sent ${data?.sent ?? 0}${failed.length ? `, failed ${failed.length}: ${failed.map(f => f.salon).join(", ")}` : ""}${data?.skipped?.length ? ` · skipped ${data.skipped.length} (already sent)` : ""}.`);
@@ -520,8 +520,11 @@ export default function AdminDashboard({ onLogout }) {
                     Rating email — {invites.filter(i => i.sent_at).length} of {invites.length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test")} style={{ fontSize: 10, padding: "8px 12px" }}>
+                    <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "nl")} style={{ fontSize: 10, padding: "8px 12px" }}>
                       {sendBusy ? "Working…" : `Send me a test${me ? ` (${me})` : ""}`}
+                    </button>
+                    <button className="btn-ghost" data-admin-send-test-en disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "en")} style={{ fontSize: 10, padding: "8px 12px" }}>
+                      English test
                     </button>
                     <button className="btn-primary" data-admin-send-all disabled={sendBusy || invites.every(i => i.sent_at)} onClick={() => sendInvites("send")} style={{ width: "auto", fontSize: 10, padding: "8px 14px", opacity: invites.every(i => i.sent_at) ? 0.5 : 1 }}>
                       {`Send to salons not yet invited (${invites.filter(i => !i.sent_at).length})`}
@@ -529,7 +532,7 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
-                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
+                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. A test is one mail; all current salons get the Dutch version. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
                 </div>
                 {sendMsg && <div data-admin-send-msg style={{ fontSize: 12, color: /^Failed/.test(sendMsg) ? c.danger : c.success, marginBottom: 10 }}>{sendMsg}</div>}
                 {invites.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No active salons.</div>}

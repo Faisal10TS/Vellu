@@ -14,8 +14,8 @@
 //      secret }. Alleen een bestaande, nog niet gestarte opdracht met kloppend
 //      geheim wordt uitgevoerd.
 // Modi:
-//   test    → NL- en EN-voorbeeld naar test_to, niets naar salons; de html
-//             komt mee terug (preview)
+//   test    → één voorbeeldmail naar test_to in test_lang (nl of en, standaard
+//             nl), niets naar salons; de html komt mee terug (preview)
 //   dry_run → alleen de ontvangerslijst (maakt wel de tokens aan)
 //   send    → echt versturen. Zonder only_owners: alle actieve niet-demo
 //             salons die de mail nog NIET kregen (herhalen gaat per salon
@@ -124,20 +124,19 @@ async function callerIsAdmin(req: Request): Promise<boolean> {
 }
 
 async function runJob(job: any): Promise<{ result: any; status: number }> {
-  // Voorbeeldmails naar het testadres — geen salon, geen token.
+  // Voorbeeldmail naar het testadres — één mail, in één taal (test_lang,
+  // standaard nl); geen salon, geen token.
   if (job.mode === "test") {
     const to = String(job.test_to || "delivered@resend.dev");
-    const out: any[] = [];
+    const lang: "nl" | "en" = job.test_lang === "en" ? "en" : "nl";
     // Tijd in het onderwerp: elke testmail een eigen conversatie in Gmail,
     // anders verbergt Gmail bij de tweede test alles wat gelijk is aan de
     // eerste achter "…" (zie render).
     const stamp = new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" }).format(new Date());
-    for (const lang of ["nl", "en"] as const) {
-      const m = render(lang, lang === "nl" ? "TTNB Den Haag" : "Beauty by Eydy", `${SITE}/beoordeel/voorbeeld`);
-      const r = await sendResend(to, m.fromName, `[TEST ${lang} ${stamp}] ${m.subject}`, m.html, m.text);
-      out.push({ lang, to, subject: m.subject, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body, html: m.html, text: m.text });
-    }
-    return { result: { mode: "test", to, sent: out.filter((x) => x.ok).length, results: out }, status: 200 };
+    const m = render(lang, lang === "nl" ? "TTNB Den Haag" : "Beauty by Eydy", `${SITE}/beoordeel/voorbeeld`);
+    const r = await sendResend(to, m.fromName, `[TEST ${lang} ${stamp}] ${m.subject}`, m.html, m.text);
+    const out = [{ lang, to, subject: m.subject, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body, html: m.html, text: m.text }];
+    return { result: { mode: "test", to, lang, sent: r.ok ? 1 : 0, results: out }, status: 200 };
   }
 
   const only: string[] = Array.isArray(job.only_owners) ? job.only_owners.map((x: unknown) => String(x)) : [];
@@ -203,8 +202,9 @@ serve(async (req) => {
     const testTo = mode === "test" ? String(body?.test_to || "").trim().toLowerCase() : null;
     if (mode === "test" && !EMAIL_RE.test(testTo || "")) return json({ error: "invalid_test_to" }, 400);
     const only = Array.isArray(body?.only_owners) ? body.only_owners.map((x: unknown) => String(x)).filter((x: string) => UUID_RE.test(x)) : [];
+    const testLang = body?.test_lang === "en" ? "en" : "nl";
     const { data: made, error } = await supabase.from("app_rating_send_jobs")
-      .insert({ mode, test_to: testTo, only_owners: only.length ? only : null, started_at: new Date().toISOString() })
+      .insert({ mode, test_to: testTo, test_lang: testLang, only_owners: only.length ? only : null, started_at: new Date().toISOString() })
       .select("*").single();
     if (error || !made) return json({ error: error?.message || "job_failed" }, 500);
     job = made;
