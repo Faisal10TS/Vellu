@@ -14,6 +14,30 @@
 
 export const RELEASES = [
   {
+    // Vijfde blok op 16-09 (notities per bezoek), zelfde achtervoegsel-truc.
+    id: "2026-09-16e",
+    date: "2026-09-16",
+    title: { nl: "Notities per bezoek", en: "Notes per visit", es: "Notas por visita" },
+    items: [
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Op elke afspraakkaart staat nu een notitieblok tussen de allergie-regel en de knoppen. Tab Notitie: schrijf op wat je de klant hebt meegegeven, bijvoorbeeld elke dag nagelriemolie of over drie weken terugkomen.",
+          en: "Every appointment card now has a notes block between the allergy line and the buttons. Tab Note: write down what you advised the client, for example cuticle oil every day or come back in three weeks.",
+          es: "Cada tarjeta de cita tiene ahora un bloque de notas entre la línea de alergias y los botones. Pestaña Nota: apunta lo que le aconsejaste al cliente, por ejemplo aceite de cutículas a diario o volver en tres semanas.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Komt de klant terug, dan opent het blok op de tab Vorige keer met wat je toen schreef en de vraag Gedaan? met Ja of Nee. Zo weet je bij binnenkomst wat je hebt geadviseerd en of ze het heeft opgevolgd. Medewerkers zien de notities van hun eigen afspraken.",
+          en: "When the client returns, the block opens on the Last time tab with what you wrote then and the question Done? with Yes or No. So when she walks in you know what you advised and whether she followed it. Team members see the notes of their own appointments.",
+          es: "Cuando el cliente vuelve, el bloque se abre en la pestaña La última vez con lo que escribiste entonces y la pregunta ¿Lo hizo? con Sí o No. Así sabes al entrar qué le aconsejaste y si lo siguió. El equipo ve las notas de sus propias citas.",
+        },
+      },
+    ],
+  },
+  {
     // Vierde blok op 16-09 (dagweergave), zelfde achtervoegsel-truc.
     id: "2026-09-16d",
     date: "2026-09-16",

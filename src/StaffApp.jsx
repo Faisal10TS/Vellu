@@ -370,7 +370,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Earnings/analytics and the whole Facturen tab stay PERSONAL — a stylist
   // sees the team's schedule, not the team's income.
   const activeAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
-  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday()));
+  // Op tijd gesorteerd: de RPC levert op datum, de volgorde binnen een dag was willekeurig.
+  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday())).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const completedAppts = myAppts.filter(a => a.status === "completed");
   // Eigen aandeel in een gecombineerde boeking (staffShareOf): doet een
   // collega een ander deel, dan telt alleen wat déze stylist deed. Zonder
@@ -412,6 +413,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [processingApptId, setProcessingApptId] = useState(null);
   // Afspraak-id waarvoor de "Hoe is er betaald?"-kiezer openstaat (Voltooid).
   const [completeFor, setCompleteFor] = useState(null);
+  // Notities per bezoek (16-09): welke kaart wordt bewerkt + welke tab open staat.
+  const [adviceEdit, setAdviceEdit] = useState(null); // { id, text }
+  const [noteTab, setNoteTab] = useState({}); // afspraak-id → "note" | "prev"
   const payMethodLabel = (pm) => ({
     nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
     en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", prepay: "Prepayment", prepaid: "Paid in advance" },
@@ -576,6 +580,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         }).catch(e => console.error("refund_sent:", e));
       }
     } finally { setProcessingApptId(null); }
+  };
+  // Notitie voor de volgende keer (appointments.visit_advice) en, bij het
+  // volgende bezoek, of de klant het gedaan heeft (advice_followed op de VORIGE rij).
+  const saveAdvice = async (id, text) => {
+    const clean = String(text || "").trim().slice(0, 600) || null;
+    const { error } = await supabase.from("appointments").update({ visit_advice: clean }).eq("id", id).eq("owner_id", salonProfile.id);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+    setAppointments(list => list.map(x => x.id === id ? { ...x, visit_advice: clean } : x));
+    setAdviceEdit(null);
+    toast.show(clean ? (lang === "nl" ? "Notitie opgeslagen" : lang === "es" ? "Nota guardada" : "Note saved") : (lang === "nl" ? "Notitie verwijderd" : lang === "es" ? "Nota eliminada" : "Note removed"));
+  };
+  const setAdviceFollowed = async (id, val) => {
+    const { error } = await supabase.from("appointments").update({ advice_followed: val }).eq("id", id).eq("owner_id", salonProfile.id);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+    setAppointments(list => list.map(x => x.id === id ? { ...x, advice_followed: val } : x));
   };
   const markNoShow = async (id) => {
     if (processingApptId) return;
@@ -962,7 +981,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     return labels.length ? labels.join(" · ") : a.service_name;
   };
 
-  const ApptCard = ({ a }) => {
+  // Gewone functie-aanroep, géén component: een component die in de render
+  // wordt gedefinieerd krijgt bij elke state-wissel een nieuwe identiteit en
+  // wordt dan opnieuw gemount — daardoor verloor de notitie-textarea na elke
+  // letter haar cursor (tekst kwam omgekeerd binnen). Geen hooks hierin.
+  const renderApptCard = (a) => {
     const note = showContact ? clientNotes[(a.client_email || "").toLowerCase()] : null;
     const phoneDigits = (a.client_phone || "").replace(/\D/g, "");
     const mine = isMineAppt(a);
@@ -971,7 +994,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const slots = mySlots(a);
     const showStaffChip = seeAll && a.staff_name && (!mine || staffFilter === null);
     return (
-    <div className="appt-card" style={{ marginBottom: 10 }}>
+    <div key={a._slotKey || a.id} className="appt-card" style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 500, fontSize: 14 }}>{a.client_name}</div>
@@ -1019,6 +1042,74 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           })()}
         </div>
       </div>
+      {/* Notities per bezoek (16-09, verzoek TTNB via Faisal, "als een notes-tab"):
+          tab Notitie = wat je de klant deze keer hebt meegegeven; tab Vorige keer =
+          de notitie van het vorige bezoek met "Gedaan? Ja/Nee" (schrijft naar die
+          VORIGE afspraak), zodat je bij binnenkomst weet wat je toen zei. */}
+      {(() => {
+        const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+        const canEdit = mine && (a.status === "confirmed" || a.status === "completed" || a.status === "pending_payment");
+        const mail = (a.client_email || "").toLowerCase();
+        const prev = mail ? (appointments || [])
+          .filter(x => x.id !== a.id && (x.client_email || "").toLowerCase() === mail && x.visit_advice && x.status !== "cancelled" && x.status !== "no_show" && (x.date < a.date || (x.date === a.date && (x.time || "") < (a.time || ""))))
+          .sort((x, y) => (y.date + (y.time || "")).localeCompare(x.date + (x.time || "")))[0] : null;
+        if (!prev && !a.visit_advice && !canEdit) return null;
+        const editing = adviceEdit && adviceEdit.id === a.id;
+        const fmtD = (ds) => { const d = parseDate(ds); return `${d.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[d.getMonth()]}`; };
+        // Standaard open op "Vorige keer" zolang deze afspraak nog geen notitie heeft.
+        const tab = editing ? "note" : (noteTab[a.id] || (prev && !a.visit_advice ? "prev" : "note"));
+        const tabBtn = (key, label, extra) => (
+          <button type="button" data-note-tab={key} onClick={() => setNoteTab(s => ({ ...s, [a.id]: key }))} aria-selected={tab === key}
+            style={{ background: "transparent", border: "none", borderBottom: `2px solid ${tab === key ? accent : "transparent"}`, padding: "7px 10px", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: tab === key ? accent : c.textLabel, cursor: "pointer", fontFamily: "'Jost',sans-serif", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: -1 }}>
+            {label}{extra}
+          </button>
+        );
+        const chip = (on, label, onClick, tone) => (
+          <button type="button" onClick={onClick} disabled={!mine} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 6, cursor: mine ? "pointer" : "default", border: `1px solid ${on ? tone : c.inputBorder}`, background: on ? `${tone}1f` : "transparent", color: on ? tone : c.textSub, fontFamily: "'Jost',sans-serif" }}>{label}</button>
+        );
+        return (
+          <div data-visit-notes style={{ marginBottom: 8, border: `1px solid ${c.border}`, borderRadius: 10, overflow: "hidden", background: c.bg }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}` }}>
+              <NavIcon name="note" size={11} color={c.textLabel} />
+              {tabBtn("note", L("Notitie", "Note", "Nota"), a.visit_advice ? <span aria-hidden="true" style={{ width: 5, height: 5, borderRadius: "50%", background: accent, display: "inline-block" }} /> : null)}
+              {prev && tabBtn("prev", `${L("Vorige keer", "Last time", "La última vez")} · ${fmtD(prev.date)}`, prev.advice_followed === true ? <NavIcon name="check" size={9} color={c.success} /> : prev.advice_followed === false ? <NavIcon name="xmark" size={9} color={c.danger} /> : null)}
+            </div>
+            <div style={{ padding: "8px 10px" }}>
+              {tab === "prev" && prev ? (
+                <div data-prev-advice={prev.id}>
+                  <div style={{ fontSize: 11, color: c.text, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{prev.visit_advice}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{L("Gedaan?", "Done?", "¿Lo hizo?")}</span>
+                    {chip(prev.advice_followed === true, L("Ja", "Yes", "Sí"), () => setAdviceFollowed(prev.id, prev.advice_followed === true ? null : true), c.success)}
+                    {chip(prev.advice_followed === false, L("Nee", "No", "No"), () => setAdviceFollowed(prev.id, prev.advice_followed === false ? null : false), c.danger)}
+                  </div>
+                </div>
+              ) : editing ? (
+                <div data-advice-editor>
+                  <textarea className="input-field" autoFocus rows={2} maxLength={600} value={adviceEdit.text} onChange={e => setAdviceEdit(s => ({ ...s, text: e.target.value }))}
+                    placeholder={L("Wat heb je meegegeven? Bijv. elke dag nagelriemolie, over 3 weken terug", "What did you advise? e.g. cuticle oil every day, back in 3 weeks", "¿Qué le aconsejaste? p. ej. aceite de cutículas a diario, volver en 3 semanas")}
+                    style={{ width: "100%", fontSize: 12, padding: "8px 10px", resize: "vertical", minHeight: 56, fontFamily: "'Jost',sans-serif" }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <button type="button" className="btn-primary" data-advice-save style={{ fontSize: 10, padding: "8px 14px", flex: 1 }} onClick={() => saveAdvice(a.id, adviceEdit.text)}>{L("Opslaan", "Save", "Guardar")}</button>
+                    <button type="button" className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px" }} onClick={() => setAdviceEdit(null)}>{L("Annuleer", "Cancel", "Cancelar")}</button>
+                  </div>
+                </div>
+              ) : a.visit_advice ? (
+                <div data-advice-text role={canEdit ? "button" : undefined} tabIndex={canEdit ? 0 : undefined} onClick={canEdit ? () => setAdviceEdit({ id: a.id, text: a.visit_advice || "" }) : undefined} onKeyDown={canEdit ? (e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAdviceEdit({ id: a.id, text: a.visit_advice || "" }); } }) : undefined}
+                  title={canEdit ? L("Tik om te bewerken", "Tap to edit", "Toca para editar") : undefined}
+                  style={{ fontSize: 11, color: c.text, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: canEdit ? "pointer" : "default", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>{a.visit_advice}</span>
+                  {canEdit && <NavIcon name="edit" size={10} color={c.textMuted} />}
+                </div>
+              ) : canEdit ? (
+                <button type="button" data-advice-add onClick={() => setAdviceEdit({ id: a.id, text: "" })} style={{ width: "100%", background: "transparent", border: `1px dashed ${c.inputBorder}`, borderRadius: 8, padding: "8px 10px", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "'Jost',sans-serif" }}>
+                  <NavIcon name="plus" size={11} color="currentColor" /> {L("Notitie toevoegen", "Add a note", "Añadir nota")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
       {a.status === "confirmed" && mine && (() => {
         // Restyle 16-09 (zoals de eigenaarsapp): één rij tekstknoppen —
         // Voltooid getint in het accent + Prijs / No-show / Annuleer — en de
@@ -1434,7 +1525,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   ) : (
                     <div style={{ position: "relative" }}>
-                      {todayAppts.slice(0, 3).map(a => <ApptCard key={a.id} a={a} />)}
+                      {todayAppts.slice(0, 3).map(a => renderApptCard(a))}
                       {todayAppts.length > 3 && (
                         <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
                           + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles →" : lang === "es" ? "más · Ver todo →" : "more · View all →"}
@@ -2113,7 +2204,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : lang === "es" ? "No hay citas este día" : "No appointments on this day")}</div>
                   </div>
                 ) : (
-                  calAppts.map(a => <ApptCard key={a.id} a={a} />)
+                  calAppts.map(a => renderApptCard(a))
                 )}
               </>)}
             </div>
