@@ -9802,16 +9802,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </div>
                           );
                         })}
-                        {/* Mobiel als 2×2-grid: vier gelijke rapportknoppen
+                        {/* Vier gelijke rapportknoppen onder één kopje: op desktop
+                            vier op een rij, op de telefoon 2×2 (Faisal 16-09:
+                            "symmetrisch" — de wrap gaf 3+1). Volle naam in de tooltip.
                             i.p.v. een rafelige wrap van 2+1. */}
-                        <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 10 } : { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                        <div data-kassa-reports-label style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginTop: 12, marginBottom: 6 }}>{lang === "nl" ? "Verkooprapport (PDF)" : lang === "es" ? "Informe de ventas (PDF)" : "Sales report (PDF)"}</div>
+                        <div data-kassa-reports style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: 6 }}>
                           {[
-                            ["day", lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"],
-                            ["month", lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"],
-                            ["quarter", lang === "nl" ? "Kwartaalrapport (PDF)" : lang === "es" ? "Trimestral (PDF)" : "Quarterly report (PDF)"],
-                            ["year", lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"],
-                          ].map(([scope, label]) => (
-                            <button key={scope} className="btn-ghost" style={{ padding: isMobile ? "8px 4px" : "8px 12px", fontSize: isMobile ? 9.5 : 10, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport(scope)}>
+                            ["day", lang === "nl" ? "Dag" : lang === "es" ? "Día" : "Day", lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"],
+                            ["month", lang === "nl" ? "Maand" : lang === "es" ? "Mes" : "Month", lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"],
+                            ["quarter", lang === "nl" ? "Kwartaal" : lang === "es" ? "Trimestre" : "Quarter", lang === "nl" ? "Kwartaalrapport (PDF)" : lang === "es" ? "Informe trimestral (PDF)" : "Quarterly report (PDF)"],
+                            ["year", lang === "nl" ? "Jaar" : lang === "es" ? "Año" : "Year", lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"],
+                          ].map(([scope, label, full]) => (
+                            <button key={scope} className="btn-ghost" title={full} aria-label={full} style={{ padding: isMobile ? "8px 4px" : "8px 6px", fontSize: isMobile ? 9.5 : 10, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, overflow: "hidden", opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport(scope)}>
                               <NavIcon name="download" size={11} color="currentColor" />{label}
                             </button>
                           ))}

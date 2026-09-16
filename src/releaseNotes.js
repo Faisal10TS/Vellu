@@ -61,6 +61,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Kassa: de vier rapportknoppen staan onder één kopje Verkooprapport (PDF) als Dag, Maand, Kwartaal en Jaar, even breed op één rij.",
+          en: "Sales: the four report buttons now sit under one heading Sales report (PDF) as Day, Month, Quarter and Year, equal width on one row.",
+          es: "Caja: los cuatro botones de informe están bajo un solo título Informe de ventas (PDF) como Día, Mes, Trimestre y Año, del mismo ancho en una fila.",
+        },
+      },
+      {
         kind: "improved", audience: ["staff"],
         text: {
           nl: "Ook in jouw app hebben kaarten en afspraken nu dezelfde zachte vierkante hoeken en zwevende schaduw als de website en de boekingspagina.",
