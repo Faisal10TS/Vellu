@@ -9752,9 +9752,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // alleen als het niet het lopende jaar is.
                     const dayLabel = `${dObj.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[dObj.getMonth()]}${dObj.getFullYear() !== getToday().getFullYear() ? ` ${dObj.getFullYear()}` : ""}`;
                     return (
-                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                      <div data-kassa-sold style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                        {/* Gecentreerd zoals het kadobon-blok (Faisal 16-09): label +
+                            dagkeuze op één regel, het dagtotaal eronder in het midden. */}
+                        <div data-kassa-sold-head style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <div data-kassa-sold-nav style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>
                               {isToday
                                 ? (lang === "nl" ? "Vandaag verkocht" : lang === "es" ? "Vendido hoy" : "Sold today")
@@ -9778,14 +9780,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                             )}
                           </div>
-                          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{dayTotal.toFixed(2)}</span>
+                          <span data-kassa-sold-total style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent, lineHeight: 1 }}>{cur}{dayTotal.toFixed(2)}</span>
                         </div>
                         {dayLoading ? (
-                          <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px" }}>
+                          <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px", textAlign: "center" }}>
                             {lang === "nl" ? "Laden…" : lang === "es" ? "Cargando…" : "Loading…"}
                           </div>
                         ) : rows.length === 0 ? (
-                          <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px" }}>
+                          <div data-kassa-sold-empty style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px", textAlign: "center" }}>
                             {isToday
                               ? (lang === "nl" ? "Nog niets verkocht vandaag." : lang === "es" ? "Aún no hay ventas hoy." : "Nothing sold yet today.")
                               : (lang === "nl" ? "Niets verkocht op deze dag." : lang === "es" ? "No se vendió nada ese día." : "Nothing sold on this day.")}
@@ -9808,9 +9810,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         })}
                         {/* Vier gelijke rapportknoppen onder één kopje: op desktop
                             vier op een rij, op de telefoon 2×2 (Faisal 16-09:
-                            "symmetrisch" — de wrap gaf 3+1). Volle naam in de tooltip.
-                            i.p.v. een rafelige wrap van 2+1. */}
-                        <div data-kassa-reports-label style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginTop: 12, marginBottom: 6 }}>{lang === "nl" ? "Verkooprapport (PDF)" : lang === "es" ? "Informe de ventas (PDF)" : "Sales report (PDF)"}</div>
+                            "symmetrisch" — de wrap gaf 3+1). Volle naam in de tooltip. */}
+                        <div data-kassa-reports-label style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginTop: 12, marginBottom: 6, textAlign: "center" }}>{lang === "nl" ? "Verkooprapport (PDF)" : lang === "es" ? "Informe de ventas (PDF)" : "Sales report (PDF)"}</div>
                         <div data-kassa-reports style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: 6 }}>
                           {[
                             ["day", lang === "nl" ? "Dag" : lang === "es" ? "Día" : "Day", lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"],
