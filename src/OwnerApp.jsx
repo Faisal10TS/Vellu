@@ -9693,12 +9693,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       })}
                     </div>
                   )}
-                  {/* Kadobon verkopen */}
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: c.text }}><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
-                    <input className="input-field" type="number" min="0" value={kassaVoucher} onChange={e => setKassaVoucher(e.target.value)} placeholder={`${cur} ${lang === "nl" ? "bedrag" : lang === "es" ? "importe" : "amount"}`} style={{ width: 110, fontSize: 12 }} />
-                    <span style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "krijgt automatisch een unieke code (op de factuur)" : lang === "es" ? "recibe un código único (en la factura)" : "gets a unique code automatically (on the invoice)"}</span>
-                    <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "7px 12px", fontSize: 10 }} onClick={async () => {
+                  {/* Kadobon verkopen — gecentreerd blok (Faisal 16-09): label +
+                      bedrag op één regel, de uitleg eronder, en de beheerknop
+                      symmetrisch daaronder in plaats van rechts uitgelijnd. */}
+                  <div data-kassa-gift style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}`, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                    <div data-kassa-gift-row style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12, color: c.text, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="gift" size={14} color="currentColor" />{lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
+                      <input className="input-field" type="number" min="0" value={kassaVoucher} onChange={e => setKassaVoucher(e.target.value)} placeholder={`${cur} ${lang === "nl" ? "bedrag" : lang === "es" ? "importe" : "amount"}`} style={{ width: 110, fontSize: 12 }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: c.textMuted, textAlign: "center" }}>{lang === "nl" ? "Krijgt automatisch een unieke code (op de factuur)." : lang === "es" ? "Recibe un código único automáticamente (en la factura)." : "Gets a unique code automatically (on the invoice)."}</span>
+                    <button type="button" data-kassa-gift-manage className="btn-ghost" style={{ padding: "7px 14px", fontSize: 10, marginTop: 2 }} onClick={async () => {
                       setShowVouchers(true); setVouchers(null);
                       const { data } = await supabase.from("gift_vouchers").select("*").eq("owner_id", salonData.owner_id).order("created_at", { ascending: false }).limit(100);
                       setVouchers(data || []);
