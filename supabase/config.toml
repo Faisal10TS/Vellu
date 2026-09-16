@@ -175,6 +175,15 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/check-pending-payments/index.ts"
 
+[functions.send-rating-request]
+enabled = true
+# Beoordelingsmail "Hoe bevalt Vellu?" aan de salons (Faisal 16-09-2026).
+# Geen gebruikers-JWT: de aanroep draagt een opdracht-id + geheim uit
+# app_rating_send_jobs, en de functie doet alleen iets bij een bestaande,
+# nog niet gestarte opdracht. verify_jwt=true zou elke aanroep 401'en.
+verify_jwt = false
+entrypoint = "./functions/send-rating-request/index.ts"
+
 [functions.send-renewal-reminder]
 enabled = true
 # Cron: waarschuwt een jaarabonnee een week voor plan_expires_at. Aangeroepen

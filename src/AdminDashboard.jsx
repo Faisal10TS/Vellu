@@ -71,6 +71,9 @@ export default function AdminDashboard({ onLogout }) {
   // met de knop om een citaat op vellu.cc te zetten (alleen als de salon dat
   // toestond). Zie RateVellu.jsx en migratie beoordeel_vellu.
   const [ratings, setRatings] = useState([]);
+  // Uitnodigingen voor de beoordelingsmail: wie is gemaild, wie opende de
+  // pagina, wie antwoordde (admin_rating_invites).
+  const [invites, setInvites] = useState([]);
   const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | ratings | cron
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
@@ -91,7 +94,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -100,6 +103,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_billing_overview"),
         supabase.rpc("admin_subscriptions_list"),
         supabase.rpc("admin_app_ratings"),
+        supabase.rpc("admin_rating_invites"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -110,6 +114,7 @@ export default function AdminDashboard({ onLogout }) {
       setBilling(bo.data?.[0] || null);
       setSubs(sb.data || []);
       setRatings(ar.data || []);
+      setInvites(ai.data || []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -472,8 +477,26 @@ export default function AdminDashboard({ onLogout }) {
                 <StatCard label="Published" value={real.filter(r => r.published).length} sub="quotes live on vellu.cc" accent={accent} c={c} />
               </div>
               <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-                Owners rate Vellu under Settings → Subscription & account (and once via a prompt in the dashboard). The average and the count go to vellu.cc automatically from 3 ratings; a salon's name and words only appear there if the salon allowed it AND you publish it here.
+                Salons rate Vellu on the page behind the personal link in the "Hoe bevalt Vellu?" email (vellu.cc/beoordeel/…, the same link also lets them change their answer later). The average and the count go to vellu.cc automatically from 3 ratings; a salon's name and words only appear there if the salon allowed it AND you publish it here.
               </div>
+              {/* Uitnodigingen: verzonden / geopend / beantwoord per salon. */}
+              {invites.length > 0 && (
+                <div data-admin-invites style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
+                    Email invitations — {invites.filter(i => i.sent_at).length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
+                  </div>
+                  {invites.map(i => (
+                    <div key={i.owner_id} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", fontSize: 12, borderBottom: `1px solid ${c.border}` }}>
+                      <span style={{ fontWeight: 500 }}>{i.business_name || <em style={{ color: c.textMuted }}>(no name)</em>} <span style={{ color: c.textMuted, fontWeight: 400 }}>· {i.email}</span></span>
+                      <span style={{ color: c.textSub, whiteSpace: "nowrap" }}>
+                        {i.sent_at ? `sent ${relTime(i.sent_at)}${i.sent_count > 1 ? ` (${i.sent_count}x)` : ""}` : "not sent"}
+                        {" · "}
+                        <span style={{ color: i.answered_at ? c.success : i.opened_at ? accent : c.textMuted }}>{i.answered_at ? "answered" : i.opened_at ? "opened" : "not opened"}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                 {ratings.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 24, textAlign: "center" }}>No ratings yet.</div>}
                 {ratings.map(r => (

@@ -24,6 +24,9 @@ const TermsPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.
 const ContactPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.ContactPage })));
 const DpaPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.DpaPage })));
 const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({ default: m.GoogleIntegrationPage })));
+// Beoordeel Vellu: de pagina achter de link in de beoordelingsmail aan salons
+// (token in de URL is de toegang, geen inlog). Zie src/RateVellu.jsx.
+const RateVelluPage = lazy(() => import("./RateVellu.jsx"));
 
 // ─── PLAN-TOEGANG ─────────────────────────────────────────────
 // Mag deze eigenaar de app in? Normaal: een plan én plan_expires_at in de
@@ -1105,6 +1108,8 @@ export default function VelluApp() {
               {/* Google OAuth verification wants a dedicated public page; this
                   describes the Google Calendar integration + Limited Use. */}
               <Route path="/integrations/google" element={<GoogleIntegrationPage lang={lang} setLang={setLangPersist} />} />
+              <Route path="/beoordeel/:token" element={<RateVelluPage />} />
+              <Route path="/rate/:token" element={<RateVelluPage />} />
               {/* Admin route — rendered for anyone, but the component itself
                   calls is_admin() via RPC and shows "Not authorised" for
                   non-admins. Real enforcement sits in the DB (app_admins). */}

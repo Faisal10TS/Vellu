@@ -14,22 +14,6 @@
 
 export const RELEASES = [
   {
-    // Zesde blok op 16-09 (Beoordeel Vellu), zelfde achtervoegsel-truc.
-    id: "2026-09-16f",
-    date: "2026-09-16",
-    title: { nl: "Wat vind jij van Vellu?", en: "What do you think of Vellu?", es: "¿Qué opinas de Vellu?" },
-    items: [
-      {
-        kind: "new", audience: ["owner"],
-        text: {
-          nl: "Onder Instellingen → Abonnement & account kun je Vellu nu een cijfer geven en vertellen wat goed werkt en wat je mist. We lezen elke reactie. Je cijfer telt mee in het gemiddelde op vellu.cc; je salonnaam en je woorden komen er alleen als je dat aanvinkt.",
-          en: "Under Settings → Subscription & account you can now give Vellu a score and tell us what works well and what you miss. We read every reply. Your score counts towards the average on vellu.cc; your salon name and your words only appear there if you tick the box.",
-          es: "En Ajustes → Suscripción y cuenta ahora puedes darle una nota a Vellu y contarnos qué funciona bien y qué echas de menos. Leemos cada respuesta. Tu nota cuenta para la media en vellu.cc; el nombre de tu salón y tus palabras solo aparecen si marcas la casilla.",
-        },
-      },
-    ],
-  },
-  {
     // Vijfde blok op 16-09 (notities per bezoek), zelfde achtervoegsel-truc.
     id: "2026-09-16e",
     date: "2026-09-16",
