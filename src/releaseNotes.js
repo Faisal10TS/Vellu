@@ -14,6 +14,63 @@
 
 export const RELEASES = [
   {
+    // Tweede release op dezelfde dag: id met achtervoegsel zodat wie
+    // "2026-09-16" al zag dit blok nog wél krijgt (string-vergelijking).
+    id: "2026-09-16b",
+    date: "2026-09-16",
+    title: { nl: "Nieuwe look dashboard", en: "New dashboard look", es: "Nuevo aspecto del panel" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Je dashboard heeft dezelfde stijl gekregen als de website en je boekingspagina: zwevende kaarten met zachte vierkante hoeken. Bovenaan vier tegels (deze week, deze maand, dit jaar en je beoordeling), daaronder Vandaag met je afspraken naast Snelle acties als tegels en je populairste behandelingen, en de omzetgrafiek over de volle breedte.",
+          en: "Your dashboard now has the same style as the website and your booking page: floating cards with soft square corners. At the top four tiles (this week, this month, this year and your rating), below that Today with your appointments next to Quick actions as tiles and your most popular services, and the revenue chart across the full width.",
+          es: "Tu panel tiene ahora el mismo estilo que la web y tu página de reservas: tarjetas flotantes con esquinas cuadradas suaves. Arriba cuatro mosaicos (esta semana, este mes, este año y tu valoración), debajo Hoy con tus citas junto a Acciones rápidas como mosaicos y tus tratamientos más populares, y el gráfico de ingresos a todo el ancho.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Zijbalk: je salon staat bovenaan als kaart met logo, plaats en plan, met je boekingslink eronder. Het oog opent je pagina, de schakel kopieert de link. De knoppen Preview en Kopieer bovenaan de pagina zijn daarheen verhuisd; bovenaan staat nu alleen nog + Afspraak toevoegen.",
+          en: "Sidebar: your salon sits at the top as a card with logo, city and plan, with your booking link below it. The eye opens your page, the link icon copies the link. The Preview and Copy buttons at the top of the page moved there; the top now only has + Add appointment.",
+          es: "Barra lateral: tu salón aparece arriba como tarjeta con logo, ciudad y plan, con tu enlace de reservas debajo. El ojo abre tu página, el icono de enlace copia el enlace. Los botones Vista previa y Copiar de la parte superior se han movido allí; arriba solo queda + Agregar cita.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Afspraakkaart: op de computer één rij knoppen (Markeer voltooid in je kleur, Verplaats, Bewerk, No-show, Annuleer) met rechts eronder kleine vierkante icoontjes voor Google Agenda, WhatsApp, product verkopen en verwijderen. Op de telefoon staat Markeer voltooid op volle breedte met de vier knoppen in twee rijen eronder.",
+          en: "Appointment card: on desktop one row of buttons (Mark complete in your colour, Reschedule, Edit, No-show, Cancel) with small square icons below right for Google Calendar, WhatsApp, selling a product and delete. On phones Mark complete spans the full width with the four buttons in two rows below.",
+          es: "Tarjeta de cita: en el ordenador una fila de botones (Completar en tu color, Reprogramar, Editar, No-show, Cancelar) con pequeños iconos cuadrados abajo a la derecha para Google Calendar, WhatsApp, vender un producto y eliminar. En el móvil Completar ocupa todo el ancho con los cuatro botones en dos filas debajo.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Telefoon: de balk onderaan heeft hoogstens vijf knoppen: Dashboard, Agenda, Kassa (Professional), Klanten en Meer. Analytics, Facturen en Instellingen vind je onder Meer.",
+          en: "Phone: the bottom bar has at most five buttons: Dashboard, Calendar, Sales (Professional), Clients and More. Analytics, Invoices and Settings are under More.",
+          es: "Móvil: la barra inferior tiene como máximo cinco botones: Panel, Agenda, Caja (Professional), Clientes y Más. Analítica, Facturas y Ajustes están bajo Más.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Agenda, Verkoop, Klanten, Analytics en Facturen in dezelfde stijl: Blokkeer tijd en Blokkeer behandeling zijn rustige grijze knoppen in plaats van rood, het weekrooster en de periodestrook zijn kaarten, klanten en facturen staan als zwevende rijen met een vierkante initiaal, en Facturen en Analytics openen met tegels met een icoon.",
+          en: "Calendar, Sales, Clients, Analytics and Invoices in the same style: Block time and Block treatment are calm grey buttons instead of red, the week grid and period strip are cards, clients and invoices are floating rows with a square initial, and Invoices and Analytics open with icon tiles.",
+          es: "Agenda, Ventas, Clientes, Analítica y Facturas en el mismo estilo: Bloquear tiempo y Bloquear tratamiento son botones grises tranquilos en lugar de rojos, la cuadrícula semanal y la franja de periodo son tarjetas, clientes y facturas son filas flotantes con una inicial cuadrada, y Facturas y Analítica abren con mosaicos con icono.",
+        },
+      },
+      {
+        kind: "improved", audience: ["staff"],
+        text: {
+          nl: "Ook in jouw app hebben kaarten en afspraken nu dezelfde zachte vierkante hoeken en zwevende schaduw als de website en de boekingspagina.",
+          en: "In your app too, cards and appointments now have the same soft square corners and floating shadow as the website and the booking page.",
+          es: "También en tu app, las tarjetas y las citas tienen ahora las mismas esquinas cuadradas suaves y sombra flotante que la web y la página de reservas.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-16",
     date: "2026-09-16",
     title: { nl: "No-show-vergoeding", en: "No-show fee", es: "Tarifa por ausencia" },
