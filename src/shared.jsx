@@ -521,6 +521,24 @@ function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink
   return `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. The total is ${amount}.\n\n${payVia}\n\nSee you next time! ✨`;
 }
 
+// No-show-vergoeding (16-09): betaalverzoek voor het bedrag dat bij de
+// statuswissel op de afspraak is vastgelegd. Verwijst naar het boekingsbeleid,
+// want dat is de grond waarop de salon dit mag rekenen.
+function getWhatsAppNoShowFeeMsg(lang, { clientName, salonName, amount, pct, paymentLink, iban, ibanHolder, countryCode }) {
+  const firstName = (clientName || "").split(" ")[0] || clientName || "";
+  const money = fmtMoney(amount, countryCode);
+  const linkWithAmount = getPaymentLinkWithAmount(paymentLink, amount);
+  const payVia = linkWithAmount
+    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
+    : (lang === "nl"
+      ? `Je kunt het overmaken naar ${iban}${ibanHolder ? ` t.n.v. ${ibanHolder}` : ""}.`
+      : `You can transfer it to ${iban}${ibanHolder ? ` (${ibanHolder})` : ""}.`);
+  if (lang === "nl") {
+    return `Hoi ${firstName},\n\nJe afspraak bij ${salonName} is helaas niet doorgegaan zonder afmelding. Volgens ons boekingsbeleid rekenen we daarvoor ${pct}% van het afspraakbedrag: ${money}.\n\n${payVia}\n\nBedankt voor je begrip.`;
+  }
+  return `Hi ${firstName},\n\nUnfortunately your appointment at ${salonName} was missed without cancelling. As stated in our booking policy we charge ${pct}% of the appointment price for this: ${money}.\n\n${payVia}\n\nThank you for your understanding.`;
+}
+
 // Te veel betaald (prijs omlaag na een vooruitbetaling): Vellu kent het
 // rekeningnummer van de klant niet, dus de salon vraagt het via WhatsApp en
 // maakt het verschil zelf terug over. Daarna "Terugbetaald" op de kaart.
@@ -3172,7 +3190,7 @@ export {
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,
   ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,

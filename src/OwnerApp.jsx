@@ -20,7 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, waDigits, partPricesOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -3965,6 +3965,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       google_calendar_connected: false,
       google_place_id: "",
       auto_block_no_show_threshold: 0,
+      no_show_fee_enabled: false,
+      no_show_fee_pct: 20,
       client_no_shows: {},
       referral_code: "",
       referral_credit_days: 0,
@@ -3981,6 +3983,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // the URL bar collapses, visualViewport.resize fires and we re-measure → buffer goes to 0.
   const toast = useToast();
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
+  // No-show-vergoeding (verzoek van een salon via Faisal, 16-09): aanzetten
+  // opent eerst de vraag of de zin in het boekingsbeleid mag — zonder die zin
+  // heeft de salon geen grond om iets te rekenen. noShowFeeAsk = het gekozen
+  // percentage waarvoor die vraag openstaat.
+  const [noShowFeeAsk, setNoShowFeeAsk] = useState(null);
+  const noShowFeeSentence = (pct, l) => l === "nl"
+    ? `Niet verschijnen zonder afmelding (no-show): wij brengen ${pct}% van het afspraakbedrag in rekening.`
+    : `No-show without cancelling: we charge ${pct}% of the appointment price.`;
+  const policyMentionsNoShowFee = (pct) => {
+    const txt = `${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`;
+    return /no[- ]?show/i.test(txt) && txt.includes(`${pct}%`);
+  };
+  const addNoShowFeeToPolicy = (pct) => update(d => {
+    const nl = (d.booking_policy || "").trim(), en = (d.booking_policy_en || "").trim();
+    if (!nl.includes(noShowFeeSentence(pct, "nl"))) d.booking_policy = (nl ? nl + "\n" : "") + noShowFeeSentence(pct, "nl");
+    if (!en.includes(noShowFeeSentence(pct, "en"))) d.booking_policy_en = (en ? en + "\n" : "") + noShowFeeSentence(pct, "en");
+    return d;
+  });
+  const chooseNoShowFee = (v) => {
+    if (v === 0) { update(d => { d.no_show_fee_enabled = false; return d; }); return; }
+    if (!salonData.no_show_fee_enabled) { setNoShowFeeAsk(v); return; }
+    update(d => { d.no_show_fee_pct = v; return d; });
+  };
   // Elke knop op het instellingenscherm die HARD wegnavigeert (Mollie-checkout,
   // Google-koppeling, abonnementspagina) gooit alles weg wat nog niet via de
   // grote Opslaan-knop is bewaard. Eén gedeelde bevestiging in plaats van vier
@@ -4454,6 +4479,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           iban_holder: data.iban_holder || "",
           payment_link: data.payment_link || "",
           prepay_enabled: !!data.prepay_enabled,
+          no_show_fee_enabled: !!data.no_show_fee_enabled,
+          no_show_fee_pct: data.no_show_fee_pct ?? 20,
           invoice_prefix: data.invoice_prefix || "INV",
           next_invoice_number: data.next_invoice_number || 1,
           invoice_profiles: Array.isArray(data.invoice_profiles) ? data.invoice_profiles : [],
@@ -5426,8 +5453,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id);
+      // .select() geeft de rij terug ná de triggers, dus mét het door de
+      // database vastgelegde no_show_fee (anders zag de kaart het pas na herladen).
+      const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).select("no_show_fee");
       if (error) return;
+      const noShowFee = Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
       const appt = salonData.appointments.find(a => a.id === id);
 
       // De TELLING gebeurt server-side: een trigger op appointments
@@ -5479,7 +5509,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         }
       }
 
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show"} : a); return d; });
+      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show", no_show_fee: noShowFee} : a); return d; });
     } finally { setProcessingApptId(null); }
   };
 
@@ -7665,7 +7695,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
         );
       })()}
-      {a.status === "no_show" && <div style={{ fontSize:11, color: c.danger, marginTop:6 }}><NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}</div>}
+      {/* No-show: het vastgelegde vergoedingsbedrag (trigger bij de statuswissel)
+          + WhatsApp-betaalverzoek. Vellu int niets zelf. */}
+      {a.status === "no_show" && (() => {
+        const fee = parseFloat(a.no_show_fee) || 0;
+        const price = parseFloat(a.service_price) || 0;
+        const pct = fee > 0 && price > 0 ? Math.round(fee / price * 100) : 0;
+        return (
+          <div style={{ marginTop: 6 }} data-no-show-line>
+            <div style={{ fontSize: 11, color: c.danger, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+              <NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}
+              {fee > 0 && <span>· {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {cur}{fee.toFixed(2)} ({pct}%)</span>}
+            </div>
+            {fee > 0 && a.client_phone && (salonData.payment_link || salonData.iban) && (
+              <a
+                href={getWhatsAppUrl(a.client_phone, getWhatsAppNoShowFeeMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: fee, pct, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                target="_blank" rel="noopener noreferrer" className="btn-ghost"
+                style={{ fontSize: 10, padding: "8px 12px", marginTop: 6, color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                title={lang === "nl" ? "Betaalverzoek voor de no-show-vergoeding via WhatsApp" : lang === "es" ? "Solicitud de pago de la tarifa por ausencia por WhatsApp" : "Payment request for the no-show fee via WhatsApp"}
+              >WhatsApp {lang === "nl" ? "betaalverzoek" : lang === "es" ? "solicitud de pago" : "payment request"}</a>
+            )}
+          </div>
+        );
+      })()}
       {/* Google Agenda + WhatsApp zitten sinds 15-09 in de derde rij van het
           bevestigd-blok hierboven (samen met de icoonknoppen). */}
     </div>
@@ -7870,6 +7922,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       <PullToRefresh />
       <ToastContainer toasts={toast.toasts} />
       <ConfirmModal state={confirmState} onYes={confirmYes} onNo={confirmNo} lang={lang} />
+
+      {/* Beleidsvraag bij het aanzetten van de no-show-vergoeding. */}
+      {noShowFeeAsk != null && (
+        <div data-no-show-fee-modal role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 300, background: c.overlay, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setNoShowFeeAsk(null)}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", boxShadow: "0 30px 60px -30px rgba(0,0,0,0.5)", maxHeight: "88vh", overflow: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: c.text }}>
+              {lang === "nl" ? "Zet dit in je boekingsbeleid" : lang === "es" ? "Ponlo en tu política de reservas" : "Put this in your booking policy"}
+            </div>
+            <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 14 }}>
+              {lang === "nl"
+                ? `Een no-show-vergoeding mag je alleen rekenen als de klant er vooraf mee akkoord is gegaan. Klanten gaan bij het boeken akkoord met je boekingsbeleid, dus daar moet het in staan. Wij kunnen deze zin voor je toevoegen (Nederlands en Engels):`
+                : lang === "es"
+                ? `Solo puedes cobrar una tarifa por ausencia si el cliente la aceptó de antemano. Al reservar, los clientes aceptan tu política de reservas, así que debe figurar ahí. Podemos añadir esta frase por ti (en neerlandés e inglés):`
+                : `You may only charge a no-show fee if the client agreed to it in advance. Clients accept your booking policy when they book, so it has to be in there. We can add this sentence for you (Dutch and English):`}
+            </div>
+            <div style={{ fontSize: 12, color: c.text, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5, fontStyle: "italic" }}>
+              {noShowFeeSentence(noShowFeeAsk, lang === "nl" ? "nl" : "en")}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button className="btn-primary" data-no-show-fee-add onClick={() => { addNoShowFeeToPolicy(noShowFeeAsk); update(d => { d.no_show_fee_enabled = true; d.no_show_fee_pct = noShowFeeAsk; return d; }); setNoShowFeeAsk(null); }}>
+                {lang === "nl" ? "Zin toevoegen en aanzetten" : lang === "es" ? "Añadir la frase y activar" : "Add the sentence and turn on"}
+              </button>
+              <button className="btn-ghost" data-no-show-fee-self onClick={() => { update(d => { d.no_show_fee_enabled = true; d.no_show_fee_pct = noShowFeeAsk; return d; }); setNoShowFeeAsk(null); }}>
+                {lang === "nl" ? "Ik zet het er zelf in" : lang === "es" ? "Lo pongo yo" : "I'll add it myself"}
+              </button>
+              <button className="btn-ghost" style={{ color: c.textMuted }} onClick={() => setNoShowFeeAsk(null)}>
+                {lang === "nl" ? "Annuleren" : lang === "es" ? "Cancelar" : "Cancel"}
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: c.textMuted, marginTop: 12, lineHeight: 1.5 }}>
+              {lang === "nl" ? "Vergeet niet op Opslaan te drukken. De vergoeding geldt voor no-shows die je daarna markeert." : lang === "es" ? "No olvides pulsar Guardar. La tarifa se aplica a las ausencias que marques a partir de entonces." : "Don't forget to press Save. The fee applies to no-shows you mark from then on."}
+            </div>
+          </div>
+        </div>
+      )}
 
       {tourOpen && <AppTour key={tourRun} steps={tourSteps} lang={lang} c={c} accent={accent} onFinish={endTour} />}
       {whatsNew && !tourOpen && <WhatsNewModal releases={whatsNew} lang={lang} c={c} accent={accent} onClose={closeWhatsNew} />}
@@ -16228,6 +16315,51 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   </div>
                 )}
               </div>
+
+              {/* No-show-vergoeding (verzoek van een salon, 16-09): percentage van
+                  het afspraakbedrag dat bij niet verschijnen geldt. Vellu int
+                  niets — het bedrag komt op de afspraakkaart met een WhatsApp-
+                  betaalverzoek, en de klant ziet het percentage vóór het akkoord
+                  met het boekingsbeleid. Aanzetten opent eerst de beleidsvraag. */}
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }} data-no-show-fee-card>
+                <SL>{lang === "nl" ? "No-show-vergoeding" : lang === "es" ? "Tarifa por ausencia" : "No-show fee"}</SL>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>
+                  {lang === "nl"
+                    ? "Percentage van het afspraakbedrag dat je rekent als een klant niet komt opdagen. Klanten zien dit bij het boeken, en bij een no-show staat het bedrag op de afspraakkaart met een betaalverzoek via WhatsApp. Het innen doe je zelf."
+                    : lang === "es"
+                    ? "Porcentaje del importe de la cita que cobras si un cliente no se presenta. Los clientes lo ven al reservar, y en una ausencia el importe aparece en la tarjeta de la cita con una solicitud de pago por WhatsApp. El cobro lo haces tú."
+                    : "Percentage of the appointment price you charge when a client does not show up. Clients see it when booking, and on a no-show the amount appears on the appointment card with a WhatsApp payment request. Collecting it is up to you."}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[0, 10, 20, 25, 50, 100].map(v => {
+                    const active = v === 0 ? !salonData.no_show_fee_enabled : (!!salonData.no_show_fee_enabled && (salonData.no_show_fee_pct ?? 20) === v);
+                    return (
+                      <div key={v} data-no-show-fee-opt={v}
+                        onClick={() => chooseNoShowFee(v)}
+                        style={{
+                          padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11,
+                          fontWeight: active ? 600 : 400,
+                          background: active ? `${accent}18` : c.inputBg,
+                          border: `1px solid ${active ? accent : c.inputBorder}`,
+                          color: active ? accent : c.textSub,
+                          transition: "all 0.2s",
+                        }}
+                      >{v === 0 ? (lang === "nl" ? "Uit" : lang === "es" ? "Desactivado" : "Off") : `${v}%`}</div>
+                    );
+                  })}
+                </div>
+                {salonData.no_show_fee_enabled && !policyMentionsNoShowFee(salonData.no_show_fee_pct ?? 20) && (
+                  <div data-no-show-fee-warn style={{ marginTop: 12, padding: "10px 12px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 10, fontSize: 11, color: c.textSub, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <NavIcon name="alerttri" size={12} color={c.warning} />
+                    <span style={{ flex: 1, minWidth: 160, lineHeight: 1.5 }}>
+                      {lang === "nl" ? `Je boekingsbeleid noemt de vergoeding van ${salonData.no_show_fee_pct ?? 20}% nog niet. Zonder die zin kun je hem niet in rekening brengen.` : lang === "es" ? `Tu política de reservas aún no menciona la tarifa del ${salonData.no_show_fee_pct ?? 20}%. Sin esa frase no puedes cobrarla.` : `Your booking policy does not mention the ${salonData.no_show_fee_pct ?? 20}% fee yet. Without that sentence you cannot charge it.`}
+                    </span>
+                    <button type="button" className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }} onClick={() => addNoShowFeeToPolicy(salonData.no_show_fee_pct ?? 20)}>
+                      {lang === "nl" ? "Zin toevoegen" : lang === "es" ? "Añadir frase" : "Add sentence"}
+                    </button>
+                  </div>
+                )}
+              </div>
               </>}
 
               {/* ═══ BILLING TAB ═══ */}
@@ -17388,6 +17520,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   iban_holder: salonData.iban_holder || null,
                   payment_link: salonData.payment_link || null,
                   prepay_enabled: !!salonData.prepay_enabled,
+                  no_show_fee_enabled: !!salonData.no_show_fee_enabled,
+                  no_show_fee_pct: salonData.no_show_fee_pct ?? 20,
                   invoice_prefix: salonData.invoice_prefix || "INV",
                   // Extras staan in ÉÉN jsonb-kolom, dus we schrijven de hele
                   // array — maar wél de gemergde variant van hierboven, zodat

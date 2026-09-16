@@ -14,6 +14,29 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-16",
+    date: "2026-09-16",
+    title: { nl: "No-show-vergoeding", en: "No-show fee", es: "Tarifa por ausencia" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Instellingen, naast de no-show-blokkade: zet een no-show-vergoeding aan van 10, 20, 25, 50 of 100% van het afspraakbedrag. Bij het aanzetten vragen we of we de zin in je boekingsbeleid mogen zetten, want zonder die zin kun je niets rekenen. Klanten zien het percentage bij het boeken, vlak voor ze akkoord gaan met je beleid.",
+          en: "Settings, next to the no-show block: turn on a no-show fee of 10, 20, 25, 50 or 100% of the appointment price. When you turn it on we ask whether we may add the sentence to your booking policy, because without it you cannot charge anything. Clients see the percentage when booking, right before they accept your policy.",
+          es: "Ajustes, junto al bloqueo por ausencia: activa una tarifa por ausencia del 10, 20, 25, 50 o 100% del importe de la cita. Al activarla te preguntamos si podemos añadir la frase a tu política de reservas, porque sin ella no puedes cobrar nada. Los clientes ven el porcentaje al reservar, justo antes de aceptar tu política.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Markeer je een afspraak als no-show, dan staat het vergoedingsbedrag op de afspraakkaart, in de app van de eigenaar met een WhatsApp-betaalverzoek. Vellu int niets zelf.",
+          en: "When you mark an appointment as a no-show, the fee amount appears on the appointment card, in the owner app with a WhatsApp payment request. Vellu does not collect anything itself.",
+          es: "Si marcas una cita como ausencia, el importe de la tarifa aparece en la tarjeta de la cita, en la app del propietario con una solicitud de pago por WhatsApp. Vellu no cobra nada por sí mismo.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-15",
     date: "2026-09-15",
     title: { nl: "Vierkante knoppen", en: "Square buttons", es: "Botones cuadrados" },

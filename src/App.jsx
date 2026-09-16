@@ -583,6 +583,8 @@ function SalonRoute({ lang, setLang }) {
         // Vooruitbetalen: de view zet dit alleen op true als de salon het aanzet
         // én een betaallink of IBAN heeft.
         prepay_enabled: !!data.prepay_enabled,
+        // No-show-vergoeding: de view geeft 0 zolang de salon het uit heeft staan.
+        no_show_fee_pct: parseInt(data.no_show_fee_pct) || 0,
         break_minutes: data.break_minutes || 0,
         logo_url: data.logo_url || "",
         cover_image_url: data.cover_image_url || "",

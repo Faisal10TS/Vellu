@@ -585,9 +585,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // klant gebeurt server-side via een database-trigger op statuswissel naar
       // no_show. Client-side meetellen zou dubbel tellen — en zou de teller
       // missen zodra de status ergens anders (eigenaar, edge-functie) wijzigt.
-      const { error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id);
+      // .select() geeft de rij ná de triggers terug, mét het vastgelegde
+      // no_show_fee (no-show-vergoeding), anders stond het pas na herladen op de kaart.
+      const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id).select("no_show_fee");
       if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : lang === "es" ? "Error al marcar como no presentado" : "Error marking no-show", "error"); return; }
-      setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show"} : x));
+      const noShowFee = Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
+      setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show", no_show_fee: noShowFee} : x));
     } finally { setProcessingApptId(null); }
   };
   const saveWorkingHours = async () => {
@@ -997,6 +1000,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{statusLabelOf(a.status)}</span>
+          {/* No-show-vergoeding: bij de statuswissel door de database vastgelegd. */}
+          {a.status === "no_show" && parseFloat(a.no_show_fee) > 0 && (
+            <div data-no-show-fee style={{ fontSize: 10, color: c.danger, marginTop: 3 }}>
+              {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {cur}{parseFloat(a.no_show_fee).toFixed(2)}
+            </div>
+          )}
           {/* Gecombineerde boeking met een collega: JOUW bedrag groot (dat
               rekent de klant bij jou af), het totaal van de boeking klein. */}
           {showMoney && (() => {

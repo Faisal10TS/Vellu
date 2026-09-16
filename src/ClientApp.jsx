@@ -4448,6 +4448,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   </div>
                 )}
 
+                {/* No-show-vergoeding (16-09): het percentage dat de salon rekent
+                    bij niet verschijnen, zichtbaar vóór het akkoord met het beleid. */}
+                {initialSalon.no_show_fee_pct > 0 && (
+                  <div data-no-show-fee style={{ marginBottom: 12, padding: "12px 14px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <NavIcon name="alerttri" size={14} color={c.warning} />
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                      {lang === "nl" ? `Niet verschijnen zonder afmelding: ${initialSalon.no_show_fee_pct}% van het afspraakbedrag wordt in rekening gebracht.` : lang === "es" ? `Si no acudes sin cancelar: se cobra el ${initialSalon.no_show_fee_pct}% del importe de la cita.` : `No-show without cancelling: ${initialSalon.no_show_fee_pct}% of the appointment price will be charged.`}
+                    </div>
+                  </div>
+                )}
                 {/* Booking Policy */}
                 {effectivePolicy && (
                   <div style={{ marginBottom: 20, padding: "16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
@@ -5087,6 +5097,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       </div>
                     )}
 
+                    {initialSalon.no_show_fee_pct > 0 && (
+                      <div data-no-show-fee style={{ marginBottom: 12, padding: "12px 14px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <NavIcon name="alerttri" size={14} color={c.warning} />
+                        <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                          {lang === "nl" ? `Niet verschijnen zonder afmelding: ${initialSalon.no_show_fee_pct}% van het afspraakbedrag wordt in rekening gebracht.` : lang === "es" ? `Si no acudes sin cancelar: se cobra el ${initialSalon.no_show_fee_pct}% del importe de la cita.` : `No-show without cancelling: ${initialSalon.no_show_fee_pct}% of the appointment price will be charged.`}
+                        </div>
+                      </div>
+                    )}
                     {/* Booking Policy (mobile) */}
                     {effectivePolicy && (
                       <div style={{ marginBottom: 20, padding: "14px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
