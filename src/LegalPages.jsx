@@ -1,8 +1,34 @@
 import { useNavigate } from "react-router-dom";
-import { useTheme, useSEO, ACCENT, T, Layout, NavIcon, LangToggle, ThemeToggle, Header } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, LangToggle, AT, AT_COLORS, AtelierSkin } from "./shared.jsx";
+
+// Gedeelde Atelier-schil voor de juridische pagina's (Faisal 16-09: "heeft nog
+// het oude thema"): bone-achtergrond, espresso-tekst, wordmark + Terug +
+// taalkeuze bovenin. Geen licht/donker-schakelaar meer — de website heeft één
+// huid. De pagina's lezen hun kleuren uit AT_COLORS, dus `c` blijft werken.
+function LegalShell({ lang, setLang, maxWidth = 600, children }) {
+  const navigate = useNavigate();
+  const t = T[lang];
+  return (
+    <Layout accent={AT.EARTH}>
+      <AtelierSkin />
+      <div className="atelier" data-legal-shell style={{ background: AT_COLORS.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: AT_COLORS.text, padding: "0 24px 64px" }}>
+        <div style={{ maxWidth, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "22px 0 36px", flexWrap: "wrap" }}>
+            <a href="/" aria-label="vellu" style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 400, letterSpacing: "0.28em", color: AT.ESPRESSO, textDecoration: "none" }}>vellu</a>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button className="btn-ghost" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
+              <LangToggle lang={lang} setLang={setLang} />
+            </div>
+          </div>
+          {children}
+        </div>
+      </div>
+    </Layout>
+  );
+}
 
 function PrivacyPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
+  const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({ title: lang === "nl" ? "Privacybeleid | Vellu" : "Privacy Policy | Vellu", url: "https://vellu.cc/privacy" });
@@ -43,14 +69,7 @@ function PrivacyPage({ lang, setLang }) {
   };
 
   return (
-    <Layout>
-
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
+    <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
           {content.sections.map(([title, body], i) => (
@@ -59,15 +78,13 @@ function PrivacyPage({ lang, setLang }) {
               <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{body}</div>
             </div>
           ))}
-        </div>
-      </div>
-    </Layout>
+    </LegalShell>
   );
 }
 
 // ─── TERMS OF SERVICE ────────────────────────────────────────
 function TermsPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
+  const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({ title: lang === "nl" ? "Voorwaarden | Vellu" : "Terms of Service | Vellu", url: "https://vellu.cc/terms" });
@@ -110,14 +127,7 @@ function TermsPage({ lang, setLang }) {
   };
 
   return (
-    <Layout>
-
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
+    <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
           {content.sections.map(([title, body], i) => (
@@ -130,15 +140,13 @@ function TermsPage({ lang, setLang }) {
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
             <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
           </div>
-        </div>
-      </div>
-    </Layout>
+    </LegalShell>
   );
 }
 
 // ─── CONTACT / ABOUT PAGE ────────────────────────────────────
 function ContactPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
+  const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({ title: lang === "nl" ? "Contact | Vellu" : "Contact | Vellu", url: "https://vellu.cc/contact" });
@@ -188,30 +196,22 @@ function ContactPage({ lang, setLang }) {
     imprintAuthorityValue: "Dutch Data Protection Authority (autoriteitpersoonsgegevens.nl)",
   };
   return (
-    <Layout>
-
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
-          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 28, fontWeight: 300, letterSpacing: "0.18em", marginBottom: 8 }}>vellu</div>
+    <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 13, color: c.textSub, marginBottom: 40 }}>{content.subtitle}</div>
-          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.8, marginBottom: 32, padding: "20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>{content.mission}</div>
+          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.8, marginBottom: 32, padding: "20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12 }}>{content.mission}</div>
           <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.why}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whyText}</div></div>
           <div style={{ marginBottom: 32 }}><div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.who}</div><div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7 }}>{content.whoText}</div></div>
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.contact}</div>
             <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 16 }}>{content.contactText}</div>
-            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: "20px" }}>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: "20px" }}>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{content.emailLabel}</div>
-              <a href="mailto:info@vellu.cc" style={{ fontSize: 15, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>info@vellu.cc</a>
+              <a href="mailto:info@vellu.cc" style={{ fontSize: 15, color: AT.ESPRESSO, textDecoration: "none", fontWeight: 500 }}>info@vellu.cc</a>
               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>{content.responseTime}</div>
             </div>
           </div>
-          <div style={{ textAlign: "center", padding: "28px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 20, marginBottom: 32 }}>
+          <div style={{ textAlign: "center", padding: "28px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12, marginBottom: 32 }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
             <button className="btn-primary" onClick={() => navigate("/owner")}>{content.ctaBtn}</button>
@@ -219,7 +219,7 @@ function ContactPage({ lang, setLang }) {
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.imprintTitle}</div>
             <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 14 }}>{content.imprintIntro}</div>
-            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "16px 18px", fontSize: 12, lineHeight: 1.9, color: c.textSub }}>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: "16px 18px", fontSize: 12, lineHeight: 1.9, color: c.textSub }}>
               {[
                 [content.imprintCompany, content.imprintCompanyValue],
                 [content.imprintOwner, content.imprintOwnerValue],
@@ -239,15 +239,13 @@ function ContactPage({ lang, setLang }) {
             <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
           </div>
-        </div>
-      </div>
-    </Layout>
+    </LegalShell>
   );
 }
 
 // ─── DATA PROCESSING AGREEMENT (VERWERKINGSOVEREENKOMST) ─────
 function DpaPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
+  const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({ title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : "Data Processing Agreement | Vellu", url: "https://vellu.cc/dpa" });
@@ -295,17 +293,10 @@ function DpaPage({ lang, setLang }) {
     ]
   };
   return (
-    <Layout>
-
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
+    <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 20 }}>{content.updated}</div>
-          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 32, padding: "16px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 14 }}>{content.intro}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 32, padding: "16px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12 }}>{content.intro}</div>
           {content.sections.map(([title, body], i) => (
             <div key={i} style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
@@ -317,9 +308,7 @@ function DpaPage({ lang, setLang }) {
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
           </div>
-        </div>
-      </div>
-    </Layout>
+    </LegalShell>
   );
 }
 
@@ -333,7 +322,7 @@ function DpaPage({ lang, setLang }) {
 // Use disclosure. Also useful for salon owners who are cautious about
 // granting calendar access.
 function GoogleIntegrationPage({ lang, setLang }) {
-  const { colors: c } = useTheme();
+  const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
   useSEO({ title: lang === "nl" ? "Google Agenda-integratie | Vellu" : "Google Calendar Integration | Vellu", url: "https://vellu.cc/integrations/google" });
@@ -405,25 +394,19 @@ function GoogleIntegrationPage({ lang, setLang }) {
   };
 
   return (
-    <Layout>
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, padding: "40px 24px" }}>
-        <div style={{ maxWidth: 680, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
-            <div style={{ display: "flex", gap: 8 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>
-          </div>
+    <LegalShell lang={lang} setLang={setLang} maxWidth={680}>
 
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 6 }}>{content.title}</div>
           <div style={{ fontSize: 13, color: c.textSub, marginBottom: 4, lineHeight: 1.5 }}>{content.subtitle}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{content.updated}</div>
 
           {/* Overview card */}
-          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.7, marginBottom: 28, padding: "18px 20px", background: `${ACCENT}08`, border: `1px solid ${ACCENT}1a`, borderRadius: 16 }}>{content.overview}</div>
+          <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.7, marginBottom: 28, padding: "18px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12 }}>{content.overview}</div>
 
           {/* Scope block */}
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.scopeTitle}</div>
-            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+            <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>OAuth scope</div>
               <div style={{ fontFamily: "'Courier New',monospace", fontSize: 12, color: c.text, wordBreak: "break-all" }}>{content.scopeName}</div>
             </div>
@@ -435,9 +418,9 @@ function GoogleIntegrationPage({ lang, setLang }) {
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{content.stepsTitle}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {content.steps.map((s, i) => (
-                <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${ACCENT}15`, color: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <NavIcon name={s.icon} size={14} color={ACCENT} />
+                <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${AT.EARTH}1f`, color: AT.ESPRESSO, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <NavIcon name={s.icon} size={14} color={AT.EARTH} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 4 }}>{s.title}</div>
@@ -474,7 +457,7 @@ function GoogleIntegrationPage({ lang, setLang }) {
           <div style={{ marginBottom: 40 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{content.moreTitle}</div>
             <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 8 }}>{content.moreBody}</div>
-            <a href="/privacy" style={{ fontSize: 13, color: ACCENT, textDecoration: "none", fontWeight: 500 }}>{content.privacyLabel}</a>
+            <a href="/privacy" style={{ fontSize: 13, color: AT.ESPRESSO, textDecoration: "none", fontWeight: 500 }}>{content.privacyLabel}</a>
           </div>
 
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
@@ -482,9 +465,7 @@ function GoogleIntegrationPage({ lang, setLang }) {
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
             <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
           </div>
-        </div>
-      </div>
-    </Layout>
+    </LegalShell>
   );
 }
 

@@ -248,6 +248,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 720px) { .at-calc-grid { grid-template-columns: 1fr 1fr; gap: 18px; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
+          .at-footer-inner { padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px)); }
+          @media (max-width: 768px) { .at-footer-inner { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); } }
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
@@ -613,7 +615,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
           {/* Footer op het espresso-vlak — zelfde juridische regels als altijd. */}
           <footer style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
-            <div style={{ maxWidth: maxW, margin: "0 auto", padding: `22px ${pad} 30px`, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center" }}>
+            {/* Onderrand via .at-footer-inner: op de telefoon extra ruimte zodat
+                de voetregels boven de chat-bubbel uit kunnen scrollen. */}
+            <div className="at-footer-inner" style={{ maxWidth: maxW, margin: "0 auto", paddingTop: 22, paddingLeft: pad, paddingRight: pad, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: MUSHROOM, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", letterSpacing: "0.04em" }}>
                 <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: MUSHROOM, textDecoration: "none" }}>Mirah Ventures</a>
                 <span>·</span>
@@ -632,7 +636,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </footer>
         </div>
 
-        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} radius={R} />
+        {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
+            en anders hangt hij over de voetregels (Faisal 16-09). */}
+        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
         <SupportChat
           lang={lang}
           c={P}

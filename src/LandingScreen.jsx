@@ -825,18 +825,30 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
 // Renders a floating "Start trial" pill bottom-right once the visitor has
 // scrolled past the hero. Hidden while in the hero so it doesn't compete
 // with the primary CTA there.
-function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff", radius = 100 }) {
+// hideWhenInView (Faisal 16-09): een selector van het element waar dezelfde
+// knop al in beeld staat (de finale-CTA). Zodra dat element in het venster
+// schuift, verdwijnt de zwevende knop — anders hangt hij over de voetregels.
+function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff", radius = 100, hideWhenInView = null }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > 600);
+    const onScroll = () => {
+      let inView = false;
+      if (hideWhenInView) {
+        const el = document.querySelector(hideWhenInView);
+        if (el) inView = el.getBoundingClientRect().top < window.innerHeight - 24;
+      }
+      setVisible(window.scrollY > 600 && !inView);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
+  }, [hideWhenInView]);
   return (
     <button
       onClick={onClick}
       aria-label={label}
+      data-sticky-start={visible ? "visible" : "hidden"}
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 50,
         padding: "12px 22px", borderRadius: radius, border: "none",

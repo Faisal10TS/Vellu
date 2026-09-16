@@ -69,6 +69,14 @@ export const RELEASES = [
       {
         kind: "improved", audience: ["owner", "staff"],
         text: {
+          nl: "De pagina's Privacy, Voorwaarden, Contact, Verwerkersovereenkomst en Google Agenda-integratie staan nu in dezelfde stijl als de website. Onderaan de homepage verdwijnt de zwevende proefknop zodra de grote knop in beeld is, en de voetregels staan vrij van de chat-knop.",
+          en: "The Privacy, Terms, Contact, Data Processing Agreement and Google Calendar integration pages now share the website's style. At the bottom of the homepage the floating trial button disappears once the big button is in view, and the footer lines stay clear of the chat button.",
+          es: "Las páginas de Privacidad, Términos, Contacto, Acuerdo de tratamiento e integración con Google Calendar tienen ahora el mismo estilo que la web. Al final de la página de inicio, el botón flotante de prueba desaparece cuando el botón grande está a la vista, y las líneas del pie quedan libres del botón de chat.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
           nl: "De cookiemelding volgt nu de nieuwe stijl: op je boekingspagina neutraal in jouw licht- of donkerthema (geen Vellu-goud meer) en op de telefoon boven de Boek-balk.",
           en: "The cookie notice now follows the new style: on your booking page it is neutral in your light or dark theme (no more Vellu gold) and on phones it sits above the Book bar.",
           es: "El aviso de cookies sigue ahora el nuevo estilo: en tu página de reservas es neutro en tu tema claro u oscuro (sin el dorado de Vellu) y en el móvil queda encima de la barra Reservar.",
