@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLoca
 import { supabase } from "./supabase.js";
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym,
-  AT, AT_COLORS, AtelierSkin
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -992,26 +992,40 @@ function CookieConsent({ lang }) {
   // reached from an email link where any consent dance is pointless).
   if (!visible || location.pathname.startsWith("/owner") || location.pathname.startsWith("/staff") || location.pathname.startsWith("/cancel")) return null;
 
+  // Twee huiden (Faisal 16-09: "de cookiebanner heeft nog het oude thema"):
+  // op Vellu's eigen pagina's (landing, juridisch, contact) het Atelier-palet —
+  // bone-kaart, espresso-knop, vierkante hoeken; op de pagina van een salon
+  // neutraal in het thema van die pagina (inkt op papier, geen Vellu-goud), want
+  // daar hoort geen Vellu-branding. Op de telefoon staat hij boven de vaste
+  // Boek-balk van de salonpagina.
+  const path = location.pathname.replace(/\/+$/, "") || "/";
+  const eigen = path === "/" || ["/privacy", "/terms", "/voorwaarden", "/contact", "/dpa", "/admin"].includes(path) || path.startsWith("/integrations/");
+  const s = eigen
+    ? { bg: AT.BONE, border: AT.PUTTY, text: AT.ESPRESSO, sub: AT.EARTH, btnBg: AT.ESPRESSO, btnInk: AT.BONE, shadow: "0 22px 40px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.08)" }
+    // c.bg en niet c.bgCard: die kaarttint is doorschijnend (3%) en de banner
+    // zweeft over de pagina — dan schijnt de inhoud erdoorheen.
+    : { bg: c.bg, border: c.border, text: c.text, sub: c.textSub, btnBg: c.text, btnInk: c.bg, shadow: "0 22px 40px -26px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.08)" };
+  const bovenBoekbalk = !eigen && typeof window !== "undefined" && window.innerWidth < 900;
   return (
-    <div style={{
-      position: "fixed", bottom: 20, left: 20, right: 20, maxWidth: 420, margin: "0 auto",
-      background: c.bg, border: "1px solid " + c.border, borderRadius: 18,
-      padding: "16px 20px", display: "flex", alignItems: "center", gap: 14,
-      boxShadow: "0 8px 32px rgba(0,0,0,0.3)", zIndex: 9999,
+    <div data-cookie-banner={eigen ? "atelier" : "salon"} style={{
+      position: "fixed", bottom: `calc(${bovenBoekbalk ? 86 : 20}px + env(safe-area-inset-bottom, 0px))`, left: 16, right: 16, maxWidth: 440, margin: "0 auto",
+      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12,
+      padding: "14px 16px 14px 18px", display: "flex", alignItems: "center", gap: 14,
+      boxShadow: s.shadow, zIndex: 9999,
       fontFamily: "'Jost',sans-serif", animation: "fadeUp 0.4s ease"
     }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, color: c.text, fontWeight: 500, marginBottom: 3 }}><NavIcon name="cookie" size={12} color={c.text} /> Cookies</div>
-        <div style={{ fontSize: 10, color: c.textSub, lineHeight: 1.5 }}>
-          {lang === "nl" 
-            ? "Wij gebruiken alleen functionele cookies. " 
-            : "We only use functional cookies. "}
-          <a href="/privacy" style={{ color: ACCENT, textDecoration: "none" }}>{lang === "nl" ? "Meer info" : lang === "es" ? "Más información" : "Learn more"}</a>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, color: s.text, fontWeight: 600, marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}><NavIcon name="cookie" size={13} color={s.text} /> Cookies</div>
+        <div style={{ fontSize: 11.5, color: s.sub, lineHeight: 1.5 }}>
+          {lang === "nl"
+            ? "Wij gebruiken alleen functionele cookies. "
+            : lang === "es" ? "Solo usamos cookies funcionales. " : "We only use functional cookies. "}
+          <a href="/privacy" style={{ color: s.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{lang === "nl" ? "Meer info" : lang === "es" ? "Más información" : "Learn more"}</a>
         </div>
       </div>
       <button onClick={() => { localStorage.setItem("vellu_cookies_accepted", "true"); setVisible(false); }}
         aria-label={lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
-        style={{ background: ACCENT, color: c.btnOnDark, border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif", flexShrink: 0 }}>
+        style={{ background: s.btnBg, color: s.btnInk, border: `1px solid ${s.btnBg}`, borderRadius: AT_RADIUS, padding: "10px 16px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", flexShrink: 0 }}>
         {lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
       </button>
     </div>

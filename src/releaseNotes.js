@@ -67,6 +67,14 @@ export const RELEASES = [
         },
       },
       {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "De cookiemelding volgt nu de nieuwe stijl: op je boekingspagina neutraal in jouw licht- of donkerthema (geen Vellu-goud meer) en op de telefoon boven de Boek-balk.",
+          en: "The cookie notice now follows the new style: on your booking page it is neutral in your light or dark theme (no more Vellu gold) and on phones it sits above the Book bar.",
+          es: "El aviso de cookies sigue ahora el nuevo estilo: en tu página de reservas es neutro en tu tema claro u oscuro (sin el dorado de Vellu) y en el móvil queda encima de la barra Reservar.",
+        },
+      },
+      {
         kind: "fix", audience: ["owner", "staff"],
         text: {
           nl: "Deel-knop op je boekingspagina: het deel-icoon is nu ook zichtbaar als je huisstijlkleur wit of heel licht is.",
