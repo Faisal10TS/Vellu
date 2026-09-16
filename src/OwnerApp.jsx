@@ -17465,7 +17465,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 /* Meer-menu: dekkend paneel (c.bg, niet de doorschijnende kaarttint)
                    op een gedimde, vervaagde pagina, met een icoontegel per keuze —
                    Faisal 16-09: "not really clear what you're clicking". */
-                <div data-more-sheet onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.42)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+                <div data-more-sheet onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 500 /* boven de chat-knop (490) */, background: "rgba(0,0,0,0.42)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
                   <div role="menu" aria-label={lang === "nl" ? "Meer" : lang === "es" ? "Más" : "More"} onClick={e => e.stopPropagation()} data-more-panel style={{ position: "absolute", left: 12, right: 12, bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", padding: 8, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, boxShadow: "0 24px 60px -18px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.12)" }}>
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, padding: "8px 12px 6px" }}>{lang === "nl" ? "Meer" : lang === "es" ? "Más" : "More"}</div>
                     {rest.map(([k, icon, label]) => (
