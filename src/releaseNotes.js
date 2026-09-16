@@ -14,6 +14,54 @@
 
 export const RELEASES = [
   {
+    // Derde blok op 16-09 (medewerkersapp), zelfde achtervoegsel-truc.
+    id: "2026-09-16c",
+    date: "2026-09-16",
+    title: { nl: "Nieuwe look medewerkersapp", en: "New look for the team app", es: "Nuevo aspecto de la app del equipo" },
+    items: [
+      {
+        kind: "new", audience: ["staff"],
+        text: {
+          nl: "Je app heeft dezelfde stijl gekregen als de website en de boekingspagina: zwevende kaarten met zachte vierkante hoeken. Bovenaan tegels voor deze week, deze maand en je totaal, daaronder Vandaag met je afspraken naast Snelle acties (afspraak toevoegen, boekingspagina bekijken of de link kopiëren, agenda exporteren, telefoon-agenda koppelen) en je populairste behandelingen, met de omzetgrafiek eronder.",
+          en: "Your app now has the same style as the website and the booking page: floating cards with soft square corners. At the top tiles for this week, this month and your total, below that Today with your appointments next to Quick actions (add appointment, view or copy the booking link, export calendar, link phone calendar) and your most popular services, with the revenue chart below.",
+          es: "Tu app tiene ahora el mismo estilo que la web y la página de reservas: tarjetas flotantes con esquinas cuadradas suaves. Arriba mosaicos de esta semana, este mes y tu total, debajo Hoy con tus citas junto a Acciones rápidas (añadir cita, ver o copiar el enlace de reservas, exportar calendario, vincular calendario del móvil) y tus tratamientos más populares, con el gráfico de ingresos debajo.",
+        },
+      },
+      {
+        kind: "improved", audience: ["staff"],
+        text: {
+          nl: "Zijbalk: bovenaan een kaart met je naam, salon en rol en de boekingslink met een oog (bekijken) en een schakel (kopiëren). Bovenaan de pagina staat op Dashboard en Agenda één knop + Afspraak toevoegen.",
+          en: "Sidebar: a card at the top with your name, salon and role, and the booking link with an eye (view) and a link icon (copy). The top of the page has one + Add appointment button on Dashboard and Calendar.",
+          es: "Barra lateral: arriba una tarjeta con tu nombre, salón y rol, y el enlace de reservas con un ojo (ver) y un icono de enlace (copiar). Arriba de la página hay un botón + Agregar cita en Panel y Agenda.",
+        },
+      },
+      {
+        kind: "improved", audience: ["staff"],
+        text: {
+          nl: "Afspraakkaart: één rij knoppen (Voltooid in de salonkleur, Prijs, No-show, Annuleer) met rechts eronder kleine icoontjes voor Google Agenda en WhatsApp. Op de telefoon staat Voltooid op volle breedte met de andere drie in één rij eronder.",
+          en: "Appointment card: one row of buttons (Complete in the salon colour, Price, No-show, Cancel) with small icons below right for Google Calendar and WhatsApp. On phones Complete spans the full width with the other three in one row below.",
+          es: "Tarjeta de cita: una fila de botones (Completar en el color del salón, Precio, No-show, Cancelar) con pequeños iconos abajo a la derecha para Google Calendar y WhatsApp. En el móvil Completar ocupa todo el ancho con los otros tres en una fila debajo.",
+        },
+      },
+      {
+        kind: "improved", audience: ["staff"],
+        text: {
+          nl: "Agenda, Klanten, Facturen en Instellingen in dezelfde stijl: rustige grijze knoppen voor Blokkeer tijd, Blokkeer behandeling en Extra werkdag (op de telefoon drie gelijke knoppen met de weeknavigatie eronder), weekrooster en periodestrook als kaart, klanten en facturen als zwevende rijen met een vierkante initiaal, tegels met een icoon.",
+          en: "Calendar, Clients, Invoices and Settings in the same style: calm grey buttons for Block time, Block treatment and Extra workday (on phones three equal buttons with the week navigation below), week grid and period strip as cards, clients and invoices as floating rows with a square initial, tiles with an icon.",
+          es: "Agenda, Clientes, Facturas y Ajustes en el mismo estilo: botones grises tranquilos para Bloquear tiempo, Bloquear tratamiento y Día extra (en el móvil tres botones iguales con la navegación semanal debajo), cuadrícula semanal y franja de periodo como tarjetas, clientes y facturas como filas flotantes con una inicial cuadrada, mosaicos con icono.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "De app van je medewerkers heeft nu dezelfde nieuwe look als jouw dashboard: tegels, Vandaag naast snelle acties, dezelfde afspraakkaart en agenda.",
+          en: "Your team members' app now has the same new look as your dashboard: tiles, Today next to quick actions, the same appointment card and calendar.",
+          es: "La app de tu equipo tiene ahora el mismo aspecto nuevo que tu panel: mosaicos, Hoy junto a acciones rápidas, la misma tarjeta de cita y agenda.",
+        },
+      },
+    ],
+  },
+  {
     // Tweede release op dezelfde dag: id met achtervoegsel zodat wie
     // "2026-09-16" al zag dit blok nog wél krijgt (string-vergelijking).
     id: "2026-09-16b",
