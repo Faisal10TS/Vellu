@@ -83,7 +83,7 @@ function BarcodeScannerModal({ onDetect, onClose, c, accent, lang, hint }) {
 
   return createPortal((
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 400, fontFamily: "'Jost', sans-serif" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 18, maxWidth: 420, width: "100%", color: c.text }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 18, maxWidth: 420, width: "100%", color: c.text }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22 }}>{lang === "nl" ? "Scan barcode" : lang === "es" ? "Escanear código" : "Scan barcode"}</div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
@@ -206,7 +206,7 @@ function QRCodeModal({ url, salonName, lang, c, accent, onClose }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20,
+          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14,
           padding: 24, maxWidth: 420, width: "100%", maxHeight: "92vh",
           overflowY: "auto",
         }}
@@ -366,7 +366,7 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20,
+          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14,
           padding: 24, maxWidth: 420, width: "100%", maxHeight: "90vh", overflowY: "auto",
         }}
       >
@@ -519,7 +519,7 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   };
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
         {lang === "nl" ? "Nodig een salon uit" : lang === "es" ? "Recomienda un salón" : "Refer a salon"}
       </div>
@@ -851,7 +851,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
   const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" };
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
         {lang === "nl" ? "Nieuwsbrief" : lang === "es" ? "Boletín" : "Newsletter"}
       </div>
@@ -944,7 +944,7 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
 // and the loss of these features is what sells the upgrade at conversion.
 function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
   return (
-    <div style={{ background: c.bgCard, border: `1.5px dashed ${accent}55`, borderRadius: 20, padding: compact ? "18px 16px" : "34px 24px", textAlign: "center", marginBottom: 12 }}>
+    <div style={{ background: c.bgCard, border: `1.5px dashed ${accent}55`, borderRadius: 14, padding: compact ? "18px 16px" : "34px 24px", textAlign: "center", marginBottom: 12 }}>
       <div style={{ marginBottom: 10 }}><NavIcon name="crown" size={compact ? 20 : 28} color={accent} /></div>
       <div style={{ fontSize: compact ? 13 : 16, fontWeight: 600, marginBottom: 4, color: c.text }}>{feature}</div>
       <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
@@ -1091,7 +1091,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
   };
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
         {lang === "nl" ? "Klanten importeren" : lang === "es" ? "Importar clientes" : "Import clients"}
       </div>
@@ -1143,7 +1143,7 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, country
   };
 
   return (
-    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
         {lang === "nl" ? "Klantenlijst exporteren" : lang === "es" ? "Exportar clientes" : "Export clients"}
       </div>
@@ -2238,7 +2238,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                 <div key={plan.id} style={{
                   background: plan.popular ? `${accent}08` : c.bgCard,
                   border: `1px solid ${plan.popular ? `${accent}44` : c.border}`,
-                  borderRadius: 24, padding: "28px 24px", position: "relative", transition: "all 0.3s"
+                  borderRadius: 16, padding: "28px 24px", position: "relative", transition: "all 0.3s"
                 }}>
                   {plan.popular && (
                     <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: accent, color: c.btnOnDark, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 14px", borderRadius: 8 }}>
@@ -3305,7 +3305,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           position:fixed and push the modal off-center. */}
       {selected && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setSelected(null)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
               <div style={{ width: 52, height: 52, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 16, flexShrink: 0 }}>{initials(selected.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3487,7 +3487,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       {/* Add customer modal */}
       {addOpen && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !saving && setAddOpen(false)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant toevoegen" : lang === "es" ? "Añadir cliente" : "Add customer"}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>{lang === "nl" ? "Voeg handmatig een klant toe aan je lijst." : lang === "es" ? "Añade un cliente a tu lista manualmente." : "Manually add a client to your list."}</div>
             {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
@@ -3511,7 +3511,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           customer list. */}
       {importPreview && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !importing && setImportPreview(null)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 560, width: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 560, width: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Import controleren" : lang === "es" ? "Revisar importación" : "Review import"}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14 }}>
               {lang === "nl"
@@ -3568,7 +3568,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           and the source's manual_clients row is removed. */}
       {mergeSource && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !merging && setMergeSource(null)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 460, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 20, maxWidth: 460, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Samenvoegen met…" : lang === "es" ? "Combinar con…" : "Merge into…"}
             </div>
@@ -3624,7 +3624,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           which of each pair should survive; the other is merged into it. */}
       {showDupes && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setShowDupes(false)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 520, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 20, maxWidth: 520, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Mogelijke duplicates" : lang === "es" ? "Posibles duplicados" : "Possible duplicates"}
             </div>
@@ -3695,7 +3695,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       {/* Waitlist modal — review incoming waitlist requests and reach out. */}
       {showWaitlist && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => setShowWaitlist(false)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 20, maxWidth: 560, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 20, maxWidth: 560, width: "100%", maxHeight: "82vh", overflowY: "auto", color: c.text }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400 }}>
                 {lang === "nl" ? "Wachtlijst" : lang === "es" ? "Lista de espera" : "Waitlist"}
@@ -3863,7 +3863,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           `hidden` flag so their appointment history is preserved. */}
       {editing && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !editSaving && !deleting && setEditing(null)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant bewerken" : lang === "es" ? "Editar cliente" : "Edit customer"}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
               {(editing.appts || []).length > 0
@@ -8009,7 +8009,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => { if (!blockSaving) { setBlockModalOpen(false); setBlockEditId(null); } }}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
-               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {blockEditId
                 ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block")
@@ -8168,7 +8168,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => setInvoicePickerFor(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={e => e.stopPropagation()}
-               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Welk factuurprofiel?" : lang === "es" ? "¿Qué perfil de facturación?" : "Which invoice profile?"}
             </div>
@@ -8218,7 +8218,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => setProductSaleFor(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={e => e.stopPropagation()}
-               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {productSaleFor === "walkin"
                 ? (lang === "nl" ? "Losse verkoop" : lang === "es" ? "Venta directa" : "Walk-in sale")
@@ -8383,7 +8383,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div onClick={close}
                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 345, fontFamily: "'Jost', sans-serif", color: c.text }}>
             <div onClick={e => e.stopPropagation()}
-                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 430, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, maxWidth: 430, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, lineHeight: 1.15 }}>
@@ -8480,7 +8480,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => setShowVouchers(false)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 340, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={e => e.stopPropagation()}
-               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, marginBottom: 4 }}><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobonnen" : lang === "es" ? "Tarjetas regalo" : "Gift cards"}</div>
             <div style={{ fontSize: 11, color: c.textSub, marginBottom: 14 }}>
               {lang === "nl" ? "Wisselt een klant een bon in? Boek het bedrag hier af — het restsaldo blijft geldig." : lang === "es" ? "¿Un cliente canjea una tarjeta? Descuenta el importe aquí." : "Client redeeming a card? Deduct the amount here — the rest stays valid."}
@@ -8534,7 +8534,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => setShowOrderList(false)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={e => e.stopPropagation()}
-               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 480, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
+               style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 480, width: "100%", color: c.text, maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Bestellijst" : lang === "es" ? "Lista de pedidos" : "Order list"}
             </div>
@@ -8604,7 +8604,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => setApptDetail(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
-               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", color: c.text, maxHeight: "85dvh", overflowY: "auto" }}>
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", color: c.text, maxHeight: "85dvh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, minWidth: 0, wordBreak: "break-word" }}>{a.client_name}</div>
               <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 6, background: `${statusColor}1f`, color: statusColor, border: `1px solid ${statusColor}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap", flexShrink: 0, marginTop: 6 }}>{statusLabel}</span>
@@ -8705,7 +8705,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => !editApptSaving && setEditingAppt(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
-               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", color: c.text }}>
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", color: c.text }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Afspraak bewerken" : lang === "es" ? "Editar cita" : "Edit appointment"}
             </div>
@@ -9123,7 +9123,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
               {/* Onboarding checklist for new salons */}
               {appts.length === 0 && (
-                <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 20, padding: "24px 22px", marginBottom: 20 }}>
+                <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, padding: "24px 22px", marginBottom: 20 }}>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{t.welcomeVellu}</div>
                   <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16, lineHeight: 1.6 }}>{t.followSteps}</div>
                   {[
@@ -9489,7 +9489,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
                   const gradId = "rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
                   return (
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                       {/* Header */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
@@ -9571,7 +9571,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 })()}
 
                 {/* Popular services — thumbnails + revenue */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
                     <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Top 5" : "Top 5"}</div>
@@ -9640,7 +9640,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               ) : (
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.4fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* Links: zoeken/scannen + product-grid */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16 }}>
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 16 }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                     <input className="input-field" autoFocus={!isMobile} value={kassaSearch}
                       placeholder={lang === "nl" ? "Zoek of scan barcode…" : lang === "es" ? "Busca o escanea…" : "Search or scan barcode…"}
@@ -9815,7 +9815,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   })()}
                 </div>
                 {/* Rechts: mandje + afrekenen */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 16, position: isMobile ? "static" : "sticky", top: 16 }}>
                   <SL>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Checkout"}</SL>
                   {(() => {
                     // Net afgerekend? Dan wordt dit vak de bevestiging: bedrag,
@@ -10143,8 +10143,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     style={{
                       padding: "8px 14px", borderRadius: 8, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
-                      background: `${c.danger}10`, color: c.danger,
-                      border: `1px solid ${c.danger}33`,
+                      // Neutraal (restyle 16-09): blokkeren is plannen, niet wissen —
+                      // rood hoort bij annuleren/verwijderen.
+                      background: c.bgCard, color: c.textSub,
+                      border: `1px solid ${c.inputBorder}`,
                       display: "inline-flex", alignItems: "center", gap: 6,
                       fontFamily: "'Jost', sans-serif",
                     }}
@@ -10162,8 +10164,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     style={{
                       padding: "8px 14px", borderRadius: 8, cursor: "pointer",
                       fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
-                      background: `${c.danger}10`, color: c.danger,
-                      border: `1px solid ${c.danger}33`,
+                      // Neutraal (restyle 16-09): blokkeren is plannen, niet wissen —
+                      // rood hoort bij annuleren/verwijderen.
+                      background: c.bgCard, color: c.textSub,
+                      border: `1px solid ${c.inputBorder}`,
                       display: "inline-flex", alignItems: "center", gap: 6,
                       fontFamily: "'Jost', sans-serif",
                     }}
@@ -10199,11 +10203,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
                           }}>{t.backToToday}</div>
                         )}
-                        <div onClick={() => shift(-1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(-1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                        <div onClick={() => shift(-1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Vorige" : lang === "es" ? "Anterior" : "Previous"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(-1); } }} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
-                        <div onClick={() => shift(1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(1); } }} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
+                        <div onClick={() => shift(1)} role="button" tabIndex={0} aria-label={lang === "nl" ? "Volgende" : lang === "es" ? "Siguiente" : "Next"} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); shift(1); } }} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard, transition: "all 0.2s" }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                         </div>
                       </>
@@ -10242,7 +10246,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {lang === "nl" ? "Oudere periode ophalen…" : lang === "es" ? "Cargando período anterior…" : "Loading earlier period…"}
                 </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, opacity: periodExtraLoading ? 0.5 : 1 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, boxShadow: "0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04)", opacity: periodExtraLoading ? 0.5 : 1 }}>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal" : "Total"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
@@ -10712,7 +10716,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
                 const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : lang === "es" ? ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+                  <div data-week-grid style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, boxShadow: "0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04)", overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
                     {weekDays.map((d, i) => {
                       const ds = fmt(d);
                       const isToday = ds === fmt(getToday());
@@ -10763,7 +10767,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {/* Vaste hoogte 24 óók zonder vandaag-cirkel: anders is de
                                 vandaag-kolomkop hoger en zakken de pills in die ene
                                 kolom scheef t.o.v. de rest van de week. */}
-                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: 24, borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? onAccentInk(accent, c.btnOnDark) : c.text, width: isToday ? 26 : "auto", height: 24, borderRadius: isToday ? 7 : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 26 : "auto" }}>{d.getDate()}</div>
                             {dienstBlokHier && (
                               <div title={lang === "nl" ? "Behandeling geblokkeerd op deze dag — klik voor details" : lang === "es" ? "Tratamiento bloqueado este día" : "A treatment is blocked this day — click for details"} style={{ position: "absolute", top: 4, right: 4, display: "flex" }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" /></svg>
@@ -11841,7 +11845,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
 
                     {/* Revenue area chart — big hero */}
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "22px 24px", marginBottom: 14, display: "flex", flexDirection: "column" }}>
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "22px 24px", marginBottom: 14, display: "flex", flexDirection: "column" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
@@ -11916,7 +11920,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Popular services — thumbnails + revenue */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
                   <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
@@ -11996,7 +12000,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const maxRev = Math.max(...rows.map(r => r.revenue), 1);
 
                 return (
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
                         {lang === "nl" ? "Team prestaties" : lang === "es" ? "Rendimiento del personal" : "Staff performance"}
@@ -12060,7 +12064,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const topProducts = Object.entries(byProduct).sort(([, a], [, b]) => b.qty - a.qty).slice(0, 5);
                 const maxRev = Math.max(...staffRows.map(([, g]) => g.revenue), 1);
                 return (
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", marginBottom: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
                         <NavIcon name="bag" size={12} color={c.textLabel} /> {lang === "nl" ? "Productverkoop" : lang === "es" ? "Venta de productos" : "Product sales"}
@@ -12105,7 +12109,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Busiest days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.busiestDays}</SL>
                 {(() => {
                   const dayNames = lang === "nl" ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"] : lang === "es" ? ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"] : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -12132,7 +12136,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Busiest hours heatmap */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Drukste uren" : lang === "es" ? "Horas de mayor actividad" : "Busiest hours"}</SL>
                 {(() => {
                   const hourCounts = {};
@@ -12158,7 +12162,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Client retention */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Klant retentie" : lang === "es" ? "Retención de clientes" : "Client retention"}</SL>
                 {(() => {
                   const clientVisits = {};
@@ -12185,7 +12189,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Reviews */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16 }}>
                 <SL>{t.reviews} ({salonData.reviews?.length || 0})</SL>
                 {(!salonData.reviews || salonData.reviews.length === 0) ? (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noReviews}</div>
@@ -12246,7 +12250,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 ["billing", "creditcard", lang === "nl" ? "Abonnement & account" : lang === "es" ? "Suscripción y cuenta" : "Subscription & account"],
               ].map(([key, icon, label]) => (
                 <div key={key} onClick={() => setSettingsTab(key)} style={{
-                  padding: "8px 16px", borderRadius: 12, cursor: "pointer", whiteSpace: "nowrap",
+                  padding: "8px 16px", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap",
                   fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", transition: "all 0.2s",
                   background: settingsTab === key ? `${accent}15` : "transparent",
                   color: settingsTab === key ? accent : c.textSub,
@@ -12276,7 +12280,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div onClick={() => !changingPlan && setUpgradeConfirm(false)}
                      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
                   <div onClick={(e) => e.stopPropagation()}
-                       style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 460, width: "100%", color: c.text }}>
+                       style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 460, width: "100%", color: c.text }}>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, marginBottom: 10 }}>
                       {lang === "nl" ? "Upgraden naar Professional?" : lang === "es" ? "¿Actualizar a Professional?" : "Upgrade to Professional?"}
                     </div>
@@ -12324,7 +12328,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
 
               {/* Profile */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.profile}</SL>
                 <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                   <input className="input-field" placeholder={t.businessName} value={salonData.name} onChange={e => update(d => { d.name = e.target.value; return d; })} />
@@ -12547,7 +12551,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Style — the display/heading font of the public booking page.
                   Each tile previews itself in its own font. Body text stays
                   the same everywhere; only headings/titles/prices change. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Stijl" : lang === "es" ? "Estilo" : "Style"}</SL>
                 {/* Licht of donker: waarin de boekingspagina OPENT (verzoek van een
                     Bonaire-salon, 08-09). De bezoeker kan tijdens het bezoek nog
@@ -12651,7 +12655,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Appearance — logo + cover. Lives here in the Salon tab, right
                   under the brand colour, since it's the same "how your page
                   looks" group. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>{t.appearance}</div>
 
                 {/* Logo upload */}
@@ -12830,7 +12834,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Locations */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.locations}</div>
                   <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.locations || []).length}</div>
@@ -12946,7 +12950,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Salon Contact Details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.salonContact}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.salonContactDesc}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -13005,7 +13009,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Invoice details */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Adres & factuurgegevens" : lang === "es" ? "Dirección y datos de facturación" : "Address & invoice details"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -13249,7 +13253,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   salon never get it. Each extra invoice profile has its own
                   fields so every worker's requests route to their own
                   account. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : lang === "es" ? "Solicitudes de pago" : "Payment requests"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
                   {isSepa
@@ -13314,7 +13318,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   stylists on ONE login want to invoice under their own
                   KVK/BTW/IBAN. Each extra has its own counter that ticks
                   independently. Primary block above stays the default. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Extra factuurprofielen" : lang === "es" ? "Perfiles de factura adicionales" : "Extra invoice profiles"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
@@ -13410,7 +13414,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {/* Diensten in hun eigen kader — zelfde boxstijl als de kaarten op
                   de Salon-tab (Faisal 30-08: "services in een box en products
                   in een box"). */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
 
               {/* AI proofreader for the salon's own service names (NL + EN). */}
               <TranslationChecker lang={lang} accent={accent} onApply={async (issue) => {
@@ -14533,7 +14537,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   appointment (sale button on the agenda card); both end up on the
                   invoice automatically because price + label live on the
                   appointment row. Eigen kader in Salon-tab-stijl. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Producten" : lang === "es" ? "Productos" : "Products"}</div>
                   {salonData.plan === "professional" && <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.products || []).length}</div>}
@@ -14918,7 +14922,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {settingsTab === "team" && <>
 
               {/* Staff / Team */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.staff}</SL>
                 {/* Account type toggle */}
                 <div style={{ display: "flex", gap: 6, marginBottom: accountTypeInfo ? 8 : 14 }}>
@@ -15063,7 +15067,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "12px 0" }}>{t.noStaff}</div>
                 )}
                 {(salonData.staff || []).map(m => (
-                  <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 10 }}>
+                  <div key={m.id} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 10 }}>
                     {/* Staff header row. In bewerk-stand op mobiel wrapt de rij:
                         foto + Opslaan/× bovenaan, het formulier (naam/rol/e-mail/
                         bio) op volle breedte eronder — naast de foto gepropt
@@ -15345,7 +15349,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <PushSettingsCard userId={salonData.owner_id} t={t} accent={accent} c={c} toast={toast} SL={SL} />
 
               {/* Business Hours */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.businessHours}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.businessHoursDesc}</div>
                 {[0,1,2,3,4,5,6].map(day => {
@@ -15474,7 +15478,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Break time between appointments */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.breakMinutes}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.breakMinutesDesc}</div>
                 {/* Mobiel als 2-koloms grid: 6 gelijke chips (flex-wrap gaf
@@ -15499,7 +15503,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {/* Slot interval — grid for bookable start times (client flow +
                   owner appointment forms). Persisted on OPSLAAN like the rest
                   of this tab. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.slotInterval}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.slotIntervalDesc}</div>
                 {/* 6 opties (incl. 45) — mobiel als 3-koloms grid: 2 volle
@@ -15524,7 +15528,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   book (min_advance_hours) and how far ahead the calendar is
                   open (max_advance_days). The booking engine already enforced
                   both; this card finally makes them settable. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Boekingsvenster" : lang === "es" ? "Ventana de reservas" : "Booking window"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>
                   {lang === "nl" ? "Tot hoe kort van tevoren kan een klant nog boeken?" : lang === "es" ? "¿Con cuánta antelación mínima puede reservar un cliente antes de la cita?" : "How close to the appointment can a client still book?"}
@@ -15596,7 +15600,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {/* Booking Policy Section — separate NL/EN so the public profile
                   shows the right text when the visitor toggles language. EN is
                   optional; when empty the NL text is shown for both languages. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
                 <AutoTranslateField
@@ -15611,7 +15615,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Phone Required Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{t.phoneRequired}</div>
@@ -15634,7 +15638,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Waitlist Toggle */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{lang === "nl" ? "Wachtlijst" : lang === "es" ? "Lista de espera" : "Waitlist"}</div>
@@ -15663,7 +15667,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Reminder timing */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.reminderTiming}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.reminderTimingDesc}</div>
                 {/* Zelfde symmetrie als Boekingsvenster: mobiel 3 kolommen,
@@ -15697,7 +15701,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Rebook nudge timing */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.rebookNudge}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.rebookNudgeDesc}</div>
                 <div style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -15717,7 +15721,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Exception Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.exceptionDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.exceptionDesc}</div>
                 {/* Merged list: legacy JSON entries (one per date — the old
@@ -15873,7 +15877,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Blocked Days */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
                 {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
@@ -16049,7 +16053,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               </div>
 
               {/* Google Calendar Sync */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.googleCalendar}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.googleCalendarDesc}</div>
                 {salonData.google_calendar_connected ? (
@@ -16085,7 +16089,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   in Apple Calendar / iPhone, Android and Outlook, not just
                   Google. Backed by the public `calendar-feed` edge function
                   authenticated with a per-owner token (calendar_feed_token). */}
-              <div id="cal-feed-card" style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div id="cal-feed-card" style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Agenda in je telefoon" : lang === "es" ? "Calendario en tu teléfono" : "Calendar on your phone"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
@@ -16199,7 +16203,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   no-shows at your salon, future bookings with their email are
                   refused by book-appointment. 0 disables. Scoped per salon so a
                   no-show at one salon doesn't block the client elsewhere. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "No-show blokkade" : lang === "es" ? "Bloqueo por ausencia" : "No-show block"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>
                   {lang === "nl"
@@ -16275,7 +16279,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   niets — het bedrag komt op de afspraakkaart met een WhatsApp-
                   betaalverzoek, en de klant ziet het percentage vóór het akkoord
                   met het boekingsbeleid. Aanzetten opent eerst de beleidsvraag. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }} data-no-show-fee-card>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }} data-no-show-fee-card>
                 <SL>{lang === "nl" ? "No-show-vergoeding" : lang === "es" ? "Tarifa por ausencia" : "No-show fee"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 12 }}>
                   {lang === "nl"
@@ -16380,7 +16384,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
                 return (<>
                   {/* Current plan card */}
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 20, marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
                       <div>
                         <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
@@ -16625,7 +16629,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     <div onClick={() => !cancelBusy && setCancelConfirmOpen(false)}
                          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
                       <div onClick={(e) => e.stopPropagation()}
-                           style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 420, width: "100%" }}>
+                           style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%" }}>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, marginBottom: 8 }}>
                           {lang === "nl" ? "Abonnement opzeggen?" : lang === "es" ? "¿Cancelar suscripción?" : "Cancel subscription?"}
                         </div>
@@ -16651,7 +16655,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   )}
 
                   {/* Invoice history */}
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 20, marginBottom: 12 }}>
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 20, marginBottom: 12 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 16 }}>
                       {lang === "nl" ? "Facturen van Vellu" : lang === "es" ? "Facturas de Vellu" : "Vellu invoices"}
                     </div>
@@ -16725,7 +16729,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   first so a stolen session can't silently swap the login.
                   Supabase sends a confirmation link to the new email
                   before it takes effect — the UI just triggers it. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Account" : lang === "es" ? "Cuenta" : "Account"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
@@ -16887,7 +16891,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   New accounts get this automatically right after the setup
                   wizard; here so anyone can watch it again later, and so a
                   second staff-owner on a shared salon can see it too. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Rondleiding" : lang === "es" ? "Visita guiada" : "Guided tour"}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14, lineHeight: 1.5 }}>
                   {lang === "nl"
@@ -16904,7 +16908,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
               {/* Mobile logout — sidebar is hidden on mobile, so expose logout here */}
               {isMobile && (
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{t.account || (lang === "nl" ? "Account" : lang === "es" ? "Cuenta" : "Account")}</div>
                   <button
                     className="btn-ghost"
@@ -16935,7 +16939,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   wel 6 uur, hier maar tot 90 dagen). Een salon die op Planning
                   zes maanden koos en daarna hier opsloeg, werd stilzwijgend op
                   60 dagen teruggezet. Die kopie is weg; Planning is de plek. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>Google Reviews</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, lineHeight: 1.55 }}>
                   {lang === "nl"
@@ -16992,7 +16996,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {isStarter ? (
                 <UpgradeCard feature={t.discountCodes} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
               ) : (
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.discountCodes}</div>
                   <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.discount_codes || []).filter(c => c.active).length} / {(salonData.discount_codes || []).length} {lang === "nl" ? "actief" : lang === "es" ? "activo" : "active"}</div>
@@ -17077,7 +17081,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   side and picks up any client whose birthday matches today,
                   provided the salon has this toggled on and set a discount %.
                   Owner only needs to configure once, then it runs itself. */}
-              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+              <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
                   {lang === "nl" ? "Verjaardagsmail" : lang === "es" ? "Correo de cumpleaños" : "Birthday email"}
                 </div>
@@ -17234,7 +17238,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const need = salonData.loyalty_visits || 10, pct = salonData.loyalty_discount_pct || 10, days = salonData.loyalty_code_days || 90;
                 const prefix = (salonData.loyalty_code_prefix || "STEMPEL");
                 return (
-                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginBottom: 12 }}>
+                  <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={12} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</div>
@@ -17600,7 +17604,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
         {/* Add Appointment Modal */}
         {showAddAppt && (
           <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowAddAppt(false)}>
-            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 16, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
               {!addApptDone ? (<>
                 <div style={{ textAlign: "center", marginBottom: 20 }}>
                   <div style={{ marginBottom: 10 }}><NavIcon name="calendar" size={32} color={accent} /></div>

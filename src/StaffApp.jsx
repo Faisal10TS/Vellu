@@ -1356,7 +1356,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {/* Today hero + KPI cards */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 20 }}>
                 {/* Today hero */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 22, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
+                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
                     <div>
@@ -1485,7 +1485,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
                   const gradId = "staff-rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
                   return (
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : lang === "es" ? "Ingresos a lo largo del tiempo" : "Revenue over time")}</div>
@@ -1556,7 +1556,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 })()}
 
                 {/* Popular services — thumbnails + revenue */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : lang === "es" ? "Servicios populares" : "Popular services")}</div>
                     <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
@@ -2200,7 +2200,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 {/* Detail modal */}
                 {clientView && (
                   <div onClick={() => setClientView(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", color: c.text }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                         <div>
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300 }}>{clientView.name}</div>
@@ -2502,7 +2502,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* WERKTIJDEN TAB */}
               {staffSettingsTab === "werktijden" && (<>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
                   {[0,1,2,3,4,5,6].map(day => {
                     const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
@@ -2552,7 +2552,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 {/* Telefoon-agenda (iCal-abonnement) — de medewerkers-versie van
                     de eigenaars-kaart: alleen haar eigen afspraken, en nieuwe
                     of gewijzigde afspraken verschijnen vanzelf in de agenda-app. */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18, marginTop: 12 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginTop: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
                     {lang === "nl" ? "Agenda in je telefoon" : lang === "es" ? "Calendario en tu teléfono" : "Calendar on your phone"}
                   </div>
@@ -2644,7 +2644,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* FACTURATIE TAB */}
               {staffSettingsTab === "facturatie" && canInvoice && (
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 18 }}>
+                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2979,7 +2979,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         {/* Add Appointment Modal */}
         {showAddAppt && (
           <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(12px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setShowAddAppt(false)}>
-            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 24, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 16, padding: 28, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
               {!addApptDone ? (<>
                 <div style={{ textAlign: "center", marginBottom: 20 }}>
                   <div style={{ marginBottom: 10 }}><NavIcon name="calendar" size={32} color={accent} /></div>
@@ -3138,7 +3138,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           <div onClick={() => { if (!blockSaving) { setBlockModalOpen(false); setBlockEditId(null); } }}
                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
             <div onClick={e => e.stopPropagation()}
-                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+                 style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
                 {blockEditId
                   ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block")
@@ -3272,7 +3272,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           <div onClick={() => !excSaving && setExcModalOpen(false)}
                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
             <div onClick={(e) => e.stopPropagation()}
-                 style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 400, width: "100%", color: c.text }}>
+                 style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 400, width: "100%", color: c.text }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
                 {lang === "nl" ? "Extra werkdag" : lang === "es" ? "Día de trabajo extra" : "Extra workday"}
               </div>
