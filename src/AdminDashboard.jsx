@@ -529,7 +529,7 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
-                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), from Faisal van Vellu, replies go to mirahventures@vellu.cc. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
+                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
                 </div>
                 {sendMsg && <div data-admin-send-msg style={{ fontSize: 12, color: /^Failed/.test(sendMsg) ? c.danger : c.success, marginBottom: 10 }}>{sendMsg}</div>}
                 {invites.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No active salons.</div>}
