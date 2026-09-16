@@ -27,7 +27,7 @@ export default function WhatsNewModal({ releases, lang: appLang, c, accent, onCl
   return createPortal((
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={lang === "nl" ? "Wat is er nieuw" : lang === "es" ? "Novedades" : "What's new"}
-        style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 24, padding: "22px 22px 18px", maxWidth: 460, width: "100%", maxHeight: "min(82vh, 640px)", display: "flex", flexDirection: "column" }}>
+        style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: "22px 22px 18px", maxWidth: 460, width: "100%", maxHeight: "min(82vh, 640px)", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
@@ -37,7 +37,7 @@ export default function WhatsNewModal({ releases, lang: appLang, c, accent, onCl
             <div style={{ marginTop: 10, display: "inline-flex" }}><LangToggle lang={lang} setLang={setLang} /></div>
           </div>
           <button aria-label={lang === "nl" ? "Sluiten" : lang === "es" ? "Cerrar" : "Close"} onClick={onClose}
-            style={{ width: 36, height: 36, padding: 0, borderRadius: 10, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            style={{ width: 36, height: 36, padding: 0, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <NavIcon name="xmark" size={14} color="currentColor" />
           </button>
         </div>
