@@ -2170,15 +2170,34 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .day-chip.sel { background: ${surface}; border-color: ${surfaceBorder}; }
   .day-chip.sel span { color: ${surfaceInk} !important; }
 
+  /* Dashboard-restyle 16-09 (mockup akkoord): dezelfde zwevende kaarttaal als
+     de website en de boekingspagina — 14px (12px mobiel), zachte schaduw. */
   .appt-card {
     background: ${c.bgCard}; border: 1px solid ${c.border};
-    border-radius: 20px; padding: 17px 19px; margin-bottom: 10px; transition: all 0.2s;
+    border-radius: 14px; padding: 16px 18px; margin-bottom: 10px; transition: all 0.2s;
+    box-shadow: 0 12px 24px -20px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.04);
   }
   .appt-card:hover { border-color: ${c.borderHover}; }
+  .vl-card {
+    background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px;
+    box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+  }
+  .vl-ico-tile { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .vl-tile {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    padding: 14px 10px; border-radius: 12px; border: 1px solid ${c.border}; background: ${c.bgCard};
+    box-shadow: 0 10px 22px -18px rgba(0,0,0,0.35); cursor: pointer; min-width: 0;
+    font-family: var(--body-font, 'Jost', sans-serif); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${c.textSub}; text-align: center;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .vl-tile:hover { transform: translateY(-2px); border-color: ${c.borderHover}; }
+  .vl-tile.primary { background: ${surface}; color: ${surfaceInk}; border-color: ${surfaceBorder}; }
+  .vl-tile .vl-tile-ico { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: flex; align-items: center; justify-content: center; }
+  .vl-tile.primary .vl-tile-ico { background: rgba(255,255,255,0.18); color: ${surfaceInk}; }
 
   .nav-item {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
-    cursor: pointer; padding: 7px 8px; border-radius: 14px; flex: 1; transition: all 0.2s;
+    cursor: pointer; padding: 7px 8px; border-radius: 8px; flex: 1; transition: all 0.2s;
   }
   .nav-item:hover { background: ${c.inputBg}; }
 
@@ -2242,7 +2261,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .flow-done-link { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 600; color: color-mix(in srgb, ${accent} 45%, ${c.text}); text-decoration: underline; text-decoration-color: ${accent}; text-underline-offset: 3px; }
   .flow-done-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; max-width: 460px; margin: 0 auto 14px; }
   .flow-done-actions .btn-ghost { flex: 1 1 150px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 14px; }
-  .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 20px; padding: 18px 20px; flex: 1; }
+  .stat-card { background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 18px 20px; flex: 1; box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04); }
 
   .lang-toggle { background: ${c.bgCardHover}; border: 1px solid ${c.inputBorder}; border-radius: 8px; padding: 4px; display: flex; gap: 2px; }
   .lang-btn { padding: 7px 12px; border-radius: 6px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s; text-transform: uppercase; }
@@ -2265,7 +2284,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .service-card { border-radius: 12px; padding: 15px 16px; }
     .flow-done { padding-top: 24px; }
     .flow-done-card { padding: 4px 16px; }
-    .appt-card { padding: 14px 14px; border-radius: 16px; }
+    .appt-card { padding: 14px 14px; border-radius: 12px; }
+    .stat-card { border-radius: 12px; }
+    .vl-card { border-radius: 12px; }
     .btn-primary { padding: 14px 20px; font-size: 13px; }
     .btn-ghost { font-size: 11px; }
     /* !important here is intentional — numerous .input-field instances have
@@ -2817,6 +2838,8 @@ function NavIcon({ name, size = 18, color = "currentColor" }) {
     facturen: <svg {...props}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>,
     instellingen: <svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
     plus: <svg {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+    // Drie puntjes: de "Meer"-knop in de mobiele onderbalk (restyle 16-09).
+    more: <svg {...props}><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>,
     download: <svg {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
     upload: <svg {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
     // Bonprinter aan de balie: papier erin boven, bonnetje eruit onder.

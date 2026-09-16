@@ -4025,6 +4025,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [gallery, setGallery] = useState(null);
   const [copied, setCopied] = useState(false);
   // Phone-calendar (iCal feed) subscription card state.
+  // Mobiele onderbalk: "Meer"-sheet met de tabs die niet in de vijf passen.
+  const [moreOpen, setMoreOpen] = useState(false);
   const [calFeedCopied, setCalFeedCopied] = useState(false);
   const [calFeedBusy, setCalFeedBusy] = useState(false);
   const [calHelpOpen, setCalHelpOpen] = useState(false);
@@ -7299,6 +7301,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     });
   };
 
+  // Nieuwe afspraak (knop in de paginakop én snelle actie): één plek voor het
+  // leegmaken van het formulier.
+  const openAddAppt = () => {
+    setShowAddAppt(true); setAddApptDone(false);
+    setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
+    setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false);
+  };
   const copyLink = () => {
     navigator.clipboard.writeText(`vellu.cc/${salonData.id}`).catch(() => {});
     setCopied(true);
@@ -7519,20 +7528,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         </div>
       )}
       {a.status === "confirmed" && (() => {
-        // Vaste rijen i.p.v. een omlopende flex-rij (Faisal 15-09: "niet
-        // symmetrisch, de knoppen onderaan passen niet"): 1) Afronden op
-        // volle breedte, 2) vier gelijke knoppen (2×2 op mobiel),
-        // 3) Google Agenda + WhatsApp + de kleine icoonknoppen.
+        // Restyle 16-09 (mockup akkoord): één rij tekstknoppen — Afronden
+        // getint in het accent + Verplaats / Bewerk / No-show / Annuleer — en
+        // de icoonknoppen (Google Agenda, WhatsApp, product, verwijderen) als
+        // vierkantjes rechts eronder. Op mobiel Afronden op volle breedte + 2×2.
         const dis = !!processingApptId;
-        const cel = { width: "100%", minWidth: 0, fontSize: 10, padding: "8px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dis ? 0.5 : 1 };
-        // 33px = de hoogte van de tekstknoppen (8px padding + regel + rand),
-        // zodat de icoonknoppen exact in de rij vallen.
-        const icoon = { width: 33, height: 33, flexShrink: 0, borderRadius: 8, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: dis ? 0.5 : 1 };
+        const cel = { width: "100%", minWidth: 0, fontSize: 10, padding: "9px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dis ? 0.5 : 1 };
+        const icoon = { width: 32, height: 32, flexShrink: 0, borderRadius: 8, background: "transparent", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: dis ? 0.5 : 1, padding: 0 };
         const dur = parseInt(a.service_duration || a.duration || 60);
         return (
           <div data-appt-actions style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <button className="btn-ghost" data-appt-primary style={{ width: "100%", fontSize: 10, padding: "9px 14px", whiteSpace: "nowrap", opacity: dis ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
-            <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 6 }}>
+            <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.5fr 1fr 1fr 1fr 1fr", gap: 6 }}>
+              <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
               <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
@@ -7542,19 +7549,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 title={lang === "nl" ? "Afspraak annuleren — de klant krijgt bericht" : lang === "es" ? "Cancelar la cita — se avisa al cliente" : "Cancel the appointment — the client is notified"}
                 onClick={() => cancelAppt(a)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
             </div>
-            <div data-appt-tools style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <button className="btn-ghost" style={{ flex: 1, minWidth: 0, fontSize: 10, padding: "8px 8px", color: c.textLabel, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} onClick={() => {
+            <div data-appt-tools style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+              <button type="button" aria-label={t.addToGoogleCal} title={t.addToGoogleCal} style={{ ...icoon, border: `1px solid ${c.border}`, color: c.textSub }} disabled={dis} onClick={() => {
                 window.open(getGoogleCalUrl({
                   title: `${a.client_name} — ${a.service_name}`,
                   date: a.date, time: a.time, duration: dur,
                   description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${cur}${a.service_price}`,
                   location: salonData.name + (salonData.city ? ", " + salonData.city : "")
                 }), "_blank");
-              }}>{t.addToGoogleCal}</button>
+              }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
               {/* WhatsApp de KLANT direct (alleen haar nummer nodig, niet het
                   salonnummer): opent WhatsApp met een ingevulde bevestiging. */}
               {a.client_phone && (
-                <button className="btn-ghost" aria-label="WhatsApp" title="WhatsApp" style={{ flexShrink: 0, fontSize: 10, padding: isMobile ? 0 : "8px 10px", ...(isMobile ? { width: 33, height: 33, justifyContent: "center" } : {}), color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => {
+                <button type="button" aria-label="WhatsApp" title="WhatsApp" style={{ ...icoon, border: "1px solid #25D36655", color: "#25a55c" }} disabled={dis} onClick={() => {
                   const msg = getWhatsAppBookingMsg(lang, {
                     clientName: a.client_name, salonName: salonData.name,
                     date: parseDate(a.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }),
@@ -7562,13 +7569,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   });
                   window.open(getWhatsAppUrl(a.client_phone, msg), "_blank");
                 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>{isMobile ? null : " WhatsApp"}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
                 </button>
               )}
               {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
-                <button style={{ ...icoon, border: `1px solid ${accent}44`, color: accent }} disabled={dis} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
+                <button type="button" style={{ ...icoon, border: `1px solid ${accent}44`, color: accent }} disabled={dis} onClick={() => { setProductSaleSel({}); setProductSaleFor(a.id); }} title={lang === "nl" ? "Product verkopen bij deze afspraak" : lang === "es" ? "Vender un producto con esta cita" : "Sell a product with this appointment"}><NavIcon name="bag" size={12} color="currentColor" /></button>
               )}
-              <button aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ ...icoon, border: `1px solid ${c.danger}26`, color: c.danger }} disabled={dis} onClick={() => deleteAppt(a)}>
+              <button type="button" aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"} title={lang === "nl" ? "Afspraak verwijderen (geen bericht aan de klant)" : lang === "es" ? "Eliminar cita (sin aviso al cliente)" : "Delete appointment (no notice to the client)"} style={{ ...icoon, border: `1px solid ${c.danger}26`, color: c.danger }} disabled={dis} onClick={() => deleteAppt(a)}>
                 <NavIcon name="xmark" size={11} color="currentColor" />
               </button>
             </div>
@@ -8944,19 +8951,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
             </div>
 
-            {/* Salon Info */}
-            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
-              <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonData.name}</div>
-              <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{salonData.city}</div>
-              <div data-tour="salon-link" style={{
-                fontSize: 11,
-                color: accent,
-                background: `${accent}12`,
-                border: `1px solid ${accent}22`,
-                borderRadius: 8,
-                padding: "7px 12px"
-              }}>
-                vellu.cc/{salonData.id}
+            {/* Salon-kaart (restyle 16-09): logo-tegel, naam, stad · plan, en de
+                boekingslink met Bekijk/Kopieer als icoonknoppen — die stonden
+                als losse knoppen in de paginakop van élke pagina. */}
+            <div style={{ padding: "14px 14px 12px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
+              <div className="vl-card" data-salon-card style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  {salonData.logo_url
+                    ? <img src={salonData.logo_url} alt="" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover", border: `1px solid ${c.border}`, flexShrink: 0 }} />
+                    : <div style={{ width: 38, height: 38, borderRadius: 10, background: accent, color: onAccentInk(accent, c.btnOnDark), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 20, flexShrink: 0 }}>{((salonData.name || "V").trim()[0] || "V").toUpperCase()}</div>}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonData.name}</div>
+                    <div style={{ fontSize: 11, color: c.textLabel, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[salonData.city, salonData.plan === "professional" ? "Professional" : salonData.plan === "starter" ? "Starter" : null].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </div>
+                <div data-tour="salon-link" style={{ display: "flex", alignItems: "center", gap: 4, background: c.inputBg, border: `1px solid ${c.border}`, borderRadius: 8, padding: "4px 4px 4px 10px", fontSize: 11, color: c.textSub, minWidth: 0 }}>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>vellu.cc/{salonData.id}</span>
+                  <button type="button" aria-label={t.preview} title={t.preview} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${c.border}`, background: c.bgCard, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}><NavIcon name="eye" size={13} color="currentColor" /></button>
+                  <button type="button" aria-label={t.copyLink} title={copied ? t.copied : t.copyLink} onClick={copyLink} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${copied ? c.success : c.border}`, background: c.bgCard, color: copied ? c.success : c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}><NavIcon name={copied ? "check" : "link"} size={13} color="currentColor" /></button>
+                </div>
               </div>
             </div>
 
@@ -8972,7 +8985,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     alignItems: "center",
                     gap: 14,
                     padding: "11px 16px",
-                    borderRadius: 12,
+                    borderRadius: 8,
                     cursor: "pointer",
                     marginBottom: 3,
                     background: view === k ? `${accent}12` : "transparent",
@@ -9066,21 +9079,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {view === "dashboard" ? t.welcomeBack : view === "agenda" ? t.manageAppts : view === "klanten" ? (lang === "nl" ? "Bekijk en beheer je klanten." : lang === "es" ? "Consulta y gestiona tus clientes." : "View and manage your clients.") : view === "analytics" ? (t.salonInsight) : view === "facturen" ? t.completedTreatments : view === "instellingen" ? t.manageSalon : t.welcomeBack}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 12 }}>
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 11, borderColor: `${accent}33`, color: accent, display: "flex", alignItems: "center", gap: 6 }}
-                    onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}
-                  >
-                    <NavIcon name="eye" size={14} color={accent} /> {t.preview}
-                  </button>
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}
-                    onClick={copyLink}
-                  >
-                    <NavIcon name="link" size={14} color={copied ? c.success : c.textSub} /> {copied ? "✓ " + t.copied : t.copyLink}
-                  </button>
+                {/* Bekijk/Kopieer zitten sinds de restyle in de salon-kaart in de
+                    zijbalk; de kop houdt één primaire actie waar die zin heeft. */}
+                <div style={{ display: "flex", gap: 10 }}>
+                  {(view === "dashboard" || view === "agenda") && (
+                    <button className="btn-primary" data-header-add style={{ width: "auto", fontSize: 11, padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={openAddAppt}>
+                      <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -9285,11 +9291,58 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 });
                 const todayRevenue = todayAppts.reduce((s, a) => s + (dashStaff ? staffShareOf(a, dashStaff) : parseFloat(a.service_price || 0)), 0);
                 const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+                // KPI-tegel (restyle 16-09): icoontegel + label, serif-getal,
+                // trend-chip, daaronder de grafiek of de sterrenverdeling.
+                const tile = ({ key, icon, label, sub, value, valueColor, chip, body }) => (
+                  <div key={key} className="stat-card" data-dash-tile={key} style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "14px 16px", minHeight: 0, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span className="vl-ico-tile"><NavIcon name={icon} size={15} color="currentColor" /></span>
+                      <div style={{ textAlign: "right", minWidth: 0 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{label}</div>
+                        {sub && <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{sub}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 24 : 28, fontWeight: 300, color: valueColor || accent, lineHeight: 1, display: "flex", alignItems: "center", gap: 6 }}>{value}</div>
+                      {chip}
+                    </div>
+                    {body}
+                  </div>
+                );
+                const weekChip = weekChange !== 0 ? (
+                  <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                    {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                  </div>
+                ) : null;
                 return (
                   <>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 22 }}>
+                  {/* KPI-tegels bovenaan: week, maand, jaar, beoordeling. */}
+                  <div data-dash-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
+                    {tile({ key: "week", icon: "money", label: isMobile ? (lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week") : t.weeklyRevenue, sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${cur}${weekRevenue.toFixed(2)}`, chip: weekChip,
+                      body: <div style={{ minHeight: 44 }}>{sparkline(weekDaily, accent, { labels: weekLabels })}</div> })}
+                    {tile({ key: "month", icon: "analytics", label: isMobile ? (lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month") : t.monthlyRevenue, sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: `${cur}${monthRevenue.toFixed(2)}`,
+                      body: <div style={{ minHeight: 44 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div> })}
+                    {tile({ key: "year", icon: "calendar", label: isMobile ? (lang === "nl" ? "Dit jaar" : lang === "es" ? "Este año" : "This year") : t.yearlyRevenue, sub: fmt(getToday()).slice(0, 4), value: yearRevTile ? `${cur}${yearRevTile.totaal.toFixed(2)}` : "…",
+                      body: <div style={{ minHeight: 44 }}>{sparkline(yearRevTile ? yearRevTile.perMaand : Array(12).fill(0), accent, { labels: (lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN).map(mn => mn[0].toUpperCase()) })}</div> })}
+                    {tile({ key: "rating", icon: "star2", label: t.avgRating, sub: `${salonData.reviews?.length || 0} ${t.reviews?.toLowerCase?.() || "reviews"}`, valueColor: c.text,
+                      value: <>{avgRating}<svg width={16} height={16} viewBox="0 0 20 20" fill={accent}><path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" /></svg></>,
+                      body: salonData.reviews?.length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {ratingDist.map(r => (
+                            <div key={r.rating} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, color: c.textMuted }}>
+                              <span style={{ width: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.rating}</span>
+                              <div style={{ flex: 1, height: 5, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${r.pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                              </div>
+                              <span style={{ width: 14, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div style={{ fontSize: 10, color: c.textMuted, padding: "4px 0" }}>{lang === "nl" ? "Nog geen reviews" : lang === "es" ? "Aún no hay reseñas" : "No reviews yet"}</div> })}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.55fr 1fr", gap: isMobile ? 14 : 18, marginBottom: 22, alignItems: "start" }}>
                     {/* Left: Today's appointments — the hero */}
-                    <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: isMobile ? 16 : 22, padding: isMobile ? "16px 14px" : "22px 24px", position: "relative", overflow: "hidden" }}>
+                    <div className="vl-card" data-dash-today style={{ padding: isMobile ? "16px 14px" : "20px 22px", position: "relative", overflow: "hidden" }}>
                       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
                         <div>
@@ -9324,85 +9377,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       )}
                     </div>
 
-                    {/* Right: 3 KPI cards — consistent structure, equal heights */}
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
-                      {/* WEEK REVENUE */}
-                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.weeklyRevenue}</div>
-                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days"}</div>
+                    {/* Right: snelle acties als zwevende tegels (restyle 16-09);
+                        de KPI-kaarten staan sindsdien als tegelrij bovenaan. */}
+                    {(() => {
+                      const heeftKassa = salonData.plan === "professional" && (salonData.products || []).some(p => p.active);
+                      const heeftExport = appts.length > 0;
+                      const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                      const acties = [
+                        { key: "add", primary: true, icon: "plus", label: isMobile ? L("+ Afspraak", "+ Booking", "+ Cita") : t.addAppointment, onClick: openAddAppt },
+                        ...(heeftKassa ? [{ key: "kassa", icon: "kassa", label: isMobile ? L("Kassa", "Sale", "Caja") : L("Verkoop / kassa", "Sale / checkout", "Venta / caja"),
+                          onClick: () => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); } }] : []),
+                        { key: "preview", icon: "eye", label: isMobile ? L("Bekijk", "Preview", "Ver") : t.previewPage, onClick: () => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer") },
+                        { key: "copy", icon: copied ? "check" : "link", label: copied ? t.copied : (isMobile ? L("Kopieer", "Copy", "Copiar") : t.copyLink), onClick: copyLink },
+                        ...(heeftExport ? [{ key: "export", icon: "download", label: isMobile ? "Export" : t.exportCalendar,
+                          onClick: () => { const upcoming = appts.filter(a => a.status === "confirmed"); if (upcoming.length === 0) return; exportCalendar(upcoming); } }] : []),
+                        // Live telefoon-agenda: springt naar de abonnements-kaart in
+                        // Instellingen → Planning. Anders dan de eenmalige export
+                        // verschijnen nieuwe afspraken daar vanzelf.
+                        { key: "phone", icon: "calendar", label: isMobile ? L("Telefoon-agenda", "Phone calendar", "Calendario móvil") : L("Koppel telefoon-agenda", "Link phone calendar", "Vincular calendario del móvil"),
+                          title: L("Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf", "Subscribe your phone's calendar — new appointments appear automatically", "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas"),
+                          onClick: () => { setView("instellingen"); setSettingsTab("planning"); setTimeout(() => { try { document.getElementById("cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400); } },
+                      ];
+                      return (
+                        <div className="vl-card" data-quick-actions data-tour="quick-actions" style={{ padding: isMobile ? 14 : 18 }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{L("Snelle acties", "Quick actions", "Acciones rápidas")}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                            {acties.map(x => (
+                              <button key={x.key} type="button" className={`vl-tile${x.primary ? " primary" : ""}`} title={x.title} onClick={x.onClick}>
+                                <span className="vl-tile-ico"><NavIcon name={x.icon} size={15} color="currentColor" /></span>
+                                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{x.label}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(2)}</div>
-                          {weekChange !== 0 && (
-                            <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
-                              {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
-                          {sparkline(weekDaily, accent, { labels: weekLabels })}
-                        </div>
-                      </div>
-
-                      {/* MONTH REVENUE */}
-                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.monthlyRevenue}</div>
-                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days"}</div>
-                        </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(2)}</div>
-                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
-                          {sparkline(monthDaily, accent, { labels: monthLabels })}
-                        </div>
-                      </div>
-
-                      {/* YEAR REVENUE — hele kalenderjaar via eigen fetch
-                          (het 90-dagen-venster telt anders maar een kwart). */}
-                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.yearlyRevenue}</div>
-                          <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{fmt(getToday()).slice(0, 4)}</div>
-                        </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>
-                          {yearRevTile ? `${cur}${yearRevTile.totaal.toFixed(2)}` : "…"}
-                        </div>
-                        <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>
-                          {sparkline(yearRevTile ? yearRevTile.perMaand : Array(12).fill(0), accent, { labels: (lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN).map(mn => mn[0].toUpperCase()) })}
-                        </div>
-                      </div>
-
-                      {/* RATING — breakdown bars as the visual */}
-                      <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: isMobile ? "12px 12px" : "16px 18px", minHeight: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.avgRating}</div>
-                          <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{salonData.reviews?.length || 0} {t.reviews?.toLowerCase?.() || "reviews"}</span>
-                        </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, display: "flex", alignItems: "center", gap: 6, lineHeight: 1, marginTop: 6 }}>
-                          {avgRating}
-                          <svg width={18} height={18} viewBox="0 0 20 20" fill={accent}>
-                            <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
-                          </svg>
-                        </div>
-                        <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                          {salonData.reviews?.length > 0 ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                              {ratingDist.map(r => (
-                                <div key={r.rating} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, color: c.textMuted }}>
-                                  <span style={{ width: 8, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.rating}</span>
-                                  <div style={{ flex: 1, height: 5, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", width: `${r.pct}%`, background: accent, borderRadius: 3, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
-                                  </div>
-                                  <span style={{ width: 14, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.count}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "8px 0" }}>{lang === "nl" ? "Nog geen reviews" : lang === "es" ? "Aún no hay reseñas" : "No reviews yet"}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                   </>
                 );
@@ -9429,66 +9438,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 );
               })()}
-              {/* Quick Actions — primary first, rest ghost. Elk label op één
-                  regel en alle cellen even breed (Faisal 15-09: labels braken
-                  over twee regels in zes smalle kolommen). Zoveel kolommen als
-                  er cellen van ≥ 186px in de balk passen, daarna in balans
-                  verdeeld over de rijen (6 → 3+3, 5 → 3+2, nooit 5+1). */}
-              {(() => {
-                const heeftKassa = salonData.plan === "professional" && (salonData.products || []).some(p => p.active);
-                const heeftExport = appts.length > 0;
-                const aantal = 4 + (heeftKassa ? 1 : 0) + (heeftExport ? 1 : 0);
-                const gap = 8, minCel = isMobile ? 160 : 186;
-                const past = qaWidth > 0 ? Math.max(1, Math.floor((qaWidth + gap) / (minCel + gap))) : (isMobile ? 2 : 3);
-                const rijen = Math.ceil(aantal / Math.min(aantal, past));
-                const kolommen = Math.ceil(aantal / rijen);
-                const qa = { padding: "12px 10px", fontSize: 10.5, display: "flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
-                return (
-              <div ref={qaRef} data-tour="quick-actions" data-quick-actions style={{ display: "grid", gridTemplateColumns: `repeat(${kolommen}, minmax(0, 1fr))`, gap, marginBottom: 22 }}>
-                <button className="btn-primary" style={qa}
-                  onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true }); setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false); }}>
-                  <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
-                </button>
-                {/* Kassa — walk-in verkoop rechtstreeks vanaf het dashboard,
-                    zodat een productverkoop geen omweg via de agenda vergt. */}
-                {heeftKassa && (
-                  <button className="btn-ghost" style={{ ...qa, color: accent, borderColor: `${accent}44` }}
-                    onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
-                    <NavIcon name="kassa" size={14} color="currentColor" /> {lang === "nl" ? "Verkoop / kassa" : lang === "es" ? "Venta / caja" : "Sale / checkout"}
-                  </button>
-                )}
-                <button className="btn-ghost" style={qa} onClick={() => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer")}>
-                  <NavIcon name="eye" size={14} color={c.textSub} /> {t.previewPage}
-                </button>
-                <button className="btn-ghost" style={{ ...qa, color: copied ? c.success : undefined, borderColor: copied ? `${c.success}55` : undefined }} onClick={copyLink}>
-                  <NavIcon name="link" size={14} color={copied ? c.success : c.textSub} /> {copied ? t.copied : t.copyLink}
-                </button>
-                {heeftExport && (
-                  <button className="btn-ghost" style={qa} onClick={() => {
-                    const upcoming = appts.filter(a => a.status === "confirmed");
-                    if (upcoming.length === 0) return;
-                    exportCalendar(upcoming);
-                  }}>
-                    <NavIcon name="download" size={14} color={c.textSub} /> {t.exportCalendar}
-                  </button>
-                )}
-                {/* Live telefoon-agenda: springt naar de abonnements-kaart in
-                    Instellingen → Planning. Anders dan de eenmalige export
-                    hierboven verschijnen nieuwe afspraken daar vanzelf. */}
-                <button className="btn-ghost" style={qa}
-                  title={lang === "nl" ? "Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf" : lang === "es" ? "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas" : "Subscribe your phone's calendar — new appointments appear automatically"}
-                  onClick={() => {
-                    setView("instellingen"); setSettingsTab("planning");
-                    setTimeout(() => { try { document.getElementById("cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400);
-                  }}>
-                  <NavIcon name="calendar" size={14} color={c.textSub} /> {isMobile
-                    ? (lang === "nl" ? "Telefoon-agenda" : lang === "es" ? "Calendario móvil" : "Phone calendar")
-                    : (lang === "nl" ? "Koppel telefoon-agenda" : lang === "es" ? "Vincular calendario del móvil" : "Link phone calendar")}
-                </button>
-              </div>
-                );
-              })()}
-
               {/* Revenue Chart + Popular Services */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
                 {/* Revenue area chart */}
@@ -17423,25 +17372,46 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
           {/* Mobile Bottom Nav — gewone flex-sibling in de app-shell-kolom:
               geen position:fixed meer, dus de iOS zwevende-balk-bug kan hem
-              per definitie niet meer raken (3e melding, 30-08). */}
-          {isMobile && (
-            <div style={{
-              flexShrink: 0,
-              background: c.bg,
-              borderTop: "1px solid " + c.border,
-              display: "flex",
-              padding: "10px 2px 8px",
-              paddingBottom: "max(12px, calc(env(safe-area-inset-bottom) + 4px))",
-            }}>
-              {navItems.map(([k, icon, label]) => (
-                <div key={k} data-tour={`nav-${k}`} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 2, flex: 1, minWidth: 0 }}>
-                  <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
-                  <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: "0.01em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
+              per definitie niet meer raken (3e melding, 30-08).
+              Restyle 16-09: hoogstens vijf knoppen (Dashboard, Agenda, Kassa,
+              Klanten) + "Meer" met de rest, in plaats van zeven afgekapte. */}
+          {isMobile && (() => {
+            const primair = ["dashboard", "agenda", "kassa", "klanten"];
+            const eerste = navItems.filter(([k]) => primair.includes(k));
+            const rest = navItems.filter(([k]) => !primair.includes(k));
+            const restActief = rest.some(([k]) => k === view);
+            const knop = (k, icon, label, actief, onClick) => (
+              <div key={k} data-tour={`nav-${k}`} className="nav-item" role="tab" tabIndex={0} aria-selected={actief} onClick={onClick} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }} style={{ gap: 3, flex: 1, minWidth: 0 }}>
+                <span style={{ width: 36, height: 26, borderRadius: 8, background: actief ? `${accent}18` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }}><NavIcon name={icon} size={18} color={actief ? accent : c.textMuted} /></span>
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: actief ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
+              </div>
+            );
+            return (<>
+              {moreOpen && rest.length > 0 && (
+                <div data-more-sheet onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.18)" }}>
+                  <div onClick={e => e.stopPropagation()} className="vl-card" style={{ position: "absolute", left: 12, right: 12, bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", padding: 8 }}>
+                    {rest.map(([k, icon, label]) => (
+                      <div key={k} data-tour={`nav-${k}`} role="tab" tabIndex={0} aria-selected={view === k} onClick={() => { setView(k); setMoreOpen(false); }} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); setMoreOpen(false); } }}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", color: view === k ? accent : c.text, background: view === k ? `${accent}12` : "transparent", fontWeight: view === k ? 600 : 400 }}>
+                        <NavIcon name={icon} size={16} color={view === k ? accent : c.textSub} /> {label}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-
+              )}
+              <div data-mobile-nav style={{
+                flexShrink: 0,
+                background: c.bg,
+                borderTop: "1px solid " + c.border,
+                display: "flex",
+                padding: "8px 4px 6px",
+                paddingBottom: "max(10px, calc(env(safe-area-inset-bottom) + 4px))",
+              }}>
+                {eerste.map(([k, icon, label]) => knop(k, icon, label, view === k && !moreOpen, () => { setView(k); setMoreOpen(false); }))}
+                {rest.length > 0 && knop("more", "more", lang === "nl" ? "Meer" : lang === "es" ? "Más" : "More", restActief || moreOpen, () => setMoreOpen(o => !o))}
+              </div>
+            </>);
+          })()}
         </main>
 
         {/* Floating save button -- position:fixed OUTSIDE main, like cookie banner */}
