@@ -1019,34 +1019,47 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           })()}
         </div>
       </div>
-      {a.status === "confirmed" && mine && (
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <button className="btn-ghost" style={{ flex: 1, minWidth: 100, fontSize: 10, padding: "8px", opacity: processingApptId ? 0.5 : 1, ...(completeFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="check" size={12} /> {lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete"}</>}</button>
-          {showMoney && (
-            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", opacity: processingApptId ? 0.5 : 1, ...(priceFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={!!processingApptId}
-              title={lang === "nl" ? "Prijs aanpassen (bv. andere behandeling)" : lang === "es" ? "Ajustar el precio (p. ej. otro tratamiento)" : "Adjust the price (e.g. a different treatment)"}
-              onClick={() => { setPriceInput(String(parseFloat(a.service_price || 0) || 0)); setPriceFor(v => v === a.id ? null : a.id); }}>{lang === "nl" ? "Prijs" : lang === "es" ? "Precio" : "Price"}</button>
-          )}
-          {showContact && phoneDigits && (
-            <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time }))} target="_blank" rel="noopener noreferrer"
-              className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
-              WhatsApp
-            </a>
-          )}
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textLabel }} onClick={() => {
-            const dur = parseInt(a.service_duration || a.duration || 60);
-            window.open(getGoogleCalUrl({
-              title: `${a.client_name} — ${a.service_name}`,
-              date: a.date, time: a.time, duration: dur,
-              description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${cur}${a.service_price}` : ""}`,
-              location: salonProfile.business_name || ""
-            }), "_blank");
-          }}>{t.addToGoogleCal}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.danger, borderColor: `${c.danger}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : <><NavIcon name="xmark" size={10} color="#f87171" /> No-show</>}</button>
-          <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
-        </div>
-      )}
+      {a.status === "confirmed" && mine && (() => {
+        // Restyle 16-09 (zoals de eigenaarsapp): één rij tekstknoppen —
+        // Voltooid getint in het accent + Prijs / No-show / Annuleer — en de
+        // icoonknoppen (Google Agenda, WhatsApp) als vierkantjes rechts
+        // eronder. Op de telefoon Voltooid op volle breedte, de rest in één rij.
+        const dis = !!processingApptId;
+        const cel = { width: "100%", minWidth: 0, fontSize: 10, padding: "9px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dis ? 0.5 : 1 };
+        const icoon = { width: 32, height: 32, flexShrink: 0, borderRadius: 8, background: "transparent", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: dis ? 0.5 : 1, padding: 0, textDecoration: "none" };
+        const n = showMoney ? 3 : 2;
+        return (
+          <div data-appt-actions style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? `repeat(${n}, minmax(0, 1fr))` : `1.5fr ${Array(n).fill("1fr").join(" ")}`, gap: 6 }}>
+              <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete")}</button>
+              {showMoney && (
+                <button className="btn-ghost" style={{ ...cel, ...(priceFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={dis}
+                  title={lang === "nl" ? "Prijs aanpassen (bv. andere behandeling)" : lang === "es" ? "Ajustar el precio (p. ej. otro tratamiento)" : "Adjust the price (e.g. a different treatment)"}
+                  onClick={() => { setPriceInput(String(parseFloat(a.service_price || 0) || 0)); setPriceFor(v => v === a.id ? null : a.id); }}>{lang === "nl" ? "Prijs" : lang === "es" ? "Precio" : "Price"}</button>
+              )}
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : "No-show"}</button>
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+            </div>
+            <div data-appt-tools style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+              <button type="button" aria-label={t.addToGoogleCal} title={t.addToGoogleCal} style={{ ...icoon, border: `1px solid ${c.border}`, color: c.textSub }} disabled={dis} onClick={() => {
+                const dur = parseInt(a.service_duration || a.duration || 60);
+                window.open(getGoogleCalUrl({
+                  title: `${a.client_name} — ${a.service_name}`,
+                  date: a.date, time: a.time, duration: dur,
+                  description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${cur}${a.service_price}` : ""}`,
+                  location: salonProfile.business_name || ""
+                }), "_blank");
+              }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
+              {showContact && phoneDigits && (
+                <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time }))} target="_blank" rel="noopener noreferrer"
+                  aria-label="WhatsApp" title="WhatsApp" style={{ ...icoon, border: "1px solid #25D36655", color: "#25a55c" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
+                </a>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {/* Prijs aanpassen (eigen afspraak): inline veldje, zelfde plek als de
           betaalwijze-kiezer. */}
       {a.status === "confirmed" && mine && priceFor === a.id && (
@@ -1153,6 +1166,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (!canEditServices && staffSettingsTab === "diensten") setStaffSettingsTab("werktijden");
   }, [canInvoice, canEditServices, view, staffSettingsTab]);
 
+  // Nieuwe afspraak: kop-knop op desktop en snelle-actie-tegel (restyle 16-09).
+  const openAddAppt = () => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true }); };
+
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
     ["agenda", "agenda", t.agenda],
@@ -1203,33 +1219,43 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em" }}>vellu</div>
             </div>
 
-            {/* Staff Info */}
-            <div style={{ padding: "14px 24px", borderBottom: "1px solid " + c.border, flexShrink: 0 }}>
-              <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{salonProfile.business_name}</div>
-              <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{myStaff.name}</div>
-              {/* Quick actions so staff can share the salon booking link the
-                  same way the owner can — no need to hunt down the URL. */}
-              {salonProfile.slug && (
-                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-                    onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}
-                    title={lang === "nl" ? "Open boekingspagina in nieuw tabblad" : lang === "es" ? "Abrir la página de reservas en una pestaña nueva" : "Open booking page in new tab"}>
-                    <NavIcon name="eye" size={11} color={accent} /> {lang === "nl" ? "Bekijk" : lang === "es" ? "Vista previa" : "Preview"}
-                  </button>
-                  <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "6px 8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}
-                    onClick={copyLink}
-                    title={lang === "nl" ? "Kopieer boekingspagina-link" : lang === "es" ? "Copiar el enlace de la página de reservas" : "Copy booking page link"}>
-                    <NavIcon name="link" size={11} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer" : lang === "es" ? "Copiar" : "Copy")}
-                  </button>
+            {/* Medewerkerskaart (restyle 16-09, zoals de salonkaart in de
+                eigenaarsapp): foto of initiaal, naam + salon · rol, en de
+                boekingslink met oog (bekijken) en schakel (kopiëren). */}
+            {(() => {
+              const iconBtn = { width: 28, height: 28, borderRadius: 6, border: `1px solid ${c.border}`, background: c.bgCard, color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 };
+              const initiaal = (myStaff.name || "?").trim().charAt(0).toUpperCase();
+              return (
+                <div style={{ padding: "12px 12px 0", flexShrink: 0 }}>
+                  <div className="vl-card" data-staff-card style={{ padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: salonProfile.slug ? 10 : 0 }}>
+                      {myStaff.avatar_url
+                        ? <img src={myStaff.avatar_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                        : <div aria-hidden="true" style={{ width: 38, height: 38, borderRadius: 10, background: `${accent}18`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 19, flexShrink: 0 }}>{initiaal}</div>}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{myStaff.name}</div>
+                        <div style={{ fontSize: 10, color: c.textLabel, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{salonProfile.business_name}{myStaff.role ? ` · ${myStaff.role}` : ""}</div>
+                      </div>
+                    </div>
+                    {salonProfile.slug && (
+                      <div data-staff-link style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 5px 5px 10px", borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}` }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>vellu.cc/{salonProfile.slug}</span>
+                        <button type="button" aria-label={lang === "nl" ? "Bekijk boekingspagina" : lang === "es" ? "Ver página de reservas" : "View booking page"} title={lang === "nl" ? "Open de boekingspagina in een nieuw tabblad" : lang === "es" ? "Abrir la página de reservas en una pestaña nueva" : "Open the booking page in a new tab"}
+                          onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")} style={iconBtn}><NavIcon name="eye" size={13} color="currentColor" /></button>
+                        <button type="button" aria-label={lang === "nl" ? "Kopieer boekingslink" : lang === "es" ? "Copiar enlace de reservas" : "Copy booking link"} title={copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer boekingslink" : lang === "es" ? "Copiar enlace de reservas" : "Copy booking link")}
+                          onClick={copyLink} style={{ ...iconBtn, borderColor: copied ? c.success : c.border, color: copied ? c.success : c.textSub }}><NavIcon name={copied ? "check" : "link"} size={13} color="currentColor" /></button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Navigation */}
             <nav style={{ flex: 1, minHeight: 0, padding: "12px 12px", overflowY: "auto" }}>
               {navItems.map(([k, icon, label]) => (
                 <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{
-                  display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", borderRadius: 12,
+                  display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", borderRadius: 8,
                   cursor: "pointer", marginBottom: 3,
                   background: view === k ? `${accent}12` : "transparent",
                   border: `1px solid ${view === k ? `${accent}22` : "transparent"}`,
@@ -1256,30 +1282,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         {/* Main content — desktop uses its own scroll pane so the fixed sidebar
             stays put; mobile inherits the body's natural scroll. */}
         <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", ...(isMobile ? { minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" } : { overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }) }}>
-          <div style={{ maxWidth: isMobile ? "100%" : 800, margin: "0 auto" }}>
+          <div style={{ maxWidth: isMobile ? "100%" : 960, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300 }}>{view === "dashboard" ? t.dashboard : view === "agenda" ? t.agenda : view === "klanten" ? (t.customers || (lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients")) : view === "facturen" ? t.invoices : t.settings}</div>
                 <div style={{ fontSize: 12, color: c.textSub }}>{t.staffWelcome}, {myStaff.name}</div>
               </div>
+              {(view === "dashboard" || view === "agenda") && (
+                <button className="btn-primary" data-header-add style={{ width: "auto", fontSize: 11, padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={openAddAppt}>
+                  <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
+                </button>
+              )}
             </div>
           )}
-          {/* Mobile quick actions — sidebar isn't rendered on mobile so surface
-              the share/preview here so staff can still grab the salon link. */}
-          {isMobile && salonProfile.slug && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", borderColor: `${accent}33`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                onClick={() => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer")}>
-                <NavIcon name="eye" size={12} color={accent} /> {lang === "nl" ? "Bekijk salon" : lang === "es" ? "Vista previa del salón" : "Preview salon"}
-              </button>
-              <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px 10px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                onClick={copyLink}>
-                <NavIcon name="link" size={12} color={copied ? c.success : c.textSub} /> {copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}
-              </button>
-            </div>
-          )}
-
           {/* DASHBOARD */}
           {view === "dashboard" && (() => {
             const now = new Date();
@@ -1353,10 +1369,47 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {isMobile && <PTitle sub={`${t.staffWelcome}, ${myStaff.name}`}>{t.dashboard}</PTitle>}
               {staffChips}
 
-              {/* Today hero + KPI cards */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.6fr 1fr", gap: 14, marginBottom: 20 }}>
-                {/* Today hero */}
-                <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
+              {/* KPI-tegels bovenaan (restyle 16-09, zelfde taal als de
+                  eigenaarsapp): week, maand en totaal — alleen als de eigenaar
+                  omzet voor het team aan heeft staan. */}
+              {showMoney && (() => {
+                const tile = ({ key, icon, label, sub, value, chip, body, valueColor, style }) => (
+                  <div key={key} className="vl-card" style={{ padding: isMobile ? 14 : "16px 18px", display: "flex", flexDirection: "column", gap: 10, minWidth: 0, ...style }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <span className="vl-ico-tile"><NavIcon name={icon} size={15} color="currentColor" /></span>
+                      <div style={{ textAlign: "right", minWidth: 0 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{label}</div>
+                        {sub && <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{sub}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 24 : 28, fontWeight: 300, color: valueColor || accent, lineHeight: 1 }}>{value}</div>
+                      {chip}
+                    </div>
+                    {body}
+                  </div>
+                );
+                const weekChip = weekChange !== 0 ? (
+                  <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
+                    {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                  </div>
+                ) : null;
+                const behandelingen = lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments";
+                return (
+                  <div data-dash-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
+                    {tile({ key: "week", icon: "money", label: lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week", sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${cur}${weekRevenue.toFixed(0)}`, chip: weekChip, body: <div style={{ height: 44 }}>{sparkline(weekDaily, accent)}</div> })}
+                    {tile({ key: "month", icon: "analytics", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: `${cur}${monthRevenue.toFixed(0)}`, body: <div style={{ height: 44 }}>{sparkline(monthDaily, accent)}</div> })}
+                    {tile({ key: "total", icon: "star2", label: t.totalEarnings, sub: lang === "nl" ? "Tot nu toe" : lang === "es" ? "Hasta ahora" : "So far", value: `${cur}${totalEarnings.toFixed(0)}`, valueColor: c.text, style: isMobile ? { gridColumn: "1 / -1" } : undefined,
+                      body: <div style={{ height: 44, display: "flex", alignItems: "flex-end", fontSize: 10, color: c.textMuted }}>{completedAppts.length} {behandelingen}</div> })}
+                  </div>
+                );
+              })()}
+
+              {/* Vandaag (links) naast snelle acties + populairste behandelingen
+                  (rechts); de kolommen rekken tot dezelfde hoogte. */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.45fr 1fr", gap: isMobile ? 14 : 18, marginBottom: 22, alignItems: "stretch" }}>
+                {/* Vandaag — de hoofdkaart */}
+                <div className="vl-card" data-dash-today style={{ padding: isMobile ? "16px 14px" : "20px 22px", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
                   <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 80% at 100% 0%, ${accent}10 0%, transparent 55%)`, pointerEvents: "none" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, position: "relative" }}>
                     <div>
@@ -1374,7 +1427,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     )}
                   </div>
                   {todayAppts.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative" }}>
+                    <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
                       <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
                       <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : lang === "es" ? "Ver agenda →" : "View agenda →"}</div>
@@ -1391,58 +1444,102 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   )}
                 </div>
 
-                {/* KPI cards stacked — with sparklines. All revenue → hidden
-                    entirely when the owner turned staff revenue off. */}
-                {showMoney && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr", gap: 10, gridAutoRows: isMobile ? "auto" : "1fr" }}>
-                  {/* WEEK REVENUE */}
-                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week"}</div>
-                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days"}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(0)}</div>
-                      {weekChange !== 0 && (
-                        <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
-                          {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+
+                {/* Rechts: snelle acties als tegels — + Afspraak op volle breedte,
+                    daaronder Bekijk/Kopieer boekingslink, Exporteer agenda en
+                    Koppel telefoon-agenda. */}
+                <div data-dash-right style={{ display: "flex", flexDirection: "column", gap: isMobile ? 14 : 18, minWidth: 0 }}>
+                  {(() => {
+                    const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                    const komend = appointments.filter(a => a.status === "confirmed" && isMineAppt(a));
+                    const acties = [
+                      { key: "add", primary: true, icon: "plus", label: t.addAppointment, onClick: openAddAppt },
+                      ...(salonProfile.slug ? [
+                        { key: "preview", icon: "eye", label: isMobile ? L("Bekijk", "Preview", "Ver") : L("Bekijk boekingspagina", "View booking page", "Ver página de reservas"), title: L("Open de boekingspagina in een nieuw tabblad", "Open the booking page in a new tab", "Abre la página de reservas en una pestaña nueva"), onClick: () => window.open(`/${salonProfile.slug}`, "_blank", "noopener,noreferrer") },
+                        { key: "copy", icon: copied ? "check" : "link", label: copied ? L("Gekopieerd", "Copied", "Copiado") : (isMobile ? L("Kopieer link", "Copy link", "Copiar enlace") : L("Kopieer boekingslink", "Copy booking link", "Copiar enlace de reservas")), title: L("Kopieer de link naar de boekingspagina", "Copy the link to the booking page", "Copiar el enlace a la página de reservas"), onClick: copyLink },
+                      ] : []),
+                      { key: "export", icon: "download", label: isMobile ? "Export" : L("Exporteer agenda", "Export calendar", "Exportar calendario"), title: L("Download je komende afspraken als agendabestand (.ics)", "Download your upcoming appointments as a calendar file (.ics)", "Descarga tus próximas citas como archivo de calendario (.ics)"),
+                        onClick: () => { if (komend.length === 0) { toast.show(L("Geen komende afspraken om te exporteren", "No upcoming appointments to export", "No hay citas próximas para exportar")); return; } exportCalendar(komend); } },
+                      { key: "phone", icon: "calendar", label: isMobile ? L("Telefoon-agenda", "Phone calendar", "Calendario móvil") : L("Koppel telefoon-agenda", "Link phone calendar", "Calendario del móvil"), title: L("Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf", "Subscribe your phone's calendar — new appointments appear automatically", "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas"),
+                        onClick: () => { setView("instellingen"); setStaffSettingsTab("werktijden"); setTimeout(() => { try { document.getElementById("staff-cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400); } },
+                    ];
+                    return (
+                      <div className="vl-card" data-quick-actions style={{ padding: isMobile ? 14 : 18 }}>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{L("Snelle acties", "Quick actions", "Acciones rápidas")}</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                          {acties.map(x => (
+                            <button key={x.key} type="button" className={`vl-tile${x.primary ? " primary" : ""}`} title={x.title} onClick={x.onClick} style={x.primary ? { gridColumn: "1 / -1" } : undefined}>
+                              <span className="vl-tile-ico"><NavIcon name={x.icon} size={15} color="currentColor" /></span>
+                              <span className="vl-tile-label">{x.label}</span>
+                            </button>
+                          ))}
                         </div>
-                      )}
+                      </div>
+                    );
+                  })()}
+                  {showMoney && (<>
+                  {/* Populairste behandelingen — onder de snelle acties, zodat de
+                      rechterkolom even hoog wordt als de Vandaag-kaart. */}
+                  <div className="vl-card" data-dash-popular style={{ padding: isMobile ? "16px 14px" : 18, display: "flex", flexDirection: "column", flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : lang === "es" ? "Servicios populares" : "Popular services")}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
                     </div>
-                    <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
-                      {sparkline(weekDaily, accent)}
-                    </div>
+                    {(() => {
+                      const svcStats = {};
+                      completedAppts.forEach(a => {
+                        const n = a.service_name?.split(" — ")[0] || "?";
+                        if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
+                        svcStats[n].count += 1;
+                        svcStats[n].revenue += myShare(a);
+                      });
+                      const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                      if (sorted.length === 0) return (
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
+                          <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
+                          <div style={{ fontSize: 12 }}>{t.noAppts}</div>
+                        </div>
+                      );
+                      const max = sorted[0][1].count;
+                      return (
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                          {sorted.map(([name, stats]) => {
+                            const svc = services.find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
+                            const thumb = svc?.photos?.[0]?.url;
+                            return (
+                              <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
+                                  {thumb ? (
+                                    <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} />
+                                  ) : null}
+                                  <NavIcon name="scissors" size={16} color={c.textMuted} />
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
+                                      <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
+                                    </div>
+                                    <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
-
-                  {/* MONTH REVENUE */}
-                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
-                      <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days"}</div>
-                    </div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(0)}</div>
-                    <div style={{ flex: 1, minHeight: 40, marginTop: 12 }}>
-                      {sparkline(monthDaily, accent)}
-                    </div>
-                  </div>
-
-                  {/* TOTAL EARNINGS */}
-                  <div className="stat-card" style={{ display: "flex", flexDirection: "column", padding: "16px 18px", minHeight: 0 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{cur}{totalEarnings.toFixed(0)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments"}</div>
-                  </div>
-                </div>}
+                  </>)}
+                </div>
               </div>
 
-              {/* Primary CTA */}
-              <button className="btn-primary" style={{ width: "100%", marginBottom: 16, padding: "14px 24px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-                onClick={() => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true }); }}>
-                <NavIcon name="plus" size={14} color={c.btnOnDark} /> {t.addAppointment}
-              </button>
-
-              {/* Revenue Chart + Popular Services — all revenue-driven, so the
-                  whole block disappears when staff revenue is turned off. */}
-              {showMoney && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: 14, marginBottom: 22, alignItems: "stretch" }}>
+              {/* Omzetgrafiek over de volle breedte — verdwijnt als de eigenaar
+                  omzet voor het team uit heeft gezet. */}
+              {showMoney && <div style={{ marginBottom: 22 }}>
                 {/* Revenue area chart — 8 weeks */}
                 {(() => {
                   const weeks = [];
@@ -1485,7 +1582,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   const areaPath = `${smoothPath} L${pts[pts.length - 1].x.toFixed(1)},${PAD_TOP + innerH} L${pts[0].x.toFixed(1)},${PAD_TOP + innerH} Z`;
                   const gradId = "staff-rev-grad-" + Math.abs(accent.charCodeAt(1) * 7).toString(16);
                   return (
-                    <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
+                    <div className="vl-card" data-dash-chart style={{ padding: isMobile ? "16px 14px" : "20px 22px", display: "flex", flexDirection: "column" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : lang === "es" ? "Ingresos a lo largo del tiempo" : "Revenue over time")}</div>
@@ -1555,60 +1652,6 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   );
                 })()}
 
-                {/* Popular services — thumbnails + revenue */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices || (lang === "nl" ? "Populaire diensten" : lang === "es" ? "Servicios populares" : "Popular services")}</div>
-                    <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
-                  </div>
-                  {(() => {
-                    const svcStats = {};
-                    completedAppts.forEach(a => {
-                      const n = a.service_name?.split(" — ")[0] || "?";
-                      if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
-                      svcStats[n].count += 1;
-                      svcStats[n].revenue += myShare(a);
-                    });
-                    const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
-                    if (sorted.length === 0) return (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10 }}>
-                        <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
-                        <div style={{ fontSize: 12 }}>{t.noAppts}</div>
-                      </div>
-                    );
-                    const max = sorted[0][1].count;
-                    return (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                        {sorted.map(([name, stats]) => {
-                          const svc = services.find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
-                          const thumb = svc?.photos?.[0]?.url;
-                          return (
-                            <div key={name} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
-                                {thumb ? (
-                                  <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative", zIndex: 1 }} />
-                                ) : null}
-                                <NavIcon name="scissors" size={16} color={c.textMuted} />
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(stats.count / max) * 100}%`, transition: "width 0.6s cubic-bezier(0.16,1,0.3,1)" }} />
-                                  </div>
-                                  <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{stats.count}×</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
               </div>}
             </div>
             );
@@ -1676,18 +1719,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", width: isMobile ? "100%" : "auto" }}>
+                  {/* Telefoon: drie gelijke knoppen op één rij en daaronder de
+                      periode-navigatie (restyle 16-09); desktop alles op één rij. */}
+                  <div data-agenda-tools style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
                   <button
                     onClick={() => {
                       setBlockEditId(null);
                       setBlockForm({ mode: "time", variant: "generic", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
                       setBlockModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: c.bgCard, color: c.textSub, border: `1px solid ${c.inputBorder}`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif", ...(isMobile ? { width: "100%", justifyContent: "center", padding: "9px 6px", whiteSpace: "nowrap" } : {}) }}
                     title={lang === "nl" ? "Blokkeer een dag of tijdvak" : lang === "es" ? "Bloquear un día o una franja horaria" : "Block a day or time window"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                    {lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time"}
+                    {isMobile ? (lang === "nl" ? "Blokkeer" : lang === "es" ? "Bloquear" : "Block") : (lang === "nl" ? "Blokkeer tijd" : lang === "es" ? "Bloquear hora" : "Block time")}
                   </button>
                   {/* Eigen ingang voor "die dag doe ik geen <behandeling>" —
                       zelfde modal, maar in de behandeling-variant. */}
@@ -1698,11 +1744,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setBlockForm({ mode: "day", variant: "service", from: calDate || todayFmt, to: "", time_start: "09:00", time_end: "17:00", reason: "", service_id: "", repeat: false });
                       setBlockModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${c.danger}14`, color: c.danger, border: `1px solid ${c.danger}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: c.bgCard, color: c.textSub, border: `1px solid ${c.inputBorder}`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif", ...(isMobile ? { width: "100%", justifyContent: "center", padding: "9px 6px", whiteSpace: "nowrap" } : {}) }}
                     title={lang === "nl" ? "Blokkeer één behandeling op een dag, evt. elke week" : lang === "es" ? "Bloquear un tratamiento en un día, o cada semana" : "Block one treatment on a day, optionally weekly"}
                   >
                     <NavIcon name="scissors" size={11} color="currentColor" />
-                    {lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment"}
+                    {isMobile ? (lang === "nl" ? "Behandeling" : lang === "es" ? "Tratamiento" : "Treatment") : (lang === "nl" ? "Blokkeer behandeling" : lang === "es" ? "Bloquear tratamiento" : "Block treatment")}
                   </button>
                   )}
                   <button
@@ -1710,12 +1756,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setExcForm({ date: calDate || todayFmt, open: "09:00", close: "17:00" });
                       setExcModalOpen(true);
                     }}
-                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: `${accent}14`, color: accent, border: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif" }}
+                    style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", background: c.bgCard, color: c.textSub, border: `1px solid ${c.inputBorder}`, display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'Jost',sans-serif", ...(isMobile ? { width: "100%", justifyContent: "center", padding: "9px 6px", whiteSpace: "nowrap" } : {}) }}
                     title={lang === "nl" ? "Werk eenmalig op een dag die normaal vrij is" : lang === "es" ? "Trabaja una vez en un día que normalmente libras" : "Work once on a day you're normally off"}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                    {lang === "nl" ? "Extra werkdag" : lang === "es" ? "Día de trabajo extra" : "Extra workday"}
+                    {isMobile ? (lang === "nl" ? "Extra dag" : lang === "es" ? "Día extra" : "Extra day") : (lang === "nl" ? "Extra werkdag" : lang === "es" ? "Día de trabajo extra" : "Extra workday")}
                   </button>
+                  </div>
+                  <div data-agenda-nav style={{ display: "flex", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
                   {staffWeekOffset !== 0 && (
                     <div onClick={() => { setStaffWeekOffset(0); setCalDate(todayFmt); }} style={{
                       padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 600,
@@ -1723,18 +1771,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       background: `${accent}14`, color: accent, border: `1px solid ${accent}33`
                     }}>{lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today"}</div>
                   )}
-                  <div onClick={() => setStaffWeekOffset(o => o - 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                  <div onClick={() => setStaffWeekOffset(o => o - 1)} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
-                  <div onClick={() => setStaffWeekOffset(o => o + 1)} style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.text, padding: "0 8px", minWidth: 140, flex: isMobile ? 1 : "none", textAlign: "center", textTransform: "capitalize" }}>{periodLabel}</div>
+                  <div onClick={() => setStaffWeekOffset(o => o + 1)} style={{ width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1px solid ${c.inputBorder}`, color: c.textSub, background: c.bgCard }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </div>
                   </div>
                 </div>
               </div>
 
               {/* Period summary strip */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16, padding: "14px 18px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+              <div className="vl-card" data-period-strip style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16, padding: "14px 18px" }}>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal" : "Total"}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text, lineHeight: 1 }}>{periodAppts.length}</div>
@@ -1762,7 +1811,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 weekStart.setDate(base.getDate() - dayOfWeek);
                 const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; });
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+                  <div className="vl-card" data-week-grid style={{ marginBottom: 20, overflow: "hidden", display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
                     {/* Header + body in one grid */}
                     {weekDays.map((d, i) => {
                       const ds = fmt(d);
@@ -1788,7 +1837,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           {/* Day header */}
                           <div style={{ textAlign: "center", padding: isMobile ? "8px 2px 6px" : "10px 4px", background: c.inputBg, borderBottom: `1px solid ${c.border}`, position: "relative" }}>
                             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: isToday ? accent : c.textLabel, marginBottom: 4 }}>{DAY_HEADERS[i]}</div>
-                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? c.btnOnDark : c.text, width: isToday ? 24 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? "50%" : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 24 : "auto" }}>{d.getDate()}</div>
+                            <div style={{ fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? onAccentInk(accent, c.btnOnDark) : c.text, width: isToday ? 26 : "auto", height: isToday ? 24 : "auto", borderRadius: isToday ? 7 : 0, background: isToday ? accent : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: isToday ? 26 : "auto" }}>{d.getDate()}</div>
                           </div>
                           {/* Day content */}
                           <div style={{ flex: 1, minHeight: isMobile ? 80 : 120, padding: isMobile ? "6px 3px 8px" : "8px 6px 10px", display: "flex", flexDirection: "column", gap: 3, position: "relative" }}>
@@ -1860,7 +1909,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 }
                 const rows = cells.length / 7;
                 return (
-                  <div style={{ marginBottom: 20, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                  <div className="vl-card" data-month-grid style={{ marginBottom: 20, overflow: "hidden" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderBottom: `1px solid ${c.border}`, background: c.inputBg }}>
                       {DAY_HEADERS.map((dh, i) => (
                         <div key={dh} style={{ textAlign: "center", fontSize: isMobile ? 9 : 10, fontWeight: 600, color: c.textLabel, padding: isMobile ? "8px 0" : "10px 0", letterSpacing: "0.12em", textTransform: "uppercase", borderRight: i < 6 ? `1px solid ${c.border}` : "none" }}>{dh}</div>
@@ -2059,7 +2108,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {/* Appointments list + export (week/month views) */}
               {calViewMode !== "year" && (<>
                 {calAppts.length === 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                  <div className="vl-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px" }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="calendar" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>{calDate === todayFmt ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : lang === "es" ? "No hay citas este día" : "No appointments on this day")}</div>
                   </div>
@@ -2110,6 +2159,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               cl.next = upcoming[0] || null;
             }
             const q = clientSearch.trim().toLowerCase();
+            const ini = (name) => { const parts = String(name || "?").trim().split(/\s+/); return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase(); };
             const list = Array.from(byEmail.values())
               .filter(cl => !q || cl.name.toLowerCase().includes(q) || (showContact && (cl.email.toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))))
               .sort((a, b) => (b.next ? 1 : 0) - (a.next ? 1 : 0) || a.name.localeCompare(b.name));
@@ -2117,21 +2167,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             return (
               <div className="fade-up">
                 {isMobile && <PTitle sub={lang === "nl" ? "Klanten die jij hebt behandeld" : lang === "es" ? "Clientes que has atendido" : "Clients you've served"}>{lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"}</PTitle>}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Totaal klanten" : lang === "es" ? "Total de clientes" : "Total clients"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{byEmail.size}</div>
-                  </div>
-                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Terugkerend" : lang === "es" ? "Recurrentes" : "Returning"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: c.text }}>{Array.from(byEmail.values()).filter(cl => cl.visitCount > 1).length}</div>
-                  </div>
-                  {!isMobile && (
-                    <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Komende afspraken" : lang === "es" ? "Próxima" : "Upcoming"}</div>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{Array.from(byEmail.values()).filter(cl => cl.next).length}</div>
+                {/* Tegels met icoontegel (restyle 16-09). */}
+                <div data-client-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>
+                  {[
+                    ["user", lang === "nl" ? "Totaal klanten" : lang === "es" ? "Total de clientes" : "Total clients", byEmail.size, c.text],
+                    ["team", lang === "nl" ? "Terugkerend" : lang === "es" ? "Recurrentes" : "Returning", Array.from(byEmail.values()).filter(cl => cl.visitCount > 1).length, c.text],
+                    ...(!isMobile ? [["calendar", lang === "nl" ? "Komende afspraken" : lang === "es" ? "Próxima" : "Upcoming", Array.from(byEmail.values()).filter(cl => cl.next).length, accent]] : []),
+                  ].map(([icon, label, value, color]) => (
+                    <div key={label} className="vl-card" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                      <span className="vl-ico-tile"><NavIcon name={icon} size={15} color="currentColor" /></span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color, lineHeight: 1 }}>{value}</div>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
 
                 <div style={{ position: "relative", marginBottom: 12 }}>
@@ -2146,7 +2196,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
 
                 {list.length === 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16 }}>
+                  <div className="vl-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px" }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="user" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>
                       {q ? (lang === "nl" ? `Geen klant gevonden voor "${clientSearch}"` : lang === "es" ? `No se encontró ningún cliente para "${clientSearch}"` : `No client found for "${clientSearch}"`)
@@ -2154,12 +2204,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
+                  <div data-client-list style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {list.map((cl, i) => {
                       const note = showContact ? clientNotes[cl.email] : null;
                       return (
                         <div key={cl.email} onClick={() => setClientView(cl)}
-                          style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr auto" : "1fr 1fr auto", gap: 12, padding: "12px 14px", borderTop: i > 0 ? `1px solid ${c.border}` : "none", cursor: "pointer", alignItems: "center" }}>
+                          data-client-row style={{ display: "grid", gridTemplateColumns: isMobile ? "auto 1fr auto" : "auto 1fr 1fr auto", gap: 12, padding: "12px 14px", borderRadius: 12, background: c.bgCard, border: `1px solid ${c.border}`, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer", alignItems: "center" }}>
+                          <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: accent, flexShrink: 0, letterSpacing: "0.04em" }}>{ini(cl.name)}</div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: c.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                               {cl.name}
@@ -2288,27 +2339,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               {completedAppts.length > 0 && (<>
                 {/* Stat cards — money tiles drop out when revenue is hidden;
                     the unsent/sent counters stay (staff still send invoices). */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : showMoney ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
-                  {showMoney && <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{t.totalEarnings}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{totalEarnings.toFixed(0)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length} {t.treatments}</div>
-                  </div>}
-                  {showMoney && <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{thisMonthTotal.toFixed(0)}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{thisMonthAppts.length} {t.treatments}</div>
-                  </div>}
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: unsent.length > 0 ? c.warning : c.text, lineHeight: 1 }}>{unsent.length}</div>
-                    {showMoney && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cur}{unsentTotal.toFixed(0)}</div>}
-                  </div>
-                  <div className="stat-card" style={{ padding: "16px 18px" }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent"}</div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: c.success, lineHeight: 1 }}>{sent.length}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%</div>
-                  </div>
+                <div data-invoice-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : showMoney ? "repeat(4, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
+                  {[
+                    ...(showMoney ? [
+                      ["money", t.totalEarnings, `${cur}${totalEarnings.toFixed(0)}`, `${completedAppts.length} ${t.treatments}`, accent],
+                      ["calendar", lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", `${cur}${thisMonthTotal.toFixed(0)}`, `${thisMonthAppts.length} ${t.treatments}`, c.text],
+                    ] : []),
+                    ["send", lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length, showMoney ? `${cur}${unsentTotal.toFixed(0)}` : "", unsent.length > 0 ? c.warning : c.text],
+                    ["check", lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", sent.length, `${completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%`, c.success],
+                  ].map(([icon, label, value, sub, color]) => (
+                    <div key={label} data-invoice-tile className="vl-card" style={{ padding: isMobile ? 14 : "16px 18px", display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                        <span className="vl-ico-tile"><NavIcon name={icon} size={15} color="currentColor" /></span>
+                        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, textAlign: "right", minWidth: 0 }}>{label}</div>
+                      </div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color, lineHeight: 1 }}>{value}</div>
+                      {sub ? <div style={{ fontSize: 10, color: c.textMuted }}>{sub}</div> : null}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Own revenue report — appointments here are already scoped to
@@ -2372,14 +2420,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   return true;
                 });
                 if (completedAppts.length === 0) return (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 14 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
                     <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen voltooide afspraken" : lang === "es" ? "Aún no hay citas completadas" : "No completed appointments yet"}</div>
                     <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : lang === "es" ? "Las facturas aparecen aquí una vez que marcas una cita como completada." : "Invoices appear here once you mark an appointment as completed."}</div>
                   </div>
                 );
                 if (filtered.length === 0) return (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 14 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
                     <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : lang === "es" ? "No hay resultados para este filtro" : "No results for this filter"}</div>
                     {(invoiceSearch || invoiceFilter !== "all") && (
@@ -2394,15 +2442,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {visible.map(a => {
                     const isSending = processingApptId === a.id;
                     return (
-                      <div key={a.id} style={{
+                      <div key={a.id} data-invoice-row style={{
                         display: "flex", alignItems: "center", gap: 14,
                         padding: "14px 18px", background: c.bgCard,
                         border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
-                        borderRadius: 14, transition: "border-color 0.15s"
+                        borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", transition: "border-color 0.15s"
                       }}>
                         {/* Avatar */}
                         <div style={{
-                          width: 42, height: 42, borderRadius: "50%",
+                          width: 40, height: 40, borderRadius: 10,
                           background: `${accent}14`, border: `1px solid ${accent}22`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 12, fontWeight: 600, color: accent, flexShrink: 0,
@@ -2502,7 +2550,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* WERKTIJDEN TAB */}
               {staffSettingsTab === "werktijden" && (<>
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18 }}>
+                <div className="vl-card" style={{ padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 14 }}>{t.myWorkingHours}</div>
                   {[0,1,2,3,4,5,6].map(day => {
                     const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
@@ -2552,7 +2600,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 {/* Telefoon-agenda (iCal-abonnement) — de medewerkers-versie van
                     de eigenaars-kaart: alleen haar eigen afspraken, en nieuwe
                     of gewijzigde afspraken verschijnen vanzelf in de agenda-app. */}
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginTop: 12 }}>
+                <div id="staff-cal-feed-card" className="vl-card" style={{ padding: 18, marginTop: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
                     {lang === "nl" ? "Agenda in je telefoon" : lang === "es" ? "Calendario en tu teléfono" : "Calendar on your phone"}
                   </div>
@@ -2644,7 +2692,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* FACTURATIE TAB */}
               {staffSettingsTab === "facturatie" && canInvoice && (
-                <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18 }}>
+                <div className="vl-card" style={{ padding: 18 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.invoiceDetails}</div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14 }}>{t.invoiceSettings}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2734,7 +2782,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ fontSize: 10, color: c.textMuted }}>{services.length} {lang === "nl" ? "diensten" : lang === "es" ? "servicios" : "services"}</div>
                   </div>
                   {services.length === 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 14 }}>
                       <div style={{ opacity: 0.4 }}><NavIcon name="diensten" size={32} color={c.textMuted} /></div>
                       <div style={{ fontSize: 12, color: c.textSub }}>{t.noServices}</div>
                     </div>
@@ -2747,7 +2795,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const extCount = (s.extras || []).length;
                     const photoCount = (s.photos || []).length;
                     return (
-                      <div key={s.id} style={{ background: c.bgCard, border: `1px solid ${isExp ? `${accent}44` : c.border}`, borderRadius: 16, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s" }}>
+                      <div key={s.id} style={{ background: c.bgCard, border: `1px solid ${isExp ? `${accent}44` : c.border}`, borderRadius: 14, marginBottom: 10, overflow: "hidden", transition: "border-color 0.2s" }}>
                         {isEdit ? (
                           <div style={{ padding: 18 }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>{lang === "nl" ? "Dienst bewerken" : lang === "es" ? "Editar servicio" : "Edit service"}</div>
@@ -3315,13 +3363,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         {/* Mobile Bottom Nav — flex-sibling in de app-shell-kolom (niet meer
             fixed/geportald), dus immuun voor de iOS zwevende-balk-bug. */}
         {isMobile && (
-          <div style={{ flexShrink: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", justifyContent: "space-around", paddingTop: 8, paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
-            {navItems.map(([k, icon, label]) => (
-              <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={view === k} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3 }}>
-                <NavIcon name={icon} size={18} color={view === k ? accent : c.textMuted} />
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: view === k ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap" }}>{label}</span>
-              </div>
-            ))}
+          <div data-mobile-nav style={{ flexShrink: 0, background: c.bg, borderTop: "1px solid " + c.border, display: "flex", padding: "8px 4px 6px", paddingBottom: "max(10px, calc(env(safe-area-inset-bottom) + 4px))" }}>
+            {navItems.map(([k, icon, label]) => {
+              const actief = view === k;
+              return (
+                <div key={k} className="nav-item" role="tab" tabIndex={0} aria-selected={actief} onClick={() => setView(k)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setView(k); } }} style={{ gap: 3, flex: 1, minWidth: 0 }}>
+                  <span style={{ width: 36, height: 26, borderRadius: 8, background: actief ? `${accent}18` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }}><NavIcon name={icon} size={18} color={actief ? accent : c.textMuted} /></span>
+                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: actief ? accent : c.textMuted, transition: "color 0.2s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{label}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

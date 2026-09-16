@@ -1359,13 +1359,16 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         </div>
       </div>
       <div style={mobiel ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 14 } : { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
-        {presets.map(p => (
+        {presets.map((p, i) => (
           <button
             key={p.key}
             onClick={() => setPeriod(p.key)}
             style={{
               padding: mobiel ? "8px 4px" : "8px 14px",
               borderRadius: 8,
+              // Telefoon (3 kolommen): een wees op de laatste rij ("Aangepast")
+              // krijgt de hele rij, zodat het raster symmetrisch blijft.
+              gridColumn: mobiel && i === presets.length - 1 && presets.length % 3 === 1 ? "1 / -1" : "auto",
               fontSize: mobiel ? 10 : 11,
               whiteSpace: "nowrap",
               textAlign: "center",
