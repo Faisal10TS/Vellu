@@ -69,6 +69,14 @@ export const RELEASES = [
       {
         kind: "fix", audience: ["owner", "staff"],
         text: {
+          nl: "Deel-knop op je boekingspagina: het deel-icoon is nu ook zichtbaar als je huisstijlkleur wit of heel licht is.",
+          en: "Share button on your booking page: the share icon is now visible even when your brand colour is white or very light.",
+          es: "Botón Compartir en tu página de reservas: el icono ahora también se ve cuando tu color de marca es blanco o muy claro.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner", "staff"],
+        text: {
           nl: "Teamkaart: laadt een teamfoto niet, dan staat er een persoon-icoon in je kleur in plaats van het kapotte plaatje van de browser.",
           en: "Team card: if a team photo fails to load, a person icon in your colour is shown instead of the browser's broken-image glyph.",
           es: "Tarjeta de equipo: si una foto del equipo no carga, se muestra un icono de persona en tu color en lugar del símbolo de imagen rota del navegador.",

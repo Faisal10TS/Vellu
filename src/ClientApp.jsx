@@ -390,6 +390,16 @@ function PhoneContact({ salon, lang, c, compact = false }) {
 // small popover with a "copy link" action and a direct WhatsApp share for
 // desktop browsers that don't expose navigator.share.
 // compact: korte tekst ("Deel") voor naast de Boek-knop op mobiel (15-09).
+// Icoonkleur op de (altijd witte) deelknop: het accent zolang het minstens
+// 3:1 contrast maakt met wit (WCAG voor grafische elementen), anders donkere
+// inkt. Wit accent (Honeysets) en lichtroze (TTNB) gaven een onzichtbaar icoon.
+const shareIconColor = (accent) => {
+  const hex = /^#[0-9a-f]{6}$/i.test(accent || "") ? accent : "#c9a96e";
+  const ch = (i) => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * ch(1) + 0.7152 * ch(3) + 0.0722 * ch(5);
+  return (1.05 / (L + 0.05)) >= 3 ? hex : "#262626";
+};
+
 function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false }) {
   const [copied, setCopied] = useState(false);
   const url = typeof window !== "undefined"
@@ -463,7 +473,7 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
         onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 14px 32px rgba(0,0,0,0.38)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.32)"; }}
       >
-        <NavIcon name="share" size={15} color={accent || "#c9a96e"} />
+        <NavIcon name="share" size={15} color={shareIconColor(accent)} />
         {compact
           ? (lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share")
           : (lang === "nl" ? "Deel deze salon" : lang === "es" ? "Compartir este salón" : "Share this salon")}
