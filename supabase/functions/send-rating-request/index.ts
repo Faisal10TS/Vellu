@@ -5,16 +5,21 @@
 // in src/RateVellu.jsx; tokens en antwoorden in app_rating_invites /
 // app_ratings (migraties beoordeel_vellu + beoordeel_vellu_per_mail).
 //
-// Aansturing via een opdracht in app_rating_send_jobs (aangemaakt met SQL):
-//   POST { "job_id": "<uuid>", "secret": "<geheim uit de rij>" }
-// De functie doet alleen iets bij een bestaande, nog niet gestarte opdracht
-// met een kloppend geheim (verify_jwt=false in config.toml, geen gebruikers-
-// JWT). De uitkomst komt in de opdrachtrij, zodat er een logboek overblijft.
-//   mode 'test'    → NL- en EN-voorbeeld naar test_to (delivered@resend.dev),
-//                    niets naar salons; de html komt mee terug voor een preview
-//   mode 'dry_run' → alleen de ontvangerslijst (maakt wel de tokens aan)
-//   mode 'send'    → echt versturen: alle actieve niet-demo salons, of alleen
-//                    only_owners als dat gevuld is
+// Twee manieren om te sturen (verify_jwt=false in config.toml, de functie
+// controleert zelf):
+//   1. vellu.cc/admin → Ratings (Faisal zelf): Authorization = gebruikers-JWT
+//      van een beheerder (app_admins); body { mode, only_owners?, test_to? }.
+//      De functie maakt dan zelf de opdrachtrij aan (logboek).
+//   2. Opdracht via SQL: insert in app_rating_send_jobs → POST { job_id,
+//      secret }. Alleen een bestaande, nog niet gestarte opdracht met kloppend
+//      geheim wordt uitgevoerd.
+// Modi:
+//   test    → NL- en EN-voorbeeld naar test_to, niets naar salons; de html
+//             komt mee terug (preview)
+//   dry_run → alleen de ontvangerslijst (maakt wel de tokens aan)
+//   send    → echt versturen. Zonder only_owners: alle actieve niet-demo
+//             salons die de mail nog NIET kregen (herhalen gaat per salon
+//             met only_owners, dan wordt dezelfde link opnieuw gemaild).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -25,11 +30,18 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const SITE = "https://vellu.cc";
 const FROM_ADDRESS = "noreply@vellu.cc";
 const REPLY_TO = "mirahventures@vellu.cc";
+const ALLOWED_ORIGINS = ["https://vellu.cc", "https://www.vellu.cc", "http://localhost:5173", "http://localhost:4173"];
 
 const DUTCH = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const langOf = (cc: unknown): "nl" | "en" => DUTCH.has(String(cc || "NL").toUpperCase()) ? "nl" : "en";
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] as string));
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function cors(origin: string | null) {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : "https://vellu.cc";
+  return { "Access-Control-Allow-Origin": allow, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin" };
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -84,32 +96,26 @@ async function sendResend(to: string, fromName: string, subject: string, html: s
 
 // Uitnodiging per salon: bestaande token hergebruiken (dezelfde link blijft
 // werken), anders een nieuwe rij met een verse token.
-async function inviteFor(ownerId: string): Promise<string | null> {
-  const { data } = await supabase.from("app_rating_invites").select("token").eq("owner_id", ownerId).maybeSingle();
-  if (data?.token) return data.token;
-  const { data: made, error } = await supabase.from("app_rating_invites").insert({ owner_id: ownerId }).select("token").single();
+async function inviteFor(ownerId: string): Promise<{ token: string; sent_at: string | null; sent_count: number } | null> {
+  const { data } = await supabase.from("app_rating_invites").select("token, sent_at, sent_count").eq("owner_id", ownerId).maybeSingle();
+  if (data?.token) return data;
+  const { data: made, error } = await supabase.from("app_rating_invites").insert({ owner_id: ownerId }).select("token, sent_at, sent_count").single();
   if (error) return null;
-  return made.token;
+  return made;
 }
 
-serve(async (req) => {
-  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
-  let body: any = {};
-  try { body = await req.json(); } catch { body = {}; }
-  const jobId = String(body?.job_id || "");
-  const secret = String(body?.secret || "");
-  if (!/^[0-9a-f-]{36}$/i.test(jobId) || secret.length < 20) return json({ error: "unauthorized" }, 401);
+// Is de aanroeper een ingelogde beheerder (app_admins)? Voor de knop in
+// vellu.cc/admin; de gateway controleert de JWT niet (verify_jwt=false).
+async function callerIsAdmin(req: Request): Promise<boolean> {
+  const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!jwt || jwt.length < 20) return false;
+  const { data, error } = await supabase.auth.getUser(jwt);
+  if (error || !data?.user?.id) return false;
+  const { data: adm } = await supabase.from("app_admins").select("user_id").eq("user_id", data.user.id).maybeSingle();
+  return !!adm;
+}
 
-  const { data: job } = await supabase.from("app_rating_send_jobs").select("*").eq("id", jobId).is("started_at", null).maybeSingle();
-  if (!job || job.secret !== secret) return json({ error: "unauthorized" }, 401);
-  // Opdracht claimen: één uitvoering, ook bij een dubbele aanroep.
-  const { data: claimed } = await supabase.from("app_rating_send_jobs").update({ started_at: new Date().toISOString() }).eq("id", jobId).is("started_at", null).select("id").maybeSingle();
-  if (!claimed) return json({ error: "already_started" }, 409);
-  const finish = async (result: unknown, status = 200) => {
-    await supabase.from("app_rating_send_jobs").update({ finished_at: new Date().toISOString(), result }).eq("id", jobId);
-    return json(result, status);
-  };
-
+async function runJob(job: any): Promise<{ result: any; status: number }> {
   // Voorbeeldmails naar het testadres — geen salon, geen token.
   if (job.mode === "test") {
     const to = String(job.test_to || "delivered@resend.dev");
@@ -119,7 +125,7 @@ serve(async (req) => {
       const r = await sendResend(to, m.fromName, `[TEST ${lang}] ${m.subject}`, m.html, m.text);
       out.push({ lang, to, subject: m.subject, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body, html: m.html, text: m.text });
     }
-    return finish({ mode: "test", results: out });
+    return { result: { mode: "test", to, sent: out.filter((x) => x.ok).length, results: out }, status: 200 };
   }
 
   const only: string[] = Array.isArray(job.only_owners) ? job.only_owners.map((x: unknown) => String(x)) : [];
@@ -128,29 +134,73 @@ serve(async (req) => {
     .select("id, business_name, email, salon_email, country_code, subscription_status, is_demo")
     .eq("is_demo", false)
     .in("subscription_status", ["active", "trialing"]);
-  if (error) return finish({ error: error.message }, 500);
+  if (error) return { result: { error: error.message }, status: 500 };
 
   const list: any[] = [];
+  const skipped: any[] = [];
   for (const s of (salons || []).filter((x: any) => only.length === 0 || only.includes(x.id))) {
     const to = String(s.salon_email || s.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) continue;
-    const token = await inviteFor(s.id);
-    list.push({ id: s.id, salon: s.business_name || "", to, lang: langOf(s.country_code), link: token ? `${SITE}/beoordeel/${token}` : null });
+    if (!EMAIL_RE.test(to)) { skipped.push({ id: s.id, salon: s.business_name || "", reason: "geen geldig e-mailadres" }); continue; }
+    const inv = await inviteFor(s.id);
+    if (!inv) { skipped.push({ id: s.id, salon: s.business_name || "", reason: "geen token" }); continue; }
+    // "Aan iedereen" = alleen wie de mail nog niet kreeg; herhalen gaat per salon.
+    if (job.mode === "send" && only.length === 0 && inv.sent_at) { skipped.push({ id: s.id, salon: s.business_name || "", reason: "al verstuurd", sent_at: inv.sent_at }); continue; }
+    list.push({ id: s.id, salon: s.business_name || "", to, lang: langOf(s.country_code), link: `${SITE}/beoordeel/${inv.token}`, sent_count: inv.sent_count || 0 });
   }
 
-  if (job.mode === "dry_run") return finish({ mode: "dry_run", count: list.length, recipients: list.map((r) => ({ ...r, link: r.link ? r.link.replace(/[0-9a-f]{32}$/, "…") : null })) });
+  if (job.mode === "dry_run") {
+    return { result: { mode: "dry_run", count: list.length, recipients: list.map((r) => ({ ...r, link: r.link.replace(/[0-9a-f]{32}$/, "…") })), skipped }, status: 200 };
+  }
 
   const results: any[] = [];
   for (const r of list) {
-    if (!r.link) { results.push({ id: r.id, salon: r.salon, to: r.to, ok: false, body: "geen token" }); continue; }
     const m = render(r.lang, r.salon, r.link);
     const sent = await sendResend(r.to, m.fromName, m.subject, m.html, m.text);
-    if (sent.ok) {
-      const { data: inv } = await supabase.from("app_rating_invites").select("sent_count").eq("owner_id", r.id).maybeSingle();
-      await supabase.from("app_rating_invites").update({ sent_at: new Date().toISOString(), sent_count: (inv?.sent_count || 0) + 1 }).eq("owner_id", r.id);
-    }
+    if (sent.ok) await supabase.from("app_rating_invites").update({ sent_at: new Date().toISOString(), sent_count: r.sent_count + 1 }).eq("owner_id", r.id);
     results.push({ id: r.id, salon: r.salon, to: r.to, lang: r.lang, ok: sent.ok, status: sent.status, body: sent.ok ? undefined : sent.body });
     await new Promise((res) => setTimeout(res, 400));
   }
-  return finish({ mode: "send", sent: results.filter((x) => x.ok).length, results });
+  return { result: { mode: "send", sent: results.filter((x) => x.ok).length, results, skipped }, status: 200 };
+}
+
+serve(async (req) => {
+  const headers = { ...cors(req.headers.get("origin")), "Content-Type": "application/json" };
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req.headers.get("origin")) });
+  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  let body: any = {};
+  try { body = await req.json(); } catch { body = {}; }
+
+  let job: any = null;
+  if (body?.job_id) {
+    // Pad 2: opdracht via SQL (job_id + geheim).
+    const jobId = String(body.job_id || "");
+    const secret = String(body.secret || "");
+    if (!UUID_RE.test(jobId) || secret.length < 20) return json({ error: "unauthorized" }, 401);
+    const { data: found } = await supabase.from("app_rating_send_jobs").select("*").eq("id", jobId).is("started_at", null).maybeSingle();
+    if (!found || found.secret !== secret) return json({ error: "unauthorized" }, 401);
+    // Opdracht claimen: één uitvoering, ook bij een dubbele aanroep.
+    const { data: claimed } = await supabase.from("app_rating_send_jobs").update({ started_at: new Date().toISOString() }).eq("id", jobId).is("started_at", null).select("*").maybeSingle();
+    if (!claimed) return json({ error: "already_started" }, 409);
+    job = claimed;
+  } else {
+    // Pad 1: beheerder vanuit vellu.cc/admin (JWT), opdrachtrij als logboek.
+    if (!(await callerIsAdmin(req))) return json({ error: "unauthorized" }, 401);
+    const mode = ["test", "dry_run", "send"].includes(body?.mode) ? body.mode : null;
+    if (!mode) return json({ error: "invalid_mode" }, 400);
+    const testTo = mode === "test" ? String(body?.test_to || "").trim().toLowerCase() : null;
+    if (mode === "test" && !EMAIL_RE.test(testTo || "")) return json({ error: "invalid_test_to" }, 400);
+    const only = Array.isArray(body?.only_owners) ? body.only_owners.map((x: unknown) => String(x)).filter((x: string) => UUID_RE.test(x)) : [];
+    const { data: made, error } = await supabase.from("app_rating_send_jobs")
+      .insert({ mode, test_to: testTo, only_owners: only.length ? only : null, started_at: new Date().toISOString() })
+      .select("*").single();
+    if (error || !made) return json({ error: error?.message || "job_failed" }, 500);
+    job = made;
+  }
+
+  const { result, status } = await runJob(job);
+  await supabase.from("app_rating_send_jobs").update({ finished_at: new Date().toISOString(), result }).eq("id", job.id);
+  // De html van de testmails hoort in het logboek, niet in het antwoord aan de browser.
+  if (result?.results && job.mode === "test" && !body?.job_id) result.results = result.results.map((r: any) => ({ ...r, html: undefined, text: undefined }));
+  return json(result, status);
 });

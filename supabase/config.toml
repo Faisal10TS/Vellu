@@ -178,9 +178,10 @@ entrypoint = "./functions/check-pending-payments/index.ts"
 [functions.send-rating-request]
 enabled = true
 # Beoordelingsmail "Hoe bevalt Vellu?" aan de salons (Faisal 16-09-2026).
-# Geen gebruikers-JWT: de aanroep draagt een opdracht-id + geheim uit
-# app_rating_send_jobs, en de functie doet alleen iets bij een bestaande,
-# nog niet gestarte opdracht. verify_jwt=true zou elke aanroep 401'en.
+# De functie controleert zelf: óf een beheerders-JWT (knop in vellu.cc/admin →
+# Ratings, app_admins), óf een opdracht-id + geheim uit app_rating_send_jobs
+# (aanroep via SQL/curl). Met verify_jwt=true zou de gateway het tweede pad
+# 401'en vóórdat de functie draait.
 verify_jwt = false
 entrypoint = "./functions/send-rating-request/index.ts"
 

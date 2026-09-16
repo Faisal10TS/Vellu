@@ -74,6 +74,9 @@ export default function AdminDashboard({ onLogout }) {
   // Uitnodigingen voor de beoordelingsmail: wie is gemaild, wie opende de
   // pagina, wie antwoordde (admin_rating_invites).
   const [invites, setInvites] = useState([]);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendMsg, setSendMsg] = useState("");
+  const [me, setMe] = useState(null); // e-mail van de ingelogde beheerder (voor de testmail)
   const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | ratings | cron
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
@@ -138,6 +141,35 @@ export default function AdminDashboard({ onLogout }) {
     const id = setInterval(() => setNow(Date.now()), 3_600_000);
     return () => clearInterval(id);
   }, []);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setMe(data?.user?.email || null)).catch(() => {});
+  }, []);
+
+  // Beoordelingsmail versturen (edge function send-rating-request, met de
+  // JWT van de beheerder). mode: "test" (naar mijn eigen adres), "send"
+  // (alle salons die 'm nog niet kregen), of "send" met only = [owner_id]
+  // (één salon, ook opnieuw). Daarna de uitnodigingslijst verversen.
+  const sendInvites = async (mode, only) => {
+    if (sendBusy) return;
+    if (mode === "send") {
+      const n = only ? only.length : invites.filter(i => !i.sent_at).length;
+      if (n === 0) { setSendMsg("Nothing to send: every salon already received it. Use Resend per salon."); return; }
+      const who = only ? (invites.find(i => i.owner_id === only[0])?.business_name || "this salon") : `${n} salon${n === 1 ? "" : "s"} that did not get it yet`;
+      if (!window.confirm(`Send the rating email to ${who} now?`)) return;
+    }
+    setSendBusy(true); setSendMsg("");
+    try {
+      const { data, error } = await supabase.functions.invoke("send-rating-request", { body: { mode, only_owners: only || null, test_to: mode === "test" ? me : null } });
+      if (error || data?.error) { setSendMsg(`Failed: ${error?.message || data?.error}`); return; }
+      if (mode === "test") setSendMsg(`Test sent to ${me} (NL + EN).`);
+      else {
+        const failed = (data?.results || []).filter(r => !r.ok);
+        setSendMsg(`Sent ${data?.sent ?? 0}${failed.length ? `, failed ${failed.length}: ${failed.map(f => f.salon).join(", ")}` : ""}${data?.skipped?.length ? ` · skipped ${data.skipped.length} (already sent)` : ""}.`);
+      }
+      const { data: ai } = await supabase.rpc("admin_rating_invites");
+      setInvites(ai || []);
+    } finally { setSendBusy(false); }
+  };
 
   // Trials die binnen 14 dagen aflopen. Stond twee keer letterlijk in de JSX
   // (één keer voor de `.length > 0`-check, één keer voor de rijen); met een
@@ -479,24 +511,41 @@ export default function AdminDashboard({ onLogout }) {
               <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
                 Salons rate Vellu on the page behind the personal link in the "Hoe bevalt Vellu?" email (vellu.cc/beoordeel/…, the same link also lets them change their answer later). The average and the count go to vellu.cc automatically from 3 ratings; a salon's name and words only appear there if the salon allowed it AND you publish it here.
               </div>
-              {/* Uitnodigingen: verzonden / geopend / beantwoord per salon. */}
-              {invites.length > 0 && (
-                <div data-admin-invites style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
-                    Email invitations — {invites.filter(i => i.sent_at).length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
+              {/* De mail: eerst een test naar jezelf, dan naar de salons die
+                  'm nog niet kregen; per salon opnieuw sturen kan altijd
+                  (zelfde link). */}
+              <div data-admin-invites style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
+                    Rating email — {invites.filter(i => i.sent_at).length} of {invites.length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
                   </div>
-                  {invites.map(i => (
-                    <div key={i.owner_id} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", fontSize: 12, borderBottom: `1px solid ${c.border}` }}>
-                      <span style={{ fontWeight: 500 }}>{i.business_name || <em style={{ color: c.textMuted }}>(no name)</em>} <span style={{ color: c.textMuted, fontWeight: 400 }}>· {i.email}</span></span>
-                      <span style={{ color: c.textSub, whiteSpace: "nowrap" }}>
-                        {i.sent_at ? `sent ${relTime(i.sent_at)}${i.sent_count > 1 ? ` (${i.sent_count}x)` : ""}` : "not sent"}
-                        {" · "}
-                        <span style={{ color: i.answered_at ? c.success : i.opened_at ? accent : c.textMuted }}>{i.answered_at ? "answered" : i.opened_at ? "opened" : "not opened"}</span>
-                      </span>
-                    </div>
-                  ))}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test")} style={{ fontSize: 10, padding: "8px 12px" }}>
+                      {sendBusy ? "Working…" : `Send me a test${me ? ` (${me})` : ""}`}
+                    </button>
+                    <button className="btn-primary" data-admin-send-all disabled={sendBusy || invites.every(i => i.sent_at)} onClick={() => sendInvites("send")} style={{ width: "auto", fontSize: 10, padding: "8px 14px", opacity: invites.every(i => i.sent_at) ? 0.5 : 1 }}>
+                      {`Send to salons not yet invited (${invites.filter(i => !i.sent_at).length})`}
+                    </button>
+                  </div>
                 </div>
-              )}
+                <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
+                  Subject "Hoe bevalt Vellu? Geef je cijfer in één minuut" (English for salons outside NL/BE/Caribbean), from Faisal van Vellu, replies go to mirahventures@vellu.cc. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
+                </div>
+                {sendMsg && <div data-admin-send-msg style={{ fontSize: 12, color: /^Failed/.test(sendMsg) ? c.danger : c.success, marginBottom: 10 }}>{sendMsg}</div>}
+                {invites.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No active salons.</div>}
+                {invites.map(i => (
+                  <div key={i.owner_id} data-admin-invite style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "7px 0", fontSize: 12, borderBottom: `1px solid ${c.border}` }}>
+                    <span style={{ fontWeight: 500, minWidth: 0 }}>{i.business_name || <em style={{ color: c.textMuted }}>(no name)</em>} <span style={{ color: c.textMuted, fontWeight: 400 }}>· {i.email}</span></span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 10, color: c.textSub, whiteSpace: "nowrap" }}>
+                      <span>{i.sent_at ? `sent ${relTime(i.sent_at)}${i.sent_count > 1 ? ` (${i.sent_count}x)` : ""}` : "not sent"}</span>
+                      <span style={{ color: i.answered_at ? c.success : i.opened_at ? accent : c.textMuted }}>{i.answered_at ? "answered" : i.opened_at ? "opened" : "not opened"}</span>
+                      <button className="btn-ghost" disabled={sendBusy} onClick={() => sendInvites("send", [i.owner_id])} style={{ fontSize: 10, padding: "6px 10px" }}>
+                        {i.sent_at ? "Resend" : "Send"}
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
                 {ratings.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 24, textAlign: "center" }}>No ratings yet.</div>}
                 {ratings.map(r => (
