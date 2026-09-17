@@ -2152,11 +2152,21 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
      het lege veld tot een pilletje dat eroverheen valt. Appearance uitzetten
      laat iOS de opgegeven breedte respecteren; de min-height compenseert dat
      een leeg veld (iOS toont geen placeholder) anders dichtklapt. */
-  .input-field[type="date"] {
+  /* Tijdvelden idem (Faisal 17-09-2026, iPhone): in "Afspraak verplaatsen"
+     stak het veld Nieuwe tijd rechts uit het venster, terwijl de datum
+     erboven wel paste — alleen het datumveld had deze regel. iOS centreert
+     de tijd bovendien; links uitlijnen houdt hem gelijk aan de datum. */
+  .input-field[type="date"],
+  .input-field[type="time"],
+  .input-field[type="datetime-local"],
+  .input-field[type="month"] {
     -webkit-appearance: none; appearance: none;
-    min-width: 0; min-height: 47px; text-align: left;
+    min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 47px; text-align: left;
   }
-  .input-field[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+  .input-field[type="date"]::-webkit-date-and-time-value,
+  .input-field[type="time"]::-webkit-date-and-time-value,
+  .input-field[type="datetime-local"]::-webkit-date-and-time-value,
+  .input-field[type="month"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
   /* Van/Tot-datumpaar: naast elkaar op desktop, gestapeld op telefoons. */
   .vl-datepair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .vl-datepair.single { grid-template-columns: 1fr; }

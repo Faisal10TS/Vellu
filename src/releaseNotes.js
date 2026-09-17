@@ -29,6 +29,14 @@ export const RELEASES = [
       {
         kind: "fix", audience: ["owner"],
         text: {
+          nl: "Afspraak verplaatsen op de iPhone: het veld Nieuwe tijd stak rechts uit het venster. Het is nu even breed als het datumveld.",
+          en: "Reschedule appointment on iPhone: the New time field stuck out of the window on the right. It is now the same width as the date field.",
+          es: "Reprogramar cita en iPhone: el campo Nueva hora se salía de la ventana por la derecha. Ahora tiene el mismo ancho que el campo de fecha.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
           nl: "Wie je boekingspagina opende via de Vellu-homepage (Vind een salon) kwam op de iPhone halverwege de pagina uit, bij de behandelingen. De pagina opent nu altijd bovenaan, bij je omslagfoto en naam.",
           en: "Anyone opening your booking page through the Vellu homepage (Find a salon) landed halfway down the page on iPhone, at the treatments. The page now always opens at the top, at your cover photo and name.",
           es: "Quien abría tu página de reservas desde la página de inicio de Vellu (Buscar un salón) aparecía en el iPhone a mitad de página, en los tratamientos. Ahora la página se abre siempre arriba, en tu foto de portada y tu nombre.",
