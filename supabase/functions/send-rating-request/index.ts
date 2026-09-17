@@ -139,7 +139,19 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
     // anders verbergt Gmail bij de tweede test alles wat gelijk is aan de
     // eerste achter "…" (zie render).
     const stamp = new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" }).format(new Date());
-    const m = render(lang, lang === "nl" ? "TTNB Den Haag" : "Beauty by Eydy", `${SITE}/beoordeel/voorbeeld`);
+    // Een testmail kan ook naar iemand anders dan de beheerder gaan, dus geen
+    // naam van een echte klant in de aanhef. De knop werkt echt: link en
+    // aanhef zijn die van de demo-salon, en antwoorden op die link tellen
+    // nergens mee (demo is overal uitgesloten). Geen demo-salon → neutrale
+    // naam en een voorbeeldlink.
+    let sampleName = lang === "nl" ? "Jouw Salon" : "Your Salon";
+    let sampleLink = `${SITE}/beoordeel/voorbeeld`;
+    const { data: demo } = await supabase.from("profiles").select("id, business_name").eq("is_demo", true).order("created_at").limit(1).maybeSingle();
+    if (demo?.id) {
+      const inv = await inviteFor(demo.id);
+      if (inv?.token) { sampleLink = `${SITE}/beoordeel/${inv.token}`; sampleName = String(demo.business_name || sampleName).trim(); }
+    }
+    const m = render(lang, sampleName, sampleLink);
     const r = await sendResend(to, m.fromName, `[TEST ${lang} ${stamp}] ${m.subject}`, m.html, m.text);
     const out = [{ lang, to, subject: m.subject, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body, html: m.html, text: m.text }];
     return { result: { mode: "test", to, lang, sent: r.ok ? 1 : 0, results: out }, status: 200 };
