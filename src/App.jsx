@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Component, lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym,
@@ -461,6 +461,48 @@ function StaffEntryPage({ lang, setLang, staffUser: propStaffUser, onLogout: pro
 }
 
 // ─── SALON ROUTE WRAPPER ─────────────────────────────────────
+// Elke nieuwe pagina opent bovenaan (Faisal 17-09-2026). Op de iPhone stond
+// een boekingspagina die je vanaf de homepage opende halverwege, bij
+// "Services": de router wisselt alleen de inhoud, dus niets zet de scrollstand
+// terug, en iOS Safari laat het scherm bovendien verschoven achter als het
+// zoekveld van "Vind een salon" nog focus heeft (toetsenbord open) op het
+// moment dat zijn pagina verdwijnt. Chrome op de computer knijpt de stand
+// toevallig wél naar 0 (de laadpagina is maar één scherm hoog), daarom viel
+// het daar niet op.
+//
+// scrollTopAfterNav: focus weghalen (klapt het toetsenbord dicht), dan naar
+// boven — meteen, één frame later, en nog twee keer ná de toetsenbordanimatie
+// van iOS. Niet als de bezoeker zelf al scrolde, niet bij een #anker, en niet
+// bij terug/vooruit in de browser (POP): daar hoort de vorige stand terug te
+// komen. Gebruikt door ScrollToTop (elke routewissel) en door SalonRoute
+// (nog één keer zodra de boekingspagina echt is neergezet).
+function scrollTopAfterNav() {
+  if (typeof window === "undefined" || window.location.hash) return () => {};
+  try { const a = document.activeElement; if (a && a !== document.body && typeof a.blur === "function") a.blur(); } catch { /* geen focus */ }
+  let touched = false;
+  const mark = () => { touched = true; };
+  window.addEventListener("touchstart", mark, { passive: true, once: true });
+  window.addEventListener("wheel", mark, { passive: true, once: true });
+  const top = () => { if (!touched && (window.scrollY !== 0 || document.documentElement.scrollTop !== 0)) window.scrollTo(0, 0); };
+  window.scrollTo(0, 0);
+  const raf = requestAnimationFrame(top);
+  const t1 = setTimeout(top, 120);
+  const t2 = setTimeout(top, 420);
+  return () => {
+    cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2);
+    window.removeEventListener("touchstart", mark); window.removeEventListener("wheel", mark);
+  };
+}
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  const navType = useNavigationType();
+  useEffect(() => {
+    if (navType === "POP") return;
+    return scrollTopAfterNav();
+  }, [pathname, navType]);
+  return null;
+}
+
 function SalonRouteWrapper({ lang, setLang }) {
   const { colors: c } = useTheme();
   const { slug } = useParams();
@@ -483,6 +525,15 @@ function SalonRoute({ lang, setLang }) {
   // "owner" | "staff" | null — is de ingelogde bezoeker de eigenaar of een
   // medewerker van DIT salon? Bepaalt of de terug-naar-dashboard-pill toont.
   const [previewRole, setPreviewRole] = useState(null);
+  // Boekingspagina opent bovenaan (zie scrollTopAfterNav): nog één keer zodra
+  // de pagina echt is neergezet. Tussen de routewissel en dit moment staat er
+  // alleen een laadscherm van één scherm hoog; iOS Safari kan in die tussentijd
+  // de oude stand terugzetten zodra de pagina weer lang wordt.
+  const navType = useNavigationType();
+  useEffect(() => {
+    if (loading || navType === "POP") return;
+    return scrollTopAfterNav();
+  }, [loading, navType]);
 
   useEffect(() => {
     if (!salon?.owner_id) return;
@@ -1093,6 +1144,7 @@ export default function VelluApp() {
     <ErrorBoundary>
       <ThemeProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<AppInner lang={lang} setLang={setLangPersist} />} />

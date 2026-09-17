@@ -14,6 +14,21 @@
 
 export const RELEASES = [
   {
+    id: "2026-09-17",
+    date: "2026-09-17",
+    title: { nl: "Boekingspagina opent bovenaan", en: "Booking page opens at the top", es: "La página de reservas se abre arriba" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Wie je boekingspagina opende via de Vellu-homepage (Vind een salon) kwam op de iPhone halverwege de pagina uit, bij de behandelingen. De pagina opent nu altijd bovenaan, bij je omslagfoto en naam.",
+          en: "Anyone opening your booking page through the Vellu homepage (Find a salon) landed halfway down the page on iPhone, at the treatments. The page now always opens at the top, at your cover photo and name.",
+          es: "Quien abría tu página de reservas desde la página de inicio de Vellu (Buscar un salón) aparecía en el iPhone a mitad de página, en los tratamientos. Ahora la página se abre siempre arriba, en tu foto de portada y tu nombre.",
+        },
+      },
+    ],
+  },
+  {
     // Vijfde blok op 16-09 (notities per bezoek), zelfde achtervoegsel-truc.
     id: "2026-09-16e",
     date: "2026-09-16",
