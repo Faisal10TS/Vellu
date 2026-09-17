@@ -26,6 +26,14 @@ export const RELEASES = [
           es: "Quien abría tu página de reservas desde la página de inicio de Vellu (Buscar un salón) aparecía en el iPhone a mitad de página, en los tratamientos. Ahora la página se abre siempre arriba, en tu foto de portada y tu nombre.",
         },
       },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Android-telefoons met de donkere modus aan (Samsung Internet, Chrome) maakten een lichte boekingspagina zelf donker en verkleurden je salonkleur, bijvoorbeeld lichtroze naar donkerpaars. Je pagina blijft nu precies zoals jij hem instelde: licht blijft licht, met je eigen kleur.",
+          en: "Android phones with dark mode on (Samsung Internet, Chrome) darkened a light booking page by themselves and changed your salon colour, for example light pink into dark purple. Your page now stays exactly as you set it: light stays light, with your own colour.",
+          es: "Los móviles Android con el modo oscuro activado (Samsung Internet, Chrome) oscurecían por su cuenta una página de reservas clara y cambiaban el color de tu salón, por ejemplo de rosa claro a morado oscuro. Ahora tu página se queda exactamente como la configuraste: clara, con tu propio color.",
+        },
+      },
     ],
   },
   {

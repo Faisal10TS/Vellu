@@ -71,7 +71,16 @@ function ThemeProvider({ children }) {
     // LICHTE stijl, terwijl de app de tekst al donker-thema-licht kleurt. Op de
     // kassa gaf dat witte medewerkersnamen op een wit dropdown-lijstje —
     // onleesbaar. Met color-scheme volgt de browser het thema van de app.
-    document.documentElement.style.colorScheme = theme;
+    //
+    // Licht = "only light", niet "light" (Faisal 17-09-2026, TTNB op Android):
+    // met de donkere modus van de telefoon aan kleurt Samsung Internet / Chrome
+    // een pagina die alleen "light" opgeeft zélf donker — witte kaarten werden
+    // bijna zwart en TTNB's lichtroze accent een donkerpaars, terwijl de salon
+    // licht had gekozen. "only" is de afgesproken manier om te zeggen: dit
+    // thema is zo bedoeld, blijf eraf. In het donkere thema speelt het niet
+    // (de pagina ís dan al donker). Zie ook <meta name="color-scheme"> in
+    // index.html.
+    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "only light";
     // color-scheme alleen bleek niet genoeg: heeft een <select> eigen opmaak
     // (en dat hebben ze hier allemaal), dan tekent Chrome op Windows het
     // uitklaplijstje alsnog licht. De opties zelf expliciet kleuren honoreert
@@ -3175,6 +3184,9 @@ const AT_COLORS = {
 function AtelierSkin() {
   return (
     <style>{`
+      /* Vaste lichte huid: native onderdelen (vinkje, scrollbalk) ook licht,
+         wat het app-thema op :root ook zegt. */
+      .atelier { color-scheme: only light; }
       .atelier .btn-primary { background: ${AT.ESPRESSO}; color: ${AT.BONE}; border: 1px solid ${AT.ESPRESSO}; border-radius: ${AT_RADIUS}px; font-family: 'Jost', sans-serif; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; box-shadow: none; }
       .atelier .btn-primary:hover { transform: translateY(-1px); background: #4a3e2f; box-shadow: 0 14px 28px -16px ${AT.ESPRESSO}; }
       .atelier .btn-ghost { background: transparent; color: ${AT.ESPRESSO}; border: 1px solid ${AT.MUSHROOM}; border-radius: ${AT_RADIUS}px; font-family: 'Jost', sans-serif; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }

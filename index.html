@@ -30,6 +30,14 @@
     <meta name="twitter:description" content="Je eigen boekingspagina. 0% commissie. Klaar in 2 minuten." />
     <meta name="twitter:image" content="https://vellu.cc/og-image.png" />
 
+    <!-- De app heeft een eigen licht én donker thema en kiest zelf (ThemeProvider
+         zet color-scheme op <html>: "only light" of "dark"). Deze regel zegt
+         tegen browsers met een "donkere modus voor websites" (Samsung Internet,
+         Chrome op Android) dat ze de pagina niet zelf hoeven te verdonkeren —
+         anders werden lichte boekingspagina's bijna zwart met verkleurde
+         accenten (TTNB, 17-09-2026). -->
+    <meta name="color-scheme" content="light dark" />
+
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#5B4C3A" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
