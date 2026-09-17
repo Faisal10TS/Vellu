@@ -19,6 +19,14 @@ export const RELEASES = [
     title: { nl: "Boekingspagina opent bovenaan", en: "Booking page opens at the top", es: "La página de reservas se abre arriba" },
     items: [
       {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Agenda, dagweergave: een geblokkeerde dag of geblokkeerde uren zijn nu een duidelijk grijs gearceerd vlak in plaats van bijna doorzichtig. Afspraken die er al stonden blijven er gewoon leesbaar bovenop staan.",
+          en: "Calendar, day view: a blocked day or blocked hours are now a clear grey hatched area instead of almost transparent. Appointments that were already there stay readable on top of it.",
+          es: "Agenda, vista de día: un día bloqueado o unas horas bloqueadas son ahora una zona gris rayada bien visible, en lugar de casi transparente. Las citas que ya estaban siguen leyéndose bien encima.",
+        },
+      },
+      {
         kind: "fix", audience: ["owner"],
         text: {
           nl: "Wie je boekingspagina opende via de Vellu-homepage (Vind een salon) kwam op de iPhone halverwege de pagina uit, bij de behandelingen. De pagina opent nu altijd bovenaan, bij je omslagfoto en naam.",

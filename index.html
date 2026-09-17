@@ -37,6 +37,14 @@
          anders werden lichte boekingspagina's bijna zwart met verkleurde
          accenten (TTNB, 17-09-2026). -->
     <meta name="color-scheme" content="light dark" />
+    <style>
+      /* Zelfde boodschap voor browsers die naar de stylesheet kijken in plaats
+         van naar de meta-regel (Samsung Internet): deze site heeft een eigen
+         donker thema, dus niet zelf verdonkeren. Het echte thema (licht of
+         donker, keuze van de salon of de bezoeker) zet ThemeProvider op <body>. */
+      html { color-scheme: light dark; }
+      @media (prefers-color-scheme: dark) { html { color-scheme: light dark; } }
+    </style>
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#5B4C3A" />

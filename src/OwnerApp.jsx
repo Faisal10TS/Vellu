@@ -10679,9 +10679,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               onClick={editable ? (e) => { e.stopPropagation(); openBlockEdit(b.row); } : undefined}
                               style={{
                                 position: "absolute", top, height, ...lane,
-                                background: `${c.textMuted}14`,
-                                backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.textMuted}26 8px 12px)`,
-                                border: `1px dashed ${c.inputBorder}`,
+                                // Duidelijk grijs vlak + arcering (TTNB 17-09-2026: "the
+                                // blocked day is transparent, not opvallend, put it like
+                                // grey"). Het stond er al grijs gearceerd, maar met
+                                // `${c.textMuted}14`: textMuted is een rgba()-waarde, en een
+                                // hex-alfa erachter plakken geeft een ongeldige kleur — de
+                                // browser liet het blok dus gewoon doorzichtig. c.text is wél
+                                // hex in beide thema's, dus daar mag de alfa achter.
+                                backgroundColor: `${c.text}24`,
+                                backgroundImage: `repeating-linear-gradient(45deg, transparent 0 8px, ${c.text}1f 8px 12px)`,
+                                border: `1px dashed ${c.text}66`,
                                 borderRadius: 6, padding: `${PAD_V}px ${compact ? 7 : 9}px`, overflow: "hidden", zIndex: 1,
                                 cursor: editable ? "pointer" : "default"
                               }}>
@@ -10832,7 +10839,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div key={a._slotKey || a.id} onClick={() => setApptDetail(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
                               style={{
                                 position: "absolute", top, height, ...lane, zIndex: 2,
-                                background: `${color}18`, borderLeft: `3px solid ${color}`, borderRadius: 6,
+                                // Dekkende ondergrond (paginakleur) onder de kleurtint: sinds
+                                // een blokkade echt grijs gearceerd is (17-09) schemerde die
+                                // arcering anders dóór een afspraak op een geblokkeerde dag.
+                                background: `linear-gradient(${color}18, ${color}18), ${c.bg}`, borderLeft: `3px solid ${color}`, borderRadius: 6,
                                 padding: `${PAD_V}px ${compact ? 7 : 9}px`, overflow: "hidden", cursor: "pointer",
                                 opacity: isCancelled ? 0.55 : 1
                               }}>

@@ -1179,7 +1179,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button className="btn-ghost" style={{ flex: 1, minWidth: 120, fontSize: 10, padding: "8px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received")}</button>
-            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: `${c.textMuted}33`, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
+            <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 12px", color: c.textMuted, borderColor: c.inputBorder /* was `${c.textMuted}33`: hex-alfa achter een rgba() = ongeldige kleur */, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => cancelAppt(a.id)}>{lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}</button>
           </div>
         </div>
       )}

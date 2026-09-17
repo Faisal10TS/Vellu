@@ -72,15 +72,26 @@ function ThemeProvider({ children }) {
     // kassa gaf dat witte medewerkersnamen op een wit dropdown-lijstje —
     // onleesbaar. Met color-scheme volgt de browser het thema van de app.
     //
-    // Licht = "only light", niet "light" (Faisal 17-09-2026, TTNB op Android):
-    // met de donkere modus van de telefoon aan kleurt Samsung Internet / Chrome
-    // een pagina die alleen "light" opgeeft zélf donker — witte kaarten werden
-    // bijna zwart en TTNB's lichtroze accent een donkerpaars, terwijl de salon
-    // licht had gekozen. "only" is de afgesproken manier om te zeggen: dit
-    // thema is zo bedoeld, blijf eraf. In het donkere thema speelt het niet
-    // (de pagina ís dan al donker). Zie ook <meta name="color-scheme"> in
-    // index.html.
-    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "only light";
+    // Android, donkere modus aan (Faisal 17-09-2026, TTNB): Samsung Internet en
+    // Chrome verdonkeren zélf elke pagina die niet zegt dat ze donker
+    // ondersteunt — witte kaarten werden bijna zwart en TTNB's lichtroze accent
+    // donkerpaars, terwijl de salon licht had gekozen. Eerste poging ("only
+    // light" op <html>) hielp in Chrome maar niet in Samsung Internet: die kijkt
+    // of de pagina donker ONDERSTEUNT, en "only light" zegt juist van niet.
+    // Daarom meldt <html> op telefoons en tablets "light dark" (de app hééft
+    // beide thema's en kiest zelf), zodat geen enkele browser gaat verdonkeren;
+    // <body> pint het échte thema vast voor alles wat de browser zelf tekent
+    // (color-scheme erft over). Achtergrond en tekstkleur staan expliciet, dus
+    // het donkere "canvas" van <html> komt nergens door. Op de computer (muis)
+    // blijft <html> het echte thema zeggen: daar kleurt het de schuifbalk van
+    // het venster, en "only light" houdt Chrome's eigen verdonkering daar al
+    // tegen. Zie ook de meta-regel en het stijlblok in index.html.
+    const pinned = theme === "dark" ? "dark" : "only light";
+    let touchDevice = false;
+    try { touchDevice = window.matchMedia("(pointer: coarse)").matches; } catch { touchDevice = false; }
+    document.documentElement.style.colorScheme = touchDevice ? "light dark" : pinned;
+    document.body.style.colorScheme = pinned;
+    document.body.style.color = THEMES[theme].text;
     // color-scheme alleen bleek niet genoeg: heeft een <select> eigen opmaak
     // (en dat hebben ze hier allemaal), dan tekent Chrome op Windows het
     // uitklaplijstje alsnog licht. De opties zelf expliciet kleuren honoreert
@@ -3038,7 +3049,7 @@ function PlanCompareTable({ lang, accent = ACCENT, defaultOpen = false }) {
             <div key={gi}>
               <div style={{ padding: "12px 16px 6px", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{g.group}</div>
               {g.rows.map(([label, starter, pro], ri) => (
-                <div key={ri} style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "8px 16px", borderBottom: (gi === planMatrix(lang).length - 1 && ri === g.rows.length - 1) ? "none" : `1px solid ${c.border}55` }}>
+                <div key={ri} style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "8px 16px", borderBottom: (gi === planMatrix(lang).length - 1 && ri === g.rows.length - 1) ? "none" : `1px solid ${c.border}` /* was `${c.border}55`: hex-alfa achter een rgba() = ongeldige kleur, dus geen lijn */ }}>
                   <div style={{ fontSize: 12, color: c.textSub, paddingRight: 8 }}>{label}</div>
                   <div style={{ textAlign: "center" }}>{cell(starter)}</div>
                   <div style={{ textAlign: "center" }}>{cell(pro)}</div>
