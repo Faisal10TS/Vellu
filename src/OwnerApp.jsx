@@ -2753,6 +2753,16 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Klantenlijst (21-09-2026, Faisal: "do the same with the clients … there is
+  // no scroll bar so u have to do it with ur mouse"): eerst 8 klanten, daarna
+  // "Toon meer". Uitgeklapt schuift de lijst op desktop binnen een vak met een
+  // zichtbare schuifbalk — de app verbergt de paginabalk, dus een lange lijst
+  // was alleen met het muiswiel door te komen. Op de telefoon blijft het
+  // gewone paginascroll: daar veeg je, en een genest scrollvak zit dan in de
+  // weg. Een net toegevoegde klant blijft in beeld, ook buiten de eerste 8.
+  const CLIENTS_FOLD = 8, CLIENTS_STEP = 25;
+  const [clientsShown, setClientsShown] = useState(CLIENTS_FOLD);
+  const [lastAddedClient, setLastAddedClient] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", email: "", phone: "", notes: "" });
   const [saving, setSaving] = useState(false);
@@ -2928,6 +2938,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     toast.show(lang === "nl" ? "Klant toegevoegd" : lang === "es" ? "Cliente añadido" : "Customer added");
     setAddForm({ name: "", email: "", phone: "", notes: "" });
     setAddOpen(false);
+    setLastAddedClient(name);
     setRefreshKey((k) => k + 1);
   };
 
@@ -3432,10 +3443,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             ? (lang === "nl" ? "Nog geen klanten — ze verschijnen hier zodra iemand een afspraak boekt." : lang === "es" ? "Aún no hay clientes — aparecerán aquí cuando alguien reserve una cita." : "No clients yet — they appear here once someone books an appointment.")
             : (lang === "nl" ? "Geen klant gevonden." : lang === "es" ? "No se encontró ningún cliente." : "No customer found.")}
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map((cl) => (
-            <div key={cl.key} data-client-row onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
+      ) : (() => {
+        const shown = filtered.filter((cl, i) => i < clientsShown || (lastAddedClient && cl.name === lastAddedClient));
+        const hidden = filtered.length - shown.length;
+        const open = clientsShown > CLIENTS_FOLD;
+        const box = open && !isMobile;
+        return (<>
+        <div data-client-list className={box ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, ...(box ? { maxHeight: "clamp(360px, calc(100vh - 330px), 760px)", overflowY: "auto", paddingRight: 6, paddingBottom: 10 } : {}) }}>
+          {shown.map((cl) => (
+            <div key={cl.key} data-client-row onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
               <div style={{ width: 42, height: 42, borderRadius: 10, background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
@@ -3477,7 +3493,32 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             </div>
           ))}
         </div>
-      )}
+        {(hidden > 0 || open) && (
+          <div data-clients-more-row style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            {hidden > 0 && (
+              <button type="button" className="btn-ghost" data-clients-more onClick={() => setClientsShown(v => v + CLIENTS_STEP)}
+                style={{ flex: "1 1 160px", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                {lang === "nl" ? `Toon meer (nog ${hidden})` : lang === "es" ? `Mostrar más (quedan ${hidden})` : `Show more (${hidden} left)`}
+              </button>
+            )}
+            {hidden > CLIENTS_STEP && (
+              <button type="button" className="btn-ghost" data-clients-all onClick={() => setClientsShown(filtered.length)}
+                style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px" }}>
+                {lang === "nl" ? "Toon alles" : lang === "es" ? "Mostrar todo" : "Show all"}
+              </button>
+            )}
+            {open && (
+              <button type="button" className="btn-ghost" data-clients-less onClick={() => { setClientsShown(CLIENTS_FOLD); setLastAddedClient(null); }}
+                style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15" /></svg>
+                {lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show less"}
+              </button>
+            )}
+          </div>
+        )}
+        </>);
+      })()}
 
       {/* Detail modal — portal'd to document.body so an ancestor with a
           transform (the .fade-up container) doesn't scope our
