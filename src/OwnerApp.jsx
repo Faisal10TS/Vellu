@@ -4260,6 +4260,49 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // (Tammy Taylor Bonaire: 762) en die allemaal tegelijk tekenen is traag.
   const PRODUCTS_FOLD = 5, PRODUCTS_STEP = 25;
   const [productsShown, setProductsShown] = useState(PRODUCTS_FOLD);
+  // Kassa (21-09-2026, Faisal: "here do six and then show more at the
+  // bottom"): het productraster toont eerst 6 producten. Met honderden
+  // geïmporteerde producten was de kassa één eindeloze pagina en stonden
+  // kadobon en dagoverzicht onbereikbaar ver naar beneden. Wat al in de bon
+  // zit blijft altijd zichtbaar, ook buiten de eerste zes (scannen of zoeken
+  // en dan het zoekveld leegmaken), en de volgorde verandert nooit: tegels
+  // mogen niet onder je vinger verspringen. Gedeeld door de Kassa-pagina en
+  // het verkoopvenster; de stand blijft staan tot "Toon minder" of herladen.
+  const KASSA_FOLD = 6, KASSA_STEP = 24;
+  const [kassaShown, setKassaShown] = useState(KASSA_FOLD);
+  const kassaMatchesNow = () => (salonData.products || []).filter(p => p.active).filter(p => {
+    if (!kassaSearch.trim()) return true;
+    return `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase().includes(kassaSearch.trim().toLowerCase());
+  });
+  const kassaShownOf = (matches) => matches.filter((p, i) => i < kassaShown || (productSaleSel[p.id] || 0) > 0);
+  const renderKassaMore = (matches, shown, marginTop = 10, marginBottom = 0) => {
+    const hidden = matches.length - shown.length;
+    if (hidden <= 0 && kassaShown <= KASSA_FOLD) return null;
+    return (
+      <div data-kassa-more-row style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop, marginBottom }}>
+        {hidden > 0 && (
+          <button type="button" className="btn-ghost" data-kassa-more onClick={() => setKassaShown(v => v + KASSA_STEP)}
+            style={{ flex: "1 1 160px", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+            {lang === "nl" ? `Toon meer (nog ${hidden})` : lang === "es" ? `Mostrar más (quedan ${hidden})` : `Show more (${hidden} left)`}
+          </button>
+        )}
+        {hidden > KASSA_STEP && (
+          <button type="button" className="btn-ghost" data-kassa-all onClick={() => setKassaShown(matches.length)}
+            style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px" }}>
+            {lang === "nl" ? "Toon alles" : lang === "es" ? "Mostrar todo" : "Show all"}
+          </button>
+        )}
+        {kassaShown > KASSA_FOLD && (
+          <button type="button" className="btn-ghost" data-kassa-less onClick={() => setKassaShown(KASSA_FOLD)}
+            style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15" /></svg>
+            {lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show less"}
+          </button>
+        )}
+      </div>
+    );
+  };
   const [lastAddedProduct, setLastAddedProduct] = useState(null);
   // Producten die nu in de lijst horen (zoekveld toegepast). Gedeeld door de
   // lijst zelf en het oogje in de kop.
@@ -8634,14 +8677,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 style={{ flex: 1, fontSize: 12 }} />
               <button type="button" className="btn-ghost" onClick={() => setScanTarget("kassa")} title={lang === "nl" ? "Scan met camera" : lang === "es" ? "Escanear con la cámara" : "Scan with camera"} style={{ padding: "0 14px", flexShrink: 0, display: "inline-flex", alignItems: "center" }}><NavIcon name="barcode" size={15} color="currentColor" /></button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-              {(salonData.products || []).filter(p => p.active).filter(p => {
-                if (!kassaSearch.trim()) return true;
-                return `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase().includes(kassaSearch.trim().toLowerCase());
-              }).map(p => {
+            {(() => {
+              // Zelfde vouw als op de Kassa-pagina: eerst 6, dan "Toon meer";
+              // uitgeklapt schuift de lijst binnen een vak met schuifbalk en
+              // blijven de knoppen eronder staan.
+              const matches = kassaMatchesNow();
+              const shown = kassaShownOf(matches);
+              const open = kassaShown > KASSA_FOLD;
+              const more = renderKassaMore(matches, shown, 0, 14);
+              return (<>
+            <div data-sale-list className={open ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: more ? 10 : 14, ...(open ? { maxHeight: "46vh", overflowY: "auto", paddingRight: 6 } : {}) }}>
+              {shown.map(p => {
                 const qty = productSaleSel[p.id] || 0;
                 return (
-                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
+                  <div key={p.id} data-sale-row style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${qty > 0 ? accent : c.border}`, borderRadius: 12 }}>
                     {p.photo_url ? <img src={p.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color={c.textMuted} /></div>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
@@ -8659,6 +8708,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 );
               })}
             </div>
+            {more}
+              </>);
+            })()}
             {(() => {
               const tot = Object.entries(productSaleSel).reduce((s, [pid, q]) => {
                 const p = (salonData.products || []).find(x => x.id === pid);
@@ -9937,15 +9989,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "18px 0" }}>
                       {lang === "nl" ? "Nog geen producten — voeg ze toe bij Instellingen → Diensten." : lang === "es" ? "Aún no hay productos — añádelos en Ajustes." : "No products yet — add them in Settings → Services."}
                     </div>
-                  ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
-                      {(salonData.products || []).filter(p => p.active).filter(p => {
-                        if (!kassaSearch.trim()) return true;
-                        return `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase().includes(kassaSearch.trim().toLowerCase());
-                      }).map(p => {
+                  ) : (() => {
+                    // Eerst 6, daarna "Toon meer" onderaan (zie KASSA_FOLD).
+                    const matches = kassaMatchesNow();
+                    const shown = kassaShownOf(matches);
+                    return (<>
+                    {/* Uitgeklapt schuift het raster binnen een vast vak met een
+                        zichtbare schuifbalk (Faisal: "add a scroll bar too"):
+                        afrekenen, kadobon en dagoverzicht blijven zo in beeld,
+                        ook met honderden producten. Ingeklapt (6) valt er
+                        niets te schuiven en groeit het vak gewoon mee. */}
+                    <div data-kassa-grid className={kassaShown > KASSA_FOLD ? "vl-scroll" : undefined} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, ...(kassaShown > KASSA_FOLD ? { maxHeight: isMobile ? "58vh" : 440, overflowY: "auto", paddingRight: 6, alignContent: "start" } : {}) }}>
+                      {shown.map(p => {
                         const qty = productSaleSel[p.id] || 0;
                         return (
-                          <div key={p.id} onClick={() => { if (lastSale) setLastSale(null); setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) })); }}
+                          <div key={p.id} data-kassa-tile onClick={() => { if (lastSale) setLastSale(null); setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, (s[p.id] || 0) + 1) })); }}
                             style={{ position: "relative", cursor: "pointer", padding: 10, borderRadius: 14, background: qty > 0 ? `${accent}10` : c.bg, border: `1.5px solid ${qty > 0 ? accent : c.border}`, textAlign: "center", transition: "all 0.15s" }}>
                             {qty > 0 && <div style={{ position: "absolute", top: 6, right: 6, minWidth: 20, height: 20, borderRadius: 10, background: accent, color: c.btnOnDark, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{qty}</div>}
                             {p.photo_url
@@ -9958,7 +10016,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         );
                       })}
                     </div>
-                  )}
+                    {renderKassaMore(matches, shown)}
+                    </>);
+                  })()}
                   {/* Kadobon verkopen — gecentreerd blok (Faisal 16-09): label +
                       bedrag op één regel, de uitleg eronder, en de beheerknop
                       symmetrisch daaronder in plaats van rechts uitgelijnd. */}

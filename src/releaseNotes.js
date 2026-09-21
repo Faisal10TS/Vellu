@@ -14,6 +14,22 @@
 
 export const RELEASES = [
   {
+    // Kassa toont eerst 6 producten. Eigen id (…c), zelfde reden als …b.
+    id: "2026-09-21c",
+    date: "2026-09-21",
+    title: { nl: "Kassa: eerst 6 producten, daarna Toon meer", en: "Sales: 6 products first, then Show more", es: "Caja: primero 6 productos, luego Mostrar más" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Kassa: het productraster toont eerst 6 producten, met Toon meer, Toon alles en Toon minder eronder. Klap je het uit, dan schuift het raster binnen een eigen vak met een schuifbalk. Kadobon, dagoverzicht, rapporten en het afrekenen blijven daardoor in beeld, ook met een lange productlijst. Zoeken of scannen blijft het snelst, en wat al in de bon zit blijft altijd zichtbaar. Hetzelfde geldt voor het venster Product verkopen bij een afspraak.",
+          en: "Sales: the product grid shows 6 products first, with Show more, Show all and Show less below it. Once expanded, the grid scrolls inside its own box with a scroll bar. Gift card, daily overview, reports and the checkout stay in view, even with a long product list. Searching or scanning stays the quickest way, and whatever is already in the basket always stays visible. The same goes for the Sell a product window on an appointment.",
+          es: "Caja: la cuadrícula muestra primero 6 productos, con Mostrar más, Mostrar todo y Mostrar menos debajo. Al desplegarla, la cuadrícula se desplaza dentro de su propio recuadro con una barra de desplazamiento. Así la tarjeta regalo, el resumen del día, los informes y el cobro siguen a la vista, también con una lista larga. Buscar o escanear sigue siendo lo más rápido, y lo que ya está en el tique siempre queda visible. Lo mismo vale para la ventana Vender un producto de una cita.",
+        },
+      },
+    ],
+  },
+  {
     // Oogje bovenaan de productenlijst. Eigen id (…b): het blok van eerder
     // vandaag is door de meeste salons al gezien, en gezien = per id.
     id: "2026-09-21b",

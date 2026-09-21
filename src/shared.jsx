@@ -2180,6 +2180,16 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
   body { overscroll-behavior: none; overflow-x: clip; }
   ::-webkit-scrollbar { width: 0; height: 0; }
+  /* Zichtbare schuifbalk voor een lijst die binnen een vast vak schuift
+     (kassa-raster, 21-09-2026). Overal elders blijven schuifbalken verborgen
+     (regel hierboven). Duim = tekstkleur op 30% (50% bij aanwijzen): c.text is
+     hex, dus daar mag een alfa achter; de tekstgrijzen zelf (rgba, 55-70%)
+     waren te zwaar voor een schuifbalk. */
+  .vl-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .vl-scroll::-webkit-scrollbar-track { background: transparent; }
+  .vl-scroll::-webkit-scrollbar-thumb { background: ${c.text}4d; border-radius: 8px; }
+  .vl-scroll::-webkit-scrollbar-thumb:hover { background: ${c.text}80; }
+  @supports not selector(::-webkit-scrollbar) { .vl-scroll { scrollbar-width: thin; scrollbar-color: ${c.text}4d transparent; } }
   input, textarea, select { outline: none; font-family: var(--body-font, 'Jost', sans-serif); }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
