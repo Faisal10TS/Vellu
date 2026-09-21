@@ -14,11 +14,12 @@
 
 export const RELEASES = [
   {
-    // Schuifbalken in het hele dashboard + Kassa en Klanten (allebei eerst 6)
-    // met Toon meer. Eigen id, zelfde reden als …b. Was kort …c (alleen kassa)
-    // en …d (klanten nog op 8): telkens samengevoegd, zodat wie vandaag nog
-    // niet keek één blok ziet, en de tekst klopt met wat er nu staat.
-    id: "2026-09-21e",
+    // Schuifbalken in het hele dashboard + Kassa, Klanten en Facturen (alle drie
+    // eerst 6) met Toon meer. Eigen id, zelfde reden als …b. Was kort …c (alleen
+    // kassa), …d (klanten nog op 8) en …e (zonder facturen): telkens
+    // samengevoegd, zodat wie vandaag nog niet keek één blok ziet, en de tekst
+    // klopt met wat er nu staat.
+    id: "2026-09-21f",
     date: "2026-09-21",
     title: { nl: "Schuifbalken in het hele dashboard", en: "Scroll bars across the dashboard", es: "Barras de desplazamiento en todo el panel" },
     items: [
@@ -28,6 +29,14 @@ export const RELEASES = [
           nl: "Op de computer heeft het hele dashboard nu schuifbalken waar iets schuift: rechts in beeld op lange pagina's zoals Facturen, Analytics en Instellingen, en in vensters en lijsten die langer zijn dan het scherm, zoals de klantkaart. Je kunt de balk slepen en hoeft niet meer alles met het muiswiel te doen. Op de telefoon verandert er niets: daar veeg je gewoon.",
           en: "On a computer the whole dashboard now has scroll bars wherever something scrolls: at the right of the screen on long pages such as Invoices, Analytics and Settings, and inside windows and lists that are taller than the screen, such as the client card. You can drag the bar instead of doing everything with the mouse wheel. Nothing changes on a phone: there you simply swipe.",
           es: "En el ordenador, todo el panel tiene ahora barras de desplazamiento donde algo se desplaza: a la derecha de la pantalla en páginas largas como Facturas, Analítica y Ajustes, y dentro de ventanas y listas más altas que la pantalla, como la ficha del cliente. Puedes arrastrar la barra en lugar de hacerlo todo con la rueda del ratón. En el móvil no cambia nada: ahí simplemente deslizas.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Facturen: de lijst toont eerst 6 facturen, met Toon meer (25 erbij), Toon alles en Toon minder eronder. Voorheen waren het er 10 en daarna in één keer alles. Op de computer schuift de uitgeklapte lijst binnen een eigen vak met een schuifbalk. Zoeken en de tabbladen Alles, Open, Verstuurd en Verborgen werken zoals altijd.",
+          en: "Invoices: the list shows 6 invoices first, with Show more (25 at a time), Show all and Show less below it. It used to be 10 and then everything at once. On a computer the expanded list scrolls inside its own box with a scroll bar. Search and the All, Open, Sent and Hidden tabs work as before.",
+          es: "Facturas: la lista muestra primero 6 facturas, con Mostrar más (25 cada vez), Mostrar todo y Mostrar menos debajo. Antes eran 10 y luego todo de golpe. En el ordenador, la lista desplegada se desplaza dentro de su propio recuadro con una barra de desplazamiento. La búsqueda y las pestañas Todo, Abiertas, Enviadas y Ocultas funcionan como siempre.",
         },
       },
       {

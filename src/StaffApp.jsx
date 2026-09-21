@@ -130,7 +130,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [calViewMode, setCalViewMode] = useState("week");
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
-  const [invoicesExpanded, setInvoicesExpanded] = useState(false);
+  // Facturenlijst (21-09-2026, Faisal: "do the same with the invoices"): eerst
+  // 6, daarna "Toon meer" (+25), "Toon alles", "Toon minder"; uitgeklapt schuift
+  // de lijst op desktop binnen een vak met een zichtbare balk, op de telefoon
+  // blijft het gewone paginascroll (onder de lijst staat niets meer). Was:
+  // eerst 10 en daarna in één keer alles.
+  const INVOICES_FOLD = 6, INVOICES_STEP = 25;
+  const [invoicesShown, setInvoicesShown] = useState(INVOICES_FOLD);
   const [expandedStaffSvc, setExpandedStaffSvc] = useState(null);
   // Client-notes keyed by lowercase email — same shape as OwnerApp's
   // salonData.client_notes so ApptCard and the new Klanten tab share a lookup.
@@ -2529,13 +2535,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     )}
                   </div>
                 );
-                const visible = invoicesExpanded ? filtered : filtered.slice(0, 10);
-                return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                const visible = filtered.slice(0, invoicesShown);
+                const hidden = filtered.length - visible.length;
+                const open = invoicesShown > INVOICES_FOLD;
+                const box = open && !isMobile;
+                return <>
+                <div data-invoice-list className={box ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, ...(box ? { maxHeight: "clamp(360px, calc(100vh - 330px), 760px)", overflowY: "auto", paddingRight: 6, paddingBottom: 10 } : {}) }}>
                   {visible.map(a => {
                     const isSending = processingApptId === a.id;
                     return (
                       <div key={a.id} data-invoice-row style={{
-                        display: "flex", alignItems: "center", gap: 14,
+                        display: "flex", alignItems: "center", flexShrink: 0, gap: 14,
                         padding: "14px 18px", background: c.bgCard,
                         border: `1px solid ${a.invoice_sent ? c.border : `${c.warning}33`}`,
                         borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", transition: "border-color 0.15s"
@@ -2591,24 +2601,32 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                     );
                   })}
-                  {filtered.length > 10 && (
-                    <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-                      <button className="btn-ghost" onClick={() => setInvoicesExpanded(v => !v)} style={{ padding: "10px 22px", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                        {invoicesExpanded ? (
-                          <>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
-                            {t.showLess || (lang === "nl" ? "Minder tonen" : lang === "es" ? "Mostrar menos" : "Show less")}
-                          </>
-                        ) : (
-                          <>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                            {t.showMore || (lang === "nl" ? "Meer laden" : lang === "es" ? "Mostrar más" : "Show more")} ({filtered.length - 10})
-                          </>
-                        )}
+                </div>
+                {(hidden > 0 || open) && (
+                  <div data-invoices-more-row style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    {hidden > 0 && (
+                      <button type="button" className="btn-ghost" data-invoices-more onClick={() => setInvoicesShown(v => v + INVOICES_STEP)}
+                        style={{ flex: "1 1 160px", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        {lang === "nl" ? `Toon meer (nog ${hidden})` : lang === "es" ? `Mostrar más (quedan ${hidden})` : `Show more (${hidden} left)`}
                       </button>
-                    </div>
-                  )}
-                </div>;
+                    )}
+                    {hidden > INVOICES_STEP && (
+                      <button type="button" className="btn-ghost" data-invoices-all onClick={() => setInvoicesShown(filtered.length)}
+                        style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px" }}>
+                        {lang === "nl" ? "Toon alles" : lang === "es" ? "Mostrar todo" : "Show all"}
+                      </button>
+                    )}
+                    {open && (
+                      <button type="button" className="btn-ghost" data-invoices-less onClick={() => setInvoicesShown(INVOICES_FOLD)}
+                        style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15" /></svg>
+                        {lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show less"}
+                      </button>
+                    )}
+                  </div>
+                )}
+                </>;
               })()}
             </div>
             );

@@ -218,6 +218,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Een AANBETALING (alleen een deel vooraf) bestaat nog niet; vooruitbetalen is altijd het hele bedrag.
 
 # Facturen
+- Lange facturenlijst (sinds 21-09-2026, eigenaar én medewerkers-app): je ziet eerst 6 facturen, nieuwste bovenaan. "Toon meer (nog N)" onder de lijst laat er telkens 25 meer zien, "Toon alles" de hele lijst, "Toon minder" klapt terug naar 6. Op de computer schuift de uitgeklapte lijst binnen een eigen vak met een zichtbare schuifbalk; op de telefoon veeg je gewoon door de pagina. Een bepaalde factuur vind je het snelst met het zoekveld (klantnaam of dienst) of met de tabbladen Alles / Open / Verstuurd / Verborgen; de vouw geldt per tabblad.
 - Elke afgeronde behandeling wordt een factuur met belasting erbij (standaard 21% BTW; tarief en label volgen je regio). Je mailt de factuur zelf met "Factuur sturen" op de kaart; het factuurnummer loopt automatisch op. Op de factuur staat de betaalwijze; een vooruitbetaling wordt afgetrokken ("Vooruitbetaald −€X / Te betalen €Y").
 - Facturen-tab: per medewerker of het hele team filteren, betaald/open bijhouden, en een omzetrapport als PDF downloaden (per medewerker of team) voor een dag, week, maand, dit of vorig kwartaal, jaar of eigen periode.
 - Gecombineerde boeking met meerdere stylistes: de omzet wordt per stylist naar rato verdeeld (haar eigen aandeel), zodat de aandelen samen precies de boeking zijn.
