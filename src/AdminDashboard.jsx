@@ -10,7 +10,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
-import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle } from "./shared.jsx";
+import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars } from "./shared.jsx";
 import { Star } from "./RateVellu.jsx";
 
 const fmtEur = (n) => `€${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
@@ -56,6 +56,7 @@ function StatCard({ label, value, sub, accent, c }) {
 
 export default function AdminDashboard({ onLogout }) {
   const { colors: c } = useTheme();
+  useDashboardScrollbars();
   const accent = ACCENT;
   const navigate = useNavigate();
 

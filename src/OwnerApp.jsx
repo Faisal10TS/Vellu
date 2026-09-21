@@ -21,7 +21,7 @@ import {
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
-  useReferralPromo, rewardLabel, promoEndLabel,
+  useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -2754,13 +2754,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [selected, setSelected] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // Klantenlijst (21-09-2026, Faisal: "do the same with the clients … there is
-  // no scroll bar so u have to do it with ur mouse"): eerst 8 klanten, daarna
+  // no scroll bar so u have to do it with ur mouse"): eerst 6 klanten (eerst 8,
+  // zelfde avond op zijn verzoek 6, gelijk aan de kassa), daarna
   // "Toon meer". Uitgeklapt schuift de lijst op desktop binnen een vak met een
   // zichtbare schuifbalk — de app verbergt de paginabalk, dus een lange lijst
   // was alleen met het muiswiel door te komen. Op de telefoon blijft het
   // gewone paginascroll: daar veeg je, en een genest scrollvak zit dan in de
-  // weg. Een net toegevoegde klant blijft in beeld, ook buiten de eerste 8.
-  const CLIENTS_FOLD = 8, CLIENTS_STEP = 25;
+  // weg. Een net toegevoegde klant blijft in beeld, ook buiten de eerste 6.
+  const CLIENTS_FOLD = 6, CLIENTS_STEP = 25;
   const [clientsShown, setClientsShown] = useState(CLIENTS_FOLD);
   const [lastAddedClient, setLastAddedClient] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -4176,6 +4177,7 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: themeC, theme } = useTheme();
+  useDashboardScrollbars();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
 

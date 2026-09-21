@@ -10,7 +10,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, partPricesOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, partPricesOf, useDashboardScrollbars,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -19,6 +19,7 @@ import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { colors: themeC, theme } = useTheme();
+  useDashboardScrollbars();
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;

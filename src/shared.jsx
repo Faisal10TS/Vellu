@@ -2190,6 +2190,31 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .vl-scroll::-webkit-scrollbar-thumb { background: ${c.text}4d; border-radius: 8px; }
   .vl-scroll::-webkit-scrollbar-thumb:hover { background: ${c.text}80; }
   @supports not selector(::-webkit-scrollbar) { .vl-scroll { scrollbar-width: thin; scrollbar-color: ${c.text}4d transparent; } }
+  /* Dashboard op de computer: zichtbare schuifbalken overal waar iets schuift
+     (Faisal 21-09-2026: "add the scroll bar to the whole dashboard where ever
+     its needed"). De regel hierboven verbergt ook de paginabalk, dus een lange
+     pagina of een lang venster was alleen met het muiswiel door te komen.
+     OwnerApp, StaffApp en AdminDashboard zetten html.vl-bars (hook
+     useDashboardScrollbars); de publieke boekingspagina en de website blijven
+     zoals ze waren. Alleen VERTICAAL: height 0 houdt de horizontale veegstroken
+     (chips, dagstrook, tabellen) balkloos. Alleen met muis/trackpad: op touch
+     veeg je. De vaste goot (scrollbar-gutter) voorkomt dat de pagina 12px
+     verspringt tussen een korte en een lange pagina. */
+  @media (hover: hover) and (pointer: fine) {
+    /* Paginabalk: Chrome zoekt de stijl EERST op <body> en pas daarna op
+       <html>; de algemene verberg-regel raakt body ook, dus alleen html
+       stylen levert een balk van 0px op. Daarom beide. */
+    html.vl-bars { scrollbar-gutter: stable; }
+    html.vl-bars::-webkit-scrollbar, html.vl-bars > body::-webkit-scrollbar { width: 12px; height: 0; }
+    html.vl-bars::-webkit-scrollbar-track, html.vl-bars > body::-webkit-scrollbar-track { background: transparent; }
+    html.vl-bars::-webkit-scrollbar-thumb, html.vl-bars > body::-webkit-scrollbar-thumb { background-color: ${c.text}4d; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+    html.vl-bars::-webkit-scrollbar-thumb:hover, html.vl-bars > body::-webkit-scrollbar-thumb:hover { background-color: ${c.text}80; }
+    html.vl-bars body *::-webkit-scrollbar { width: 8px; height: 0; }
+    html.vl-bars body *::-webkit-scrollbar-track { background: transparent; }
+    html.vl-bars body *::-webkit-scrollbar-thumb { background-color: ${c.text}4d; border-radius: 8px; }
+    html.vl-bars body *::-webkit-scrollbar-thumb:hover { background-color: ${c.text}80; }
+    @supports not selector(::-webkit-scrollbar) { html.vl-bars, html.vl-bars * { scrollbar-width: thin; scrollbar-color: ${c.text}4d transparent; } }
+  }
   input, textarea, select { outline: none; font-family: var(--body-font, 'Jost', sans-serif); }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
@@ -2921,6 +2946,18 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
 
 // ─── SHARED ───────────────────────────────────────────────────
 // Layout wrapper - full-screen responsive (replaces old Phone component)
+// Zet de zichtbare schuifbalken aan voor een dashboard (zie html.vl-bars in
+// makeCSS). Als klasse op <html> en niet als prop van Layout: de paginabalk
+// hoort bij het document zelf, en de publieke pagina's gebruiken dezelfde
+// Layout maar moeten balkloos blijven.
+function useDashboardScrollbars() {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("vl-bars");
+    return () => root.classList.remove("vl-bars");
+  }, []);
+}
+
 function Layout({ children, accent = ACCENT, rawAccent = null, maxWidth = "100%" }) {
   // rawAccent = de onbewerkte merkkleur voor gevulde knoppen/chips (zie
   // makeCSS); zonder die prop gedragen vlakken zich als voorheen (= accent).
@@ -3324,7 +3361,7 @@ export {
   Skeleton, DashboardSkeleton,
   useToast, ToastContainer,
   useConfirm, ConfirmModal,
-  useFocusTrap, useSEO,
+  useFocusTrap, useSEO, useDashboardScrollbars,
   compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin,
   rememberRef, storedRef, useReferralPromo, rewardLabel, promoEndLabel,

@@ -14,19 +14,28 @@
 
 export const RELEASES = [
   {
-    // Kassa (eerst 6) en Klanten (eerst 8) met Toon meer + schuifbalk. Eigen id,
-    // zelfde reden als …b. Was kort …c met alleen het kassapunt: samengevoegd
-    // zodat wie vandaag nog niet keek één blok ziet in plaats van twee.
-    id: "2026-09-21d",
+    // Schuifbalken in het hele dashboard + Kassa en Klanten (allebei eerst 6)
+    // met Toon meer. Eigen id, zelfde reden als …b. Was kort …c (alleen kassa)
+    // en …d (klanten nog op 8): telkens samengevoegd, zodat wie vandaag nog
+    // niet keek één blok ziet, en de tekst klopt met wat er nu staat.
+    id: "2026-09-21e",
     date: "2026-09-21",
-    title: { nl: "Kassa en Klanten: korte lijst, daarna Toon meer", en: "Sales and Clients: short list, then Show more", es: "Caja y Clientes: lista corta, luego Mostrar más" },
+    title: { nl: "Schuifbalken in het hele dashboard", en: "Scroll bars across the dashboard", es: "Barras de desplazamiento en todo el panel" },
     items: [
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Op de computer heeft het hele dashboard nu schuifbalken waar iets schuift: rechts in beeld op lange pagina's zoals Facturen, Analytics en Instellingen, en in vensters en lijsten die langer zijn dan het scherm, zoals de klantkaart. Je kunt de balk slepen en hoeft niet meer alles met het muiswiel te doen. Op de telefoon verandert er niets: daar veeg je gewoon.",
+          en: "On a computer the whole dashboard now has scroll bars wherever something scrolls: at the right of the screen on long pages such as Invoices, Analytics and Settings, and inside windows and lists that are taller than the screen, such as the client card. You can drag the bar instead of doing everything with the mouse wheel. Nothing changes on a phone: there you simply swipe.",
+          es: "En el ordenador, todo el panel tiene ahora barras de desplazamiento donde algo se desplaza: a la derecha de la pantalla en páginas largas como Facturas, Analítica y Ajustes, y dentro de ventanas y listas más altas que la pantalla, como la ficha del cliente. Puedes arrastrar la barra en lugar de hacerlo todo con la rueda del ratón. En el móvil no cambia nada: ahí simplemente deslizas.",
+        },
+      },
       {
         kind: "improved", audience: ["owner"],
         text: {
-          nl: "Klanten: de lijst toont eerst 8 klanten, met Toon meer, Toon alles en Toon minder eronder. Op de computer schuift de uitgeklapte lijst binnen een eigen vak met een schuifbalk, zodat je niet meer eindeloos met het muiswiel hoeft te scrollen. Op de telefoon veeg je gewoon door. Zoeken op naam, e-mail of telefoon blijft het snelst, en een klant die je net toevoegt blijft in beeld.",
-          en: "Clients: the list shows 8 clients first, with Show more, Show all and Show less below it. On a computer the expanded list scrolls inside its own box with a scroll bar, so no more endless scrolling with the mouse wheel. On a phone you simply swipe. Searching by name, email or phone stays the quickest way, and a client you just added stays in view.",
-          es: "Clientes: la lista muestra primero 8 clientes, con Mostrar más, Mostrar todo y Mostrar menos debajo. En el ordenador, la lista desplegada se desplaza dentro de su propio recuadro con una barra de desplazamiento, así que se acabó girar la rueda del ratón sin fin. En el móvil simplemente deslizas. Buscar por nombre, correo o teléfono sigue siendo lo más rápido, y un cliente que acabas de añadir queda a la vista.",
+          nl: "Klanten: de lijst toont eerst 6 klanten, met Toon meer, Toon alles en Toon minder eronder. Op de computer schuift de uitgeklapte lijst binnen een eigen vak met een schuifbalk, zodat je niet meer eindeloos met het muiswiel hoeft te scrollen. Op de telefoon veeg je gewoon door. Zoeken op naam, e-mail of telefoon blijft het snelst, en een klant die je net toevoegt blijft in beeld.",
+          en: "Clients: the list shows 6 clients first, with Show more, Show all and Show less below it. On a computer the expanded list scrolls inside its own box with a scroll bar, so no more endless scrolling with the mouse wheel. On a phone you simply swipe. Searching by name, email or phone stays the quickest way, and a client you just added stays in view.",
+          es: "Clientes: la lista muestra primero 6 clientes, con Mostrar más, Mostrar todo y Mostrar menos debajo. En el ordenador, la lista desplegada se desplaza dentro de su propio recuadro con una barra de desplazamiento, así que se acabó girar la rueda del ratón sin fin. En el móvil simplemente deslizas. Buscar por nombre, correo o teléfono sigue siendo lo más rápido, y un cliente que acabas de añadir queda a la vista.",
         },
       },
       {
