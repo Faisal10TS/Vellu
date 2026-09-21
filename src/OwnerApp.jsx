@@ -662,9 +662,9 @@ function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
       </div>
       <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14, maxWidth: 620 }}>
         {L(
-          `Normaal is dat 2 weken. Meldt een collega zich tot en met ${until} aan met jouw link, dan wordt de maand bij jullie allebei meteen bijgeschreven en bij de volgende afschrijving verrekend. Zo vaak als je wilt.`,
-          `Normally it is 2 weeks. If a colleague signs up with your link by ${until}, the month is credited to both of you right away and settled at your next payment. As often as you like.`,
-          `Normalmente son 2 semanas. Si una colega se registra con tu enlace hasta el ${until}, el mes se os abona a las dos al momento y se descuenta en el próximo cobro. Tantas veces como quieras.`
+          `Normaal is dat 2 weken. Meldt iemand zich tot en met ${until} aan met jouw uitnodigingscode, dan wordt de maand bij jullie allebei meteen bijgeschreven en bij de volgende afschrijving verrekend. Zo vaak als je wilt.`,
+          `Normally it is 2 weeks. If someone signs up using your referral code by ${until}, the month is credited to both of you right away and settled at your next payment. As often as you like.`,
+          `Normalmente son 2 semanas. Si alguien se registra con tu código de invitación hasta el ${until}, el mes se os abona a ambos al momento y se descuenta en el próximo cobro. Tantas veces como quieras.`
         )}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
