@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // Oogje bovenaan de productenlijst. Eigen id (…b): het blok van eerder
+    // vandaag is door de meeste salons al gezien, en gezien = per id.
+    id: "2026-09-21b",
+    date: "2026-09-21",
+    title: { nl: "Alle producten in één keer alleen aan de balie", en: "All products counter only in one go", es: "Todos los productos solo en el mostrador de una vez" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Instellingen → Diensten & producten: met het oogje bovenaan de productenlijst zet je alle producten in één keer op alleen aan de balie. Ze verdwijnen dan van je boekingspagina, maar blijven gewoon in je kassa staan. Nog een keer tikken zet ze weer online. Zoek je eerst, bijvoorbeeld op een leverancier, dan geldt het alleen voor de gevonden producten. Per product kan het nog steeds met het oogje in de rij.",
+          en: "Settings → Services & products: the eye at the top of the product list sets all products to counter only in one go. They disappear from your booking page but stay in your till. Tap it again to put them back online. Search first, for example by supplier, and it only applies to the products found. Per product it still works with the eye in the row.",
+          es: "Ajustes → Servicios y productos: con el ojo de arriba de la lista de productos pones todos los productos como solo de mostrador de una vez. Desaparecen de tu página de reservas, pero siguen en tu caja. Tócalo otra vez para volver a mostrarlos online. Si buscas primero, por ejemplo por proveedor, solo se aplica a los productos encontrados. Por producto sigue funcionando con el ojo de la fila.",
+        },
+      },
+    ],
+  },
+  {
     // Referral-actie 21-09 t/m 05-10-2026 (referral_promos). Na de einddatum
     // mag dit blok blijven staan: het noemt de datum zelf.
     id: "2026-09-21",

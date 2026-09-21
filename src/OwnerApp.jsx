@@ -2412,11 +2412,15 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
   const t = T[lang];
   const toast = useToast();
   const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
-  const [step, setStep] = useState(0);
+  // Verdergaan waar de eigenaar was (21-09-2026): de wizard verschijnt zolang
+  // er geen diensten zijn, dus na een verversing halverwege begon hij weer bij
+  // het e-mailadres dat al was opgeslagen. Staat dat adres er al, dan opent hij
+  // op de dienst-stap.
+  const [step, setStep] = useState(salonData.salon_email ? 1 : 0);
   // Salon name + city are already collected at signup, so onboarding doesn't
   // re-ask them. Step 1 only collects the public-facing contact email (the one
-  // thing not gathered yet) — empty by default, optional.
-  const [salonEmail, setSalonEmail] = useState("");
+  // thing not gathered yet) — optional.
+  const [salonEmail, setSalonEmail] = useState(salonData.salon_email || "");
   const [svcName, setSvcName] = useState("");
   const [svcPrice, setSvcPrice] = useState("");
   const [svcDuration, setSvcDuration] = useState("60");
@@ -2462,11 +2466,26 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
     setStep(2);
   };
 
+  // Afgerond óf overgeslagen: vastleggen op het account, zodat de wizard niet
+  // bij elke verversing terugkomt voor een salon dat (nog) geen diensten heeft.
+  // Op het account en niet op het apparaat — telefoon, laptop en een
+  // incognitovenster moeten het allemaal weten. Mislukt het schrijven, dan
+  // komt hij hooguit nog één keer; daar hoeft de eigenaar niets van te merken.
+  const markDone = () => {
+    if (salonData.onboarding_done_at) return;
+    const at = new Date().toISOString();
+    update(d => { d.onboarding_done_at = at; return d; });
+    supabase.from("profiles").update({ onboarding_done_at: at }).eq("id", salonData.owner_id).then(() => {}, () => {});
+  };
+  const finish = () => { markDone(); onFinish(); };
+
   const saveStep3 = async () => {
     setSaving(true);
-    const { error } = await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS }).eq("id", salonData.owner_id);
+    const at = salonData.onboarding_done_at || new Date().toISOString();
+    const { error } = await supabase.from("profiles").update({ business_hours: salonData.business_hours || DEFAULT_HOURS, onboarding_done_at: at }).eq("id", salonData.owner_id);
     setSaving(false);
     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt — probeer opnieuw" : lang === "es" ? "Error al guardar — inténtalo de nuevo" : "Save failed — try again", "error"); return; }
+    update(d => { d.onboarding_done_at = at; return d; });
     setStep(3);
   };
 
@@ -2590,7 +2609,7 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
               <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12, marginTop: 18, marginBottom: 10 }} onClick={saveStep3} disabled={saving}>
                 {saving ? "..." : t.onboardingNext}
               </button>
-              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, padding: "12px 20px" }} onClick={onFinish}>
+              <button className="btn-ghost" data-onboarding-skip-all style={{ width: "100%", fontSize: 11, padding: "12px 20px" }} onClick={finish}>
                 {t.onboardingSkip}
               </button>
             </div>
@@ -2603,7 +2622,7 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
               <div style={{ fontSize: "clamp(28px, 5vw, 34px)", fontFamily: "'Cormorant Garamond',serif", fontWeight: 400, marginBottom: 8, color: INK, lineHeight: 1.12 }}>{t.onboardingDone}</div>
               <div style={{ fontSize: 13.5, color: c.textSub, marginBottom: 10, lineHeight: 1.6 }}>{t.onboardingDoneSub}</div>
               <div style={{ display: "inline-block", fontSize: 13, color: INK, marginBottom: 28, fontWeight: 500, padding: "8px 14px", borderRadius: R, background: c.bg, border: `1px solid ${AT.PUTTY}` }}>vellu.cc/{salonData.id}</div>
-              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12 }} onClick={onFinish}>{t.onboardingFinish}</button>
+              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12 }} onClick={finish}>{t.onboardingFinish}</button>
             </div>
           )}
           </div>
@@ -4242,6 +4261,56 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const PRODUCTS_FOLD = 5, PRODUCTS_STEP = 25;
   const [productsShown, setProductsShown] = useState(PRODUCTS_FOLD);
   const [lastAddedProduct, setLastAddedProduct] = useState(null);
+  // Producten die nu in de lijst horen (zoekveld toegepast). Gedeeld door de
+  // lijst zelf en het oogje in de kop.
+  const productMatchesNow = () => (salonData.products || []).filter(p => {
+    if (!productSearch.trim()) return true;
+    const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase();
+    return hay.includes(productSearch.trim().toLowerCase());
+  });
+  // Oogje bovenaan (21-09-2026): alle producten — of, met een zoekopdracht,
+  // alle gevonden producten — in één keer "alleen aan de balie" (niet op de
+  // boekingspagina) of weer online zichtbaar. Een salon met honderden
+  // geïmporteerde producten wil dat niet per stuk aantikken. Staat er nog
+  // iets online, dan zet de knop alles uit; staat alles uit, dan alles aan.
+  const [bulkOnlineBusy, setBulkOnlineBusy] = useState(false);
+  const bulkSetProductsOnline = async () => {
+    if (bulkOnlineBusy) return;
+    const list = productMatchesNow();
+    if (list.length === 0) return;
+    const next = !list.some(p => p.visible_online !== false);
+    const filtered = !!productSearch.trim();
+    const n = list.length;
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    const wie = filtered ? L(`de ${n} gevonden producten`, `the ${n} products found`, `los ${n} productos encontrados`) : L(`alle ${n} producten`, `all ${n} products`, `los ${n} productos`);
+    const vraag = next
+      ? L(`Wil je ${wie} weer op je boekingspagina tonen? Klanten kunnen ze dan online meebestellen.`, `Show ${wie} on your booking page again? Clients can then order them online.`, `¿Mostrar ${wie} de nuevo en tu página de reservas? Los clientes podrán pedirlos online.`)
+      : L(`Wil je ${wie} alleen aan de balie verkopen? Ze verdwijnen van je boekingspagina, maar blijven gewoon in je kassa staan.`, `Sell ${wie} at the counter only? They disappear from your booking page but stay in your till.`, `¿Vender ${wie} solo en el mostrador? Desaparecen de tu página de reservas, pero siguen en tu caja.`);
+    // tone "primary": de standaardknop van het bevestigvenster is een rode
+    // "Verwijderen", en er wordt hier niets verwijderd.
+    if (!(await showConfirm(vraag, { tone: "primary", confirmText: next ? L("Online tonen", "Show online", "Mostrar online") : L("Alleen balie", "Counter only", "Solo mostrador") }))) return;
+    setBulkOnlineBusy(true);
+    try {
+      let failed = false;
+      if (!filtered) {
+        const { error } = await supabase.from("products").update({ visible_online: next }).eq("owner_id", salonData.owner_id);
+        failed = !!error;
+      } else {
+        // Id's in porties: honderden uuid's passen niet in één adresregel.
+        const ids = list.map(p => p.id);
+        for (let i = 0; i < ids.length && !failed; i += 80) {
+          const { error } = await supabase.from("products").update({ visible_online: next }).eq("owner_id", salonData.owner_id).in("id", ids.slice(i, i + 80));
+          failed = !!error;
+        }
+      }
+      if (failed) { toast.show(t.somethingWrong, "error"); return; }
+      const idSet = new Set(list.map(p => p.id));
+      update(d => { d.products = (d.products || []).map(x => idSet.has(x.id) ? { ...x, visible_online: next } : x); return d; });
+      toast.show(next
+        ? L(`${n} producten staan weer op je boekingspagina`, `${n} products are on your booking page again`, `${n} productos vuelven a estar en tu página de reservas`)
+        : L(`${n} producten zijn nu alleen aan de balie`, `${n} products are now counter only`, `${n} productos ahora son solo de mostrador`));
+    } finally { setBulkOnlineBusy(false); }
+  };
   // Verhoogd wanneer een regiowissel wordt geannuleerd, zodat de <select>
   // opnieuw mount en weer het werkelijke land toont.
   const [regionSelectKey, setRegionSelectKey] = useState(0);
@@ -4680,6 +4749,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
           salon_email: data.salon_email || "",
+          onboarding_done_at: data.onboarding_done_at || null,
           whatsapp_number: data.whatsapp_number || "",
           phone_required: data.phone_required || false,
           waitlist_enabled: data.waitlist_enabled !== false,
@@ -4787,8 +4857,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           categories: catData || [],
           locations: locData || []
         }));
-        // Show onboarding if no services exist yet
-        if ((data.services || []).length === 0) setShowOnboarding(true);
+        // Show onboarding if no services exist yet — tenzij de eigenaar hem al
+        // heeft afgerond of overgeslagen (onboarding_done_at, 21-09-2026).
+        if ((data.services || []).length === 0 && !data.onboarding_done_at) setShowOnboarding(true);
       }
       setDataLoaded(true);
       } catch (e) {
@@ -14902,7 +14973,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {/* Mobiel: zoekveld op z'n eigen regel; de waarde-kaartjes
                           komen er dan netjes als paar onder i.p.v. rommelig
                           eromheen te wrappen. */}
-                      <input className="input-field" placeholder={lang === "nl" ? "Zoeken…" : lang === "es" ? "Buscar…" : "Search…"} value={productSearch} onChange={e => setProductSearch(e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px", ...(isMobile ? { flexBasis: "100%" } : {}) }} />
+                      <input className="input-field" data-products-search placeholder={lang === "nl" ? "Zoeken…" : lang === "es" ? "Buscar…" : "Search…"} value={productSearch} onChange={e => setProductSearch(e.target.value)} style={{ flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px", ...(isMobile ? { flexBasis: "100%" } : {}) }} />
                       {(() => {
                         const tracked = (salonData.products || []).filter(p => p.stock != null);
                         if (!tracked.length) return null;
@@ -14961,6 +15032,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={stockImporting} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) importStockCsv(f); }} />
                         {stockImporting ? "…" : (lang === "nl" ? "Import voorraad" : lang === "es" ? "Importar existencias" : "Import stock")}
                       </label>
+                      {/* Mobiel heeft geen tabelkop, dus het oogje voor "alles alleen
+                          aan de balie" staat hier als knop met tekst. */}
+                      {isMobile && (() => {
+                        const anyOnline = productMatchesNow().some(p => p.visible_online !== false);
+                        return (
+                          <button type="button" className="btn-ghost" data-products-eye-all onClick={bulkSetProductsOnline} disabled={bulkOnlineBusy}
+                            style={{ padding: "8px 12px", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, flex: "1 0 auto", opacity: bulkOnlineBusy ? 0.5 : 1 }}>
+                            <NavIcon name="eye" size={11} color="currentColor" />
+                            {anyOnline
+                              ? (lang === "nl" ? "Alles alleen balie" : lang === "es" ? "Todo solo mostrador" : "All counter only")
+                              : (lang === "nl" ? "Alles online tonen" : lang === "es" ? "Mostrar todo online" : "Show all online")}
+                          </button>
+                        );
+                      })()}
                     </div>
                   )}
                   <datalist id="vellu-suppliers">
@@ -14983,17 +15068,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             schakelaar 32, bewerken+verwijderen 64. Het oogje
                             ontbrak hier, waardoor de koppen 40px naast hun
                             kolom stonden (Faisal 21-09-2026). */}
-                        <div style={{ width: 28, flexShrink: 0 }} />
+                        {(() => {
+                          const anyOnline = productMatchesNow().some(p => p.visible_online !== false);
+                          return (
+                            <button type="button" data-products-eye-all onClick={bulkSetProductsOnline} disabled={bulkOnlineBusy}
+                              title={anyOnline
+                                ? (lang === "nl" ? "Alles alleen aan de balie — niet op je boekingspagina" : lang === "es" ? "Todo solo en el mostrador — no en tu página de reservas" : "All counter only — not on your booking page")
+                                : (lang === "nl" ? "Alles weer online zichtbaar" : lang === "es" ? "Todo visible online de nuevo" : "All visible online again")}
+                              aria-label={anyOnline
+                                ? (lang === "nl" ? "Alle producten alleen aan de balie" : lang === "es" ? "Todos los productos solo en el mostrador" : "All products counter only")
+                                : (lang === "nl" ? "Alle producten online zichtbaar" : lang === "es" ? "Todos los productos visibles online" : "All products visible online")}
+                              style={{ width: 28, height: 28, padding: 0, flexShrink: 0, borderRadius: 8, border: `1px solid ${anyOnline ? `${accent}55` : c.inputBorder}`, background: "transparent", color: anyOnline ? accent : c.textMuted, cursor: bulkOnlineBusy ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: bulkOnlineBusy ? 0.5 : 1 }}>
+                              <NavIcon name="eye" size={13} color="currentColor" />
+                            </button>
+                          );
+                        })()}
                         <div style={{ width: 32, flexShrink: 0 }} />
                         <div style={{ width: 64, flexShrink: 0 }} />
                       </div>
                     )}
                     {(() => {
-                      const matches = (salonData.products || []).filter(p => {
-                        if (!productSearch.trim()) return true;
-                        const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase();
-                        return hay.includes(productSearch.trim().toLowerCase());
-                      });
+                      const matches = productMatchesNow();
                       // Het product dat je bewerkt of net toevoegde blijft altijd in beeld.
                       const shown = matches.filter((p, i) => i < productsShown || p.id === editingProduct || p.id === lastAddedProduct);
                       const hidden = matches.length - shown.length;
