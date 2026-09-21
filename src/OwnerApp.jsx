@@ -662,9 +662,9 @@ function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
       </div>
       <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14, maxWidth: 620 }}>
         {L(
-          `Normaal is dat 2 weken. Meldt iemand zich tot en met ${until} aan met jouw uitnodigingscode, dan wordt de maand bij jullie allebei meteen bijgeschreven en bij de volgende afschrijving verrekend. Zo vaak als je wilt.`,
-          `Normally it is 2 weeks. If someone signs up using your referral code by ${until}, the month is credited to both of you right away and settled at your next payment. As often as you like.`,
-          `Normalmente son 2 semanas. Si alguien se registra con tu código de invitación hasta el ${until}, el mes se os abona a ambos al momento y se descuenta en el próximo cobro. Tantas veces como quieras.`
+          `Normaal is dat 2 weken. Meldt iemand zich tot en met ${until} aan met jouw uitnodigingscode, dan krijg jij ${reward} tegoed, verrekend bij je volgende afschrijving, en begint de nieuwe salon met ${reward} gratis in plaats van 2 weken. Zo vaak als je wilt.`,
+          `Normally it is 2 weeks. If someone signs up using your referral code by ${until}, you get ${reward} of credit, settled at your next payment, and the new salon starts with ${reward} free instead of 2 weeks. As often as you like.`,
+          `Normalmente son 2 semanas. Si alguien se registra con tu código de invitación hasta el ${until}, tú recibes ${reward} de crédito, que se descuenta en tu próximo cobro, y el nuevo salón empieza con ${reward} gratis en lugar de 2 semanas. Tantas veces como quieras.`
         )}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2082,6 +2082,10 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const [busyPlan, setBusyPlan] = useState(null);
   const busy = busyPlan !== null;
   const [profileBilling, setProfileBilling] = useState(null); // { trial_used, subscription_status }
+  // Lengte van de proef voor DEZE eigenaar: 14 dagen, of 30 als zij zich
+  // tijdens een referral-actie met een uitnodigingscode aanmeldde (dan is de
+  // gratis maand haar proef; zie start-trial + RPC my_trial_days).
+  const [trialDays, setTrialDays] = useState(14);
   const [postCheckout, setPostCheckout] = useState(false);
   // Eigen confirm-modal: PlanSelection staat los van OwnerApp en heeft dus geen
   // toegang tot de showConfirm daar. Nodig omdat beide knoppen hieronder de
@@ -2109,6 +2113,11 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         .eq("id", user.id)
         .maybeSingle();
       if (!cancelled && data) setProfileBilling(data);
+      try {
+        const { data: td } = await supabase.rpc("my_trial_days");
+        const n = Number(td);
+        if (!cancelled && Number.isFinite(n) && n >= 14 && n <= 90) setTrialDays(n);
+      } catch { /* zonder antwoord: gewone 14 dagen */ }
     })();
     return () => { cancelled = true; };
   }, [user.id]);
@@ -2259,7 +2268,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     busyPlan === planId
       ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Cargando…" : "Loading…")
       : (canTrial
-          ? (lang === "nl" ? "Start gratis 14 dagen" : lang === "es" ? "Comienza la prueba gratuita de 14 días" : "Start 14-day free trial")
+          ? (lang === "nl" ? `Start gratis ${trialDays} dagen` : lang === "es" ? `Comienza la prueba gratuita de ${trialDays} días` : `Start ${trialDays}-day free trial`)
           : t.selectPlan);
 
   return (
@@ -2291,7 +2300,9 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{t.choosePlan}</div>
             <div style={{ fontSize: 13, color: c.textLabel }}>
               {canTrial
-                ? (lang === "nl" ? "Probeer Vellu 14 dagen gratis. Geen creditcard nodig." : lang === "es" ? "Prueba Vellu gratis durante 14 días. No se requiere tarjeta de crédito." : "Try Vellu free for 14 days. No credit card required.")
+                ? (trialDays > 14
+                    ? (lang === "nl" ? `Je bent uitgenodigd door een andere salon: probeer Vellu ${trialDays} dagen gratis in plaats van 14. Geen creditcard nodig.` : lang === "es" ? `Te ha invitado otro salón: prueba Vellu gratis durante ${trialDays} días en lugar de 14. No se requiere tarjeta de crédito.` : `You were invited by another salon: try Vellu free for ${trialDays} days instead of 14. No credit card required.`)
+                    : (lang === "nl" ? "Probeer Vellu 14 dagen gratis. Geen creditcard nodig." : lang === "es" ? "Prueba Vellu gratis durante 14 días. No se requiere tarjeta de crédito." : "Try Vellu free for 14 days. No credit card required."))
                 : t.choosePlanSub}
             </div>
           </div>

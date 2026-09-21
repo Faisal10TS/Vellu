@@ -90,10 +90,28 @@ serve(async (req) => {
     return err(400, "invalid_billing_interval", origin);
   }
 
+  // Referral-actie (21-09-2026): wie zich tijdens een actie met een
+  // uitnodigingscode aanmeldde krijgt haar gratis maand ALS proefperiode
+  // (referral_redemptions.new_salon_trial_days, gezet door
+  // redeem_referral_code) — 30 dagen in plaats van 14, geen tegoed erbovenop,
+  // zodat de eerste betaling na één maand komt. Anders de vaste 14 dagen.
+  let trialDays = TRIAL_DAYS;
+  try {
+    const { data: red } = await supabase
+      .from("referral_redemptions")
+      .select("new_salon_trial_days")
+      .eq("new_profile_id", userId)
+      .maybeSingle();
+    const n = Number(red?.new_salon_trial_days);
+    if (Number.isFinite(n) && n >= TRIAL_DAYS && n <= 90) trialDays = n;
+  } catch (e) {
+    console.error("start-trial: referral lookup failed, using default trial", e);
+  }
+
   // Atomic guard: only allow trial if `trial_used` is still false. We rely on
   // the WHERE clause + a returning select to detect "already used" without a
   // separate read-then-write race window.
-  const trialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const trialEnd = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
   const now = new Date();
 
   const { data: updated, error: updErr } = await supabase
@@ -137,5 +155,6 @@ serve(async (req) => {
     plan: updated.plan,
     subscription_status: updated.subscription_status,
     trial_ends_at: updated.trial_ends_at,
+    trial_days: trialDays,
   }, origin);
 });
