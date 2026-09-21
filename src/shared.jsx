@@ -127,26 +127,30 @@ select option { background-color: ${THEMES[theme].selectBg}; color: ${THEMES[the
 
 function useTheme() { return useContext(ThemeContext); }
 
-// ─── UITNODIGINGSCODE ONTHOUDEN ──────────────────────────────
+// ─── UITNODIGINGSCODE ONTHOUDEN (alleen dit bezoek) ──────────
 // "Powered by Vellu" onderaan elke boekingspagina linkt naar de homepage met
 // de uitnodigingscode van die salon (?ref=CODE, 21-09-2026). De homepage is
 // de verkooppagina; aanmelden gebeurt pas een paar klikken later op /owner,
-// en onderweg raakt een queryparameter zoek. Daarom 30 dagen onthouden op
-// het apparaat: wie via TTNB's pagina binnenkwam en drie dagen later een
-// account maakt, telt nog steeds als haar uitnodiging.
+// en onderweg raakt een queryparameter zoek. Daarom onthouden — maar alleen
+// voor DIT bezoek in DIT tabblad (sessionStorage). Eerst was het 30 dagen op
+// het apparaat; Faisal zag daardoor dagen later op vellu.cc/owner nog
+// "Invited by TTNB Den Haag" terwijl hij gewoon het adres had ingetypt
+// ("it still says invited by ttnb"). Wie later terugkomt zonder link is dus
+// een gewone bezoeker. De oude 30-dagen-sleutel wordt opgeruimd.
 const REF_KEY = "vellu_ref";
 const REF_RE = /^[A-Za-z0-9]{4,16}$/;
 function rememberRef(code) {
   const clean = String(code || "").trim().toUpperCase();
+  try { localStorage.removeItem(REF_KEY); } catch { /* private mode */ }
   if (!REF_RE.test(clean)) return "";
-  try { localStorage.setItem(REF_KEY, JSON.stringify({ code: clean, at: Date.now() })); } catch { /* private mode */ }
+  try { sessionStorage.setItem(REF_KEY, clean); } catch { /* private mode */ }
   return clean;
 }
 function storedRef() {
+  try { localStorage.removeItem(REF_KEY); } catch { /* private mode */ }
   try {
-    const raw = JSON.parse(localStorage.getItem(REF_KEY) || "null");
-    if (!raw || !REF_RE.test(raw.code || "") || Date.now() - Number(raw.at || 0) > 30 * 864e5) return "";
-    return raw.code;
+    const code = sessionStorage.getItem(REF_KEY) || "";
+    return REF_RE.test(code) ? code : "";
   } catch { return ""; }
 }
 
