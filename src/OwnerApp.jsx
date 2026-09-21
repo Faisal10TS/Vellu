@@ -2399,8 +2399,16 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
 }
 
 // ─── ONBOARDING WIZARD ──────────────────────────────────────
-function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent = ACCENT }) {
-  const { colors: c } = useTheme();
+// Atelier-huid (21-09-2026, Faisal: "its in the old theme"): de wizard is de
+// laatste stap van de merk-funnel (bone homepage → bone login → bone
+// plankeuze → wizard → app). Hij stond nog in het donkere app-thema met goud
+// en een themaknop. Vaste lichte huid, espresso/earth, 8px hoeken; de kleur
+// van de salon speelt hier nog niet (die kiest ze pas in Instellingen).
+function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
+  const c = AT_COLORS;
+  const accent = AT.EARTH;
+  const INK = AT.ESPRESSO;
+  const R = 8;
   const t = T[lang];
   const toast = useToast();
   const DAY_FULL = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
@@ -2462,35 +2470,57 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
     setStep(3);
   };
 
+  const H = ({ children }) => (
+    <div style={{ fontSize: "clamp(26px, 5vw, 32px)", marginBottom: 6, fontFamily: "'Cormorant Garamond',serif", fontWeight: 400, lineHeight: 1.12, color: INK }}>{children}</div>
+  );
+  const Sub = ({ children, mb = 26 }) => (
+    <div style={{ fontSize: 13.5, color: c.textSub, marginBottom: mb, lineHeight: 1.6 }}>{children}</div>
+  );
+  const inputStyle = { borderRadius: R, fontSize: 14, padding: "12px 14px", colorScheme: "only light" };
+  const optStyle = { background: c.bgCard, color: INK };
+  const selStyle = { background: c.bgCard, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "7px 8px", color: INK, fontSize: 12, fontFamily: "'Jost',sans-serif", cursor: "pointer", colorScheme: "only light" };
+  const toggleDay = (day, isClosed) => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], closed: !isClosed }; return d; });
+
   return (
     <Layout>
+      <AtelierSkin />
       <ToastContainer toasts={toast.toasts} />
 
-      <div style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative" }}>
-        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, zIndex: 5 }}>
-          <ThemeToggle />
+      <div className="atelier" data-onboarding style={{ background: c.bg, minHeight: "100dvh", fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 20px calc(32px + env(safe-area-inset-bottom, 0px))", position: "relative", boxSizing: "border-box" }}>
+        <div aria-hidden="true" style={{ position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)", width: "80%", maxWidth: 600, height: "46%", background: `radial-gradient(ellipse at center, ${accent}0d 0%, transparent 70%)`, pointerEvents: "none" }} />
+
+        {/* Kop: woordmerk + taal. Geen themaknop: vaste Atelier-huid. */}
+        <div style={{ width: "100%", maxWidth: 520, padding: "calc(22px + env(safe-area-inset-top, 0px)) 0 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, position: "relative", zIndex: 5 }}>
+          <div style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 300, letterSpacing: "0.18em", color: INK }}>vellu</div>
           {setLang && <LangToggle lang={lang} setLang={setLang} />}
         </div>
-        <div style={{ width: "100%", maxWidth: 440 }}>
 
-          {/* Progress */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 40 }}>
-            {steps.map((_, i) => (
-              <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? accent : c.border, transition: "background 0.3s" }} />
-            ))}
-          </div>
+        <div style={{ width: "100%", maxWidth: 520, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", zIndex: 5 }} className="fade-up">
+          <div data-onboarding-card style={{ background: c.bgCard, border: `1px solid ${AT.PUTTY}`, borderRadius: 16, padding: "clamp(22px, 4vw, 34px)", boxShadow: "0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05)" }}>
+
+          {/* Voortgang */}
+          {step < 3 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 26 }}>
+              <div style={{ display: "flex", gap: 6, flex: 1 }}>
+                {steps.map((_, i) => (
+                  <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? INK : AT.PUTTY, transition: "background 0.3s" }} />
+                ))}
+              </div>
+              <div data-onboarding-step style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: c.textLabel, fontVariantNumeric: "tabular-nums" }}>{step + 1} / {steps.length}</div>
+            </div>
+          )}
 
           {/* Step 0: Salon details */}
           {step === 0 && (
             <div>
-              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingWelcome}</div>
-              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingWelcomeSub}</div>
+              <H>{t.onboardingWelcome}</H>
+              <Sub>{t.onboardingWelcomeSub}</Sub>
 
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.salonEmail}</div>
-              <input className="input-field" type="email" placeholder={lang === "nl" ? "Bijv. info@jouwsalon.nl" : lang === "es" ? "p. ej. info@yoursalon.com" : "e.g. info@yoursalon.com"} value={salonEmail} onChange={e => setSalonEmail(e.target.value)} style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 24, lineHeight: 1.5 }}>{lang === "nl" ? "Dit e-mailadres is zichtbaar voor klanten op je boekingspagina. Je inlog-e-mail blijft privé. Optioneel — je kunt dit later wijzigen bij Instellingen." : lang === "es" ? "Este correo es visible para los clientes en tu página de reservas. Tu correo de acceso permanece privado. Opcional — puedes cambiarlo más adelante en Ajustes." : "This email is visible to clients on your booking page. Your login email stays private. Optional — you can change this later in Settings."}</div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.salonEmail}</div>
+              <input className="input-field" type="email" placeholder={lang === "nl" ? "Bijv. info@jouwsalon.nl" : lang === "es" ? "p. ej. info@yoursalon.com" : "e.g. info@yoursalon.com"} value={salonEmail} onChange={e => setSalonEmail(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} />
+              <div style={{ fontSize: 11.5, color: c.textLabel, marginBottom: 24, lineHeight: 1.55 }}>{lang === "nl" ? "Dit e-mailadres is zichtbaar voor klanten op je boekingspagina. Je inlog-e-mail blijft privé. Optioneel — je kunt dit later wijzigen bij Instellingen." : lang === "es" ? "Este correo es visible para los clientes en tu página de reservas. Tu correo de acceso permanece privado. Opcional — puedes cambiarlo más adelante en Ajustes." : "This email is visible to clients on your booking page. Your login email stays private. Optional — you can change this later in Settings."}</div>
 
-              <button className="btn-primary" style={{ width: "100%" }} onClick={saveStep1} disabled={saving}>
+              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12 }} onClick={saveStep1} disabled={saving}>
                 {saving ? "..." : (salonEmail.trim() ? t.onboardingNext : t.onboardingSkip)}
               </button>
             </div>
@@ -2499,21 +2529,21 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
           {/* Step 1: First service */}
           {step === 1 && (
             <div>
-              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep2}</div>
-              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 32, lineHeight: 1.6 }}>{t.onboardingStep2Sub}</div>
+              <H>{t.onboardingStep2}</H>
+              <Sub>{t.onboardingStep2Sub}</Sub>
 
-              <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ marginBottom: 10 }} />
+              <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }} />
               <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
-                <input className="input-field" type="number" placeholder={t.onboardingServicePrice} value={svcPrice} onChange={e => setSvcPrice(e.target.value)} style={{ flex: 1 }} />
-                <select className="input-field" value={svcDuration} onChange={e => setSvcDuration(e.target.value)} style={{ flex: 1 }}>
-                  {[15,30,45,60,75,90,120].map(m => <option key={m} value={m}>{m} min</option>)}
+                <input className="input-field" type="number" placeholder={t.onboardingServicePrice} value={svcPrice} onChange={e => setSvcPrice(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                <select className="input-field" value={svcDuration} onChange={e => setSvcDuration(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
+                  {[15,30,45,60,75,90,120].map(m => <option key={m} value={m} style={optStyle}>{m} min</option>)}
                 </select>
               </div>
 
-              <button className="btn-primary" style={{ width: "100%", marginBottom: 10 }} onClick={saveStep2} disabled={saving || !svcName.trim() || !svcPrice}>
+              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12, marginBottom: 10, opacity: (!svcName.trim() || !svcPrice) ? 0.5 : 1 }} onClick={saveStep2} disabled={saving || !svcName.trim() || !svcPrice}>
                 {saving ? "..." : t.onboardingNext}
               </button>
-              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textLabel }} onClick={() => setStep(2)}>
+              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, padding: "12px 20px" }} onClick={() => setStep(2)}>
                 {t.onboardingSkip}
               </button>
             </div>
@@ -2522,42 +2552,45 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
           {/* Step 2: Business hours */}
           {step === 2 && (
             <div>
-              <div style={{ fontSize: 26, marginBottom: 4, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300 }}>{t.onboardingStep3}</div>
-              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 24, lineHeight: 1.6 }}>{t.onboardingStep3Sub}</div>
+              <H>{t.onboardingStep3}</H>
+              <Sub mb={20}>{t.onboardingStep3Sub}</Sub>
 
               {[0,1,2,3,4,5,6].map(day => {
                 const hours = salonData.business_hours?.[day] || DEFAULT_HOURS[day];
                 const isClosed = hours.closed;
                 return (
-                  <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "10px 12px", background: isClosed ? c.bgCard : `${accent}08`, border: `1px solid ${isClosed ? c.border : `${accent}22`}`, borderRadius: 12, opacity: isClosed ? 0.6 : 1, transition: "all 0.2s" }}>
-                    <div style={{ width: 80, fontSize: 12, fontWeight: 500 }}>{DAY_FULL[day]}</div>
-                    <div onClick={() => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], closed: !isClosed }; return d; })}
-                      style={{ width: 36, height: 20, borderRadius: 10, background: isClosed ? c.inputBorder : accent, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
-                      <div style={{ position: "absolute", top: 2, left: isClosed ? 2 : 18, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                  <div key={day} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 8, padding: "10px 12px", background: isClosed ? "transparent" : `${accent}12`, border: `1px solid ${isClosed ? AT.PUTTY : `${accent}44`}`, borderRadius: R, opacity: isClosed ? 0.7 : 1, transition: "all 0.2s" }}>
+                    <div style={{ width: 84, fontSize: 12.5, fontWeight: 500, color: INK }}>{DAY_FULL[day]}</div>
+                    <div role="switch" aria-checked={!isClosed} tabIndex={0}
+                      onClick={() => toggleDay(day, isClosed)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDay(day, isClosed); } }}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: isClosed ? AT.MUSHROOM : INK, cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}>
+                      <div style={{ position: "absolute", top: 2, left: isClosed ? 2 : 18, width: 16, height: 16, borderRadius: "50%", background: AT.BONE, transition: "left 0.2s" }} />
                     </div>
                     {!isClosed ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                        <select value={hours.open} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], open: e.target.value }; return d; })}
-                          style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                          {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                      // Tijden: op een smal scherm passen twee keuzelijsten (16px
+                      // letters op de telefoon) niet naast dag + schakelaar; dan
+                      // springen ze samen naar een eigen regel i.p.v. uit de kaart.
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 190px", minWidth: 0 }}>
+                        <select value={hours.open} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], open: e.target.value }; return d; })} style={{ ...selStyle, flex: 1, minWidth: 0 }}>
+                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{tm}</option>)}
                         </select>
                         <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
-                        <select value={hours.close} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], close: e.target.value }; return d; })}
-                          style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                          {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                        <select value={hours.close} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], close: e.target.value }; return d; })} style={{ ...selStyle, flex: 1, minWidth: 0 }}>
+                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{tm}</option>)}
                         </select>
                       </div>
                     ) : (
-                      <div style={{ fontSize: 11, color: c.textMuted }}>{t.closed}</div>
+                      <div style={{ fontSize: 11.5, color: c.textLabel }}>{t.closed}</div>
                     )}
                   </div>
                 );
               })}
 
-              <button className="btn-primary" style={{ width: "100%", marginTop: 20, marginBottom: 10 }} onClick={saveStep3} disabled={saving}>
+              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12, marginTop: 18, marginBottom: 10 }} onClick={saveStep3} disabled={saving}>
                 {saving ? "..." : t.onboardingNext}
               </button>
-              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textLabel }} onClick={onFinish}>
+              <button className="btn-ghost" style={{ width: "100%", fontSize: 11, padding: "12px 20px" }} onClick={onFinish}>
                 {t.onboardingSkip}
               </button>
             </div>
@@ -2565,14 +2598,15 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish, accent =
 
           {/* Done state — shown briefly before redirecting */}
           {step === 3 && (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ marginBottom: 16 }}><NavIcon name="diamond" size={48} color={accent} /></div>
-              <div style={{ fontSize: 28, fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, marginBottom: 8 }}>{t.onboardingDone}</div>
-              <div style={{ fontSize: 13, color: c.textSub, marginBottom: 8 }}>{t.onboardingDoneSub}</div>
-              <div style={{ fontSize: 13, color: accent, marginBottom: 32, fontWeight: 500 }}>vellu.cc/{salonData.id}</div>
-              <button className="btn-primary" style={{ width: "100%" }} onClick={onFinish}>{t.onboardingFinish}</button>
+            <div style={{ textAlign: "center", padding: "6px 0" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 12, background: `${accent}1f`, marginBottom: 18 }}><NavIcon name="check" size={26} color={accent} /></div>
+              <div style={{ fontSize: "clamp(28px, 5vw, 34px)", fontFamily: "'Cormorant Garamond',serif", fontWeight: 400, marginBottom: 8, color: INK, lineHeight: 1.12 }}>{t.onboardingDone}</div>
+              <div style={{ fontSize: 13.5, color: c.textSub, marginBottom: 10, lineHeight: 1.6 }}>{t.onboardingDoneSub}</div>
+              <div style={{ display: "inline-block", fontSize: 13, color: INK, marginBottom: 28, fontWeight: 500, padding: "8px 14px", borderRadius: R, background: c.bg, border: `1px solid ${AT.PUTTY}` }}>vellu.cc/{salonData.id}</div>
+              <button className="btn-primary" style={{ width: "100%", padding: "15px 20px", fontSize: 12 }} onClick={onFinish}>{t.onboardingFinish}</button>
             </div>
           )}
+          </div>
         </div>
       </div>
     </Layout>
@@ -4202,6 +4236,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [editProductForm, setEditProductForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
   const [productPhotoUploading, setProductPhotoUploading] = useState(null);
   const [productSearch, setProductSearch] = useState("");
+  // Productenlijst: eerst 5 rijen, de rest achter "Toon meer" (21-09-2026).
+  // Stapsgewijs (+25), want een salon kan honderden producten importeren
+  // (Tammy Taylor Bonaire: 762) en die allemaal tegelijk tekenen is traag.
+  const PRODUCTS_FOLD = 5, PRODUCTS_STEP = 25;
+  const [productsShown, setProductsShown] = useState(PRODUCTS_FOLD);
+  const [lastAddedProduct, setLastAddedProduct] = useState(null);
   // Verhoogd wanneer een regiowissel wordt geannuleerd, zodat de <select>
   // opnieuw mount en weer het werkelijke land toont.
   const [regionSelectKey, setRegionSelectKey] = useState(0);
@@ -14939,15 +14979,26 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Compra" : "Cost"}</div>
                         <div style={{ width: 62, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>
                         <div style={{ width: 72, textAlign: "right", flexShrink: 0 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Existencias" : "Stock"}</div>
+                        {/* Zelfde breedtes als de knoppen in een rij: oogje 28,
+                            schakelaar 32, bewerken+verwijderen 64. Het oogje
+                            ontbrak hier, waardoor de koppen 40px naast hun
+                            kolom stonden (Faisal 21-09-2026). */}
+                        <div style={{ width: 28, flexShrink: 0 }} />
                         <div style={{ width: 32, flexShrink: 0 }} />
                         <div style={{ width: 64, flexShrink: 0 }} />
                       </div>
                     )}
-                    {(salonData.products || []).filter(p => {
-                      if (!productSearch.trim()) return true;
-                      const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase();
-                      return hay.includes(productSearch.trim().toLowerCase());
-                    }).map(p => (
+                    {(() => {
+                      const matches = (salonData.products || []).filter(p => {
+                        if (!productSearch.trim()) return true;
+                        const hay = `${p.name_nl || ""} ${p.name_en || ""} ${p.name_es || ""} ${p.supplier || ""} ${p.barcode || ""}`.toLowerCase();
+                        return hay.includes(productSearch.trim().toLowerCase());
+                      });
+                      // Het product dat je bewerkt of net toevoegde blijft altijd in beeld.
+                      const shown = matches.filter((p, i) => i < productsShown || p.id === editingProduct || p.id === lastAddedProduct);
+                      const hidden = matches.length - shown.length;
+                      return (<>
+                    {shown.map(p => (
                       editingProduct === p.id ? (
                         <div key={p.id} style={{ background: c.bg, border: `1px solid ${accent}44`, borderRadius: 12, padding: 12 }}>
                           <div style={{ marginBottom: 8 }}>
@@ -15142,6 +15193,32 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                       )
                     ))}
+                    {(hidden > 0 || productsShown > PRODUCTS_FOLD) && (
+                      <div data-products-more-row style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {hidden > 0 && (
+                          <button type="button" className="btn-ghost" data-products-more onClick={() => setProductsShown(v => v + PRODUCTS_STEP)}
+                            style={{ flex: "1 1 160px", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            {lang === "nl" ? `Toon meer (nog ${hidden})` : lang === "es" ? `Mostrar más (quedan ${hidden})` : `Show more (${hidden} left)`}
+                          </button>
+                        )}
+                        {hidden > PRODUCTS_STEP && (
+                          <button type="button" className="btn-ghost" data-products-all onClick={() => setProductsShown(matches.length)}
+                            style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px" }}>
+                            {lang === "nl" ? "Toon alles" : lang === "es" ? "Mostrar todo" : "Show all"}
+                          </button>
+                        )}
+                        {productsShown > PRODUCTS_FOLD && (
+                          <button type="button" className="btn-ghost" data-products-less onClick={() => { setProductsShown(PRODUCTS_FOLD); setLastAddedProduct(null); }}
+                            style={{ flex: "0 1 auto", fontSize: 11, padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15" /></svg>
+                            {lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show less"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                      </>);
+                    })()}
                   </div>
                   </div>
                   {showNewProductForm ? (
@@ -15206,6 +15283,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           }).select().single();
                           if (error || !data) { toast.show(t.somethingWrong, "error"); return; }
                           update(d => { d.products = [...(d.products || []), data]; return d; });
+                          // Nieuw product komt onderaan: in beeld houden, anders
+                          // verdwijnt het meteen achter "Toon meer".
+                          setLastAddedProduct(data.id);
                           setNewProduct({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
                           setShowNewProductForm(false);
                         }}><NavIcon name="plus" size={12} color={c.btnOnDark} /> {lang === "nl" ? "Product toevoegen" : lang === "es" ? "Añadir producto" : "Add product"}</button>

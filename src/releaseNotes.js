@@ -28,6 +28,14 @@ export const RELEASES = [
           es: "Hasta el 5 de octubre: si alguien se registra con tu código de invitación, ambos recibís 1 mes de Vellu gratis en lugar de 2 semanas. Tú recibes el mes como crédito, que se descuenta en tu próximo cobro; el nuevo salón empieza con 1 mes gratis en lugar de 2 semanas. Tantas veces como invites a alguien. Arriba en tu panel hay una tarjeta con un botón de WhatsApp y un mensaje ya preparado.",
         },
       },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Instellingen → Diensten & producten: de productenlijst toont eerst 5 producten, met Toon meer, Toon alles en Toon minder eronder. Zoeken blijft het snelst bij een lange lijst. De kopjes Inkoop, Verkoop en Voorraad staan nu recht boven hun kolom.",
+          en: "Settings → Services & products: the product list shows 5 products first, with Show more, Show all and Show less below it. Searching stays the quickest way in a long list. The Cost, Sale and Stock headings now sit right above their columns.",
+          es: "Ajustes → Servicios y productos: la lista de productos muestra primero 5, con Mostrar más, Mostrar todo y Mostrar menos debajo. Buscar sigue siendo lo más rápido en una lista larga. Los títulos Compra, Venta y Existencias están ahora justo encima de su columna.",
+        },
+      },
     ],
   },
   {
