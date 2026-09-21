@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -1461,6 +1461,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // verspringt daar níet van — een bestaande eigenaar die gewoon wil inloggen
   // mag geen aanmeldformulier voor zijn neus krijgen.
   const effRef = (urlRef || storedRef() || "").toUpperCase();
+  // Referral-beloning van dit moment (14 dagen, of meer tijdens een actie).
+  const refPromo = useReferralPromo();
   const [mode, setMode] = useState(urlRef || urlSignup ? "signup" : "signin");
   // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
   // email field so they only type their password. Supabase itself already
@@ -1673,9 +1675,11 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
               }}>
                 {lang === "nl" ? (
-                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>2 weken gratis</strong>.</>
+                  <>Je bent uitgenodigd door <strong>{referrerName}</strong> — jullie krijgen allebei <strong>{rewardLabel(refPromo.days, "nl")} gratis</strong>{refPromo.promo ? ` (actie t/m ${promoEndLabel(refPromo.endsAt, "nl")})` : ""}.</>
+                ) : lang === "es" ? (
+                  <>Invitación de <strong>{referrerName}</strong> — ambos recibís <strong>{rewardLabel(refPromo.days, "es")} gratis</strong>{refPromo.promo ? ` (promoción hasta el ${promoEndLabel(refPromo.endsAt, "es")})` : ""}.</>
                 ) : (
-                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>2 weeks free</strong>.</>
+                  <>Invited by <strong>{referrerName}</strong> — you both get <strong>{rewardLabel(refPromo.days, "en")} free</strong>{refPromo.promo ? ` (offer until ${promoEndLabel(refPromo.endsAt, "en")})` : ""}.</>
                 )}
               </div>
             )}

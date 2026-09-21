@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // Referral-actie 21-09 t/m 05-10-2026 (referral_promos). Na de einddatum
+    // mag dit blok blijven staan: het noemt de datum zelf.
+    id: "2026-09-21",
+    date: "2026-09-21",
+    title: { nl: "Actie: 1 maand gratis voor jullie allebei", en: "Offer: 1 month free for both of you", es: "Promoción: 1 mes gratis para las dos" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Tot en met 5 oktober: nodig een andere salon uit met jouw link en jullie krijgen allebei 1 maand Vellu gratis in plaats van 2 weken. De maand wordt meteen bijgeschreven en bij je volgende afschrijving verrekend, zo vaak als je iemand uitnodigt. Bovenaan je dashboard staat een kaart met een WhatsApp-knop en een kant-en-klaar bericht.",
+          en: "Until 5 October: invite another salon with your link and you both get 1 month of Vellu free instead of 2 weeks. The month is credited right away and settled at your next payment, as often as you invite someone. At the top of your dashboard there is a card with a WhatsApp button and a ready-made message.",
+          es: "Hasta el 5 de octubre: invita a otro salón con tu enlace y las dos recibís 1 mes de Vellu gratis en lugar de 2 semanas. El mes se abona al momento y se descuenta en tu próximo cobro, tantas veces como invites a alguien. Arriba en tu panel hay una tarjeta con un botón de WhatsApp y un mensaje ya preparado.",
+        },
+      },
+    ],
+  },
+  {
     id: "2026-09-17",
     date: "2026-09-17",
     title: { nl: "Boekingspagina opent bovenaan", en: "Booking page opens at the top", es: "La página de reservas se abre arriba" },

@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
-import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, storedRef } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
@@ -149,14 +149,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     return () => { off = true; };
   }, []);
   // Uitnodiging (21-09-2026): wie via "Powered by Vellu" op een boekingspagina
-  // of via een gedeelde link binnenkomt heeft ?ref=CODE. Onthouden (30 dagen,
-  // zie rememberRef), de naam van de uitnodigende salon erbij zoeken voor de
-  // balk bovenaan, en de startknoppen de code laten meenemen naar /owner —
-  // daar staat het aanmeldformulier al klaar voor ?ref= (banner + verzilveren).
+  // of via een gedeelde link binnenkomt heeft ?ref=CODE. De balk bovenaan en
+  // de code op de startknoppen horen ALLEEN bij zo'n bezoek (Faisal 21-09:
+  // "i just typed the vellu link and now that is on top, thats not supposed to
+  // be there"): wie later gewoon vellu.cc intypt ziet de normale homepage. De
+  // code wordt wel stil onthouden (30 dagen, rememberRef), zodat hij op het
+  // aanmeldformulier klaarstaat en de uitnodigende salon haar beloning krijgt.
   const [invite, setInvite] = useState(null); // { code, name }
   useEffect(() => {
     let code = "";
-    try { code = rememberRef(new URLSearchParams(window.location.search).get("ref")) || storedRef(); } catch { code = ""; }
+    try { code = rememberRef(new URLSearchParams(window.location.search).get("ref")); } catch { code = ""; }
     if (!code) return;
     setInvite({ code, name: "" });
     let off = false;
@@ -169,6 +171,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     return () => { off = true; };
   }, []);
   const ownerStart = (signup) => navigate(invite?.code ? `/owner?ref=${encodeURIComponent(invite.code)}` : signup ? "/owner?signup=1" : "/owner");
+  // Loopt er een referral-actie (bijv. 1 maand i.p.v. 2 weken), dan zegt de
+  // balk dat, met de einddatum erbij.
+  const refPromo = useReferralPromo();
+  const refReward = rewardLabel(refPromo.days, lang);
+  const refUntil = refPromo.promo ? promoEndLabel(refPromo.endsAt, lang) : "";
   useSEO({
     title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : lang === "es" ? "Vellu - Plataforma de reservas de belleza | 0% de comisión" : "Vellu - Beauty Booking Platform | 0% Commission",
     description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
@@ -372,9 +379,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             binnenkwam. Zelfde belofte als het aanmeldscherm. */}
         {invite?.name && (
           <div data-invite-bar style={{ position: "relative", zIndex: 41, background: INK, color: BONE, textAlign: "center", padding: `calc(9px + env(safe-area-inset-top, 0px)) ${pad} 9px`, fontSize: 12.5, lineHeight: 1.5 }}>
-            {lang === "nl" ? <>Uitgenodigd door <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: jullie krijgen allebei 2 weken gratis.</>
-              : lang === "es" ? <>Invitación de <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: ambos recibís 2 semanas gratis.</>
-              : <>Invited by <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: you both get 2 weeks free.</>}
+            {lang === "nl" ? <>Uitgenodigd door <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: jullie krijgen allebei {refReward} gratis{refUntil ? ` (actie t/m ${refUntil})` : ""}.</>
+              : lang === "es" ? <>Invitación de <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: ambos recibís {refReward} gratis{refUntil ? ` (promoción hasta el ${refUntil})` : ""}.</>
+              : <>Invited by <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: you both get {refReward} free{refUntil ? ` (offer until ${refUntil})` : ""}.</>}
             {" "}
             <button onClick={() => ownerStart(true)} data-invite-start style={{ background: "none", border: "none", cursor: "pointer", color: BONE, fontFamily: "'Jost',sans-serif", fontSize: 12.5, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, padding: "0 2px" }}>
               {lang === "nl" ? "Maak je pagina" : lang === "es" ? "Crea tu página" : "Create your page"} →

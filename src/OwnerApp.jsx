@@ -21,6 +21,7 @@ import {
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
+  useReferralPromo, rewardLabel, promoEndLabel,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -464,18 +465,28 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
 // allebei) én de eigen boekingspagina, want "kijk maar hoe het eruitziet"
 // overtuigt meer dan een featurelijst. Gedeeld door de instellingenkaart en
 // de dashboardknop — één tekst, zodat het overal hetzelfde aankomt.
-const referralPromoText = (salonData, lang) => {
+// `promo` = useReferralPromo(): tijdens een actie (bijv. 1 maand i.p.v. 2
+// weken, 21-09 t/m 05-10-2026) noemt het bericht de actie en de einddatum.
+const referralPromoText = (salonData, lang, promo) => {
   const code = salonData.referral_code || "";
   const referralUrl = code ? `https://vellu.cc/owner?ref=${code}` : "https://vellu.cc";
   const pageUrl = salonData.id ? `https://vellu.cc/${salonData.id}` : "";
   const look = pageUrl
     ? (lang === "nl" ? ` Zo ziet mijn boekingspagina eruit: ${pageUrl}` : lang === "es" ? ` Así se ve mi página de reservas: ${pageUrl}` : ` This is what my booking page looks like: ${pageUrl}`)
     : "";
-  return lang === "nl"
-    ? `Hey! Ik gebruik Vellu voor mijn salonafspraken en het doet precies wat ik wil — klanten boeken zelf online en krijgen vanzelf een herinnering, dus ik hoef niemand meer achterna te zitten. Geen commissie, gewoon een vast bedrag per maand.${look} Probeer het 2 weken gratis via mijn link: ${referralUrl}`
+  const actie = promo?.promo;
+  const reward = rewardLabel(promo?.days, lang);
+  const until = actie ? promoEndLabel(promo.endsAt, lang) : "";
+  const closing = lang === "nl"
+    ? (actie ? ` Meld je je tot en met ${until} aan via mijn link, dan krijg je ${reward} gratis: ${referralUrl}` : ` Probeer het 2 weken gratis via mijn link: ${referralUrl}`)
     : lang === "es"
-    ? `¡Hola! Uso Vellu para las citas de mi salón y hace justo lo que necesito — los clientes reservan online por su cuenta y reciben un recordatorio automático, así que ya no tengo que perseguir a nadie. Sin comisiones, solo una cuota fija al mes.${look} Pruébalo 2 semanas gratis con mi enlace: ${referralUrl}`
-    : `Hey! I'm using Vellu for my salon appointments and it does exactly what I need — clients book online by themselves and get automatic reminders, so I never have to chase anyone. No commission, just a fixed monthly price.${look} Try it 2 weeks for free with my link: ${referralUrl}`;
+    ? (actie ? ` Si te registras con mi enlace hasta el ${until}, tienes ${reward} gratis: ${referralUrl}` : ` Pruébalo 2 semanas gratis con mi enlace: ${referralUrl}`)
+    : (actie ? ` Sign up with my link by ${until} and you get ${reward} free: ${referralUrl}` : ` Try it 2 weeks for free with my link: ${referralUrl}`);
+  return lang === "nl"
+    ? `Hey! Ik gebruik Vellu voor mijn salonafspraken en het doet precies wat ik wil — klanten boeken zelf online en krijgen vanzelf een herinnering, dus ik hoef niemand meer achterna te zitten. Geen commissie, gewoon een vast bedrag per maand.${look}${closing}`
+    : lang === "es"
+    ? `¡Hola! Uso Vellu para las citas de mi salón y hace justo lo que necesito — los clientes reservan online por su cuenta y reciben un recordatorio automático, así que ya no tengo que perseguir a nadie. Sin comisiones, solo una cuota fija al mes.${look}${closing}`
+    : `Hey! I'm using Vellu for my salon appointments and it does exactly what I need — clients book online by themselves and get automatic reminders, so I never have to chase anyone. No commission, just a fixed monthly price.${look}${closing}`;
 };
 // Zonder nummer: WhatsApp vraagt zelf aan wie — de eigenaar kiest de collega.
 const referralWhatsAppUrl = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -496,7 +507,8 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   // link erin: een persoonlijke aanbeveling deelt makkelijker en de eigenaar
   // hoeft zelf niets te typen. Zelfde tekst voor Kopieer en Delen, zodat het
   // bericht overal identiek aankomt.
-  const promoText = referralPromoText(salonData, lang);
+  const promo = useReferralPromo();
+  const promoText = referralPromoText(salonData, lang, promo);
 
   const copy = async () => {
     try {
@@ -524,11 +536,16 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
         {lang === "nl" ? "Nodig een salon uit" : lang === "es" ? "Recomienda un salón" : "Refer a salon"}
       </div>
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
+        {promo.promo && (
+          <span data-referral-promo-badge style={{ display: "inline-block", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 6, marginRight: 8, background: `${accent}1f`, border: `1px solid ${accent}55`, color: c.text }}>
+            {lang === "nl" ? `Actie t/m ${promoEndLabel(promo.endsAt, lang)}` : lang === "es" ? `Promoción hasta el ${promoEndLabel(promo.endsAt, lang)}` : `Offer until ${promoEndLabel(promo.endsAt, lang)}`}
+          </span>
+        )}
         {lang === "nl"
-          ? "Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei 2 weken gratis."
+          ? `Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei ${rewardLabel(promo.days, lang)} gratis${promo.promo ? " (normaal 2 weken)" : ""}.`
           : lang === "es"
-          ? "Comparte tu enlace con otro salón. Si se registran, ambos conseguimos 2 semanas gratis."
-          : "Share your link with another salon. If they sign up, you both get 2 weeks free."}
+          ? `Comparte tu enlace con otro salón. Si se registran, ambos conseguís ${rewardLabel(promo.days, lang)} gratis${promo.promo ? " (normalmente 2 semanas)" : ""}.`
+          : `Share your link with another salon. If they sign up, you both get ${rewardLabel(promo.days, lang)} free${promo.promo ? " (normally 2 weeks)" : ""}.`}
       </div>
 
       {/* Stats row */}
@@ -593,6 +610,72 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
               : `${creditOpen} day${creditOpen === 1 ? "" : "s"} of credit remaining — applied automatically at your next billing cycle.`}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── ACTIEKAART OP HET DASHBOARD ─────────────────────────────
+// Referral-actie als "event" (Faisal 21-09-2026): zolang er een actie loopt
+// (referral_promos, nu 21-09 t/m 05-10: 1 maand i.p.v. 2 weken voor beide)
+// staat deze kaart bovenaan het dashboard, met de dagen die nog resteren en
+// dezelfde deelknoppen als de kaart in Instellingen. Wegklikken onthoudt het
+// apparaat per actie (sleutel = einddatum), dus een volgende actie komt
+// gewoon weer tevoorschijn. Na de einddatum verdwijnt de kaart vanzelf en
+// geldt weer de vaste 2 weken.
+function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
+  const promo = useReferralPromo();
+  const hideKey = promo.endsAt ? `vellu_refpromo_hide_${String(promo.endsAt).slice(0, 10)}` : "";
+  const [hidden, setHidden] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!hideKey) return;
+    try { setHidden(localStorage.getItem(hideKey) === "1"); } catch { setHidden(false); }
+  }, [hideKey]);
+  if (!promo.promo || hidden || !salonData.referral_code) return null;
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const reward = rewardLabel(promo.days, lang);
+  const until = promoEndLabel(promo.endsAt, lang);
+  const daysLeft = Math.max(0, Math.ceil((new Date(promo.endsAt).getTime() - Date.now()) / 864e5));
+  const text = referralPromoText(salonData, lang, promo);
+  const ink = onAccentInk(accent, c.btnOnDark);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { toast.show(L("Kopiëren mislukt", "Copy failed", "No se pudo copiar"), "error"); }
+  };
+  const hide = () => { setHidden(true); try { localStorage.setItem(hideKey, "1"); } catch { /* private mode */ } };
+  return (
+    <div data-referral-event className="vl-card" style={{ position: "relative", padding: isMobile ? "16px 16px 14px" : "18px 20px 16px", marginBottom: 14, border: `1px solid ${accent}66`, background: `linear-gradient(${accent}14, ${accent}14), ${c.bg}` }}>
+      <button aria-label={L("Verbergen", "Hide", "Ocultar")} data-referral-event-hide onClick={hide}
+        style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, padding: 0, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <NavIcon name="xmark" size={12} color="currentColor" />
+      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, paddingRight: 36 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 6, background: accent, color: ink }}>
+          {L("Actie", "Offer", "Promoción")}
+        </span>
+        <span data-referral-event-left style={{ fontSize: 11, color: c.textSub, fontWeight: 600 }}>
+          {daysLeft <= 1 ? L("laatste dag", "last day", "último día") : L(`nog ${daysLeft} dagen`, `${daysLeft} days left`, `quedan ${daysLeft} días`)} · {L(`t/m ${until}`, `until ${until}`, `hasta el ${until}`)}
+        </span>
+      </div>
+      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 22 : 26, fontWeight: 400, lineHeight: 1.15, color: c.text, marginBottom: 6 }}>
+        {L(`Nodig een salon uit: jullie krijgen allebei ${reward} gratis`, `Invite a salon: you both get ${reward} free`, `Invita a un salón: ambos recibís ${reward} gratis`)}
+      </div>
+      <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14, maxWidth: 620 }}>
+        {L(
+          `Normaal is dat 2 weken. Meldt een collega zich tot en met ${until} aan met jouw link, dan wordt de maand bij jullie allebei meteen bijgeschreven en bij de volgende afschrijving verrekend. Zo vaak als je wilt.`,
+          `Normally it is 2 weeks. If a colleague signs up with your link by ${until}, the month is credited to both of you right away and settled at your next payment. As often as you like.`,
+          `Normalmente son 2 semanas. Si una colega se registra con tu enlace hasta el ${until}, el mes se os abona a las dos al momento y se descuenta en el próximo cobro. Tantas veces como quieras.`
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <a href={referralWhatsAppUrl(text)} target="_blank" rel="noopener noreferrer" className="btn-primary" data-referral-event-wa
+          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, width: isMobile ? "100%" : "auto", fontSize: 11, padding: "11px 18px", textDecoration: "none" }}>
+          <NavIcon name="chat" size={14} color="currentColor" /> {L("Stuur via WhatsApp", "Send via WhatsApp", "Enviar por WhatsApp")}
+        </a>
+        <button className="btn-ghost" data-referral-event-copy onClick={copy} style={{ flex: isMobile ? 1 : "0 0 auto", fontSize: 11, padding: "11px 16px" }}>
+          {copied ? L("Gekopieerd", "Copied", "Copiado") : L("Kopieer bericht", "Copy message", "Copiar mensaje")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -9374,6 +9457,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 ) : null;
                 return (
                   <>
+                  {/* Referral-actie als event: helemaal bovenaan, alleen zolang
+                      er een actie loopt en tot de eigenaar hem wegklikt. */}
+                  <ReferralEventCard salonData={salonData} lang={lang} c={c} accent={accent} toast={toast} isMobile={isMobile} />
                   {/* KPI-tegels bovenaan: week, maand, jaar, beoordeling. */}
                   <div data-dash-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
                     {tile({ key: "week", icon: "money", label: isMobile ? (lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week") : t.weeklyRevenue, sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${cur}${weekRevenue.toFixed(2)}`, chip: weekChip,

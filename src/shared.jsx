@@ -150,6 +150,49 @@ function storedRef() {
   } catch { return ""; }
 }
 
+// ─── REFERRAL-ACTIE ──────────────────────────────────────────
+// Normaal krijgen beide salons 14 dagen; tijdens een actie (rij in
+// referral_promos, bijv. 21-09 t/m 05-10-2026: 30 dagen) meer. De server
+// (redeem_referral_code) bepaalt de echte beloning; dit is alleen voor de
+// teksten en de actiekaart. Eén keer ophalen per sessie, gedeeld via een
+// module-cache. Geeft { days, endsAt, promo } — promo=false = geen actie.
+const REFERRAL_BASE_DAYS = 14;
+let referralPromoCache = null;
+function useReferralPromo() {
+  const [state, setState] = useState(() => (referralPromoCache && typeof referralPromoCache.then !== "function") ? referralPromoCache : { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: false });
+  useEffect(() => {
+    let off = false;
+    if (!referralPromoCache) {
+      referralPromoCache = Promise.resolve(supabase.rpc("active_referral_promo"))
+        .then(({ data }) => {
+          const row = Array.isArray(data) ? data[0] : data;
+          const ok = row && Number(row.reward_days) > 0 && new Date(row.ends_at).getTime() > Date.now();
+          referralPromoCache = ok
+            ? { days: Number(row.reward_days), endsAt: row.ends_at, promo: true, loaded: true }
+            : { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: true };
+          return referralPromoCache;
+        })
+        .catch(() => { referralPromoCache = { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: true }; return referralPromoCache; });
+    }
+    Promise.resolve(referralPromoCache).then((v) => { if (!off) setState(v); });
+    return () => { off = true; };
+  }, []);
+  return state;
+}
+// "1 maand" / "2 weken" / "10 dagen" in de taal van het scherm.
+function rewardLabel(days, lang) {
+  const d = Number(days) || REFERRAL_BASE_DAYS;
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  if (d % 30 === 0) { const n = d / 30; return L(n === 1 ? "1 maand" : `${n} maanden`, n === 1 ? "1 month" : `${n} months`, n === 1 ? "1 mes" : `${n} meses`); }
+  if (d % 7 === 0) { const n = d / 7; return L(n === 1 ? "1 week" : `${n} weken`, n === 1 ? "1 week" : `${n} weeks`, n === 1 ? "1 semana" : `${n} semanas`); }
+  return L(`${d} dagen`, `${d} days`, `${d} días`);
+}
+// "5 oktober" — einddatum van de actie in Nederlandse tijd.
+function promoEndLabel(endsAt, lang) {
+  try { return new Date(endsAt).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }); }
+  catch { return ""; }
+}
+
 // ─── LOADING SKELETON ────────────────────────────────────────
 function Skeleton({ width = "100%", height = 16, radius = 8, style = {} }) {
   const { colors: c } = useTheme();
@@ -3270,7 +3313,7 @@ export {
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin,
-  rememberRef, storedRef,
+  rememberRef, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,
