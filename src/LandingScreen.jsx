@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -1455,13 +1455,19 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // /owner?signup=1 (knop "Maak je pagina" in de landingsbalk) opent direct
   // het registratie-tabblad, net als een referral-link.
   const urlSignup = !!urlQuery && ["1", "true", "yes"].includes((urlQuery.get("signup") || "").toLowerCase());
+  // Geen code in de URL maar wél eerder binnengekomen via een uitnodigingslink
+  // (bijv. "Powered by Vellu" op een boekingspagina, zie rememberRef): de code
+  // staat dan al ingevuld zodra iemand naar Registreren gaat. Het tabblad
+  // verspringt daar níet van — een bestaande eigenaar die gewoon wil inloggen
+  // mag geen aanmeldformulier voor zijn neus krijgen.
+  const effRef = (urlRef || storedRef() || "").toUpperCase();
   const [mode, setMode] = useState(urlRef || urlSignup ? "signup" : "signin");
   // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
   // email field so they only type their password. Supabase itself already
   // persists the session (localStorage) — this flag only controls whether we
   // reuse the email locally on the next visit.
   const rememberedEmail = typeof window !== "undefined" ? (localStorage.getItem("vellu_remember_email") || "") : "";
-  const [form, setForm] = useState({ email: rememberedEmail, password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: urlRef.toUpperCase() });
+  const [form, setForm] = useState({ email: rememberedEmail, password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: effRef });
   const [rememberMe, setRememberMe] = useState(!!rememberedEmail);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1473,14 +1479,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // network lookup stays in the effect — the mode flip is already handled by
   // the initial state above.
   useEffect(() => {
-    if (!urlRef) return;
+    if (!effRef) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from("public_salons").select("business_name").eq("referral_code", urlRef.toUpperCase()).maybeSingle();
+      const { data } = await supabase.from("public_salons").select("business_name").eq("referral_code", effRef).maybeSingle();
       if (!cancelled && data?.business_name) setReferrerName(data.business_name);
     })();
     return () => { cancelled = true; };
-  }, [urlRef]);
+  }, [effRef]);
 
   const handleReset = async () => {
     if (!form.email) { setError(t.fillEmail); return; }

@@ -3293,10 +3293,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               ) : null}
             </section>
 
-            {/* Powered by */}
+            {/* Powered by — ook de wervingslink (21-09-2026). Elke boekingspagina
+                wordt gezien door klanten die zelf in de beauty werken; de helft
+                van de salons kwam tot nu toe via een andere salon binnen. De
+                link gaat naar de homepage mét de uitnodigingscode van deze
+                salon, zodat zij er twee weken gratis aan overhoudt als iemand
+                zich aanmeldt. Nieuw tabblad: de salon raakt haar bezoeker
+                niet kwijt. Tekstkleur c.text i.p.v. het accent: een lichte
+                salonkleur (roze, goud) is als kleine tekst niet leesbaar. */}
             <div className="profile-footer">
-              {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span> · {t.noCommission}
-              <div style={{ marginTop: 6, fontSize: 10, opacity: 0.6 }}>
+              {(() => {
+                const vlHref = initialSalon.referral_code ? `/?ref=${encodeURIComponent(initialSalon.referral_code)}` : "/";
+                return (
+                  <>
+                    <a href={vlHref} target="_blank" rel="noopener" data-powered-by style={{ color: "inherit", textDecoration: "none" }}>
+                      {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span>
+                    </a>
+                    {" · "}{t.noCommission}
+                    <div style={{ marginTop: 8 }}>
+                      <a href={vlHref} target="_blank" rel="noopener" data-get-page style={{ color: c.text, fontWeight: 500, textDecoration: "none", borderBottom: `1px solid ${c.textMuted}`, paddingBottom: 1 }}>
+                        {lang === "nl" ? "Zelf een salon? Maak je eigen boekingspagina" : lang === "es" ? "¿Tienes un salón? Crea tu propia página de reservas" : "Own a salon? Get your own booking page"} →
+                      </a>
+                    </div>
+                  </>
+                );
+              })()}
+              <div style={{ marginTop: 10, fontSize: 10, opacity: 0.6 }}>
                 <a href="/privacy" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{lang === "nl" ? "Privacy" : lang === "es" ? "Privacidad" : "Privacy"}</a>
                 {" · "}
                 <a href="/terms" style={{ color: "inherit", textDecoration: "none", borderBottom: "1px solid currentColor" }}>{t.terms}</a>

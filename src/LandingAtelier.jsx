@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
-import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, storedRef } from "./shared.jsx";
 import {
   SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
@@ -148,6 +148,27 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     })();
     return () => { off = true; };
   }, []);
+  // Uitnodiging (21-09-2026): wie via "Powered by Vellu" op een boekingspagina
+  // of via een gedeelde link binnenkomt heeft ?ref=CODE. Onthouden (30 dagen,
+  // zie rememberRef), de naam van de uitnodigende salon erbij zoeken voor de
+  // balk bovenaan, en de startknoppen de code laten meenemen naar /owner —
+  // daar staat het aanmeldformulier al klaar voor ?ref= (banner + verzilveren).
+  const [invite, setInvite] = useState(null); // { code, name }
+  useEffect(() => {
+    let code = "";
+    try { code = rememberRef(new URLSearchParams(window.location.search).get("ref")) || storedRef(); } catch { code = ""; }
+    if (!code) return;
+    setInvite({ code, name: "" });
+    let off = false;
+    (async () => {
+      try {
+        const { data } = await supabase.from("public_salons").select("business_name").eq("referral_code", code).maybeSingle();
+        if (!off && data?.business_name) setInvite({ code, name: String(data.business_name).trim() });
+      } catch { /* zonder naam werkt de code nog steeds */ }
+    })();
+    return () => { off = true; };
+  }, []);
+  const ownerStart = (signup) => navigate(invite?.code ? `/owner?ref=${encodeURIComponent(invite.code)}` : signup ? "/owner?signup=1" : "/owner");
   useSEO({
     title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : lang === "es" ? "Vellu - Plataforma de reservas de belleza | 0% de comisión" : "Vellu - Beauty Booking Platform | 0% Commission",
     description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
@@ -347,6 +368,20 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (prefers-reduced-motion: reduce) { .vl-marquee-track { animation: none; } }
         `}</style>
 
+        {/* Uitnodigingsbalk: alleen voor wie met een code van een salon
+            binnenkwam. Zelfde belofte als het aanmeldscherm. */}
+        {invite?.name && (
+          <div data-invite-bar style={{ position: "relative", zIndex: 41, background: INK, color: BONE, textAlign: "center", padding: `calc(9px + env(safe-area-inset-top, 0px)) ${pad} 9px`, fontSize: 12.5, lineHeight: 1.5 }}>
+            {lang === "nl" ? <>Uitgenodigd door <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: jullie krijgen allebei 2 weken gratis.</>
+              : lang === "es" ? <>Invitación de <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: ambos recibís 2 semanas gratis.</>
+              : <>Invited by <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: you both get 2 weeks free.</>}
+            {" "}
+            <button onClick={() => ownerStart(true)} data-invite-start style={{ background: "none", border: "none", cursor: "pointer", color: BONE, fontFamily: "'Jost',sans-serif", fontSize: 12.5, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, padding: "0 2px" }}>
+              {lang === "nl" ? "Maak je pagina" : lang === "es" ? "Crea tu página" : "Create your page"} →
+            </button>
+          </div>
+        )}
+
         {/* ── NAV — haarlijn, espresso, rustig. ── */}
         <nav style={{ position: "sticky", top: 0, zIndex: 40, background: scrolled ? `${BONE}ee` : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", WebkitBackdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: `1px solid ${scrolled ? PUTTY : "transparent"}`, transition: "background 0.3s ease, border-color 0.3s ease" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
@@ -395,7 +430,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={700}>
                 <div className="at-ctas">
-                  <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => navigate("/owner")}>
+                  <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => ownerStart(false)}>
                     {t.startFree}
                   </button>
                   <button onClick={() => scrollToSection("how-it-works")} data-hero-how
@@ -505,7 +540,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               want .btn-primary is standaard 100% breed. */}
           <Reveal delay={steps.length * 110}>
             <div style={{ display: "flex", justifyContent: "center", marginTop: "clamp(28px, 4vw, 40px)" }}>
-              <button className="btn-primary" data-create-page style={{ width: "auto", padding: "17px 40px", fontSize: 11 }} onClick={() => navigate("/owner?signup=1")}>
+              <button className="btn-primary" data-create-page style={{ width: "auto", padding: "17px 40px", fontSize: 11 }} onClick={() => ownerStart(true)}>
                 {t.createPageNav} →
               </button>
             </div>
@@ -594,7 +629,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => navigate("/owner")}
+                    <button onClick={() => ownerStart(false)}
                       style={{ width: "100%", padding: "15px 20px", borderRadius: R, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
                       {t.getStarted}
                     </button>
@@ -675,7 +710,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 pagina staan. */}
             <Reveal delay={200}>
               <div className="at-ctas" style={{ justifyContent: "center", gap: 22 }} data-finale-ctas>
-                <button onClick={() => navigate("/owner")}
+                <button onClick={() => ownerStart(false)}
                   style={{ padding: "18px 46px", borderRadius: R, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
                   {t.startFree}
                 </button>
@@ -740,7 +775,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
             en anders hangt hij over de voetregels (Faisal 16-09). */}
-        <StickyStartPill onClick={() => navigate("/owner")} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
+        <StickyStartPill onClick={() => ownerStart(false)} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
         <SupportChat
           lang={lang}
           c={P}

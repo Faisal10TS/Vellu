@@ -619,6 +619,9 @@ function SalonRoute({ lang, setLang }) {
         page_font: data.page_font || "classic",
         // Boekingspagina opent in dark (oude gedrag) | light | auto (apparaat).
         booking_theme: data.booking_theme || "dark",
+        // Uitnodigingscode van de salon: de "Powered by Vellu"-link onderaan
+        // de pagina draagt hem mee (zie ClientApp, profile-footer).
+        referral_code: data.referral_code || null,
         slot_interval_minutes: data.slot_interval_minutes || 30,
         show_owner_on_booking: !!data.show_owner_on_booking,
         booking_policy: data.booking_policy || "",

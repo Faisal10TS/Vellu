@@ -127,6 +127,29 @@ select option { background-color: ${THEMES[theme].selectBg}; color: ${THEMES[the
 
 function useTheme() { return useContext(ThemeContext); }
 
+// ─── UITNODIGINGSCODE ONTHOUDEN ──────────────────────────────
+// "Powered by Vellu" onderaan elke boekingspagina linkt naar de homepage met
+// de uitnodigingscode van die salon (?ref=CODE, 21-09-2026). De homepage is
+// de verkooppagina; aanmelden gebeurt pas een paar klikken later op /owner,
+// en onderweg raakt een queryparameter zoek. Daarom 30 dagen onthouden op
+// het apparaat: wie via TTNB's pagina binnenkwam en drie dagen later een
+// account maakt, telt nog steeds als haar uitnodiging.
+const REF_KEY = "vellu_ref";
+const REF_RE = /^[A-Za-z0-9]{4,16}$/;
+function rememberRef(code) {
+  const clean = String(code || "").trim().toUpperCase();
+  if (!REF_RE.test(clean)) return "";
+  try { localStorage.setItem(REF_KEY, JSON.stringify({ code: clean, at: Date.now() })); } catch { /* private mode */ }
+  return clean;
+}
+function storedRef() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REF_KEY) || "null");
+    if (!raw || !REF_RE.test(raw.code || "") || Date.now() - Number(raw.at || 0) > 30 * 864e5) return "";
+    return raw.code;
+  } catch { return ""; }
+}
+
 // ─── LOADING SKELETON ────────────────────────────────────────
 function Skeleton({ width = "100%", height = 16, radius = 8, style = {} }) {
   const { colors: c } = useTheme();
@@ -3247,6 +3270,7 @@ export {
   useFocusTrap, useSEO,
   compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin,
+  rememberRef, storedRef,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,
