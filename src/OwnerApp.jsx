@@ -9485,17 +9485,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               )}
 
-              {/* Onboarding checklist for new salons */}
-              {appts.length === 0 && (
-                <div style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, padding: "24px 22px", marginBottom: 20 }}>
+              {/* Onboarding checklist for new salons. Weg zodra de eerste
+                  afspraak er is — óf zodra alle stappen zijn afgevinkt (Faisal
+                  22-09-2026: TT Bonaire had alles gedaan en zag de kaart nog
+                  steeds, omdat er nog geen boeking was). */}
+              {appts.length === 0 && (() => {
+                const steps = [
+                  { done: salonData.services?.length > 0, label: t.addServices, action: () => setView("instellingen") },
+                  { done: !!(salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed)), label: t.setHours, action: () => setView("instellingen") },
+                  { done: !!salonData.logo_url, label: t.uploadLogo, action: () => setView("instellingen") },
+                  { done: hasSharedLink, label: t.shareLink + "vellu.cc/" + salonData.id, action: copyLink },
+                ];
+                if (steps.every(x => x.done)) return null;
+                return (
+                <div data-welcome-checklist style={{ background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14, padding: "24px 22px", marginBottom: 20 }}>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 12 }}>{t.welcomeVellu}</div>
                   <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16, lineHeight: 1.6 }}>{t.followSteps}</div>
-                  {[
-                    { done: salonData.services?.length > 0, label: t.addServices, action: () => setView("instellingen") },
-                    { done: salonData.business_hours && Object.values(salonData.business_hours).some(d => !d.closed), label: t.setHours, action: () => setView("instellingen") },
-                    { done: salonData.logo_url, label: t.uploadLogo, action: () => setView("instellingen") },
-                    { done: hasSharedLink, label: t.shareLink + "vellu.cc/" + salonData.id, action: copyLink },
-                  ].map((step, i) => (
+                  {steps.map((step, i) => (
                     <div key={i} onClick={step.action} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, cursor: "pointer", marginBottom: 4, background: step.done ? `${accent}08` : "transparent", border: `1px solid ${step.done ? accent + "22" : c.border}` }}>
                       <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${step.done ? accent : c.textMuted}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {step.done && <NavIcon name="check" size={12} color={accent} />}
@@ -9507,7 +9513,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {lang === "nl" ? "Of bekijk eerst de rondleiding →" : lang === "es" ? "O haz primero el recorrido →" : "Or take the tour first →"}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Staff scope — same chips as the agenda. Everything below
                   (today's list, expected revenue, week/month KPIs) follows it
