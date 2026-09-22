@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // Rapporten ook als Excel (Faisal 22-09-2026: "can all the pdf reports be
+    // downloaded as excel files too?"). Zelfde cijfers als de PDF (één rekenlaag).
+    id: "2026-09-22",
+    date: "2026-09-22",
+    title: { nl: "Rapporten nu ook als Excel", en: "Reports now also as Excel", es: "Informes también en Excel" },
+    items: [
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Het omzetrapport (Facturen) en het verkooprapport van de Kassa kun je nu ook als Excel-bestand downloaden, naast de PDF. Bij Facturen staat een knop Download Excel naast Download PDF; in de Kassa kies je met de schakelaar PDF of Excel en tik je daarna op Dag, Maand, Kwartaal of Jaar. Het Excel-bestand bevat dezelfde cijfers als de PDF, met echte bedragen en datums om zelf mee te rekenen, te sorteren en te filteren: een samenvatting met de belasting per tarief, en per regel elke afspraak of verkoop.",
+          en: "The revenue report (Invoices) and the sales report in the Sales tab can now be downloaded as an Excel file as well as a PDF. Under Invoices there is a Download Excel button next to Download PDF; in Sales you pick PDF or Excel with the switch and then tap Day, Month, Quarter or Year. The Excel file holds the same figures as the PDF, with real amounts and dates you can calculate with, sort and filter: a summary with tax per rate, and every appointment or sale as its own row.",
+          es: "El informe de ingresos (Facturas) y el informe de ventas de la Caja ahora también se pueden descargar como archivo de Excel, además del PDF. En Facturas hay un botón Descargar Excel junto a Descargar PDF; en la Caja eliges PDF o Excel con el interruptor y luego tocas Día, Mes, Trimestre o Año. El archivo de Excel contiene las mismas cifras que el PDF, con importes y fechas reales para calcular, ordenar y filtrar: un resumen con el impuesto por tipo, y cada cita o venta en su propia fila.",
+        },
+      },
+    ],
+  },
+  {
     // Schuifbalken in het hele dashboard + Kassa, Klanten en Facturen (alle drie
     // eerst 6) met Toon meer. Eigen id, zelfde reden als …b. Was kort …c (alleen
     // kassa), …d (klanten nog op 8) en …e (zonder facturen): telkens

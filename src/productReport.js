@@ -14,7 +14,8 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { computeTax, linesFromSale, taxForSale } from "./taxEngine.js";
+import { taxForSale } from "./taxEngine.js";
+import { productReportData, productReportFilename } from "./reportData.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e
 const s = (v) => (v === null || v === undefined ? "" : String(v));
@@ -70,7 +71,6 @@ export function generateProductReportPDF({
   // het belastingbedrag niet op een klantfactuur, maar hier hoort het juist
   // wel te staan \u2014 vandaar showTaxInternal en niet showTax.
   const showTax = !!cfg.showTaxInternal;
-  const payLabel = (pm) => (PAY_LABEL[lang] || PAY_LABEL.nl)[pm] || (PAY_LABEL[lang] || PAY_LABEL.nl)["on-arrival"];
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -79,90 +79,11 @@ export function generateProductReportPDF({
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
 
   // ── Aggregate ────────────────────────────────────────────────────────
-  // Per product, per day and per payment method in ONE pass over the rows.
-  const byProduct = new Map();   // name -> { qty, revenue }
-  const byDay = new Map();       // date -> { qty, revenue }
-  const byPay = new Map();       // payment_method -> { count, revenue }
-  const lines = [];              // flat transaction lines for the detail table
-  // Grondslag per tarief. Nodig omdat \u00e9\u00e9n periode meerdere tarieven kan
-  // bevatten: op de BES-eilanden is een behandeling belast en een doorverkocht
-  // product niet, en in NL kan een salon 9% op diensten en 21% op producten
-  // hanteren. Een enkel percentage over het totaal klopt dan nooit.
-  const byRate = new Map();      // tarief -> grondslag in centen
-  // Kadobon-inwisseling apart bijhouden. Die verlaagt wel de omzet maar niet de
-  // grondslag, dus zonder eigen regel telt de tarieftabel niet op tot de omzet.
-  let voucherCents = 0;
-  let totalRevenue = 0, totalQty = 0;
-
-  for (const a of appointments) {
-    const items = Array.isArray(a.products) ? a.products : [];
-    if (!items.length) continue;
-    let rowRevenue = 0, rowQty = 0;
-    const names = [];
-    for (const it of items) {
-      const qty = parseInt(it.qty) || 1;
-      const rev = (parseFloat(it.price) || 0) * qty;
-      // Een ingewisselde kadobon is een negatieve regel: die hoort wel in het
-      // geld (er kwam minder binnen) maar is geen verkocht stuk.
-      const counts = rev >= 0 && it.kind !== "voucher_redeem";
-      rowRevenue += rev; rowQty += counts ? qty : 0;
-      names.push(qty > 1 ? `${s(it.name)} ×${qty}` : s(it.name));
-      const p = byProduct.get(s(it.name)) || { qty: 0, revenue: 0 };
-      p.qty += counts ? qty : 0; p.revenue += rev;
-      byProduct.set(s(it.name), p);
-    }
-    const d = byDay.get(a.date) || { qty: 0, revenue: 0 };
-    d.qty += rowQty; d.revenue += rowRevenue;
-    byDay.set(a.date, d);
-
-    const pm = byPay.get(a.payment_method || "on-arrival") || { count: 0, revenue: 0 };
-    pm.count += 1; pm.revenue += rowRevenue;
-    byPay.set(a.payment_method || "on-arrival", pm);
-
-    // Belasting over de PRODUCTregels van deze rij. De motor weet zelf welke
-    // regels belast zijn; een ingewisselde kadobon is een betaalmiddel en telt
-    // niet mee in de grondslag.
-    {
-      const t = computeTax(items.map((it) => {
-        const q = parseInt(it.qty) || 1;
-        return {
-          kind: it.kind === "voucher_redeem" ? "voucher"
-            : (it.kind === "voucher_sale" || it.id === "giftcard") ? "voucher_issue"
-            : "product",
-          name: s(it.name), qty: q, gross: (parseFloat(it.price) || 0) * q,
-        };
-      }), cfg);
-      for (const r of t.byRate) byRate.set(r.rate, (byRate.get(r.rate) || 0) + Math.round(r.gross * 100));
-      voucherCents += Math.round(t.paidByVoucher * 100);
-    }
-    totalRevenue += rowRevenue; totalQty += rowQty;
-    lines.push({
-      date: a.date, time: a.time || "",
-      what: names.join(", "),
-      staff: s(a.staff_name || "").split(",")[0].trim(),
-      pay: payLabel(a.payment_method),
-      amount: rowRevenue,
-      isSale: a.is_sale === true,
-    });
-  }
-  lines.sort((x, y) => (`${x.date} ${x.time}`).localeCompare(`${y.date} ${y.time}`));
-
-  // Afronden op rapportniveau per tarief, zodat netto + belasting exact
-  // optellen tot de grondslag \u2014 nooit per regel afronden en dan sommeren.
-  const rateRows = [...byRate.entries()].sort((a, b) => b[0] - a[0]).map(([rate, grossC]) => {
-    const netC = Math.round(grossC / (1 + rate / 100));
-    return { rate, gross: grossC / 100, net: netC / 100, tax: (grossC - netC) / 100 };
-  });
+  // Per product, per dag en per betaalwijze; belasting per tarief; kadobonnen
+  // apart. Sinds 22-09-2026 in reportData.js, gedeeld met de Excel-export.
+  const P = productReportData({ appointments, cfg, lang });
+  const { lines, rateRows, totalRevenue, totalQty, totalTax, totalNet, voucherPaid, untaxed } = P;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const taxableGross = rateRows.reduce((n, r) => n + r.gross, 0);
-  const totalTax = rateRows.reduce((n, r) => n + r.tax, 0);
-  const totalNet = round2(totalRevenue - totalTax);
-  const voucherPaid = round2(voucherCents / 100);
-  // Wat er naast de belaste grondslag in de omzet zit: op de BES-eilanden de
-  // doorverkochte producten. De kadobon moet er weer bij opgeteld worden, want
-  // die zit als min-post in de omzet maar niet in de grondslag — zonder die
-  // term werd dit negatief en viel de verklarende noot hieronder weg.
-  const untaxed = round2(totalRevenue - taxableGross + voucherPaid);
 
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -258,9 +179,7 @@ export function generateProductReportPDF({
   };
 
   // ── Per product ──────────────────────────────────────────────────────
-  const productRows = [...byProduct.entries()]
-    .sort((a, b) => b[1].revenue - a[1].revenue)
-    .map(([name, v]) => [name, String(v.qty), money(v.revenue)]);
+  const productRows = P.products.map((p) => [p.name, String(p.qty), money(p.revenue)]);
   autoTable(doc, {
     ...tableTheme,
     startY: y,
@@ -271,9 +190,7 @@ export function generateProductReportPDF({
   });
 
   // ── Payment split (cash-up) ──────────────────────────────────────────
-  const payRows = [...byPay.entries()]
-    .sort((a, b) => b[1].revenue - a[1].revenue)
-    .map(([pm, v]) => [payLabel(pm), String(v.count), money(v.revenue)]);
+  const payRows = P.payments.map((p) => [p.label, String(p.count), money(p.revenue)]);
   if (payRows.length) {
     autoTable(doc, {
       ...tableTheme,
@@ -333,10 +250,8 @@ export function generateProductReportPDF({
   }
 
   // ── Per day (only useful for multi-day ranges) ───────────────────────
-  if (byDay.size > 1) {
-    const dayRows = [...byDay.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, v]) => [fmtDate(date, lang), String(v.qty), money(v.revenue)]);
+  if (P.days.length > 1) {
+    const dayRows = P.days.map((d) => [fmtDate(d.date, lang), String(d.qty), money(d.revenue)]);
     autoTable(doc, {
       ...tableTheme,
       startY: doc.lastAutoTable.finalY + 22,
@@ -386,15 +301,8 @@ export function generateProductReportPDF({
     },
   });
 
-  const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
-  // Naam naar de PERIODE, niet naar de begindatum: een jaarrapport heette
-  // anders "...-2026-01-01.pdf" en botste met het dagrapport van diezelfde
-  // 1 januari. Nu wordt het 2026 / 2026-08 / 2026-08-12.
-  const span = range.from === range.to ? s(range.from)
-    : s(range.from).slice(0, 4) === s(range.to).slice(0, 4) && s(range.from).endsWith("-01-01") ? s(range.from).slice(0, 4)
-    : s(range.from).slice(0, 7) === s(range.to).slice(0, 7) ? s(range.from).slice(0, 7)
-    : `${s(range.from)}_${s(range.to)}`;
-  const filename = `${fnSalon}-${T("productverkoop", "product-sales", "venta-productos")}-${span || "report"}.pdf`;
+  // Zelfde naam als de Excel-export; alleen de extensie verschilt.
+  const filename = productReportFilename({ salon, range, lang, ext: "pdf" });
   doc.save(filename);
 
   return { filename, totalRevenue, totalQty, transactions: lines.length };

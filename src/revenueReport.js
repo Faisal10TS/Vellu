@@ -20,7 +20,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { computeTax, linesFromSale } from "./taxEngine.js";
+import { revenueReportData, revenueReportFilename } from "./reportData.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
@@ -168,31 +168,14 @@ export function generateRevenueReportPDF({
   }
 
   // ── SUMMARY ──────────────────────────────────────────────
-  // Belasting komt uit de belastingmotor en niet uit één deling over het totaal.
-  // Reden: één rapport kan meerdere grondslagen bevatten. Een Bonaire-salon die
-  // producten aanslaat op een behandeling verkoopt 6% ABB-plichtige diensten
-  // naast doorverkochte producten waarover al bij invoer ABB is betaald — die
-  // mogen hier niet nog een keer belast worden. linesFromSale trekt elke rij
-  // uiteen in regels, computeTax groepeert ze per tarief en rondt één keer op
-  // documentniveau af, zodat netto + belasting exact de grondslag is.
-  const allLines = appointments.flatMap((a) => linesFromSale(a));
-  const computed = computeTax(allLines, cfg);
+  // De cijfers komen uit reportData.js (gedeeld met de Excel-export sinds
+  // 22-09-2026): belasting via de belastingmotor per tarief, onbelaste omzet en
+  // ingewisselde kadobonnen apart, één afronding op documentniveau.
+  const R = revenueReportData({ appointments, cfg });
+  const computed = R.computed;
   // Intern document: showTaxInternal, niet showTax (zie kop van dit bestand).
-  const showTaxRows = computed.showTaxInternal;
-
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const totalGross = computed.grandTotal;
-  const totalBtw = showTaxRows ? computed.taxTotal : 0;
-  const totalNet = round2(totalGross - totalBtw);
-  const avg = appointments.length ? totalGross / appointments.length : 0;
-  // Wat er naast de belaste grondslag in de omzet zit. Onbelast = de regels
-  // zonder tarief (op de BES-eilanden de doorverkochte producten); kadobonnen
-  // zijn een betaalmiddel en verlagen wél het ontvangen bedrag maar geen
-  // grondslag — beide krijgen een eigen regel, anders telt de tabel niet op.
-  const untaxedGross = round2(
-    computed.lines.filter((l) => !l.taxable && l.kind !== "voucher").reduce((n, l) => n + l.gross, 0)
-  );
-  const voucherPaid = round2(computed.paidByVoucher);
+  const showTaxRows = R.showTaxRows;
+  const { totalGross, totalBtw, totalNet, avg, untaxedGross, voucherPaid } = R;
 
   y = Math.max(y + 34, 220);
   doc.setDrawColor(230, 230, 230);
@@ -235,15 +218,11 @@ export function generateRevenueReportPDF({
   // echte tabel die per tarief grondslag en belasting laat zien én optelt.
   const btwY = summaryY + 44;
   let breakdownBottom = 0;
-  // De uitsplitsing is niet alleen nodig bij MEERDERE tarieven. Op de
-  // BES-eilanden is er precies één tarief (diensten) terwijl de doorverkochte
-  // producten onbelast zijn — dan staat er anders "ABB 5,66" naast een omzet
-  // van 115, wat neerkomt op 4,9% en nergens uit te herleiden is. Hetzelfde
-  // geldt voor ingewisselde kadobonnen: die verlagen de omzet maar niet de
-  // grondslag. Zodra een van die twee speelt, hoort de tabel er te staan.
-  const needsBreakdown = computed.byRate.length > 1
-    || Math.abs(untaxedGross) >= 0.01
-    || voucherPaid >= 0.01;
+  // De uitsplitsing is niet alleen nodig bij MEERDERE tarieven (zie
+  // reportData.js): ook bij één tarief naast onbelaste omzet of een
+  // ingewisselde kadobon, anders is "ABB 5,66" naast 115 omzet nergens uit te
+  // herleiden.
+  const needsBreakdown = R.needsBreakdown;
   if (showTaxRows && computed.byRate.length === 1 && !needsBreakdown) {
     const only = computed.byRate[0];
     doc.setFont("helvetica", "normal");
@@ -300,11 +279,8 @@ export function generateRevenueReportPDF({
   // precies één belastingregel.
   const tableStartY = breakdownBottom ? breakdownBottom + 26 : summaryY + 40;
 
-  // Sort appointments by date asc then time asc for a chronological ledger
-  const sorted = [...appointments].sort((a, b) => {
-    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    return (a.time || "") < (b.time || "") ? -1 : 1;
-  });
+  // Chronologisch grootboek (datum op, dan tijd) — gesorteerd in reportData.js.
+  const sorted = R.sorted;
 
   // Voetnoot op elke pagina: Vellu rekent met de instellingen van déze salon en
   // is geen belastingadviseur. Eerst opmeten, want de onderrand van de tabel
@@ -397,10 +373,8 @@ export function generateRevenueReportPDF({
   });
 
   // ── FILENAME ─────────────────────────────────────────────
-  const fnSalon = s(salon.business_name || salon.name || "vellu").replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 40);
-  const fnStaff = staffName ? "-" + s(staffName).replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase().slice(0, 30) : "";
-  const fnRange = (range.from || "").slice(0, 7); // YYYY-MM for month files
-  const filename = `${fnSalon}${fnStaff}-${T("omzet", "revenue", "ingresos")}-${fnRange || range.from || "report"}.pdf`;
+  // Zelfde naam als de Excel-export; alleen de extensie verschilt.
+  const filename = revenueReportFilename({ salon, staffName, range, lang, ext: "pdf" });
 
   doc.save(filename);
 

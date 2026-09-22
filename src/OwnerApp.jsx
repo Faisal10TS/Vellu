@@ -1363,9 +1363,10 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
     return periodPreset(period, lang);
   };
 
-  const [generating, setGenerating] = useState(false);
+  // "" | "pdf" | "xlsx": welk bestand er op dit moment gemaakt wordt.
+  const [generating, setGenerating] = useState("");
 
-  const download = async () => {
+  const download = async (format = "pdf") => {
     const range = getRange();
     if (!range) {
       toast.show(lang === "nl" ? "Kies een datumbereik" : lang === "es" ? "Elige un rango de fechas" : "Pick a date range", "error");
@@ -1373,7 +1374,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
     }
     // Vanaf hier staat de knop op "bezig": het ophalen van een oude periode
     // duurt merkbaar even en de eigenaar mag niet in het ongewisse blijven.
-    setGenerating(true);
+    setGenerating(format);
     try {
       let source = completedAppts;
       if (fetchRange) {
@@ -1393,35 +1394,46 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         toast.show(lang === "nl" ? "Geen afgeronde afspraken in deze periode" : lang === "es" ? "No hay citas completadas en este periodo" : "No completed appointments in this period", "error");
         return;
       }
-      // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
-      // chunk downloads; subsequent clicks are instant (browser-cached).
-      const mod = await import("./revenueReport.js");
       // Currency + tax for the report come from the salon's country. Prices are
       // tax-inclusive; the report only breaks out tax when the salon is tax-
       // registered (has a tax id) and a rate > 0 — same rule as the invoice.
       const _money = currencyForCountry(salonData.country_code);
       const _tax = resolveTax(salonData);
-      const _logo = await loadLogoForPdf(salonData);
       // Rapport voor één stylist: per gecombineerde boeking alleen háár
       // aandeel (staffShareOf), zodat het rapport optelt tot wat het dashboard
       // voor haar laat zien. Het teamrapport houdt de hele prijzen.
       const shareId = fixedStaffId || selectedStaff?.id || null;
       const rows = shareId ? inRange.map(a => ({ ...a, service_price: staffShareOf(a, shareId) })) : inRange;
-      const result = mod.generateRevenueReportPDF({
-        salon: salonData, appointments: rows, range, lang, logo: _logo,
+      const params = {
+        salon: salonData, appointments: rows, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
         taxCfg: _tax,
         // Losse velden blijven meegaan voor de kop en als terugval.
         taxLabel: _tax.label, taxIdLabel: _tax.idLabel,
         taxRate: _tax.serviceRate / 100, showTax: _tax.showTaxInternal,
-      });
-      toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : lang === "es" ? `PDF descargado (${result.count} citas)` : `PDF downloaded (${result.count} appointments)`);
+      };
+      let result;
+      if (format === "xlsx") {
+        // Excel (22-09-2026): dezelfde cijfers uit dezelfde rekenlaag, met een
+        // eigen kleine schrijver — jsPDF komt er niet aan te pas.
+        const mod = await import("./reportExcel.js");
+        result = mod.downloadRevenueReportXlsx(params);
+        toast.show(lang === "nl" ? `Excel gedownload (${result.count} afspraken)` : lang === "es" ? `Excel descargado (${result.count} citas)` : `Excel downloaded (${result.count} appointments)`);
+      } else {
+        // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
+        // chunk downloads; subsequent clicks are instant (browser-cached).
+        const mod = await import("./revenueReport.js");
+        const _logo = await loadLogoForPdf(salonData);
+        result = mod.generateRevenueReportPDF({ ...params, logo: _logo });
+        toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : lang === "es" ? `PDF descargado (${result.count} citas)` : `PDF downloaded (${result.count} appointments)`);
+      }
     } catch (e) {
-      console.error("PDF error:", e);
-      toast.show(lang === "nl" ? "PDF genereren mislukt" : lang === "es" ? "No se pudo generar el PDF" : "Failed to generate PDF", "error");
+      console.error("report error:", e);
+      const wat = format === "xlsx" ? "Excel" : "PDF";
+      toast.show(lang === "nl" ? `${wat} genereren mislukt` : lang === "es" ? `No se pudo generar el ${wat}` : `Failed to generate ${wat}`, "error");
     } finally {
-      setGenerating(false);
+      setGenerating("");
     }
   };
 
@@ -1430,14 +1442,14 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 3 }}>
-            {lang === "nl" ? "Omzetrapport (PDF)" : lang === "es" ? "Informe de ingresos (PDF)" : "Revenue report (PDF)"}
+            {lang === "nl" ? "Omzetrapport (PDF of Excel)" : lang === "es" ? "Informe de ingresos (PDF o Excel)" : "Revenue report (PDF or Excel)"}
           </div>
           <div style={{ fontSize: 11, color: c.textLabel }}>
             {lang === "nl"
-              ? "Download een professioneel rapport voor je boekhouder of belastingaangifte."
+              ? "Download een professioneel rapport voor je boekhouder of belastingaangifte — als PDF, of als Excel om zelf mee te rekenen."
               : lang === "es"
-              ? "Descarga un informe profesional para tu contable o tu declaración de impuestos."
-              : "Download a professional report for your accountant or tax filing."}
+              ? "Descarga un informe profesional para tu contable o tu declaración de impuestos, en PDF o en Excel para hacer tus propios cálculos."
+              : "Download a professional report for your accountant or tax filing — as a PDF, or as Excel to do your own sums."}
           </div>
         </div>
       </div>
@@ -1511,21 +1523,28 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
           />
         </div>
       )}
-      <button
-        onClick={download}
-        disabled={generating}
-        className="btn-primary"
-        style={{ marginTop: 14, width: "100%", padding: "12px 20px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: generating ? 0.6 : 1 }}
-      >
-        {generating ? (
-          <>{lang === "nl" ? "PDF maken..." : lang === "es" ? "Generando PDF..." : "Building PDF..."}</>
-        ) : (
-          <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            {lang === "nl" ? "Download PDF" : lang === "es" ? "Descargar PDF" : "Download PDF"}
-          </>
-        )}
-      </button>
+      {/* PDF én Excel (22-09-2026): zelfde periode, zelfde medewerker, zelfde
+          cijfers — alleen het bestandsformaat verschilt. */}
+      <div data-report-buttons style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button onClick={() => download("pdf")} disabled={!!generating} className="btn-primary" data-report-pdf
+          style={{ flex: 1, padding: "12px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: generating ? 0.6 : 1 }}>
+          {generating === "pdf" ? (lang === "nl" ? "PDF maken..." : lang === "es" ? "Generando PDF..." : "Building PDF...") : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              {lang === "nl" ? "Download PDF" : lang === "es" ? "Descargar PDF" : "Download PDF"}
+            </>
+          )}
+        </button>
+        <button onClick={() => download("xlsx")} disabled={!!generating} className="btn-ghost" data-report-xlsx
+          style={{ flex: 1, padding: "12px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: generating ? 0.6 : 1 }}>
+          {generating === "xlsx" ? (lang === "nl" ? "Excel maken..." : lang === "es" ? "Generando Excel..." : "Building Excel...") : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+              {lang === "nl" ? "Download Excel" : lang === "es" ? "Descargar Excel" : "Download Excel"}
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -4592,6 +4611,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [saleDeleteArm, setSaleDeleteArm] = useState(false);
   const [receiptBusy, setReceiptBusy] = useState(false);
   const [productReportBusy, setProductReportBusy] = useState(false);
+  // Bestandsformaat van het verkooprapport (22-09-2026): de vier periodeknoppen
+  // maken een PDF of een Excel-bestand, naar gelang deze schakelaar.
+  const [productReportFormat, setProductReportFormat] = useState("pdf");
+  const productReportFmtName = productReportFormat === "xlsx" ? "Excel" : "PDF";
   const [importBusy, setImportBusy] = useState(null);
   // Services filter + group collapse. A Set of category ids (the string
   // "__uncat" for services without a category) that are currently hidden.
@@ -7085,8 +7108,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // hoort in de agenda thuis — stond zij in deze lijst, dan wist "Verwijderen"
   // de hele afspraak (tijdslot, klant, factuurhistorie) in plaats van een bon.
   const kassaSalesBetween = (from, to) => productSalesBetween(from, to).filter(isSaleRow);
-  // PDF-rapport productverkoop (dag of maand). jsPDF wordt lazy geladen.
-  const downloadProductReport = async (scope) => {
+  // Rapport productverkoop (dag/maand/kwartaal/jaar) als PDF of Excel; beide
+  // modules worden lazy geladen.
+  const downloadProductReport = async (scope, format = productReportFormat) => {
     if (productReportBusy) return;
     setProductReportBusy(true);
     try {
@@ -7113,7 +7137,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         toast.show(lang === "nl" ? "Geen productverkopen in deze periode" : lang === "es" ? "Sin ventas de productos en este período" : "No product sales in this period", "error");
         return;
       }
-      const mod = await import("./productReport.js");
       const label = scope === "year"
         ? today.slice(0, 4)
         : scope === "quarter"
@@ -7121,9 +7144,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         : scope === "month"
         ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
         : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-      const _logoP = await loadLogoForPdf(salonData);
-      mod.generateProductReportPDF({
-        salon: salonData, logo: _logoP,
+      const params = {
+        salon: salonData,
         appointments: rows,
         range: { from, to, label },
         lang,
@@ -7131,7 +7153,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
         taxIdLabel: tax.idLabel,
         taxCfg,
-      });
+      };
+      if (format === "xlsx") {
+        const mod = await import("./reportExcel.js");
+        mod.downloadProductReportXlsx(params);
+      } else {
+        const mod = await import("./productReport.js");
+        const _logoP = await loadLogoForPdf(salonData);
+        mod.generateProductReportPDF({ ...params, logo: _logoP });
+      }
     } catch (e) {
       console.error("product report error:", e);
       toast.show(t.somethingWrong, "error");
@@ -10193,13 +10223,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {/* Vier gelijke rapportknoppen onder één kopje: op desktop
                             vier op een rij, op de telefoon 2×2 (Faisal 16-09:
                             "symmetrisch" — de wrap gaf 3+1). Volle naam in de tooltip. */}
-                        <div data-kassa-reports-label style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginTop: 12, marginBottom: 6, textAlign: "center" }}>{lang === "nl" ? "Verkooprapport (PDF)" : lang === "es" ? "Informe de ventas (PDF)" : "Sales report (PDF)"}</div>
+                        {/* Kopje + schakelaar PDF/Excel (22-09-2026): de vier
+                            periodeknoppen eronder maken het gekozen formaat. */}
+                        <div data-kassa-reports-label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 12, marginBottom: 6 }}>
+                          <span style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Verkooprapport" : lang === "es" ? "Informe de ventas" : "Sales report"}</span>
+                          <div data-kassa-report-format role="group" aria-label={lang === "nl" ? "Bestandsformaat" : lang === "es" ? "Formato de archivo" : "File format"} style={{ display: "inline-flex", border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: 2, gap: 2 }}>
+                            {[["pdf", "PDF"], ["xlsx", "Excel"]].map(([k, l]) => (
+                              <button key={k} type="button" onClick={() => setProductReportFormat(k)} aria-pressed={productReportFormat === k}
+                                style={{ padding: "3px 9px", fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 6, border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", background: productReportFormat === k ? accent : "transparent", color: productReportFormat === k ? onAccentInk(accent, c.btnOnDark) : c.textSub, transition: "all 0.15s" }}>{l}</button>
+                            ))}
+                          </div>
+                        </div>
                         <div data-kassa-reports style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: 6 }}>
                           {[
-                            ["day", lang === "nl" ? "Dag" : lang === "es" ? "Día" : "Day", lang === "nl" ? "Dagrapport (PDF)" : lang === "es" ? "Informe diario (PDF)" : "Daily report (PDF)"],
-                            ["month", lang === "nl" ? "Maand" : lang === "es" ? "Mes" : "Month", lang === "nl" ? "Maandrapport (PDF)" : lang === "es" ? "Informe mensual (PDF)" : "Monthly report (PDF)"],
-                            ["quarter", lang === "nl" ? "Kwartaal" : lang === "es" ? "Trimestre" : "Quarter", lang === "nl" ? "Kwartaalrapport (PDF)" : lang === "es" ? "Informe trimestral (PDF)" : "Quarterly report (PDF)"],
-                            ["year", lang === "nl" ? "Jaar" : lang === "es" ? "Año" : "Year", lang === "nl" ? "Jaarrapport (PDF)" : lang === "es" ? "Informe anual (PDF)" : "Yearly report (PDF)"],
+                            ["day", lang === "nl" ? "Dag" : lang === "es" ? "Día" : "Day", lang === "nl" ? `Dagrapport (${productReportFmtName})` : lang === "es" ? `Informe diario (${productReportFmtName})` : `Daily report (${productReportFmtName})`],
+                            ["month", lang === "nl" ? "Maand" : lang === "es" ? "Mes" : "Month", lang === "nl" ? `Maandrapport (${productReportFmtName})` : lang === "es" ? `Informe mensual (${productReportFmtName})` : `Monthly report (${productReportFmtName})`],
+                            ["quarter", lang === "nl" ? "Kwartaal" : lang === "es" ? "Trimestre" : "Quarter", lang === "nl" ? `Kwartaalrapport (${productReportFmtName})` : lang === "es" ? `Informe trimestral (${productReportFmtName})` : `Quarterly report (${productReportFmtName})`],
+                            ["year", lang === "nl" ? "Jaar" : lang === "es" ? "Año" : "Year", lang === "nl" ? `Jaarrapport (${productReportFmtName})` : lang === "es" ? `Informe anual (${productReportFmtName})` : `Yearly report (${productReportFmtName})`],
                           ].map(([scope, label, full]) => (
                             <button key={scope} className="btn-ghost" title={full} aria-label={full} style={{ padding: isMobile ? "8px 4px" : "8px 6px", fontSize: isMobile ? 9.5 : 10, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, overflow: "hidden", opacity: productReportBusy ? 0.5 : 1 }} disabled={productReportBusy} onClick={() => downloadProductReport(scope)}>
                               <NavIcon name="download" size={11} color="currentColor" />{label}
