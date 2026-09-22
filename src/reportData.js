@@ -185,14 +185,58 @@ export function revenueReportFilename({ salon, staffName = "", range, lang = "nl
   return `${fnSalon}${fnStaff}-${T3(lang, "omzet", "revenue", "ingresos")}-${fnRange || range?.from || "report"}.${ext}`;
 }
 
-export function productReportFilename({ salon, range, lang = "nl", ext = "pdf" }) {
-  const fnSalon = fileSlug(salon?.business_name || salon?.name || "vellu", 40);
+// Naam naar de PERIODE: 2026 / 2026-08 / 2026-08-12, anders botst het
+// jaarrapport met het dagrapport van 1 januari.
+const periodSpan = (range) => {
   const from = s(range?.from), to = s(range?.to);
-  // Naam naar de PERIODE: 2026 / 2026-08 / 2026-08-12, anders botst het
-  // jaarrapport met het dagrapport van 1 januari.
-  const span = from === to ? from
+  return from === to ? from
     : from.slice(0, 4) === to.slice(0, 4) && from.endsWith("-01-01") ? from.slice(0, 4)
     : from.slice(0, 7) === to.slice(0, 7) ? from.slice(0, 7)
     : `${from}_${to}`;
-  return `${fnSalon}-${T3(lang, "productverkoop", "product-sales", "venta-productos")}-${span || "report"}.${ext}`;
+};
+
+export function productReportFilename({ salon, range, lang = "nl", ext = "pdf" }) {
+  const fnSalon = fileSlug(salon?.business_name || salon?.name || "vellu", 40);
+  return `${fnSalon}-${T3(lang, "productverkoop", "product-sales", "venta-productos")}-${periodSpan(range) || "report"}.${ext}`;
+}
+
+export function cashbookFilename({ salon, range, lang = "nl", ext = "pdf" }) {
+  const fnSalon = fileSlug(salon?.business_name || salon?.name || "vellu", 40);
+  return `${fnSalon}-${T3(lang, "kasboek", "cash-book", "libro-caja")}-${periodSpan(range) || "export"}.${ext}`;
+}
+
+// ── Kasboek ──────────────────────────────────────────────────────────────
+// movements: cash_movements-rijen (open/in/out/count) van de periode;
+// cashRows: appointments-rijen die contant zijn afgerekend (kassa én
+// behandelingen). Per dag dezelfde regels als in Kasboek.jsx:
+//   verwacht = beginsaldo + contant verkocht + kas in − kas uit
+//   verschil = geteld − verwacht op het moment van tellen (bevroren in de rij)
+export function cashbookData({ movements, cashRows, from, to }) {
+  const chrono = (a, b) => (`${a.date} ${a.created_at || a.time || ""}`).localeCompare(`${b.date} ${b.created_at || b.time || ""}`);
+  const mv = (Array.isArray(movements) ? movements : []).filter((m) => m.date >= from && m.date <= to).slice().sort(chrono);
+  const cs = (Array.isArray(cashRows) ? cashRows : []).filter((a) => a.date >= from && a.date <= to && a.payment_method === "cash" && a.status === "completed").slice().sort(chrono);
+  const dates = [...new Set([...mv.map((m) => m.date), ...cs.map((a) => a.date)])].sort();
+  const days = dates.map((date) => {
+    const dm = mv.filter((m) => m.date === date);
+    const opening = [...dm].reverse().find((m) => m.kind === "open") || null;
+    const count = [...dm].reverse().find((m) => m.kind === "count") || null;
+    const daySales = cs.filter((a) => a.date === date);
+    const sales = round2(daySales.reduce((n, a) => n + (parseFloat(a.service_price) || 0), 0));
+    const cashIn = round2(dm.filter((m) => m.kind === "in").reduce((n, m) => n + (parseFloat(m.amount) || 0), 0));
+    const cashOut = round2(dm.filter((m) => m.kind === "out").reduce((n, m) => n + (parseFloat(m.amount) || 0), 0));
+    const expected = round2((opening ? parseFloat(opening.amount) || 0 : 0) + sales + cashIn - cashOut);
+    const counted = count ? round2(parseFloat(count.amount) || 0) : null;
+    const diff = count ? round2(counted - (count.expected != null ? parseFloat(count.expected) || 0 : expected)) : null;
+    return { date, opening: opening ? round2(parseFloat(opening.amount) || 0) : null, sales, salesCount: daySales.length, cashIn, cashOut, expected, counted, countedAt: count ? count.created_at : null, diff, note: count && count.reason ? String(count.reason) : "" };
+  });
+  const totals = {
+    sales: round2(days.reduce((n, d) => n + d.sales, 0)),
+    salesCount: cs.length,
+    cashIn: round2(days.reduce((n, d) => n + d.cashIn, 0)),
+    cashOut: round2(days.reduce((n, d) => n + d.cashOut, 0)),
+    diff: round2(days.reduce((n, d) => n + (d.diff || 0), 0)),
+    daysCounted: days.filter((d) => d.counted !== null).length,
+    days: days.length,
+  };
+  return { days, movements: mv, cashRows: cs, totals };
 }

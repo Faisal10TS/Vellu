@@ -14,11 +14,11 @@
 // als de verkooplijst, ook voor dagen buiten het 90-dagen-venster.
 
 import { useState, useEffect } from "react";
-import { NavIcon } from "./shared.jsx";
+import { NavIcon, onAccentInk } from "./shared.jsx";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cashRows = [], lang = "nl", c, accent, cur = "€", toast, showConfirm, staffName = "" }) {
+export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cashRows = [], lang = "nl", c, accent, cur = "€", toast, showConfirm, staffName = "", onExport = null }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
   const money = (n) => `${cur}${round2(n).toFixed(2)}`;
   const KIND = {
@@ -34,6 +34,9 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastCountBefore, setLastCountBefore] = useState(null); // laatste telling vóór deze dag → suggestie beginsaldo
+  // Export (22-09-2026): PDF of Excel voor dag/maand/kwartaal/jaar rond deze dag.
+  const [exportFormat, setExportFormat] = useState("pdf");
+  const [exporting, setExporting] = useState(null); // scope die nu gemaakt wordt
 
   useEffect(() => {
     if (!ownerId || !day) return;
@@ -217,6 +220,30 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
               </div>
             );
           })}
+        </div>
+      )}
+      {/* Exporteren: zelfde schakelaar en periodeknoppen als het verkooprapport. */}
+      {onExport && (
+        <div data-kasboek-export style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{T("Kasboek exporteren", "Export cash book", "Exportar libro de caja")}</span>
+            <div data-kasboek-export-format role="group" style={{ display: "inline-flex", border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: 2, gap: 2 }}>
+              {[["pdf", "PDF"], ["xlsx", "Excel"]].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setExportFormat(k)} aria-pressed={exportFormat === k}
+                  style={{ padding: "3px 9px", fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 6, border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", background: exportFormat === k ? accent : "transparent", color: exportFormat === k ? onAccentInk(accent, c.btnOnDark) : c.textSub }}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div data-kasboek-export-scopes style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))", gap: 6 }}>
+            {[["day", T("Dag", "Day", "Día")], ["month", T("Maand", "Month", "Mes")], ["quarter", T("Kwartaal", "Quarter", "Trimestre")], ["year", T("Jaar", "Year", "Año")]].map(([scope, label]) => (
+              <button key={scope} type="button" className="btn-ghost" data-kasboek-export-scope={scope} disabled={!!exporting}
+                title={`${T("Kasboek", "Cash book", "Libro de caja")} ${label.toLowerCase()} (${exportFormat === "xlsx" ? "Excel" : "PDF"})`}
+                onClick={async () => { if (exporting) return; setExporting(scope); try { await onExport(scope, exportFormat); } finally { setExporting(null); } }}
+                style={{ padding: "8px 6px", fontSize: 10, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, opacity: exporting ? 0.5 : 1 }}>
+                <NavIcon name="download" size={11} color="currentColor" />{exporting === scope ? "…" : label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {rows !== null && !opening && list.length === 0 && (

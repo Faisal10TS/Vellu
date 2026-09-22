@@ -7125,6 +7125,51 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // hoort in de agenda thuis — stond zij in deze lijst, dan wist "Verwijderen"
   // de hele afspraak (tijdslot, klant, factuurhistorie) in plaats van een bon.
   const kassaSalesBetween = (from, to) => productSalesBetween(from, to).filter(isSaleRow);
+  // Kasboek exporteren (22-09-2026): dag/maand/kwartaal/jaar rond de gekozen
+  // kasboek-dag, als PDF of Excel. Haalt de kasboekregels én de contante
+  // betalingen (kassa + contant afgerekende afspraken) van de periode op.
+  const exportCashbook = async (scope, format, baseDay) => {
+    const today = fmt(getToday());
+    const base = baseDay && baseDay <= today ? baseDay : today;
+    const d = parseDate(base);
+    const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB";
+    let from, to, label;
+    if (scope === "day") { from = base; to = base; label = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" }); }
+    else if (scope === "month") { from = base.slice(0, 7) + "-01"; to = fmt(new Date(d.getFullYear(), d.getMonth() + 1, 0)); label = d.toLocaleDateString(locale, { month: "long", year: "numeric" }); }
+    else if (scope === "quarter") { const q = Math.floor(d.getMonth() / 3); from = fmt(new Date(d.getFullYear(), q * 3, 1)); to = fmt(new Date(d.getFullYear(), q * 3 + 3, 0)); label = `Q${q + 1} ${d.getFullYear()}`; }
+    else { from = `${d.getFullYear()}-01-01`; to = `${d.getFullYear()}-12-31`; label = String(d.getFullYear()); }
+    if (to > today) to = today;
+    try {
+      const [mv, appts] = await Promise.all([
+        supabase.from("cash_movements").select("*").eq("owner_id", salonData.owner_id).gte("date", from).lte("date", to).order("date").order("created_at"),
+        fetchApptsBetween(from, to),
+      ]);
+      if (mv.error || appts === null) {
+        toast.show(lang === "nl" ? "Kon de periode niet ophalen — probeer het opnieuw" : lang === "es" ? "No se pudo cargar el período — inténtalo de nuevo" : "Could not load the period — please try again", "error");
+        return false;
+      }
+      const movements = mv.data || [];
+      const cashRows = (appts || []).filter(a => a.payment_method === "cash" && a.status === "completed");
+      if (!movements.length && !cashRows.length) {
+        toast.show(lang === "nl" ? "Geen kasboekregels of contante betalingen in deze periode" : lang === "es" ? "Sin movimientos de caja ni pagos en efectivo en este período" : "No cash book lines or cash payments in this period", "error");
+        return false;
+      }
+      const params = { salon: salonData, movements, cashRows, range: { from, to, label }, lang, currencySymbol: cur, moneyLocale: locale };
+      if (format === "xlsx") {
+        const mod = await import("./reportExcel.js");
+        mod.downloadCashbookXlsx(params);
+      } else {
+        const mod = await import("./cashbookReport.js");
+        const _logo = await loadLogoForPdf(salonData);
+        mod.generateCashbookPDF({ ...params, logo: _logo });
+      }
+      return true;
+    } catch (e) {
+      console.error("kasboek export:", e);
+      toast.show(t.somethingWrong, "error");
+      return false;
+    }
+  };
   // Rapport productverkoop (dag/maand/kwartaal/jaar) als PDF of Excel; beide
   // modules worden lazy geladen.
   const downloadProductReport = async (scope, format = productReportFormat) => {
@@ -10273,7 +10318,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {/* Kasboek (22-09-2026): beginsaldo, kas in / kas uit,
                             telling — volgt de dagkeuze hierboven. */}
                         <Kasboek supabase={supabase} ownerId={salonData.owner_id} day={day} isToday={isToday} dayLabel={dayLabel} cashRows={cashRows}
-                          lang={lang} c={c} accent={accent} cur={cur} toast={toast} showConfirm={showConfirm} />
+                          lang={lang} c={c} accent={accent} cur={cur} toast={toast} showConfirm={showConfirm}
+                          onExport={(scope, format) => exportCashbook(scope, format, day)} />
                       </div>
                     );
                   })()}
