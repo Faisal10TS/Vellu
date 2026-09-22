@@ -23,6 +23,7 @@ import {
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
 } from "./shared.jsx";
+import Kasboek from "./Kasboek.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import PushSettingsCard from "./PushSettings.jsx";
@@ -10179,6 +10180,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // Korte datum met de bestaande maandafkortingen; jaartal
                     // alleen als het niet het lopende jaar is.
                     const dayLabel = `${dObj.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[dObj.getMonth()]}${dObj.getFullYear() !== getToday().getFullYear() ? ` ${dObj.getFullYear()}` : ""}`;
+                    // Kasboek: alles wat die dag contant in de la kwam — kassa-
+                    // verkopen én afspraken die contant zijn afgerekend. Zelfde
+                    // dagbron als de verkooplijst (kassaDayExtra buiten het venster).
+                    const cashRows = (outOfRange
+                      ? (extraReady ? kassaDayExtra.rows : [])
+                      : (salonData.appointments || []).filter(a => a.date === day))
+                      .filter(a => a.payment_method === "cash" && a.status === "completed");
                     return (
                       <div data-kassa-sold style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         {/* Gecentreerd zoals het kadobon-blok (Faisal 16-09): label +
@@ -10262,6 +10270,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             </button>
                           ))}
                         </div>
+                        {/* Kasboek (22-09-2026): beginsaldo, kas in / kas uit,
+                            telling — volgt de dagkeuze hierboven. */}
+                        <Kasboek supabase={supabase} ownerId={salonData.owner_id} day={day} isToday={isToday} dayLabel={dayLabel} cashRows={cashRows}
+                          lang={lang} c={c} accent={accent} cur={cur} toast={toast} showConfirm={showConfirm} />
                       </div>
                     );
                   })()}

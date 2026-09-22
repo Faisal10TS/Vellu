@@ -18,8 +18,16 @@ export const RELEASES = [
     // downloaded as excel files too?"). Zelfde cijfers als de PDF (één rekenlaag).
     id: "2026-09-22",
     date: "2026-09-22",
-    title: { nl: "Rapporten ook als Excel, wisselgeld in de Kassa", en: "Reports also as Excel, change in Sales", es: "Informes en Excel, cambio en la Caja" },
+    title: { nl: "Excel-rapporten, wisselgeld en een kasboek", en: "Excel reports, change and a cash book", es: "Informes en Excel, cambio y libro de caja" },
     items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Kasboek in de Kassa, onder het dagoverzicht: zet aan het begin van de dag het beginsaldo (Vellu stelt de laatste telling voor), boek kas in en kas uit met een reden (wisselgeld gehaald, bloemen, naar de bank), en tel aan het eind de la. Contante verkopen tellen vanzelf mee. Je ziet wat er in de la hoort te zitten en na het tellen het kasverschil. Per dag terug te bladeren.",
+          en: "Cash book in Sales, below the day overview: set the opening float at the start of the day (Vellu suggests the last count), log cash in and cash out with a reason (change from the bank, flowers, to the bank), and count the drawer at the end. Cash sales are included automatically. You see what should be in the drawer and, after counting, the difference. Browse back per day.",
+          es: "Libro de caja en la Caja, debajo del resumen del día: fija el saldo inicial al empezar (Vellu sugiere el último recuento), registra entradas y salidas con un motivo (cambio del banco, flores, al banco) y cuenta la caja al final. Las ventas en efectivo se incluyen solas. Ves lo que debería haber en la caja y, tras contar, la diferencia. Se puede consultar por día.",
+        },
+      },
       {
         kind: "new", audience: ["owner"],
         text: {
