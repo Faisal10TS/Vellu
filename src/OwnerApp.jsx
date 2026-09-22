@@ -8432,7 +8432,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         dismissKey="vellu_install_dismissed_owner"
         title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
         subtitle={lang === "nl" ? "Snelle toegang tot je dashboard" : lang === "es" ? "Acceso rápido a tu panel" : "Quick access to your dashboard"}
-        lang={lang} accent={accent} c={c}
+        lang={lang} c={c}
       />
 
       {qrOpen && (

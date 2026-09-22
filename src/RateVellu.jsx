@@ -196,7 +196,7 @@ export default function RateVelluPage() {
               <div style={{ marginBottom: 16 }}>{ta(missing, setMissing)}</div>
 
               <label data-rate-allow style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: c.textSub, lineHeight: 1.5, cursor: "pointer", marginBottom: 20 }}>
-                <input type="checkbox" checked={allowPublic} onChange={(e) => setAllowPublic(e.target.checked)} style={{ marginTop: 3, accentColor: AT.ESPRESSO, width: 16, height: 16, flexShrink: 0 }} />
+                <input type="checkbox" className="at-check" checked={allowPublic} onChange={(e) => setAllowPublic(e.target.checked)} style={{ marginTop: 3 }} />
                 <span>{T.allow}</span>
               </label>
 

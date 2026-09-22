@@ -3338,6 +3338,17 @@ function AtelierSkin() {
       .atelier .lang-btn { border-radius: ${AT_RADIUS - 2}px; }
       .atelier .lang-btn.active { background: ${AT.ESPRESSO}; color: ${AT.BONE}; }
       .atelier .lang-btn.inactive { background: transparent; color: ${AT.EARTH}; }
+      /* Eigen vinkje (22-09-2026, Faisal: "the remember me icon before clicking
+         it is black"). Het native vinkje volgde het app-thema: de ThemeProvider
+         zet input { color-scheme: dark } rechtstreeks op elk invoerveld, en
+         dat wint van de "only light" die .atelier overerft — dus een zwart
+         hokje op de bone-kaart. Zelf tekenen: bone vlak, mushroom rand, espresso
+         met een bone vinkje als hij aanstaat. Het vinkje is een achtergrond-
+         afbeelding, geen ::before: dat werkt in elke browser op appearance:none. */
+      .atelier .at-check { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; padding: 0; flex-shrink: 0; border-radius: 4px; border: 1.5px solid ${AT.MUSHROOM}; background: ${AT_COLORS.inputBg} center / 10px 10px no-repeat; color-scheme: only light; cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease; }
+      .atelier .at-check:hover { border-color: ${AT.EARTH}; }
+      .atelier .at-check:focus-visible { outline: 2px solid ${AT.EARTH}66; outline-offset: 2px; }
+      .atelier .at-check:checked { background-color: ${AT.ESPRESSO}; border-color: ${AT.ESPRESSO}; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23F4EFE6' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"); }
       .vl-marquee-track { animation: vlMarquee 32s linear infinite; }
       .vl-marquee:hover .vl-marquee-track { animation-play-state: paused; }
       @keyframes vlMarquee { to { transform: translateX(-50%); } }

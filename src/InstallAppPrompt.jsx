@@ -13,6 +13,16 @@
 // quick access to your dashboard").
 
 import { useState, useEffect } from "react";
+import { AT } from "./shared.jsx";
+
+// Kleur van de knoppen (22-09-2026, Faisal: "u can barely read the install
+// thing … it should be brown and match the apps theme"). Dit is een bericht
+// van Vellu zelf, niet van de salon, dus het Vellu-bruin van het app-icoon
+// ernaast — en niet het salonaccent. Dat accent ging hier ook mis: een
+// lichtroze salon (TT Bonaire) krijgt in het lichte thema een bijna-zwart
+// genormaliseerd accent, en daarop stond hardcoded donkere tekst.
+const BRAND = AT.ESPRESSO;
+const BRAND_INK = AT.BONE;
 
 export default function InstallAppPrompt({
   // Unique localStorage key for this context's dismiss state. For salon
@@ -26,7 +36,6 @@ export default function InstallAppPrompt({
   iosCopy = null,
   // Visual
   lang = "nl",
-  accent = "#c9a96e",
   c,
 }) {
   // Global install-success key — shared across all contexts so a successful
@@ -143,8 +152,9 @@ export default function InstallAppPrompt({
         </div>
         <button
           onClick={install}
+          data-install-btn
           style={{
-            background: accent, color: "#0d0b0a", border: "none",
+            background: BRAND, color: BRAND_INK, border: "none",
             borderRadius: 8, padding: "8px 16px",
             fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
             textTransform: "uppercase", cursor: "pointer",
@@ -215,7 +225,7 @@ export default function InstallAppPrompt({
                 }}>
                   <div style={{
                     width: 26, height: 26, borderRadius: "50%",
-                    background: `${accent}18`, color: accent,
+                    background: `${BRAND}22`, color: c.text,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 12, fontWeight: 700, flexShrink: 0,
                   }}>{s.num}</div>
@@ -231,7 +241,7 @@ export default function InstallAppPrompt({
             <button
               onClick={() => { setShowIosGuide(false); dismiss(); }}
               style={{
-                width: "100%", background: accent, color: "#0d0b0a", border: "none",
+                width: "100%", background: BRAND, color: BRAND_INK, border: "none",
                 borderRadius: 8, padding: "14px", fontSize: 13, fontWeight: 600,
                 letterSpacing: "0.08em", textTransform: "uppercase",
                 cursor: "pointer", fontFamily: "'Jost',sans-serif",

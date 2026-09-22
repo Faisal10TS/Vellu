@@ -1289,7 +1289,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         dismissKey="vellu_install_dismissed_staff"
         title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
         subtitle={lang === "nl" ? "Snelle toegang tot je agenda" : lang === "es" ? "Acceso rápido a tu agenda" : "Quick access to your agenda"}
-        lang={lang} accent={accent} c={c}
+        lang={lang} c={c}
       />
       {/* Wrapper: on desktop, use fixed 100dvh + overflow:hidden so the sidebar
           stays put while only the main pane scrolls. On mobile, use natural page

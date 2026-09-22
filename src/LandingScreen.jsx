@@ -1768,8 +1768,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
             </div>
             {mode === "signin" && (
               <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer", userSelect: "none" }}>
-                <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: AT.EARTH, cursor: "pointer" }} />
+                <input type="checkbox" className="at-check" data-remember-me checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
                 <span style={{ fontSize: 12, color: c.textSub }}>
                   {lang === "nl" ? "Onthoud mijn gegevens" : lang === "es" ? "Recordarme" : "Remember me"}
                 </span>
