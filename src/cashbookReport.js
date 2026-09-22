@@ -149,9 +149,13 @@ export function generateCashbookPDF({
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(160, 160, 160);
-    doc.text(T(`Bedragen in ${currencySymbol}. Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames; kasverschil = geteld − verwacht op het moment van tellen.`,
-      `Amounts in ${currencySymbol}. Expected = opening float + cash received − change + deposits − withdrawals; difference = counted − expected at the time of counting.`,
-      `Importes en ${currencySymbol}. Esperado = saldo inicial + efectivo recibido − cambio + depósitos − retiradas; diferencia = contado − esperado en el momento del recuento.`), margin, pageH - 32, { maxWidth: pageW - margin * 2 });
+    // Alleen ASCII-tekens in de PDF-tekst: een echt minteken (U+2212) zit niet
+    // in de standaardfont, jsPDF schakelt dan naar 2-byte-tekst en de hele regel
+    // wordt wijd gespatieerd met een verkeerd glyph. Twee regels hoog, boven
+    // de regel "Gegenereerd op".
+    doc.text(T(`Bedragen in ${currencySymbol}. Verwacht in kas = beginsaldo + contant ontvangen - wisselgeld + stortingen - opnames; kasverschil = geteld - verwacht op het moment van tellen.`,
+      `Amounts in ${currencySymbol}. Expected = opening float + cash received - change + deposits - withdrawals; difference = counted - expected at the time of counting.`,
+      `Importes en ${currencySymbol}. Esperado = saldo inicial + efectivo recibido - cambio + depósitos - retiradas; diferencia = contado - esperado en el momento del recuento.`), margin, pageH - 44, { maxWidth: pageW - margin * 2 });
     doc.text(`${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`, margin, pageH - 20);
     doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
   }
