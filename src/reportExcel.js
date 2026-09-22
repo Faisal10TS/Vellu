@@ -20,7 +20,7 @@
 // meteen mee kan rekenen, sorteren en filteren.
 
 import { buildXlsx, saveXlsx } from "./xlsx.js";
-import { revenueReportData, productReportData, cashbookData, revenueReportFilename, productReportFilename, cashbookFilename } from "./reportData.js";
+import { revenueReportData, productReportData, cashbookData, cashFlowOf, revenueReportFilename, productReportFilename, cashbookFilename } from "./reportData.js";
 
 const s = (v) => (v === null || v === undefined ? "" : String(v));
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -238,28 +238,30 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
     [T("Tot en met", "To", "Hasta"), date(range.to)],
     [],
     [{ v: T("Kerncijfers", "Key figures", "Cifras clave"), s: "bold" }],
-    [T("Contant verkocht", "Cash sales", "Ventas en efectivo"), money(D.totals.sales)],
+    [T("Contant ontvangen (kas in uit verkopen)", "Cash received (cash in from sales)", "Efectivo recibido (entrada por ventas)"), money(D.totals.received)],
+    [T("Wisselgeld teruggegeven (kas uit)", "Change given back (cash out)", "Cambio devuelto (salida)"), money(D.totals.change)],
+    [T("Contant verkocht (netto)", "Cash sales (net)", "Ventas en efectivo (neto)"), money(D.totals.sales)],
     [T("Contante betalingen", "Cash payments", "Pagos en efectivo"), int(D.totals.salesCount)],
-    [T("Kas in", "Cash in", "Entradas"), money(D.totals.cashIn)],
-    [T("Kas uit", "Cash out", "Salidas"), money(D.totals.cashOut)],
+    [T("Stortingen (kas in)", "Deposits (cash in)", "Depósitos (entrada)"), money(D.totals.cashIn)],
+    [T("Opnames (kas uit)", "Withdrawals (cash out)", "Retiradas (salida)"), money(D.totals.cashOut)],
     [T("Kasverschil (alle tellingen)", "Difference (all counts)", "Diferencia (todos los recuentos)"), D.totals.daysCounted ? money(D.totals.diff) : "—"],
     [T("Dagen met kasverkeer", "Days with cash activity", "Días con movimientos"), int(D.totals.days)],
     [T("Dagen geteld", "Days counted", "Días contados"), int(D.totals.daysCounted)],
     [],
     ...companyRows(salon, salon.tax_id_label || "BTW-id", T), [],
     ...noteRows([
-      T("Verwacht in kas = beginsaldo + contant verkocht + kas in − kas uit. Kasverschil = geteld − verwacht op het moment van tellen.",
-        "Expected in drawer = opening float + cash sales + cash in − cash out. Difference = counted − expected at the time of counting.",
-        "Esperado en caja = saldo inicial + ventas en efectivo + entradas − salidas. Diferencia = contado − esperado en el momento del recuento."),
-      T(`Bedragen in ${currencySymbol}. Contant verkocht = kassaverkopen én contant afgerekende behandelingen.`, `Amounts in ${currencySymbol}. Cash sales = till sales and treatments paid in cash.`, `Importes en ${currencySymbol}. Ventas en efectivo = ventas de caja y tratamientos pagados en efectivo.`),
+      T("Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames. Kasverschil = geteld − verwacht op het moment van tellen.",
+        "Expected in drawer = opening float + cash received − change + deposits − withdrawals. Difference = counted − expected at the time of counting.",
+        "Esperado en caja = saldo inicial + efectivo recibido − cambio + depósitos − retiradas. Diferencia = contado − esperado en el momento del recuento."),
+      T(`Bedragen in ${currencySymbol}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${currencySymbol}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${currencySymbol}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
       `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
     ]),
   ];
 
-  const dayHead = H(T("Dag", "Day", "Día"), T("Beginsaldo", "Opening float", "Saldo inicial"), T("Contant verkocht", "Cash sales", "Ventas en efectivo"), T("Kas in", "Cash in", "Entrada"), T("Kas uit", "Cash out", "Salida"), T("Verwacht in kas", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia"), T("Opmerking", "Note", "Nota"));
-  const dayBody = D.days.map((d) => [date(d.date), d.opening === null ? "" : money(d.opening), money(d.sales), money(d.cashIn), money(d.cashOut), money(d.expected), d.counted === null ? "" : money(d.counted), d.diff === null ? "" : money(d.diff), d.note]);
+  const dayHead = H(T("Dag", "Day", "Día"), T("Beginsaldo", "Opening float", "Saldo inicial"), T("Contant ontvangen", "Cash received", "Efectivo recibido"), T("Wisselgeld", "Change", "Cambio"), T("Contant verkocht (netto)", "Cash sales (net)", "Ventas (neto)"), T("Stortingen (kas in)", "Deposits (cash in)", "Depósitos"), T("Opnames (kas uit)", "Withdrawals (cash out)", "Retiradas"), T("Verwacht in kas", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia"), T("Opmerking", "Note", "Nota"));
+  const dayBody = D.days.map((d) => [date(d.date), d.opening === null ? "" : money(d.opening), money(d.received), money(d.change), money(d.sales), money(d.cashIn), money(d.cashOut), money(d.expected), d.counted === null ? "" : money(d.counted), d.diff === null ? "" : money(d.diff), d.note]);
   const dayLast = dayBody.length + 1;
-  const dayTotal = [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sum("C", 2, dayLast)(D.totals.sales), sum("D", 2, dayLast)(D.totals.cashIn), sum("E", 2, dayLast)(D.totals.cashOut), null, null, sum("H", 2, dayLast)(D.totals.diff), null];
+  const dayTotal = [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sum("C", 2, dayLast)(D.totals.received), sum("D", 2, dayLast)(D.totals.change), sum("E", 2, dayLast)(D.totals.sales), sum("F", 2, dayLast)(D.totals.cashIn), sum("G", 2, dayLast)(D.totals.cashOut), null, null, sum("J", 2, dayLast)(D.totals.diff), null];
 
   const mvHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Soort", "Type", "Tipo"), T("Reden / opmerking", "Reason / note", "Motivo / nota"), T("Bedrag", "Amount", "Importe"), T("Verwacht bij telling", "Expected at count", "Esperado al contar"), T("Verschil", "Difference", "Diferencia"));
   const mvBody = D.movements.map((m) => {
@@ -269,16 +271,16 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
   });
   const mvLast = mvBody.length + 1;
 
-  const csHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Bedrag", "Amount", "Importe"));
-  const csBody = D.cashRows.map((a) => [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(a.service_price)]);
+  const csHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe"));
+  const csBody = D.cashRows.map((a) => { const f = cashFlowOf(a); return [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(f.received), money(f.change), money(f.net)]; });
   const csLast = csBody.length + 1;
-  const csTotal = [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("F", 2, csLast)(D.totals.sales)];
+  const csTotal = [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("F", 2, csLast)(D.totals.received), sum("G", 2, csLast)(D.totals.change), sum("H", 2, csLast)(D.totals.sales)];
 
   const sheets = [
     { name: T("Samenvatting", "Summary", "Resumen"), cols: [34, 18, 18, 14], rows: sum1 },
-    { name: T("Per dag", "By day", "Por día"), cols: [12, 13, 16, 12, 12, 15, 12, 12, 30], rows: [dayHead, ...dayBody, dayTotal], freeze: true, filter: dayLast },
+    { name: T("Per dag", "By day", "Por día"), cols: [12, 13, 16, 12, 18, 15, 15, 15, 12, 12, 30], rows: [dayHead, ...dayBody, dayTotal], freeze: true, filter: dayLast },
     { name: T("Mutaties", "Movements", "Movimientos"), cols: [12, 7, 14, 36, 13, 18, 12], rows: [mvHead, ...mvBody], freeze: true, filter: Math.max(1, mvLast) },
-    { name: T("Contante betalingen", "Cash payments", "Pagos en efectivo"), cols: [12, 7, 24, 40, 18, 13], rows: [csHead, ...csBody, csTotal], freeze: true, filter: csLast },
+    { name: T("Contante betalingen", "Cash payments", "Pagos en efectivo"), cols: [12, 7, 24, 40, 18, 13, 12, 13], rows: [csHead, ...csBody, csTotal], freeze: true, filter: csLast },
   ];
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = cashbookFilename({ salon, range, lang, ext: "xlsx" });

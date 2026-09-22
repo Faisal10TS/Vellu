@@ -8,7 +8,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { cashbookData, cashbookFilename } from "./reportData.js";
+import { cashbookData, cashbookFilename, cashFlowOf } from "./reportData.js";
 
 const ACCENT = [201, 169, 110];
 const s = (v) => (v === null || v === undefined ? "" : String(v));
@@ -74,9 +74,10 @@ export function generateCashbookPDF({
   y = Math.max(y + 34, 200);
   doc.setDrawColor(230, 230, 230); doc.line(margin, y - 14, pageW - margin, y - 14);
   const summary = [
-    [T("Contant verkocht", "Cash sales", "Ventas en efectivo"), money(D.totals.sales)],
-    [T("Kas in", "Cash in", "Entradas"), money(D.totals.cashIn)],
-    [T("Kas uit", "Cash out", "Salidas"), money(D.totals.cashOut)],
+    [T("Contant ontvangen", "Cash received", "Efectivo recibido"), money(D.totals.received)],
+    [T("Wisselgeld terug", "Change given", "Cambio devuelto"), money(D.totals.change)],
+    [T("Stortingen", "Deposits", "Depósitos"), money(D.totals.cashIn)],
+    [T("Opnames", "Withdrawals", "Retiradas"), money(D.totals.cashOut)],
     [T("Kasverschil", "Difference", "Diferencia"), D.totals.daysCounted ? signed(D.totals.diff) : "—"],
   ];
   let sx = margin;
@@ -84,7 +85,7 @@ export function generateCashbookPDF({
   for (const [label, value] of summary) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(150, 150, 150);
     doc.text(String(label).toUpperCase(), sx, y);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(26, 23, 20);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(26, 23, 20);
     doc.text(String(value), sx, y + 18);
     sx += colW;
   }
@@ -97,9 +98,9 @@ export function generateCashbookPDF({
 
   const tableTheme = {
     theme: "grid",
-    headStyles: { fillColor: [250, 248, 245], textColor: [120, 110, 100], fontStyle: "bold", fontSize: 8 },
-    bodyStyles: { fontSize: 8, textColor: [60, 60, 60] },
-    footStyles: { fillColor: [245, 243, 239], textColor: [26, 23, 20], fontStyle: "bold", fontSize: 8.5 },
+    headStyles: { fillColor: [250, 248, 245], textColor: [120, 110, 100], fontStyle: "bold", fontSize: 7.5 },
+    bodyStyles: { fontSize: 7.5, textColor: [60, 60, 60] },
+    footStyles: { fillColor: [245, 243, 239], textColor: [26, 23, 20], fontStyle: "bold", fontSize: 8 },
     margin: { left: margin, right: margin, bottom: 46 },
   };
   const right = (n) => ({ halign: "right" });
@@ -108,12 +109,12 @@ export function generateCashbookPDF({
   autoTable(doc, {
     ...tableTheme,
     startY: y,
-    head: [[T("Dag", "Day", "Día"), T("Beginsaldo", "Opening", "Inicial"), T("Contant verkocht", "Cash sales", "Ventas"), T("Kas in", "Cash in", "Entrada"), T("Kas uit", "Cash out", "Salida"), T("Verwacht", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia")]],
+    head: [[T("Dag", "Day", "Día"), T("Beginsaldo", "Opening", "Inicial"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Stortingen", "Deposits", "Depósitos"), T("Opnames", "Withdrawals", "Retiradas"), T("Verwacht", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia")]],
     body: D.days.length
-      ? D.days.map((d) => [fmtDate(d.date, lang), d.opening === null ? "—" : money(d.opening), money(d.sales), d.cashIn ? money(d.cashIn) : "", d.cashOut ? money(d.cashOut) : "", money(d.expected), d.counted === null ? "—" : money(d.counted), d.diff === null ? "—" : signed(d.diff)])
-      : [[T("Geen kasverkeer in deze periode", "No cash activity in this period", "Sin movimientos en este período"), "", "", "", "", "", "", ""]],
-    foot: D.days.length ? [[T("Totaal", "Total", "Total"), "", money(D.totals.sales), money(D.totals.cashIn), money(D.totals.cashOut), "", "", D.totals.daysCounted ? signed(D.totals.diff) : "—"]] : undefined,
-    columnStyles: { 1: right(), 2: right(), 3: right(), 4: right(), 5: right(), 6: right(), 7: right() },
+      ? D.days.map((d) => [fmtDate(d.date, lang), d.opening === null ? "—" : money(d.opening), money(d.received), d.change ? money(d.change) : "", d.cashIn ? money(d.cashIn) : "", d.cashOut ? money(d.cashOut) : "", money(d.expected), d.counted === null ? "—" : money(d.counted), d.diff === null ? "—" : signed(d.diff)])
+      : [[T("Geen kasverkeer in deze periode", "No cash activity in this period", "Sin movimientos en este período"), "", "", "", "", "", "", "", ""]],
+    foot: D.days.length ? [[T("Totaal", "Total", "Total"), "", money(D.totals.received), money(D.totals.change), money(D.totals.cashIn), money(D.totals.cashOut), "", "", D.totals.daysCounted ? signed(D.totals.diff) : "—"]] : undefined,
+    columnStyles: { 1: right(), 2: right(), 3: right(), 4: right(), 5: right(), 6: right(), 7: right(), 8: right() },
   });
 
   // ── Mutaties ────────────────────────────────────────────────────────
@@ -136,10 +137,10 @@ export function generateCashbookPDF({
     autoTable(doc, {
       ...tableTheme,
       startY: doc.lastAutoTable.finalY + 20,
-      head: [[T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Bedrag", "Amount", "Importe")]],
-      body: D.cashRows.map((a) => [fmtDate(a.date, lang), s(a.time), s(a.client_name), s(a.service_name).slice(0, 70), s(a.staff_name).split(",")[0].trim(), money(a.service_price)]),
-      foot: [["", "", "", "", T("Totaal", "Total", "Total"), money(D.totals.sales)]],
-      columnStyles: { 5: right(), 3: { cellWidth: 170 } },
+      head: [[T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe")]],
+      body: D.cashRows.map((a) => { const f = cashFlowOf(a); return [fmtDate(a.date, lang), s(a.time), s(a.client_name), s(a.service_name).slice(0, 60), s(a.staff_name).split(",")[0].trim(), money(f.received), f.change ? money(f.change) : "", money(f.net)]; }),
+      foot: [["", "", "", "", T("Totaal", "Total", "Total"), money(D.totals.received), money(D.totals.change), money(D.totals.sales)]],
+      columnStyles: { 5: right(), 6: right(), 7: right(), 3: { cellWidth: 130 } },
     });
   }
 
@@ -148,9 +149,9 @@ export function generateCashbookPDF({
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(160, 160, 160);
-    doc.text(T(`Bedragen in ${currencySymbol}. Verwacht in kas = beginsaldo + contant verkocht + kas in − kas uit; kasverschil = geteld − verwacht op het moment van tellen.`,
-      `Amounts in ${currencySymbol}. Expected = opening float + cash sales + cash in − cash out; difference = counted − expected at the time of counting.`,
-      `Importes en ${currencySymbol}. Esperado = saldo inicial + ventas en efectivo + entradas − salidas; diferencia = contado − esperado en el momento del recuento.`), margin, pageH - 32, { maxWidth: pageW - margin * 2 });
+    doc.text(T(`Bedragen in ${currencySymbol}. Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames; kasverschil = geteld − verwacht op het moment van tellen.`,
+      `Amounts in ${currencySymbol}. Expected = opening float + cash received − change + deposits − withdrawals; difference = counted − expected at the time of counting.`,
+      `Importes en ${currencySymbol}. Esperado = saldo inicial + efectivo recibido − cambio + depósitos − retiradas; diferencia = contado − esperado en el momento del recuento.`), margin, pageH - 32, { maxWidth: pageW - margin * 2 });
     doc.text(`${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`, margin, pageH - 20);
     doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
   }

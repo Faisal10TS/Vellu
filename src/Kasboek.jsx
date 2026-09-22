@@ -5,8 +5,14 @@
 // vanzelf uit de kassa en de afspraken die contant zijn afgerekend), handmatige
 // stortingen en opnames met een reden, en aan het eind van de dag een telling.
 //
-//   verwacht in kas = beginsaldo + contant verkocht + kas in − kas uit
+//   verwacht in kas = beginsaldo + contant verkocht (netto) + kas in − kas uit
 //   kasverschil      = geteld − verwacht (op het moment van tellen bevroren)
+//
+// Contante verkopen zijn een echte geldstroom (Faisal 22-09-2026: "waarom
+// staat er niet automatisch dat er 4 kassa uit is"): wat de klant gaf
+// (cash_received, of gepast) telt als kas in, het wisselgeld als kas uit —
+// automatisch, als regels die niet te verwijderen zijn. Netto blijft het
+// verkoopbedrag in de la, dus "verwacht" verandert daar niet door.
 //
 // Rendert onder het dagoverzicht van de Kassa en volgt dezelfde dagkeuze. De
 // regels staan in cash_movements (RLS: eigenaar). De contante verkopen worden
@@ -15,8 +21,10 @@
 
 import { useState, useEffect } from "react";
 import { NavIcon, onAccentInk } from "./shared.jsx";
+import { cashFlowOf } from "./reportData.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const str = (v) => (v === null || v === undefined ? "" : String(v));
 
 export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cashRows = [], lang = "nl", c, accent, cur = "€", toast, showConfirm, staffName = "", onExport = null }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
@@ -54,7 +62,13 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
   const opening = [...list].reverse().find((r) => r.kind === "open") || null;
   const sumIn = list.filter((r) => r.kind === "in").reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
   const sumOut = list.filter((r) => r.kind === "out").reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  const cashSales = cashRows.reduce((s, a) => s + (parseFloat(a.service_price) || 0), 0);
+  // Contante verkopen als echte geldstroom (Faisal 22-09-2026: "waarom staat
+  // er niet automatisch dat er 4 kassa uit is"): wat de klant gaf is kas in,
+  // het wisselgeld is kas uit. Netto blijft het verkoopbedrag in de la.
+  const flows = cashRows.map(cashFlowOf);
+  const cashReceived = round2(flows.reduce((n, f) => n + f.received, 0));
+  const cashChange = round2(flows.reduce((n, f) => n + f.change, 0));
+  const cashSales = round2(cashReceived - cashChange);
   const expected = round2((opening ? parseFloat(opening.amount) || 0 : 0) + cashSales + sumIn - sumOut);
   const lastCount = [...list].reverse().find((r) => r.kind === "count") || null;
   // Verschil van de laatste telling: tegen het bedrag dat TOEN verwacht werd
@@ -120,9 +134,11 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
       {/* Kerncijfers van de dag */}
       <div data-kasboek-tiles style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 6 }}>
         {tile(KIND.open, opening ? money(opening.amount) : "—")}
-        {tile(T("Contant verkocht", "Cash sales", "Ventas en efectivo"), money(cashSales), cashRows.length ? `${cashRows.length} ${cashRows.length === 1 ? T("betaling", "payment", "pago") : T("betalingen", "payments", "pagos")}` : null)}
-        {tile(KIND.in, sumIn > 0 ? `+${money(sumIn)}` : money(0))}
-        {tile(KIND.out, sumOut > 0 ? `−${money(sumOut)}` : money(0))}
+        {tile(KIND.in, cashReceived + sumIn > 0 ? `+${money(cashReceived + sumIn)}` : money(0),
+          [cashRows.length ? `${money(cashReceived)} ${T("ontvangen", "received", "recibido")} (${cashRows.length} ${cashRows.length === 1 ? T("betaling", "payment", "pago") : T("betalingen", "payments", "pagos")})` : null, sumIn > 0 ? `${money(sumIn)} ${T("gestort", "deposited", "depositado")}` : null].filter(Boolean).join(" · ") || null)}
+        {tile(KIND.out, cashChange + sumOut > 0 ? `−${money(cashChange + sumOut)}` : money(0),
+          [cashChange > 0 ? `${money(cashChange)} ${T("wisselgeld", "change", "cambio")}` : null, sumOut > 0 ? `${money(sumOut)} ${T("opgenomen", "withdrawn", "retirado")}` : null].filter(Boolean).join(" · ") || null)}
+        {tile(T("Contant verkocht", "Cash sales", "Ventas en efectivo"), money(cashSales), cashChange > 0 ? T(`netto, na ${money(cashChange)} wisselgeld`, `net, after ${money(cashChange)} change`, `neto, tras ${money(cashChange)} de cambio`) : null)}
       </div>
       <div data-kasboek-expected-row style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "10px 2px 0" }}>
         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{T("Verwacht in kas", "Expected in drawer", "Esperado en caja")}</span>
@@ -196,32 +212,48 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
         </div>
       )}
 
-      {/* Regels van de dag */}
+      {/* Regels van de dag: het kasboek zelf én de automatische regels uit de
+          verkopen (contant ontvangen / wisselgeld), op tijd gesorteerd. De
+          automatische regels zijn niet te verwijderen — dat gaat via de verkoop. */}
       {rows === null ? (
         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8 }}>…</div>
-      ) : list.length > 0 && (
-        <div data-kasboek-rows style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-          {list.map((r) => {
-            const amt = parseFloat(r.amount) || 0;
-            const sign = r.kind === "out" ? "−" : r.kind === "in" ? "+" : "";
-            const kleur = r.kind === "out" ? c.danger : r.kind === "in" ? c.success : c.text;
-            const diff = r.kind === "count" ? round2(amt - (parseFloat(r.expected) || 0)) : null;
-            return (
-              <div key={r.id} data-kasboek-row={r.kind} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, padding: "5px 2px", borderBottom: `1px solid ${c.border}` }}>
-                <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtTime(r.created_at)}</span>
+      ) : (() => {
+        const ledger = [];
+        for (const a of cashRows) {
+          const f = cashFlowOf(a);
+          const wat = `${str(a.service_name)}${a.client_name && !a.is_sale ? ` (${str(a.client_name)})` : ""}`;
+          ledger.push({ key: `sale-${a.id}`, kind: "sale", auto: true, time: str(a.time).slice(0, 5), label: T("Contant ontvangen", "Cash received", "Efectivo recibido"), sub: wat, amount: f.received, sign: "+", color: c.success });
+          if (f.change > 0) ledger.push({ key: `chg-${a.id}`, kind: "change", auto: true, time: str(a.time).slice(0, 5), label: T("Wisselgeld", "Change", "Cambio"), sub: wat, amount: f.change, sign: "−", color: c.danger });
+        }
+        for (const r of list) {
+          const amt = parseFloat(r.amount) || 0;
+          const diff = r.kind === "count" ? round2(amt - (parseFloat(r.expected) || 0)) : null;
+          ledger.push({ key: r.id, kind: r.kind, auto: false, row: r, time: fmtTime(r.created_at), label: KIND[r.kind] || r.kind, sub: str(r.reason), amount: amt, sign: r.kind === "out" ? "−" : r.kind === "in" ? "+" : "", color: r.kind === "out" ? c.danger : r.kind === "in" ? c.success : c.text, diff });
+        }
+        ledger.sort((x, y) => x.time.localeCompare(y.time));
+        if (!ledger.length) return null;
+        return (
+          <div data-kasboek-rows style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+            {ledger.map((e) => (
+              <div key={e.key} data-kasboek-row={e.kind} data-kasboek-auto={e.auto ? "1" : undefined} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, padding: "5px 2px", borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{e.time}</span>
                 <span style={{ flex: 1, minWidth: 0, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {KIND[r.kind] || r.kind}{r.reason ? ` · ${r.reason}` : ""}
-                  {r.kind === "count" && diff !== null && (
-                    <span style={{ color: diff === 0 ? c.success : diff > 0 ? c.warning : c.danger }}> · {diff === 0 ? T("klopt", "balances", "cuadra") : diff > 0 ? `+${money(diff)}` : `−${money(-diff)}`}</span>
+                  {e.label}{e.sub ? <span style={{ color: c.textSub }}> · {e.sub}</span> : null}
+                  {e.kind === "count" && e.diff !== null && (
+                    <span style={{ color: e.diff === 0 ? c.success : e.diff > 0 ? c.warning : c.danger }}> · {e.diff === 0 ? T("klopt", "balances", "cuadra") : e.diff > 0 ? `+${money(e.diff)}` : `−${money(-e.diff)}`}</span>
                   )}
                 </span>
-                <span style={{ color: kleur, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{sign}{money(amt)}</span>
-                <button type="button" data-kasboek-delete aria-label={T("Verwijderen", "Remove", "Eliminar")} onClick={() => remove(r)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>{"×"}</button>
+                <span style={{ color: e.color, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{e.sign}{money(e.amount)}</span>
+                {e.auto ? (
+                  <span title={T("Automatisch uit de verkoop", "Automatic from the sale", "Automático de la venta")} style={{ width: 18, textAlign: "center", color: c.textMuted, fontSize: 8, letterSpacing: "0.04em", flexShrink: 0 }}>{T("auto", "auto", "auto")}</span>
+                ) : (
+                  <button type="button" data-kasboek-delete aria-label={T("Verwijderen", "Remove", "Eliminar")} onClick={() => remove(e.row)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px", flexShrink: 0, width: 18 }}>{"×"}</button>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
       {/* Exporteren: zelfde schakelaar en periodeknoppen als het verkooprapport. */}
       {onExport && (
         <div data-kasboek-export style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
@@ -248,9 +280,9 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
       )}
       {rows !== null && !opening && list.length === 0 && (
         <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 8, lineHeight: 1.45 }}>
-          {T("Zet aan het begin van de dag het beginsaldo, boek stortingen en opnames met een reden, en tel aan het eind de la. Contante verkopen tellen vanzelf mee.",
-             "Set the opening float at the start of the day, log deposits and withdrawals with a reason, and count the drawer at the end. Cash sales are included automatically.",
-             "Fija el saldo inicial al empezar el día, registra entradas y salidas con un motivo y cuenta la caja al final. Las ventas en efectivo se incluyen automáticamente.")}
+          {T("Zet aan het begin van de dag het beginsaldo, boek stortingen en opnames met een reden, en tel aan het eind de la. Contante verkopen tellen vanzelf mee: wat de klant geeft als kas in, het wisselgeld als kas uit.",
+             "Set the opening float at the start of the day, log deposits and withdrawals with a reason, and count the drawer at the end. Cash sales are included automatically: what the client hands you as cash in, the change as cash out.",
+             "Fija el saldo inicial al empezar el día, registra entradas y salidas con un motivo y cuenta la caja al final. Las ventas en efectivo se incluyen automáticamente: lo que entrega el cliente como entrada, el cambio como salida.")}
         </div>
       )}
     </div>

@@ -205,6 +205,17 @@ export function cashbookFilename({ salon, range, lang = "nl", ext = "pdf" }) {
   return `${fnSalon}-${T3(lang, "kasboek", "cash-book", "libro-caja")}-${periodSpan(range) || "export"}.${ext}`;
 }
 
+// Geldstroom van één contante betaling: wat de klant gaf (cash_received, of het
+// bedrag zelf als dat niet is ingevuld = gepast), wat er terugging (wisselgeld)
+// en wat er netto in de la bleef (het verkoopbedrag). Kas in = received, kas
+// uit = change; received − change = net.
+export function cashFlowOf(a) {
+  const price = round2(parseFloat(a?.service_price) || 0);
+  const raw = a?.cash_received != null && a.cash_received !== "" ? round2(parseFloat(a.cash_received) || 0) : price;
+  const received = Math.max(raw, price);
+  return { price, received, change: round2(received - price), net: price };
+}
+
 // ── Kasboek ──────────────────────────────────────────────────────────────
 // movements: cash_movements-rijen (open/in/out/count) van de periode;
 // cashRows: appointments-rijen die contant zijn afgerekend (kassa én
@@ -221,15 +232,20 @@ export function cashbookData({ movements, cashRows, from, to }) {
     const opening = [...dm].reverse().find((m) => m.kind === "open") || null;
     const count = [...dm].reverse().find((m) => m.kind === "count") || null;
     const daySales = cs.filter((a) => a.date === date);
-    const sales = round2(daySales.reduce((n, a) => n + (parseFloat(a.service_price) || 0), 0));
+    const flows = daySales.map(cashFlowOf);
+    const received = round2(flows.reduce((n, f) => n + f.received, 0)); // kas in uit verkopen
+    const change = round2(flows.reduce((n, f) => n + f.change, 0));     // kas uit: wisselgeld
+    const sales = round2(received - change);                             // netto in de la
     const cashIn = round2(dm.filter((m) => m.kind === "in").reduce((n, m) => n + (parseFloat(m.amount) || 0), 0));
     const cashOut = round2(dm.filter((m) => m.kind === "out").reduce((n, m) => n + (parseFloat(m.amount) || 0), 0));
     const expected = round2((opening ? parseFloat(opening.amount) || 0 : 0) + sales + cashIn - cashOut);
     const counted = count ? round2(parseFloat(count.amount) || 0) : null;
     const diff = count ? round2(counted - (count.expected != null ? parseFloat(count.expected) || 0 : expected)) : null;
-    return { date, opening: opening ? round2(parseFloat(opening.amount) || 0) : null, sales, salesCount: daySales.length, cashIn, cashOut, expected, counted, countedAt: count ? count.created_at : null, diff, note: count && count.reason ? String(count.reason) : "" };
+    return { date, opening: opening ? round2(parseFloat(opening.amount) || 0) : null, received, change, sales, salesCount: daySales.length, cashIn, cashOut, expected, counted, countedAt: count ? count.created_at : null, diff, note: count && count.reason ? String(count.reason) : "" };
   });
   const totals = {
+    received: round2(days.reduce((n, d) => n + d.received, 0)),
+    change: round2(days.reduce((n, d) => n + d.change, 0)),
     sales: round2(days.reduce((n, d) => n + d.sales, 0)),
     salesCount: cs.length,
     cashIn: round2(days.reduce((n, d) => n + d.cashIn, 0)),
