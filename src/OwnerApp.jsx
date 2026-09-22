@@ -5377,6 +5377,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Kassa: hoe er is afgerekend. "request" wordt payment_method "online"
   // zodat de factuur-mail het betaalverzoek-blok meestuurt.
   const [walkinPay, setWalkinPay] = useState("pin");
+  // Contant afrekenen (22-09-2026, Faisal: "kassa in, kassa uit"): wat de klant
+  // geeft. Leeg = gepast. Wisselgeld = ontvangen - totaal, uitgerekend in beeld
+  // en op de bon; het ontvangen bedrag gaat mee op de verkoop (cash_received).
+  const [kassaCashIn, setKassaCashIn] = useState("");
   // Kassakorting: alleen op het productdeel (kadobon = betaalmiddel). De
   // %-stand is een invoerhulp; geboekt wordt altijd een bedrag, als negatieve
   // productregel zodat bon én belastinggrondslag vanzelf kloppen.
@@ -6982,6 +6986,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       });
     }
     const netTotal = +(saleTotal - redeemAmt).toFixed(2);
+    // Contant: is er een bedrag ingetypt, dan moet het minstens het totaal
+    // zijn — anders is de verkoop niet betaald. De knop is dan al uit, dit is
+    // het vangnet (na de kadobon-handelingen, dus mét terugdraaien).
+    const cashInAmt = walkinPay === "cash" && kassaCashIn.trim() !== "" ? Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100 : null;
+    if (cashInAmt !== null && cashInAmt + 0.005 < netTotal) {
+      await rollbackVouchers();
+      toast.show(lang === "nl" ? `Ontvangen bedrag (${cur}${cashInAmt.toFixed(2)}) is lager dan het totaal` : lang === "es" ? `El importe recibido (${cur}${cashInAmt.toFixed(2)}) es menor que el total` : `Cash received (${cur}${cashInAmt.toFixed(2)}) is less than the total`, "error");
+      return;
+    }
     const saleLabel = items.filter(it => it.kind !== "voucher_redeem" && it.kind !== "discount").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
     {
       const now = new Date();
@@ -7016,6 +7029,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // Pin/contant is op dat moment afgerekend → meteen als betaald
         // gemarkeerd. Een betaalverzoek blijft openstaan tot je 'm afvinkt.
         paid_at: (walkinPay === "request" && netTotal > 0) ? null : new Date().toISOString(),
+        // Contant: wat de klant gaf (kassa in); de bon en de bevestiging
+        // rekenen daar het wisselgeld (kassa uit) uit. NULL = niet ingevuld.
+        cash_received: cashInAmt,
         invoice_sent: false,
         // Kassa-verkoop, geen afspraak: telt mee in omzet/facturen/analytics
         // maar wordt uit alle agenda-weergaven gefilterd.
@@ -7047,7 +7063,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.next_receipt_number = receiptNo + 1; return d; });
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
-      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode(""); setKassaDiscount(""); setKassaDiscountPct(false);
+      setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaCashIn(""); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode(""); setKassaDiscount(""); setKassaDiscountPct(false);
       // Bevestiging in beeld houden: bedrag, betaalwijze en knoppen voor de bon.
       setLastSale(data);
       // Met auto-print aan rolt de bon direct uit de printer terwijl de
@@ -9793,7 +9809,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const acties = [
                         { key: "add", primary: true, icon: "plus", label: isMobile ? L("+ Afspraak", "+ Booking", "+ Cita") : t.addAppointment, onClick: openAddAppt },
                         ...(heeftKassa ? [{ key: "kassa", icon: "kassa", label: isMobile ? L("Kassa", "Sale", "Caja") : L("Verkoop / kassa", "Sale / checkout", "Venta / caja"),
-                          onClick: () => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); } }] : []),
+                          onClick: () => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaCashIn(""); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); } }] : []),
                         { key: "preview", icon: "eye", label: isMobile ? L("Bekijk", "Preview", "Ver") : L("Bekijk boekingspagina", "View booking page", "Ver página de reservas"), title: L("Open je boekingspagina in een nieuw tabblad", "Open your booking page in a new tab", "Abre tu página de reservas en una pestaña nueva"), onClick: () => window.open(`/${salonData.id}`, "_blank", "noopener,noreferrer") },
                         { key: "copy", icon: copied ? "check" : "link", label: copied ? t.copied : (isMobile ? L("Kopieer link", "Copy link", "Copiar enlace") : L("Kopieer boekingslink", "Copy booking link", "Copiar enlace de reservas")), title: L("Kopieer de link naar je boekingspagina", "Copy the link to your booking page", "Copiar el enlace a tu página de reservas"), onClick: copyLink },
                         ...(heeftExport ? [{ key: "export", icon: "download", label: isMobile ? "Export" : t.exportCalendar,
@@ -10278,6 +10294,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {sale.invoice_sent && sale.client_email && (
                               <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>{lang === "nl" ? "Factuur gemaild naar" : lang === "es" ? "Factura enviada a" : "Invoice emailed to"} {sale.client_email}</div>
                             )}
+                            {/* Contant met ingetypt bedrag: het wisselgeld is
+                                op dit moment het enige dat de kassier wil weten. */}
+                            {sale.payment_method === "cash" && sale.cash_received != null && (() => {
+                              const ontvangen = parseFloat(sale.cash_received) || 0;
+                              const terug = Math.max(0, Math.round((ontvangen - (parseFloat(sale.service_price) || 0)) * 100) / 100);
+                              return (
+                                <div data-kassa-change-done style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${c.success}12`, border: `1px solid ${c.success}44` }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textSub }}>
+                                    <span>{lang === "nl" ? "Ontvangen (kassa in)" : lang === "es" ? "Recibido" : "Cash received"}</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{cur}{ontvangen.toFixed(2)}</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Wisselgeld (kassa uit)" : lang === "es" ? "Cambio a devolver" : "Change to give back"}</span>
+                                    <span data-kassa-change-done-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: c.success, fontVariantNumeric: "tabular-nums" }}>{cur}{terug.toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 9 }}>
                             {lines.map((it, i) => (
@@ -10416,7 +10450,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         )}
                         <div style={{ display: "flex", gap: 6 }}>
                           {[["pin", lang === "es" ? "Tarjeta" : "Pin"], ["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["request", lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request"]].map(([val, label]) => (
-                            <button key={val} type="button" onClick={() => setWalkinPay(val)}
+                            <button key={val} type="button" data-kassa-pay={val} onClick={() => { setWalkinPay(val); if (val !== "cash") setKassaCashIn(""); }}
                               style={{ flex: 1, padding: "9px 6px", borderRadius: 10, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${walkinPay === val ? accent : c.inputBorder}`, background: walkinPay === val ? `${accent}14` : "transparent", color: walkinPay === val ? accent : c.textSub }}>
                               {label}
                             </button>
@@ -10440,8 +10474,45 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                  : "Cash taken — Vellu records it for your cash-up.")}
                           </div>
                         )}
-                        <button className="btn-primary" style={{ width: "100%", padding: "13px 16px", fontSize: 12, opacity: kassaCheckoutBusy ? 0.6 : 1 }}
-                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId || kassaCheckoutBusy}
+                        {/* Contant: kassa in / kassa uit (22-09-2026). Wat geeft de
+                            klant, wat gaat er terug. Snelknoppen: gepast en de
+                            eerstvolgende ronde bedragen boven het totaal. Leeg
+                            laten = gepast betaald. */}
+                        {walkinPay === "cash" && tot > 0 && (() => {
+                          const ingevuld = kassaCashIn.trim() !== "";
+                          const ontvangen = ingevuld ? Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100 : tot;
+                          const verschil = Math.round((ontvangen - tot) * 100) / 100;
+                          const teWeinig = ingevuld && verschil < 0;
+                          const coupures = cur === "$" ? [1, 5, 10, 20, 50, 100] : [5, 10, 20, 50, 100];
+                          const snel = [...new Set(coupures.map(n => Math.ceil(tot / n) * n).filter(v => v > tot + 0.004))].sort((a, b) => a - b).slice(0, 3);
+                          const knop = (label, val, actief) => (
+                            <button key={label} type="button" onClick={() => setKassaCashIn(val)}
+                              style={{ flex: "1 0 auto", padding: "7px 8px", borderRadius: 8, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Jost',sans-serif", border: `1px solid ${actief ? accent : c.inputBorder}`, background: actief ? `${accent}14` : "transparent", color: actief ? accent : c.textSub, whiteSpace: "nowrap" }}>{label}</button>
+                          );
+                          return (
+                            <div data-kassa-cash style={{ padding: "10px 12px", borderRadius: 12, background: c.inputBg, border: `1px solid ${c.inputBorder}` }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ flex: 1, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Contant ontvangen (kassa in)" : lang === "es" ? "Efectivo recibido" : "Cash received"}</span>
+                                <input data-kassa-cash-in className="input-field" type="number" inputMode="decimal" min="0" step="0.01" value={kassaCashIn} onChange={e => setKassaCashIn(e.target.value)} placeholder={tot.toFixed(2)}
+                                  style={{ width: 96, fontSize: 13, padding: "7px 10px", borderRadius: 10, textAlign: "right", borderColor: teWeinig ? c.danger : undefined }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                                {knop(lang === "nl" ? "Gepast" : lang === "es" ? "Exacto" : "Exact", tot.toFixed(2), ingevuld && Math.abs(ontvangen - tot) < 0.005)}
+                                {snel.map(v => knop(`${cur}${v}`, String(v), ingevuld && Math.abs(ontvangen - v) < 0.005))}
+                              </div>
+                              <div data-kassa-change style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 10 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: teWeinig ? c.danger : c.text }}>
+                                  {teWeinig
+                                    ? (lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Falta por recibir" : "Still to receive")
+                                    : (lang === "nl" ? "Wisselgeld (kassa uit)" : lang === "es" ? "Cambio a devolver" : "Change to give back")}
+                                </span>
+                                <span data-kassa-change-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: teWeinig ? c.danger : c.success, fontVariantNumeric: "tabular-nums" }}>{cur}{Math.abs(verschil).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <button className="btn-primary" data-kassa-checkout style={{ width: "100%", padding: "13px 16px", fontSize: 12, opacity: kassaCheckoutBusy ? 0.6 : 1 }}
+                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId || kassaCheckoutBusy || (walkinPay === "cash" && kassaCashIn.trim() !== "" && (Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100) + 0.005 < tot)}
                           onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
                           {kassaCheckoutBusy
                             ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
@@ -11754,7 +11825,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {salonData.plan === "professional" && (salonData.products || []).some(p => p.active) && (
                     <button className="btn-ghost" style={{ flexShrink: 0, padding: "12px 16px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}
                       title={lang === "nl" ? "Product verkopen zonder afspraak (walk-in)" : lang === "es" ? "Vender producto sin cita (walk-in)" : "Sell a product without an appointment (walk-in)"}
-                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
+                      onClick={() => { setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaCashIn(""); setKassaSearch(""); setKassaVoucher(""); setView("kassa"); }}>
                       <NavIcon name="kassa" size={13} color="currentColor" /> {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
                     </button>
                   )}

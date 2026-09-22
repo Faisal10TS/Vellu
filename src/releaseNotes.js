@@ -18,8 +18,16 @@ export const RELEASES = [
     // downloaded as excel files too?"). Zelfde cijfers als de PDF (één rekenlaag).
     id: "2026-09-22",
     date: "2026-09-22",
-    title: { nl: "Rapporten nu ook als Excel", en: "Reports now also as Excel", es: "Informes también en Excel" },
+    title: { nl: "Rapporten ook als Excel, wisselgeld in de Kassa", en: "Reports also as Excel, change in Sales", es: "Informes en Excel, cambio en la Caja" },
     items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Kassa, contant afrekenen: vul in wat de klant geeft (kassa in) en Vellu rekent het wisselgeld uit (kassa uit). Met snelknoppen voor gepast en de eerstvolgende ronde bedragen. Is het te weinig, dan zie je dat meteen en kun je niet afrekenen. Het wisselgeld staat groot in de bevestiging en op de bon. Niets invullen betekent gepast betaald.",
+          en: "Sales, paying cash: enter what the client hands you (cash in) and Vellu works out the change (cash out). Quick buttons for the exact amount and the next round amounts. If it is too little you see it straight away and cannot check out. The change is shown large in the confirmation and on the receipt. Leaving it empty means paid exactly.",
+          es: "Caja, pago en efectivo: introduce lo que te da el cliente (entra en caja) y Vellu calcula el cambio (sale de caja). Con botones rápidos para el importe exacto y los siguientes importes redondos. Si es poco lo ves al momento y no puedes cobrar. El cambio aparece en grande en la confirmación y en el recibo. Dejarlo vacío significa pago exacto.",
+        },
+      },
       {
         kind: "new", audience: ["owner", "staff"],
         text: {

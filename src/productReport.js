@@ -457,6 +457,14 @@ export function generateReceiptPDF({
     doc.text(T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago"), m, y);
     y += 11;
   }
+  // Contant met ingetypt bedrag (22-09-2026): ontvangen en wisselgeld, zoals op
+  // elke kassabon. Wisselgeld nooit negatief tonen: dan is er te weinig gegeven
+  // en had de kassa dat al tegengehouden.
+  if (sale.payment_method === "cash" && sale.cash_received != null) {
+    const ontvangen = parseFloat(sale.cash_received) || 0;
+    pair(T("Ontvangen", "Cash received", "Recibido"), money(ontvangen), 8, "normal", [40, 40, 40], 11);
+    pair(T("Wisselgeld", "Change", "Cambio"), money(Math.max(0, ontvangen - grandTotal)), 8, "normal", [40, 40, 40], 11);
+  }
   if (sale.staff_name) pair(T("Verkocht door", "Sold by", "Vendido por"), String(sale.staff_name).split(",")[0].trim(), 7.5, "normal", [125, 125, 125], 11);
   y += 3;
   rule();
@@ -569,6 +577,11 @@ export function receiptHTML({
   b += `<hr>`;
   b += row(T("Betaald met", "Paid with", "Pagado con"), escHtml(payLabel(sale.payment_method)));
   if (sale.payment_method === "online") b += `<div class="sub klein oranje">${T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago")}</div>`;
+  if (sale.payment_method === "cash" && sale.cash_received != null) {
+    const ontvangen = parseFloat(sale.cash_received) || 0;
+    b += row(T("Ontvangen", "Cash received", "Recibido"), money(ontvangen));
+    b += row(T("Wisselgeld", "Change", "Cambio"), money(Math.max(0, ontvangen - grandTotal)));
+  }
   if (sale.staff_name) b += row(T("Verkocht door", "Sold by", "Vendido por"), escHtml(String(sale.staff_name).split(",")[0].trim()), "sub");
   b += `<hr>`;
   b += `<div class="c sub">${T("Bedankt en tot ziens!", "Thank you, see you soon!", "¡Gracias, hasta pronto!")}</div>`;
