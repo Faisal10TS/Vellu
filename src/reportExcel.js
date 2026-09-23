@@ -14,9 +14,12 @@
 //                   zoals in de PDF elke afspraak, bedrijfsgegevens, noten) +
 //                   Afspraken (dezelfde regels als los blad, om te filteren).
 //                   Esther/TTNB (23-09-2026) miste de regels op het eerste blad.
-//   Productverkoop: Samenvatting (kerncijfers, betaalwijzen, belasting per
-//                   tarief) + Per product + Per dag (bij meer dagen) +
-//                   Transacties (één regel per bon) + Regels (één per artikel)
+//   Productverkoop: Samenvatting (kerncijfers, per product, betaalwijzen,
+//                   belasting per tarief, per dag, transacties — zoals de PDF)
+//                   + Per product + Per dag (bij meer dagen) + Transacties (één
+//                   regel per bon) + Regels (één per artikel) als eigen bladen
+//   Kasboek:        Samenvatting (kerncijfers, per dag, mutaties, contante
+//                   betalingen — zoals de PDF) + dezelfde drie als eigen blad
 // Bedragen zijn echte getallen met een valutanotatie, datums echte datums,
 // totalen SOM-formules met vooraf berekende waarde — zodat een boekhouder er
 // meteen mee kan rekenen, sorteren en filteren.
@@ -48,6 +51,21 @@ function companyRows(salon, idLabel, T) {
   return rows.map(([k, v]) => [{ v: k, s: "bold" }, v]);
 }
 const noteRows = (lines) => lines.filter(Boolean).map((l) => [{ v: l, s: "muted" }]);
+// Zonder regels geen SOM-formule (SUM(H3:H2) zou de totaalregel zelf raken).
+const sumOr = (col, first, last, v, kind = "money") => (last >= first
+  ? sum(col, first, last, true, kind === "int" ? "intTotal" : "moneyTotal")(v)
+  : (kind === "int" ? int(v, true) : money(v, true)));
+// Tabel op een samenvattingsblad: vette kop, kopregel, regels, totaalregel
+// (functie van eerste/laatste rij, zodat de SOM naar de eigen regels wijst),
+// lege regel erna. Blad 1 hoort net zo volledig te zijn als de PDF — een
+// klant kijkt niet verder dan het eerste blad (Esther/TTNB, 23-09-2026).
+const addTable = (rows, title, head, body, totalFn) => {
+  rows.push([{ v: title, s: "bold" }], head);
+  const first = rows.length + 1;
+  for (const r of body) rows.push(r);
+  if (totalFn) rows.push(totalFn(first, rows.length));
+  rows.push([]);
+};
 
 // ── Omzetrapport ─────────────────────────────────────────────────────────
 // Zelfde parameters als generateRevenueReportPDF (zonder logo).
@@ -156,7 +174,29 @@ export function buildProductReportXlsx({
   const P = productReportData({ appointments, cfg, lang });
   const { taxLabel, showTax } = P;
 
-  // ── blad 1: samenvatting ──
+  // ── tabellen: op blad 1 in de volgorde van de PDF (per product,
+  //    betaalwijzen, belasting, per dag, transacties) én als eigen bladen om
+  //    te sorteren en filteren (Faisal 23-09-2026: "doe dat ook voor de kassa").
+  //    Regels (één per artikel) staat niet in de PDF en blijft een eigen blad.
+  //    De totaalregels zijn functies van (eerste, laatste) rij, zodat de
+  //    SOM-formules op elk blad naar de juiste regels wijzen. ──
+  const prodHead = H(T("Product", "Product", "Producto"), T("Aantal", "Qty", "Cantidad"), T("Omzet", "Revenue", "Ingresos"));
+  const prodBody = P.products.map((p) => [p.name, int(p.qty), money(p.revenue)]);
+  const prodTotal = (first, last) => [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("B", first, last, P.totalQty, "int"), sumOr("C", first, last, P.totalRevenue)];
+
+  const dayHead = H(T("Dag", "Day", "Día"), T("Aantal", "Qty", "Cantidad"), T("Omzet", "Revenue", "Ingresos"));
+  const dayBody = P.days.map((d) => [date(d.date), int(d.qty), money(d.revenue)]);
+  const dayTotal = (first, last) => [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("B", first, last, P.totalQty, "int"), sumOr("C", first, last, P.totalRevenue)];
+
+  const trHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Verkocht", "Sold", "Vendido"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"), T("Soort", "Type", "Tipo"), T("Bedrag", "Amount", "Importe"));
+  const trBody = P.lines.map((l) => [date(l.date), l.time, l.what, l.staff, l.pay, l.isSale ? T("Kassa", "Till", "Caja") : T("Bij afspraak", "With appointment", "Con cita"), money(l.amount)]);
+  const trTotal = (first, last) => [null, null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("G", first, last, P.totalRevenue)];
+
+  const itHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Product", "Product", "Producto"), T("Aantal", "Qty", "Cantidad"), T("Stukprijs", "Unit price", "Precio unitario"), T("Bedrag", "Amount", "Importe"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"));
+  const itBody = P.items.map((i) => [date(i.date), i.time, i.kind === "voucher" ? `${i.name} (${T("kadobon ingewisseld", "gift card redeemed", "tarjeta regalo canjeada")})` : i.kind === "voucher_issue" ? `${i.name} (${T("kadobon verkocht", "gift card sold", "tarjeta regalo vendida")})` : i.name, int(i.qty), money(i.price), money(i.amount), i.staff, i.pay]);
+  const itTotal = (first, last) => [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("F", first, last, P.totalRevenue), null, null];
+
+  // ── blad 1: samenvatting, net zo volledig als de PDF ──
   const sum1 = [
     [{ v: T("Productverkoop", "Product sales", "Venta de productos"), s: "title" }],
     [{ v: s(salon.business_name || salon.name), s: "bold" }],
@@ -172,6 +212,7 @@ export function buildProductReportXlsx({
     showTax && P.rateRows.length ? [taxLabel, money(P.totalTax)] : null,
     [],
   ].filter(Boolean);
+  addTable(sum1, T("Per product", "By product", "Por producto"), prodHead, prodBody, prodTotal);
   if (P.payments.length) {
     sum1.push(H(T("Betaalwijze", "Payment method", "Método de pago"), T("Transacties", "Transactions", "Transacciones"), T("Bedrag", "Amount", "Importe")));
     for (const p of P.payments) sum1.push([p.label, int(p.count), money(p.revenue)]);
@@ -187,6 +228,8 @@ export function buildProductReportXlsx({
     if (P.untaxed >= 0.01) sum1.push(...noteRows([T(`De regel "Onbelast" is doorverkoop van producten; die is hier niet ${taxLabel}-plichtig.`, `The "Untaxed" row is resale of products, which is not subject to ${taxLabel} here.`, `La fila "Sin impuesto" es reventa de productos, que no está sujeta a ${taxLabel} aquí.`)]));
     sum1.push([]);
   }
+  if (P.days.length > 1) addTable(sum1, T("Per dag", "By day", "Por día"), dayHead, dayBody, dayTotal);
+  addTable(sum1, T("Transacties", "Transactions", "Transacciones"), trHead, trBody, trTotal);
   sum1.push(...companyRows(salon, cfg.idLabel || taxIdLabel, T), []);
   sum1.push(...noteRows([
     T(`Bedragen in ${currencySymbol}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
@@ -195,37 +238,13 @@ export function buildProductReportXlsx({
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 
-  // ── blad 2: per product ──
-  const prodHead = H(T("Product", "Product", "Producto"), T("Aantal", "Qty", "Cantidad"), T("Omzet", "Revenue", "Ingresos"));
-  const prodBody = P.products.map((p) => [p.name, int(p.qty), money(p.revenue)]);
-  const prodLast = prodBody.length + 1;
-  const prodTotal = [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("B", 2, prodLast, true, "intTotal")(P.totalQty), sum("C", 2, prodLast)(P.totalRevenue)];
-
-  // ── blad 3: per dag (alleen bij meer dan één dag) ──
-  const daySheet = P.days.length > 1 ? (() => {
-    const body = P.days.map((d) => [date(d.date), int(d.qty), money(d.revenue)]);
-    const last = body.length + 1;
-    return { name: T("Per dag", "By day", "Por día"), cols: [14, 10, 14], rows: [H(T("Dag", "Day", "Día"), T("Aantal", "Qty", "Cantidad"), T("Omzet", "Revenue", "Ingresos")), ...body, [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("B", 2, last, true, "intTotal")(P.totalQty), sum("C", 2, last)(P.totalRevenue)]], freeze: true, filter: last };
-  })() : null;
-
-  // ── blad 4: transacties (één regel per bon) ──
-  const trHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Verkocht", "Sold", "Vendido"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"), T("Soort", "Type", "Tipo"), T("Bedrag", "Amount", "Importe"));
-  const trBody = P.lines.map((l) => [date(l.date), l.time, l.what, l.staff, l.pay, l.isSale ? T("Kassa", "Till", "Caja") : T("Bij afspraak", "With appointment", "Con cita"), money(l.amount)]);
-  const trLast = trBody.length + 1;
-  const trTotal = [null, null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("G", 2, trLast)(P.totalRevenue)];
-
-  // ── blad 5: regels (één regel per artikel) ──
-  const itHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Product", "Product", "Producto"), T("Aantal", "Qty", "Cantidad"), T("Stukprijs", "Unit price", "Precio unitario"), T("Bedrag", "Amount", "Importe"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"));
-  const itBody = P.items.map((i) => [date(i.date), i.time, i.kind === "voucher" ? `${i.name} (${T("kadobon ingewisseld", "gift card redeemed", "tarjeta regalo canjeada")})` : i.kind === "voucher_issue" ? `${i.name} (${T("kadobon verkocht", "gift card sold", "tarjeta regalo vendida")})` : i.name, int(i.qty), money(i.price), money(i.amount), i.staff, i.pay]);
-  const itLast = itBody.length + 1;
-  const itTotal = [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("F", 2, itLast)(P.totalRevenue), null, null];
-
+  // ── eigen bladen: dezelfde tabellen, met bevroren kopregel en filter ──
   const sheets = [
-    { name: T("Samenvatting", "Summary", "Resumen"), cols: [30, 18, 18, 14], rows: sum1 },
-    { name: T("Per product", "By product", "Por producto"), cols: [34, 10, 14], rows: [prodHead, ...prodBody, prodTotal], freeze: true, filter: prodLast },
-    daySheet,
-    { name: T("Transacties", "Transactions", "Transacciones"), cols: [12, 7, 44, 18, 16, 14, 13], rows: [trHead, ...trBody, trTotal], freeze: true, filter: trLast },
-    { name: T("Regels", "Lines", "Líneas"), cols: [12, 7, 34, 8, 12, 13, 18, 16], rows: [itHead, ...itBody, itTotal], freeze: true, filter: itLast },
+    { name: T("Samenvatting", "Summary", "Resumen"), cols: [30, 14, 44, 18, 16, 14, 13], rows: sum1 },
+    { name: T("Per product", "By product", "Por producto"), cols: [34, 10, 14], rows: [prodHead, ...prodBody, prodTotal(2, prodBody.length + 1)], freeze: true, filter: prodBody.length + 1 },
+    P.days.length > 1 ? { name: T("Per dag", "By day", "Por día"), cols: [14, 10, 14], rows: [dayHead, ...dayBody, dayTotal(2, dayBody.length + 1)], freeze: true, filter: dayBody.length + 1 } : null,
+    { name: T("Transacties", "Transactions", "Transacciones"), cols: [12, 7, 44, 18, 16, 14, 13], rows: [trHead, ...trBody, trTotal(2, trBody.length + 1)], freeze: true, filter: trBody.length + 1 },
+    { name: T("Regels", "Lines", "Líneas"), cols: [12, 7, 34, 8, 12, 13, 18, 16], rows: [itHead, ...itBody, itTotal(2, itBody.length + 1)], freeze: true, filter: itBody.length + 1 },
   ].filter(Boolean);
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = productReportFilename({ salon, range, lang, ext: "xlsx" });
@@ -247,6 +266,25 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
   const KIND = { open: T("Beginsaldo", "Opening float", "Saldo inicial"), in: T("Kas in", "Cash in", "Entrada"), out: T("Kas uit", "Cash out", "Salida"), count: T("Telling", "Count", "Recuento") };
   const tijd = (iso) => { try { return new Date(iso).toLocaleTimeString(genLocale(lang), { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
+  // ── tabellen: op blad 1 zoals in de PDF (per dag, mutaties, contante
+  //    betalingen) én als eigen bladen om te sorteren en filteren (Faisal
+  //    23-09-2026). Totaalregels als functie van (eerste, laatste) rij. ──
+  const dayHead = H(T("Dag", "Day", "Día"), T("Beginsaldo", "Opening float", "Saldo inicial"), T("Contant ontvangen", "Cash received", "Efectivo recibido"), T("Wisselgeld", "Change", "Cambio"), T("Contant verkocht (netto)", "Cash sales (net)", "Ventas (neto)"), T("Stortingen (kas in)", "Deposits (cash in)", "Depósitos"), T("Opnames (kas uit)", "Withdrawals (cash out)", "Retiradas"), T("Verwacht in kas", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia"), T("Opmerking", "Note", "Nota"));
+  const dayBody = D.days.map((d) => [date(d.date), d.opening === null ? "" : money(d.opening), money(d.received), money(d.change), money(d.sales), money(d.cashIn), money(d.cashOut), money(d.expected), d.counted === null ? "" : money(d.counted), d.diff === null ? "" : money(d.diff), d.note]);
+  const dayTotal = (first, last) => [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sumOr("C", first, last, D.totals.received), sumOr("D", first, last, D.totals.change), sumOr("E", first, last, D.totals.sales), sumOr("F", first, last, D.totals.cashIn), sumOr("G", first, last, D.totals.cashOut), null, null, sumOr("J", first, last, D.totals.diff), null];
+
+  const mvHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Soort", "Type", "Tipo"), T("Reden / opmerking", "Reason / note", "Motivo / nota"), T("Bedrag", "Amount", "Importe"), T("Verwacht bij telling", "Expected at count", "Esperado al contar"), T("Verschil", "Difference", "Diferencia"));
+  const mvBody = D.movements.map((m) => {
+    const amt = parseFloat(m.amount) || 0;
+    const diff = m.kind === "count" ? round2(amt - (parseFloat(m.expected) || 0)) : null;
+    return [date(m.date), tijd(m.created_at), KIND[m.kind] || m.kind, s(m.reason), money(m.kind === "out" ? -amt : amt), m.kind === "count" && m.expected != null ? money(m.expected) : "", diff === null ? "" : money(diff)];
+  });
+
+  const csHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe"));
+  const csBody = D.cashRows.map((a) => { const f = cashFlowOf(a); return [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(f.received), money(f.change), money(f.net)]; });
+  const csTotal = (first, last) => [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("F", first, last, D.totals.received), sumOr("G", first, last, D.totals.change), sumOr("H", first, last, D.totals.sales)];
+
+  // ── blad 1: samenvatting, net zo volledig als de PDF ──
   const sum1 = [
     [{ v: T("Kasboek", "Cash book", "Libro de caja"), s: "title" }],
     [{ v: s(salon.business_name || salon.name), s: "bold" }],
@@ -265,39 +303,25 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
     [T("Dagen met kasverkeer", "Days with cash activity", "Días con movimientos"), int(D.totals.days)],
     [T("Dagen geteld", "Days counted", "Días contados"), int(D.totals.daysCounted)],
     [],
-    ...companyRows(salon, salon.tax_id_label || "BTW-id", T), [],
-    ...noteRows([
-      T("Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames. Kasverschil = geteld − verwacht op het moment van tellen.",
-        "Expected in drawer = opening float + cash received − change + deposits − withdrawals. Difference = counted − expected at the time of counting.",
-        "Esperado en caja = saldo inicial + efectivo recibido − cambio + depósitos − retiradas. Diferencia = contado − esperado en el momento del recuento."),
-      T(`Bedragen in ${currencySymbol}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${currencySymbol}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${currencySymbol}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
-      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
-    ]),
   ];
+  addTable(sum1, T("Per dag", "By day", "Por día"), dayHead, dayBody, dayTotal);
+  addTable(sum1, T("Mutaties", "Movements", "Movimientos"), mvHead, mvBody, null);
+  addTable(sum1, T("Contante betalingen", "Cash payments", "Pagos en efectivo"), csHead, csBody, csTotal);
+  sum1.push(...companyRows(salon, salon.tax_id_label || "BTW-id", T), []);
+  sum1.push(...noteRows([
+    T("Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames. Kasverschil = geteld − verwacht op het moment van tellen.",
+      "Expected in drawer = opening float + cash received − change + deposits − withdrawals. Difference = counted − expected at the time of counting.",
+      "Esperado en caja = saldo inicial + efectivo recibido − cambio + depósitos − retiradas. Diferencia = contado − esperado en el momento del recuento."),
+    T(`Bedragen in ${currencySymbol}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${currencySymbol}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${currencySymbol}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
+    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
+  ]));
 
-  const dayHead = H(T("Dag", "Day", "Día"), T("Beginsaldo", "Opening float", "Saldo inicial"), T("Contant ontvangen", "Cash received", "Efectivo recibido"), T("Wisselgeld", "Change", "Cambio"), T("Contant verkocht (netto)", "Cash sales (net)", "Ventas (neto)"), T("Stortingen (kas in)", "Deposits (cash in)", "Depósitos"), T("Opnames (kas uit)", "Withdrawals (cash out)", "Retiradas"), T("Verwacht in kas", "Expected", "Esperado"), T("Geteld", "Counted", "Contado"), T("Verschil", "Difference", "Diferencia"), T("Opmerking", "Note", "Nota"));
-  const dayBody = D.days.map((d) => [date(d.date), d.opening === null ? "" : money(d.opening), money(d.received), money(d.change), money(d.sales), money(d.cashIn), money(d.cashOut), money(d.expected), d.counted === null ? "" : money(d.counted), d.diff === null ? "" : money(d.diff), d.note]);
-  const dayLast = dayBody.length + 1;
-  const dayTotal = [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sum("C", 2, dayLast)(D.totals.received), sum("D", 2, dayLast)(D.totals.change), sum("E", 2, dayLast)(D.totals.sales), sum("F", 2, dayLast)(D.totals.cashIn), sum("G", 2, dayLast)(D.totals.cashOut), null, null, sum("J", 2, dayLast)(D.totals.diff), null];
-
-  const mvHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Soort", "Type", "Tipo"), T("Reden / opmerking", "Reason / note", "Motivo / nota"), T("Bedrag", "Amount", "Importe"), T("Verwacht bij telling", "Expected at count", "Esperado al contar"), T("Verschil", "Difference", "Diferencia"));
-  const mvBody = D.movements.map((m) => {
-    const amt = parseFloat(m.amount) || 0;
-    const diff = m.kind === "count" ? round2(amt - (parseFloat(m.expected) || 0)) : null;
-    return [date(m.date), tijd(m.created_at), KIND[m.kind] || m.kind, s(m.reason), money(m.kind === "out" ? -amt : amt), m.kind === "count" && m.expected != null ? money(m.expected) : "", diff === null ? "" : money(diff)];
-  });
-  const mvLast = mvBody.length + 1;
-
-  const csHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe"));
-  const csBody = D.cashRows.map((a) => { const f = cashFlowOf(a); return [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(f.received), money(f.change), money(f.net)]; });
-  const csLast = csBody.length + 1;
-  const csTotal = [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sum("F", 2, csLast)(D.totals.received), sum("G", 2, csLast)(D.totals.change), sum("H", 2, csLast)(D.totals.sales)];
-
+  // ── eigen bladen: dezelfde tabellen, met bevroren kopregel en filter ──
   const sheets = [
-    { name: T("Samenvatting", "Summary", "Resumen"), cols: [34, 18, 18, 14], rows: sum1 },
-    { name: T("Per dag", "By day", "Por día"), cols: [12, 13, 16, 12, 18, 15, 15, 15, 12, 12, 30], rows: [dayHead, ...dayBody, dayTotal], freeze: true, filter: dayLast },
-    { name: T("Mutaties", "Movements", "Movimientos"), cols: [12, 7, 14, 36, 13, 18, 12], rows: [mvHead, ...mvBody], freeze: true, filter: Math.max(1, mvLast) },
-    { name: T("Contante betalingen", "Cash payments", "Pagos en efectivo"), cols: [12, 7, 24, 40, 18, 13, 12, 13], rows: [csHead, ...csBody, csTotal], freeze: true, filter: csLast },
+    { name: T("Samenvatting", "Summary", "Resumen"), cols: [34, 14, 24, 40, 18, 18, 15, 15, 12, 12, 30], rows: sum1 },
+    { name: T("Per dag", "By day", "Por día"), cols: [12, 13, 16, 12, 18, 15, 15, 15, 12, 12, 30], rows: [dayHead, ...dayBody, dayTotal(2, dayBody.length + 1)], freeze: true, filter: dayBody.length + 1 },
+    { name: T("Mutaties", "Movements", "Movimientos"), cols: [12, 7, 14, 36, 13, 18, 12], rows: [mvHead, ...mvBody], freeze: true, filter: Math.max(1, mvBody.length + 1) },
+    { name: T("Contante betalingen", "Cash payments", "Pagos en efectivo"), cols: [12, 7, 24, 40, 18, 13, 12, 13], rows: [csHead, ...csBody, csTotal(2, csBody.length + 1)], freeze: true, filter: csBody.length + 1 },
   ];
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = cashbookFilename({ salon, range, lang, ext: "xlsx" });

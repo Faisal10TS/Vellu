@@ -26,9 +26,9 @@ export const RELEASES = [
         // betaald hebben, net als in de pdf — in jouw excel staat alleen het totaal".
         kind: "improved", audience: ["owner", "staff"],
         text: {
-          nl: "Excel-omzetrapport: het eerste werkblad toont nu, net als de PDF, onder de kerncijfers ook elke afspraak: datum, tijd, klant, behandeling, medewerker, betaalwijze, factuurnummer en bedrag, met per regel netto en btw. Het tabblad Afspraken blijft er voor sorteren en filteren.",
-          en: "Excel revenue report: the first sheet now also lists every appointment below the key figures, just like the PDF: date, time, client, service, staff member, payment method, invoice number and amount, with net and tax per row. The Appointments tab stays for sorting and filtering.",
-          es: "Informe de ingresos en Excel: la primera hoja muestra ahora, como el PDF, cada cita debajo de las cifras clave: fecha, hora, cliente, servicio, miembro del equipo, forma de pago, número de factura e importe, con neto e impuesto por línea. La pestaña Citas sigue ahí para ordenar y filtrar.",
+          nl: "Excel-rapporten: het eerste werkblad is nu net zo volledig als de PDF. Omzetrapport: onder de kerncijfers elke afspraak (datum, tijd, klant, behandeling, medewerker, betaalwijze, factuurnummer, bedrag) met per regel netto en btw. Verkooprapport van de Kassa: per product, betaalwijzen, belasting, per dag en elke transactie. Kasboek: per dag, alle mutaties en de contante betalingen. De losse tabbladen blijven er voor sorteren en filteren.",
+          en: "Excel reports: the first sheet is now as complete as the PDF. Revenue report: every appointment below the key figures (date, time, client, service, staff member, payment method, invoice number, amount) with net and tax per row. Sales report in the Sales tab: per product, payment methods, tax, per day and every transaction. Cash book: per day, all movements and the cash payments. The separate tabs stay for sorting and filtering.",
+          es: "Informes en Excel: la primera hoja es ahora tan completa como el PDF. Informe de ingresos: cada cita debajo de las cifras clave (fecha, hora, cliente, servicio, miembro del equipo, forma de pago, número de factura, importe) con neto e impuesto por línea. Informe de ventas de la Caja: por producto, formas de pago, impuestos, por día y cada transacción. Libro de caja: por día, todos los movimientos y los pagos en efectivo. Las pestañas separadas siguen ahí para ordenar y filtrar.",
         },
       },
       {
