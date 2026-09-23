@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // Belastingtarief buiten NL (23-09-2026): bij het aanmelden ging het land
+    // mee maar het tarief bleef op de NL-standaard van 21 staan (Mebeauty.nails
+    // op Curaçao, Brilliant Beauty op Bonaire). Kolom mag nu leeg zijn = landtarief.
+    id: "2026-09-23",
+    date: "2026-09-23",
+    title: { nl: "Belastingtarief buiten Nederland", en: "Tax rate outside the Netherlands", es: "Tipo impositivo fuera de los Países Bajos" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Instellingen, Salon, Belasting: buiten Nederland begon het tarief op behandelingen op 21%, het Nederlandse btw-tarief. Het staat nu op het tarief van je eiland (Bonaire 6%, Aruba 7%) en op Curaçao blijft het leeg tot je invult wat je boekhouder opgeeft. Stond je tarief al goed, dan verandert er niets.",
+          en: "Settings, Salon, Tax: outside the Netherlands the rate on treatments started at 21%, the Dutch VAT rate. It now starts at your island's rate (Bonaire 6%, Aruba 7%) and on Curaçao it stays empty until you enter what your accountant tells you. If your rate was already right, nothing changes.",
+          es: "Ajustes, Salón, Impuestos: fuera de los Países Bajos el tipo sobre tratamientos empezaba en el 21%, el IVA neerlandés. Ahora empieza en el tipo de tu isla (Bonaire 6%, Aruba 7%) y en Curazao queda vacío hasta que introduzcas lo que te indique tu contable. Si tu tipo ya era correcto, no cambia nada.",
+        },
+      },
+    ],
+  },
+  {
     // Rapporten ook als Excel (Faisal 22-09-2026: "can all the pdf reports be
     // downloaded as excel files too?"). Zelfde cijfers als de PDF (één rekenlaag).
     id: "2026-09-22",
