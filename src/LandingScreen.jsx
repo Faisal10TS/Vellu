@@ -647,6 +647,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
+  // Zeven salons en als achtste de "Jouw zaak hier?"-kaart (Faisal 23-09-2026):
+  // zo blijft het raster twee rijen van vier. Wie zoekt of op "Toon alle N
+  // salons" tikt ziet ze allemaal; de acquisitiekaart staat altijd achteraan.
+  const SALON_FOLD = 7;
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -694,6 +699,8 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
     const hay = normStr(`${s.business_name} ${s.city || ""} ${s.slug} ${s.svc || ""}`);
     return q.trim().split(/\s+/).every(w => hay.includes(normStr(w)));
   });
+  const searching = !!q.trim();
+  const shown = searching || showAll ? list : list.slice(0, SALON_FOLD);
   // Some salons typed a full address into the city field; show just the
   // city part (text after the last comma) without touching their data.
   const cityOf = (s) => (s.city || "").split(",").pop().trim();
@@ -756,7 +763,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
           <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, padding: "16px 0" }}>…</div>
         ) : (
           <div className={atelier ? "salon-strip salon-strip-float" : "salon-strip"}>
-            {list.map(s => {
+            {shown.map(s => {
               const acc = s.accent_color || accent;
               // Zelfde leesbaarheid als op de boekingspagina (27-08): tekst in
               // leesbare inkt en een outline zodra het salon-accent tegen de
@@ -792,12 +799,25 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               );
             })}
             {/* "Your salon here?" — acquisition card, always last */}
-            <button className="salon-card" onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
+            <button className="salon-card" data-salon-cta onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
               style={{ border: `1.5px dashed ${accent}66`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${accent}88`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 18, marginBottom: 10 }}>+</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
               <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: smallRadius, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
+            </button>
+          </div>
+        )}
+
+        {/* Meer dan zeven salons: één regel "Toon alle N salons" onder het
+            raster (en "Toon minder" terug). Tijdens het zoeken staat alles al. */}
+        {salons !== null && !searching && list.length > SALON_FOLD && (
+          <div style={{ textAlign: "center", marginTop: atelier ? 6 : 10 }}>
+            <button type="button" data-salon-more={showAll ? "less" : "all"} onClick={() => setShowAll(v => !v)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: c.text, borderBottom: `1px solid ${accent}`, padding: "4px 2px" }}>
+              {showAll
+                ? (lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show fewer")
+                : (lang === "nl" ? `Toon alle ${list.length} salons` : lang === "es" ? `Ver los ${list.length} salones` : `Show all ${list.length} salons`)}
             </button>
           </div>
         )}
