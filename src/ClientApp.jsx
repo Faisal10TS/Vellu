@@ -3312,7 +3312,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {" · "}{t.noCommission}
                     <div style={{ marginTop: 8 }}>
                       <a href={vlHref} target="_blank" rel="noopener" data-get-page style={{ color: c.text, fontWeight: 500, textDecoration: "none", borderBottom: `1px solid ${c.textMuted}`, paddingBottom: 1 }}>
-                        {lang === "nl" ? "Zelf een salon? Maak je eigen boekingspagina" : lang === "es" ? "¿Tienes un salón? Crea tu propia página de reservas" : "Own a salon? Get your own booking page"} →
+                        {lang === "nl" ? "Maak je eigen boekingspagina" : lang === "es" ? "Crea tu propia página de reservas" : "Get your own booking page"} →
                       </a>
                     </div>
                   </>
