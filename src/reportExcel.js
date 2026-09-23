@@ -10,8 +10,10 @@
 // als de PDF-modules.
 //
 // Opzet per bestand:
-//   Omzetrapport:   Samenvatting (kop, kerncijfers, belasting per tarief,
-//                   bedrijfsgegevens, noten) + Afspraken (één regel per afspraak)
+//   Omzetrapport:   Samenvatting (kop, kerncijfers, belasting per tarief, dan
+//                   zoals in de PDF elke afspraak, bedrijfsgegevens, noten) +
+//                   Afspraken (dezelfde regels als los blad, om te filteren).
+//                   Esther/TTNB (23-09-2026) miste de regels op het eerste blad.
 //   Productverkoop: Samenvatting (kerncijfers, betaalwijzen, belasting per
 //                   tarief) + Per product + Per dag (bij meer dagen) +
 //                   Transacties (één regel per bon) + Regels (één per artikel)
@@ -20,7 +22,7 @@
 // meteen mee kan rekenen, sorteren en filteren.
 
 import { buildXlsx, saveXlsx } from "./xlsx.js";
-import { revenueReportData, productReportData, cashbookData, cashFlowOf, revenueReportFilename, productReportFilename, cashbookFilename } from "./reportData.js";
+import { revenueReportData, productReportData, cashbookData, cashFlowOf, payLabel, revenueReportFilename, productReportFilename, cashbookFilename } from "./reportData.js";
 
 const s = (v) => (v === null || v === undefined ? "" : String(v));
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -89,6 +91,26 @@ export function buildRevenueReportXlsx({
     sum1.push([{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, money(R.totalGross, true), money(R.totalNet, true), money(R.totalBtw, true)]);
     sum1.push([]);
   }
+  // ── afsprakentabel: op blad 1 onder de kerncijfers, zoals in de PDF
+  //    (Esther/TTNB, 23-09-2026: "in jouw excel staat alleen het totaal"), én
+  //    als eigen blad om te sorteren en filteren. Met belasting erbij per regel
+  //    netto en belasting in volle precisie (zie reportData.rows). ──
+  const head = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Behandeling", "Service", "Servicio"), T("Medewerker", "Staff", "Personal"), T("Betaalwijze", "Payment", "Pago"), T("Factuurnr.", "Invoice no.", "N.º factura"), T("Bedrag", "Amount", "Importe"),
+    ...(showTaxRows ? [T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`), label] : []));
+  const rowOf = (r) => {
+    const a = r.appt;
+    return [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name), a.payment_method ? payLabel(a.payment_method, lang) : "", s(a.invoice_number), money(r.gross),
+      ...(showTaxRows ? [{ v: r.net, s: "money" }, { v: r.tax, s: "money" }] : [])];
+  };
+  // Zonder regels geen SOM-formule (SUM(H3:H2) zou de totaalregel zelf raken).
+  const sumOrValue = (col, first, last, v) => (last >= first ? sum(col, first, last)(v) : money(v, true));
+  const totalRow = (first, last) => [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sumOrValue("H", first, last, R.totalGross),
+    ...(showTaxRows ? [sumOrValue("I", first, last, R.totalNet), sumOrValue("J", first, last, R.totalBtw)] : [])];
+  sum1.push([{ v: T("Afspraken", "Appointments", "Citas"), s: "bold" }], head);
+  const firstS = sum1.length + 1;
+  for (const r of R.rows) sum1.push(rowOf(r));
+  sum1.push(totalRow(firstS, sum1.length), []);
+
   sum1.push(...companyRows(salon, idLabel, T), []);
   const ratesNote = showTaxRows ? ` · ${label} ${R.byRate.map((r) => pctLabel(r.rate, moneyLocale)).join(" / ")}` : "";
   sum1.push(...noteRows([
@@ -98,23 +120,18 @@ export function buildRevenueReportXlsx({
     T(`Bedragen in ${currencySymbol}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
       `Amounts in ${currencySymbol}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
       `Importes en ${currencySymbol}${ratesNote}, impuestos incluidos. Tras un cambio de región, los importes anteriores no se convierten.`),
+    showTaxRows ? T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
+      `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
+      `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`) : null,
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 
-  // ── blad 2: afspraken ──
-  const head = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Behandeling", "Service", "Servicio"), T("Medewerker", "Staff", "Personal"), T("Betaalwijze", "Payment", "Pago"), T("Factuurnr.", "Invoice no.", "N.º factura"), T("Bedrag", "Amount", "Importe"));
-  const body = R.sorted.map((a) => [
-    date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name),
-    a.payment_method ? T({ pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", "on-arrival": "In de salon" }[a.payment_method] || s(a.payment_method),
-      { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", "on-arrival": "In salon" }[a.payment_method] || s(a.payment_method),
-      { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", "on-arrival": "En el salón" }[a.payment_method] || s(a.payment_method)) : "",
-    s(a.invoice_number), money(a.service_price),
-  ]);
+  // ── blad 2: afspraken (zelfde regels, bevroren kop + filter) ──
+  const body = R.rows.map(rowOf);
   const lastRow = body.length + 1;
-  const total = [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sum("H", 2, lastRow)(R.totalGross)];
   const sheets = [
-    { name: T("Samenvatting", "Summary", "Resumen"), cols: [30, 18, 18, 14], rows: sum1 },
-    { name: T("Afspraken", "Appointments", "Citas"), cols: [12, 7, 24, 34, 18, 16, 14, 13], rows: [head, ...body, total], freeze: true, filter: lastRow },
+    { name: T("Samenvatting", "Summary", "Resumen"), cols: [24, 14, 24, 40, 18, 16, 14, 13, 13, 12], rows: sum1 },
+    { name: T("Afspraken", "Appointments", "Citas"), cols: [12, 7, 24, 34, 18, 16, 14, 13, 13, 12], rows: [head, ...body, totalRow(2, lastRow)], freeze: true, filter: Math.max(1, lastRow) },
   ];
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = revenueReportFilename({ salon, staffName, range, lang, ext: "xlsx" });

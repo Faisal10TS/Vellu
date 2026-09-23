@@ -64,7 +64,21 @@ export function revenueReportData({ appointments, cfg }) {
     return (a.time || "") < (b.time || "") ? -1 : 1;
   });
 
-  return { computed, count: list.length, totalGross, totalBtw, totalNet, avg, untaxedGross, voucherPaid, showTaxRows, needsBreakdown, byRate: computed.byRate, sorted };
+  // Per afspraak (voor de regeltabellen in Excel): bedrag, netto en belasting.
+  // Bewust met VOLLE precisie en niet per regel afgerond: de belastingmotor
+  // rondt per tarief op documentniveau af, en een kolom vol afgeronde centen
+  // zou opgeteld een paar cent naast de kerncijfers uitkomen. Onafgerond
+  // sommeert de kolom tot (op de weergave na) precies het documenttotaal.
+  const rows = sorted.map((a) => {
+    const t = computeTax(linesFromSale(a), cfg || {});
+    const tax = showTaxRows
+      ? t.lines.reduce((n, l) => n + (l.taxable && l.rate > 0 ? l.gross - l.gross / (1 + l.rate / 100) : 0), 0)
+      : 0;
+    const gross = Number(a.service_price) || 0;
+    return { appt: a, gross, tax, net: gross - tax };
+  });
+
+  return { computed, count: list.length, totalGross, totalBtw, totalNet, avg, untaxedGross, voucherPaid, showTaxRows, needsBreakdown, byRate: computed.byRate, sorted, rows };
 }
 
 // ── Productverkoop ───────────────────────────────────────────────────────

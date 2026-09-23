@@ -19,8 +19,18 @@ export const RELEASES = [
     // op Curaçao, Brilliant Beauty op Bonaire). Kolom mag nu leeg zijn = landtarief.
     id: "2026-09-23",
     date: "2026-09-23",
-    title: { nl: "Belastingtarief buiten Nederland", en: "Tax rate outside the Netherlands", es: "Tipo impositivo fuera de los Países Bajos" },
+    title: { nl: "Excel-omzetrapport en belastingtarief buiten Nederland", en: "Excel revenue report and tax rate outside the Netherlands", es: "Informe de ingresos en Excel y tipo impositivo fuera de los Países Bajos" },
     items: [
+      {
+        // Esther (TTNB) via Faisal 23-09: "datum, klant, dienst en hoeveel ze
+        // betaald hebben, net als in de pdf — in jouw excel staat alleen het totaal".
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Excel-omzetrapport: het eerste werkblad toont nu, net als de PDF, onder de kerncijfers ook elke afspraak: datum, tijd, klant, behandeling, medewerker, betaalwijze, factuurnummer en bedrag, met per regel netto en btw. Het tabblad Afspraken blijft er voor sorteren en filteren.",
+          en: "Excel revenue report: the first sheet now also lists every appointment below the key figures, just like the PDF: date, time, client, service, staff member, payment method, invoice number and amount, with net and tax per row. The Appointments tab stays for sorting and filtering.",
+          es: "Informe de ingresos en Excel: la primera hoja muestra ahora, como el PDF, cada cita debajo de las cifras clave: fecha, hora, cliente, servicio, miembro del equipo, forma de pago, número de factura e importe, con neto e impuesto por línea. La pestaña Citas sigue ahí para ordenar y filtrar.",
+        },
+      },
       {
         kind: "fix", audience: ["owner"],
         text: {
