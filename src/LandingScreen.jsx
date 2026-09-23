@@ -648,10 +648,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
   const [salons, setSalons] = useState(null); // null = loading
   const [slugFallback, setSlugFallback] = useState("");
   // Zeven salons en als achtste de "Jouw zaak hier?"-kaart (Faisal 23-09-2026):
-  // zo blijft het raster twee rijen van vier. Wie zoekt of op "Toon alle N
-  // salons" tikt ziet ze allemaal; de acquisitiekaart staat altijd achteraan.
+  // zo blijft het raster twee rijen van vier. Bewust GEEN "Toon alle N salons"-
+  // link: die verraadt hoe klein de lijst nog is (Faisal). In plaats daarvan
+  // schuift het venster van zeven elke dag één plek op, zodat elke salon aan
+  // bod komt; zoeken vindt altijd alles. De acquisitiekaart staat achteraan.
   const SALON_FOLD = 7;
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -700,7 +701,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
     return q.trim().split(/\s+/).every(w => hay.includes(normStr(w)));
   });
   const searching = !!q.trim();
-  const shown = searching || showAll ? list : list.slice(0, SALON_FOLD);
+  const shown = (() => {
+    if (searching || list.length <= SALON_FOLD) return list;
+    const start = Math.floor(Date.now() / 86400000) % list.length; // dagteller
+    return Array.from({ length: SALON_FOLD }, (_, i) => list[(start + i) % list.length]);
+  })();
   // Some salons typed a full address into the city field; show just the
   // city part (text after the last comma) without touching their data.
   const cityOf = (s) => (s.city || "").split(",").pop().trim();
@@ -762,7 +767,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
         {salons === null ? (
           <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, padding: "16px 0" }}>…</div>
         ) : (
-          <div className={atelier ? "salon-strip salon-strip-float" : "salon-strip"}>
+          <div className={atelier ? "salon-strip salon-strip-float" : "salon-strip"} data-salon-fold={SALON_FOLD}>
             {shown.map(s => {
               const acc = s.accent_color || accent;
               // Zelfde leesbaarheid als op de boekingspagina (27-08): tekst in
@@ -805,19 +810,6 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
               <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: smallRadius, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
-            </button>
-          </div>
-        )}
-
-        {/* Meer dan zeven salons: één regel "Toon alle N salons" onder het
-            raster (en "Toon minder" terug). Tijdens het zoeken staat alles al. */}
-        {salons !== null && !searching && list.length > SALON_FOLD && (
-          <div style={{ textAlign: "center", marginTop: atelier ? 6 : 10 }}>
-            <button type="button" data-salon-more={showAll ? "less" : "all"} onClick={() => setShowAll(v => !v)}
-              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: c.text, borderBottom: `1px solid ${accent}`, padding: "4px 2px" }}>
-              {showAll
-                ? (lang === "nl" ? "Toon minder" : lang === "es" ? "Mostrar menos" : "Show fewer")
-                : (lang === "nl" ? `Toon alle ${list.length} salons` : lang === "es" ? `Ver los ${list.length} salones` : `Show all ${list.length} salons`)}
             </button>
           </div>
         )}
