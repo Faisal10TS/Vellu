@@ -4,10 +4,10 @@
 // hoe Mebeauty.nails en Aura Glow Nails ons vonden — maar Faisal wilde geen
 // enquête en geen persoonlijke afzender: "a hello welcome to vellu we
 // appreciate you for choosing us". Dus: een warm welkom met drie praktische
-// tips, en de vraag hoe ze Vellu vonden alleen als één zin aan het eind
-// (antwoord = reply, landt in mirahventures@vellu.cc). P.S. met de eigen
-// uitnodigingscode en de lopende actie. Afzender altijd "Vellu", ondertekening
-// "Team Vellu" — nooit een persoonsnaam (zie geheugen feedback_no_faisal_name).
+// tips en een P.S. met de eigen uitnodigingscode en de lopende actie. De vraag
+// hoe ze Vellu vonden is er helemaal uit ("dat vraag stukje kan weg"); een
+// reply op de mail landt in mirahventures@vellu.cc. Afzender altijd "Vellu",
+// ondertekening "Team Vellu" — nooit een persoonsnaam (feedback_no_faisal_name).
 //
 // Zelfde opzet en beveiliging als send-rating-request (verify_jwt=false in
 // config.toml, de functie controleert zelf):
@@ -66,11 +66,10 @@ function render(lang: "nl" | "en", o: Salon) {
       "Diensten, prijzen, foto's en je team regel je onder Instellingen. Alles wat je daar aanpast staat meteen op je boekingspagina.",
       "Vragen? De helpchat in je dashboard geeft direct antwoord, en op deze mail reageren kan altijd.",
     ],
-    ask: "Eén vraagje nog, omdat we graag weten wat werkt: hoe heb je Vellu gevonden? Een korte reply is genoeg.",
     close: "Veel succes, en nogmaals welkom!",
     team: "Team Vellu",
     ps: `P.S. Ken je een salon die Vellu ook goed kan gebruiken? Deel je uitnodigingscode <strong>${eCode}</strong> of de link ${link(refLink)}. ${o.promo ? `Tot en met ${esc(promoDate)} krijgen jullie dan allebei een maand gratis.` : "Jullie krijgen dan allebei twee weken gratis."}`,
-    plain: `Hoi ${o.salon},\n\nWelkom bij Vellu! Fijn dat je voor Vellu hebt gekozen, dat waarderen we enorm. Vanaf nu kunnen je klanten dag en nacht bij je boeken, en jij houdt je agenda, je klanten en je betalingen op één plek.\n\nZo haal je er meteen het meeste uit:\n- Je boekingspagina staat klaar op ${pageUrl}. Zet de link in je Instagram-bio en je WhatsApp-status, dan boeken klanten zelf.\n- Diensten, prijzen, foto's en je team regel je onder Instellingen. Alles wat je daar aanpast staat meteen op je boekingspagina.\n- Vragen? De helpchat in je dashboard geeft direct antwoord, en op deze mail reageren kan altijd.\n\nEén vraagje nog, omdat we graag weten wat werkt: hoe heb je Vellu gevonden? Een korte reply is genoeg.\n\nVeel succes, en nogmaals welkom!\nTeam Vellu\nvellu.cc\n\nP.S. Ken je een salon die Vellu ook goed kan gebruiken? Deel je uitnodigingscode ${o.code} of de link ${refLink}. ${o.promo ? `Tot en met ${promoDate} krijgen jullie dan allebei een maand gratis.` : "Jullie krijgen dan allebei twee weken gratis."}`,
+    plain: `Hoi ${o.salon},\n\nWelkom bij Vellu! Fijn dat je voor Vellu hebt gekozen, dat waarderen we enorm. Vanaf nu kunnen je klanten dag en nacht bij je boeken, en jij houdt je agenda, je klanten en je betalingen op één plek.\n\nZo haal je er meteen het meeste uit:\n- Je boekingspagina staat klaar op ${pageUrl}. Zet de link in je Instagram-bio en je WhatsApp-status, dan boeken klanten zelf.\n- Diensten, prijzen, foto's en je team regel je onder Instellingen. Alles wat je daar aanpast staat meteen op je boekingspagina.\n- Vragen? De helpchat in je dashboard geeft direct antwoord, en op deze mail reageren kan altijd.\n\nVeel succes, en nogmaals welkom!\nTeam Vellu\nvellu.cc\n\nP.S. Ken je een salon die Vellu ook goed kan gebruiken? Deel je uitnodigingscode ${o.code} of de link ${refLink}. ${o.promo ? `Tot en met ${promoDate} krijgen jullie dan allebei een maand gratis.` : "Jullie krijgen dan allebei twee weken gratis."}`,
   } : {
     subject: `Welcome to Vellu, ${o.salon}`,
     hi: `Hi ${eSalon},`,
@@ -81,11 +80,10 @@ function render(lang: "nl" | "en", o: Salon) {
       "Services, prices, photos and your team are all under Settings. Whatever you change there shows up on your booking page right away.",
       "Questions? The help chat in your dashboard answers straight away, and you can always reply to this email.",
     ],
-    ask: "One small question, because we love to know what works: how did you find Vellu? A short reply is all it takes.",
     close: "Good luck, and welcome once more!",
     team: "Team Vellu",
     ps: `P.S. Know a salon that could use Vellu too? Share your invitation code <strong>${eCode}</strong> or the link ${link(refLink)}. ${o.promo ? `Until ${esc(promoDate)} you both get a month free.` : "You both get two weeks free."}`,
-    plain: `Hi ${o.salon},\n\nWelcome to Vellu! Thank you for choosing Vellu, we truly appreciate it. From now on your clients can book with you day and night, and you keep your calendar, your clients and your payments in one place.\n\nGet the most out of it from day one:\n- Your booking page is ready at ${pageUrl}. Put the link in your Instagram bio and your WhatsApp status, and clients book by themselves.\n- Services, prices, photos and your team are all under Settings. Whatever you change there shows up on your booking page right away.\n- Questions? The help chat in your dashboard answers straight away, and you can always reply to this email.\n\nOne small question, because we love to know what works: how did you find Vellu? A short reply is all it takes.\n\nGood luck, and welcome once more!\nTeam Vellu\nvellu.cc\n\nP.S. Know a salon that could use Vellu too? Share your invitation code ${o.code} or the link ${refLink}. ${o.promo ? `Until ${promoDate} you both get a month free.` : "You both get two weeks free."}`,
+    plain: `Hi ${o.salon},\n\nWelcome to Vellu! Thank you for choosing Vellu, we truly appreciate it. From now on your clients can book with you day and night, and you keep your calendar, your clients and your payments in one place.\n\nGet the most out of it from day one:\n- Your booking page is ready at ${pageUrl}. Put the link in your Instagram bio and your WhatsApp status, and clients book by themselves.\n- Services, prices, photos and your team are all under Settings. Whatever you change there shows up on your booking page right away.\n- Questions? The help chat in your dashboard answers straight away, and you can always reply to this email.\n\nGood luck, and welcome once more!\nTeam Vellu\nvellu.cc\n\nP.S. Know a salon that could use Vellu too? Share your invitation code ${o.code} or the link ${refLink}. ${o.promo ? `Until ${promoDate} you both get a month free.` : "You both get two weeks free."}`,
   };
   const tips = t.tips.map((tip) => `<li style="margin:0 0 10px;">${tip}</li>`).join("");
   const html = `<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">
@@ -96,7 +94,6 @@ function render(lang: "nl" | "en", o: Salon) {
     <p style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;font-weight:600;color:#8A7356;margin:0 0 12px;">${t.tipsTitle}</p>
     <ul style="font-size:14px;line-height:1.7;color:#333;margin:0;padding:0 0 0 18px;">${tips}</ul>
   </div>
-  <p style="font-size:14px;line-height:1.7;margin:0 0 24px;color:#333;">${t.ask}</p>
   <p style="font-size:15px;line-height:1.7;margin:0;">${t.close}<br><strong>${t.team}</strong><br><span style="color:#888;font-size:13px;">vellu.cc</span></p>
   <div style="border-top:1px solid #e8e0d5;margin-top:28px;padding-top:16px;font-size:13px;line-height:1.7;color:#555;">${t.ps}</div>
   <div style="border-top:1px solid #e8e0d5;margin-top:24px;padding-top:14px;font-size:12px;color:#888;line-height:1.6;">${REPLY_TO}</div>
