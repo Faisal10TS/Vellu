@@ -55,11 +55,11 @@ check("SX tarief 5", resolveTax(salonSX).serviceRate, 5);
 check("SX producten belast", resolveTax(salonSX).productRate, 5);
 check("SX NIET op klantdocument", resolveTax(salonSX).showTax, false);
 check("SX WEL intern", resolveTax(salonSX).showTaxInternal, true);
-check("valuta SX is Cg", currencyForCountry("SX").symbol.trim(), "Cg");
+check("valuta SX is XCG (ISO-code, niet Cg)", currencyForCountry("SX").symbol.trim(), "XCG");
 check("valuta SX code", currencyForCountry("SX").code, "XCG");
 check("oude rij valt terug op btw_id", resolveTax(salonOud).registered, true);
 check("leeg tariefveld wordt niet stiekem 0", resolveTax({ ...salonNL, btw_rate: "" }).serviceRate, 21);
-check("valuta CW is Cg", currencyForCountry("CW").symbol.trim(), "Cg");
+check("valuta CW is XCG (ISO-code, niet Cg)", currencyForCountry("CW").symbol.trim(), "XCG");
 check("valuta CW code", currencyForCountry("CW").code, "XCG");
 
 console.log("\n== computeTax: Nederland, alles belast ==");

@@ -39,7 +39,9 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
 };
 const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
-const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" };
+// Spiegelt shared.jsx CURRENCIES. CW/SX = Caribische gulden; Vellu toont de
+// ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026).
+const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
 const clientLang = (apptLang: unknown, country: unknown) => {
   const l = String(apptLang || "").toLowerCase();
   if (l === "nl" || l === "en" || l === "es") return l;

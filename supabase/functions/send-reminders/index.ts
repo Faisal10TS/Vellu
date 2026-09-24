@@ -84,10 +84,11 @@ const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
 
 // Currency symbol per country (mirrors shared.jsx CURRENCIES). Unset = €.
-// CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
+// CW/SX = "XCG " (Caribische gulden): die verving op 31 maart 2025 de
 // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet terugzetten
-// naar "NAf." — dat geld bestaat niet meer.
-const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" };
+// naar "NAf." — dat geld bestaat niet meer. Vellu toont de ISO-code "XCG", niet
+// het CBCS-symbool "Cg" (Faisal, 24-09-2026) — gelijk houden met shared.jsx.
+const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
 const curFor = (code?: string | null) => CUR_SYM[code || ""] || "€";
 
 // Tijdzone per land, zelfde soort tabel als DUTCH_COUNTRIES en CUR_SYM hierboven.

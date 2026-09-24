@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // Faisal 24-09-2026: liever de ISO-code "XCG" dan het CBCS-symbool "Cg" —
+    // eenduidig voor klanten, banken en boekhouders. Alleen zichtbaar voor
+    // salons op Curaçao en Sint Maarten; de rest ziet geen verschil.
+    id: "2026-09-24",
+    date: "2026-09-24",
+    title: { nl: "Caribische gulden als XCG", en: "Caribbean guilder shown as XCG", es: "Florín caribeño como XCG" },
+    items: [
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Curaçao en Sint Maarten: bedragen tonen nu de ISO-code XCG (bijvoorbeeld XCG 45.00) in plaats van Cg, op de boekingspagina, in het dashboard, op bonnen, facturen, rapporten en in e-mails. XCG is de Caribische gulden, die in 2025 de Antilliaanse gulden (NAf) een op een verving. Voor salons in andere landen verandert er niets.",
+          en: "Curaçao and Sint Maarten: amounts now show the ISO code XCG (for example XCG 45.00) instead of Cg, on the booking page, in the dashboard, on receipts, invoices, reports and in emails. XCG is the Caribbean guilder, which replaced the Antillean guilder (NAf) one to one in 2025. Nothing changes for salons in other countries.",
+          es: "Curazao y San Martín: los importes muestran ahora el código ISO XCG (por ejemplo XCG 45.00) en lugar de Cg, en la página de reservas, el panel, los recibos, las facturas, los informes y los correos. XCG es el florín caribeño, que en 2025 sustituyó al florín antillano (NAf) uno a uno. Para los salones de otros países no cambia nada.",
+        },
+      },
+    ],
+  },
+  {
     // Belastingtarief buiten NL (23-09-2026): bij het aanmelden ging het land
     // mee maar het tarief bleef op de NL-standaard van 21 staan (Mebeauty.nails
     // op Curaçao, Brilliant Beauty op Bonaire). Kolom mag nu leeg zijn = landtarief.

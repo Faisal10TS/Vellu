@@ -1072,10 +1072,12 @@ serve(async (req) => {
     // Currency symbol from the salon's country (mirrors shared.jsx CURRENCIES) —
     // so a Bonaire client's confirmation shows $ instead of €. send-emails
     // defaults to € when this is absent.
-    // CW = "Cg " (Caribische gulden, XCG): die verving op 31 maart 2025 de
+    // CW/SX = "XCG " (Caribische gulden): die verving op 31 maart 2025 de
     // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet
-    // terugzetten naar "NAf." — dat geld bestaat niet meer.
-    currency: ({ BQ: "$", AW: "Afl. ", CW: "Cg ", SX: "Cg ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
+    // terugzetten naar "NAf." — dat geld bestaat niet meer. Vellu toont de
+    // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026) —
+    // gelijk houden met shared.jsx, send-reminders en prepay-watch.
+    currency: ({ BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
   const ownerLang = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en";

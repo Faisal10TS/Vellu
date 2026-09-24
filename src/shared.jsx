@@ -766,8 +766,11 @@ const CURRENCIES = {
   GBP: { code: "GBP", symbol: "£",     locale: "en-GB" },
   AWG: { code: "AWG", symbol: "Afl. ", locale: "en-US" }, // Aruban florin
   // Caribische gulden — verving op 31 maart 2025 de Antilliaanse gulden (ANG)
-  // op Curaçao en Sint Maarten, 1:1. Officiële schrijfwijze is "Cg", zonder punt.
-  XCG: { code: "XCG", symbol: "Cg ",   locale: "en-US" },
+  // op Curaçao en Sint Maarten, 1:1. De centrale bank (CBCS) schrijft "Cg", maar
+  // Vellu toont bewust de ISO-code "XCG" (Faisal, 24-09-2026): eenduidig voor
+  // klanten, banken en boekhouders. Zelfde waarde in de edge functions
+  // (book-appointment, send-reminders, prepay-watch) — samen wijzigen.
+  XCG: { code: "XCG", symbol: "XCG ",  locale: "en-US" },
 };
 
 // The language the SALON OWNER receives system emails in, derived from the
