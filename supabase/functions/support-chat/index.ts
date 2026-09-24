@@ -201,6 +201,9 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Is de dag waarvoor iemand wachtte voorbij, dan verdwijnt die aanmelding vanzelf uit de wachtlijst (sinds 16-09-2026; 's nachts definitief opgeruimd). De eigenaar hoeft verlopen aanmeldingen niet zelf weg te halen.
 - Je markeert per aanmelding "benaderd" of verwijdert 'm.
 
+# Welkomstmail
+- Zodra een nieuwe salon de proefperiode start, krijgt de eigenaar automatisch een Engelse welkomstmail van Team Vellu (sinds 24-09-2026): welkom en dank, drie tips (de link naar de eigen boekingspagina vellu.cc/<slug> voor in de Instagram-bio en WhatsApp-status; diensten, prijzen, foto's en team onder Instellingen; de helpchat), en een P.S. met de eigen uitnodigingscode. Afzender Vellu <noreply@vellu.cc>; reageren op die mail komt bij mirahventures@vellu.cc terecht. Niet ontvangen? Kijk in spam, of vraag het via mirahventures@vellu.cc.
+
 # Valuta & regio (Instellingen → Salon → "Regio & valuta")
 - Vellu toont alle bedragen in de valuta van je salon; die volgt uit je regio/land. Nederland/België = euro (€), Bonaire = US dollar ($), Aruba = Arubaanse florin (Afl.), Curaçao en Sint Maarten = Caribische gulden (XCG). Je KUNT je valuta dus wél wijzigen — via je regio.
 - Decimaalteken: bedragen staan overal met een KOMMA (€45,00, $45,00, Afl. 45,00, XCG 45,00; sinds 24-09-2026, daarvoor een punt): boekingspagina, dashboard, medewerkers-app, bonnen, facturen, PDF-rapporten, e-mails en WhatsApp-berichten. In WhatsApp-teksten en PDF's staat ook een punt als duizendtal (€1.234,50). Het decimaalteken is niet instelbaar. Uitzondering: in Excel-bestanden bepaalt de Excel-instelling van de gebruiker zelf hoe getallen worden getoond, en in invoervelden typ je een bedrag met een punt (45.50) — dat is de standaard van het invoerveld.

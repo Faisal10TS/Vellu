@@ -185,12 +185,23 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-rating-request/index.ts"
 
+[functions.start-trial]
+enabled = true
+# Proefstart door de ingelogde eigenaar; vereist een gebruikers-JWT (de functie
+# leest de eigenaar uit getUser). Sinds 24-09-2026 maakt hij daarna de
+# welkomstmail-opdracht aan (send-source-request). Blok toegevoegd 24-09-2026;
+# stond al zo (default) in productie.
+verify_jwt = true
+entrypoint = "./functions/start-trial/index.ts"
+
 [functions.send-source-request]
 enabled = true
-# "Hoe heb je Vellu gevonden?"-mail aan nieuwe salons (Faisal 24-09-2026).
-# Zelfde opzet als send-rating-request: óf een beheerders-JWT (app_admins),
-# óf een opdracht-id + geheim uit app_source_send_jobs (aanroep via SQL/curl).
-# Met verify_jwt=true zou de gateway het tweede pad 401'en.
+# Welkomstmail van Team Vellu aan elke nieuwe salon (Faisal 24-09-2026; begon
+# als "Hoe heb je Vellu gevonden?"-mail). Zelfde opzet als send-rating-request:
+# óf een beheerders-JWT (app_admins), óf een opdracht-id + geheim uit
+# app_source_send_jobs — zo roept start-trial hem aan na een proefstart, en
+# zo kan een opdracht via SQL/curl. Met verify_jwt=true zou de gateway dat
+# tweede pad 401'en.
 verify_jwt = false
 entrypoint = "./functions/send-source-request/index.ts"
 

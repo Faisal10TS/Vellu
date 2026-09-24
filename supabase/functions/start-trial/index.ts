@@ -150,6 +150,32 @@ serve(async (req) => {
     return err(500, "unknown", origin);
   }
 
+  // Welkomstmail (Faisal 24-09-2026: "send it whenever a new salon signs up"):
+  // de proefstart is hét moment dat een salon écht binnen is, en dit pad loopt
+  // precies één keer per eigenaar (trial_used). Zelfde route als de knop in
+  // admin: een opdrachtrij in app_source_send_jobs + aanroep van
+  // send-source-request, die zelf demo-salons overslaat en de verzendstand in
+  // app_source_requests bijhoudt. Mislukt dit, dan is de proef gewoon gestart;
+  // de mail is nooit een reden om een aanmelding te laten stranden.
+  try {
+    const { data: job } = await supabase
+      .from("app_source_send_jobs")
+      .insert({ mode: "send", only_owners: [userId] })
+      .select("id, secret")
+      .single();
+    if (job?.id) {
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/send-source-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "" },
+        body: JSON.stringify({ job_id: job.id, secret: job.secret }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) console.error("start-trial: welkomstmail-opdracht gaf", r.status, await r.text().catch(() => ""));
+    }
+  } catch (e) {
+    console.error("start-trial: welkomstmail niet verstuurd", e);
+  }
+
   return ok({
     success: true,
     plan: updated.plan,
