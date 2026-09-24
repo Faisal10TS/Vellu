@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
@@ -3705,7 +3705,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Bezoeken" : lang === "es" ? "Visitas" : "Visits"}</div>
               </div>
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>{cur}{selected.totalSpent.toFixed(2)}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: accent }}>{fmtAmt(cur, selected.totalSpent)}</div>
                 <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{lang === "nl" ? "Besteed" : lang === "es" ? "Gastado" : "Spent"}</div>
               </div>
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
@@ -5600,10 +5600,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(
         charged > 0
           ? (lang === "nl"
-              ? `Upgrade gelukt — €${charged.toFixed(2)} voor de rest van deze periode wordt eenmalig afgeschreven, daarna ${vervolgPrijs}.`
+              ? `Upgrade gelukt — ${fmtAmt("€", charged)} voor de rest van deze periode wordt eenmalig afgeschreven, daarna ${vervolgPrijs}.`
               : lang === "es"
-              ? `Mejora completada — se cobrará una sola vez €${charged.toFixed(2)} por lo que queda de este periodo, y después ${vervolgPrijs}.`
-              : `Upgraded — a one-off €${charged.toFixed(2)} for the rest of this period will be charged, then ${vervolgPrijs}.`)
+              ? `Mejora completada — se cobrará una sola vez ${fmtAmt("€", charged)} por lo que queda de este periodo, y después ${vervolgPrijs}.`
+              : `Upgraded — a one-off ${fmtAmt("€", charged)} for the rest of this period will be charged, then ${vervolgPrijs}.`)
           : (lang === "nl"
               ? "Abonnement gewijzigd. Nieuwe prijs gaat in op de volgende renewal."
               : lang === "es"
@@ -5802,10 +5802,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const refund = Math.round((paidAmountOf(a) - price) * 100) / 100;
     if (refund <= 0) return;
     const msg = lang === "nl"
-      ? `Terugbetaling van ${cur}${refund.toFixed(2)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
+      ? `Terugbetaling van ${fmtAmt(cur, refund)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
       : lang === "es"
-      ? `¿Registrar la devolución de ${cur}${refund.toFixed(2)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
-      : `Record the refund of ${cur}${refund.toFixed(2)} to ${a.client_name}? The client gets a confirmation by email.`;
+      ? `¿Registrar la devolución de ${fmtAmt(cur, refund)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
+      : `Record the refund of ${fmtAmt(cur, refund)} to ${a.client_name}? The client gets a confirmation by email.`;
     // Neutrale knop: de standaard is de rode "Verwijderen" en dat klopt hier niet.
     if (!(await showConfirm(msg, { tone: "primary", confirmText: lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded" }))) return;
     setProcessingApptId(a.id);
@@ -5815,7 +5815,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
       update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
-      toast.show(lang === "nl" ? `Terugbetaling van ${cur}${refund.toFixed(2)} vastgelegd` : lang === "es" ? `Devolución de ${cur}${refund.toFixed(2)} registrada` : `Refund of ${cur}${refund.toFixed(2)} recorded`);
+      toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
       if (a.client_email) {
         sendEmails("refund_sent", {
           client_name: a.client_name, client_email: a.client_email,
@@ -6795,7 +6795,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
       setRedeemVoucher({ id: data.id, code: data.code, remaining: left });
       setRedeemCode("");
-      toast.show(`${data.code} · ${lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} ${cur}${left.toFixed(2)}`);
+      toast.show(`${data.code} · ${lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} ${fmtAmt(cur, left)}`);
     } catch (e) {
       console.error("voucher lookup:", e);
       toast.show(t.somethingWrong, "error");
@@ -6822,7 +6822,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         sale,
         lang,
         currencySymbol: cur,
-        moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
+        moneyLocale: currencyForCountry(salonData.country_code).locale, // komma overal (24-09-2026), niet de UI-taal
         taxIdLabel: tax.idLabel,
         taxCfg,
         receiptNumber: sale.receipt_number ?? null,
@@ -6993,7 +6993,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const cashInAmt = walkinPay === "cash" && kassaCashIn.trim() !== "" ? Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100 : null;
     if (cashInAmt !== null && cashInAmt + 0.005 < netTotal) {
       await rollbackVouchers();
-      toast.show(lang === "nl" ? `Ontvangen bedrag (${cur}${cashInAmt.toFixed(2)}) is lager dan het totaal` : lang === "es" ? `El importe recibido (${cur}${cashInAmt.toFixed(2)}) es menor que el total` : `Cash received (${cur}${cashInAmt.toFixed(2)}) is less than the total`, "error");
+      toast.show(lang === "nl" ? `Ontvangen bedrag (${fmtAmt(cur, cashInAmt)}) is lager dan het totaal` : lang === "es" ? `El importe recibido (${fmtAmt(cur, cashInAmt)}) es menor que el total` : `Cash received (${fmtAmt(cur, cashInAmt)}) is less than the total`, "error");
       return;
     }
     const saleLabel = items.filter(it => it.kind !== "voucher_redeem" && it.kind !== "discount").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
@@ -7016,7 +7016,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
-        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${kortingAmt > 0 ? ` (${lang === "nl" ? "korting" : lang === "es" ? "descuento" : "discount"} −${cur}${kortingAmt.toFixed(2)})` : ""}${redeemAmt > 0 ?` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${cur}${redeemAmt.toFixed(2)})` : ""}`,
+        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${kortingAmt > 0 ? ` (${lang === "nl" ? "korting" : lang === "es" ? "descuento" : "discount"} −${fmtAmt(cur, kortingAmt)})` : ""}${redeemAmt > 0 ?` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${fmtAmt(cur, redeemAmt)})` : ""}`,
         service_price: netTotal,
         service_duration: 0,
         date: fmt(getToday()),
@@ -7070,13 +7070,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Met auto-print aan rolt de bon direct uit de printer terwijl de
       // bevestiging in beeld komt — afrekenen is dan één handeling aan de balie.
       if (kassaAutoPrint) downloadReceipt(data, "print");
-      if (voucherCode) toast.show(lang === "nl" ? `Kadobon ${voucherCode} aangemaakt (${cur}${voucherAmt.toFixed(2)})` : lang === "es" ? `Tarjeta ${voucherCode} creada` : `Gift card ${voucherCode} created`);
+      if (voucherCode) toast.show(lang === "nl" ? `Kadobon ${voucherCode} aangemaakt (${fmtAmt(cur, voucherAmt)})` : lang === "es" ? `Tarjeta ${voucherCode} creada` : `Gift card ${voucherCode} created`);
       // Kassa: met een e-mailadres gaat de factuur/bon er direct achteraan —
       // afrekenen en factureren is dan één handeling, zoals bij Sara.
       if (row.client_email) {
         await sendInvoiceWith(data.id, null, data);
       } else {
-        toast.show(`${lang === "nl" ? "Afgerekend" : lang === "es" ? "Cobrado" : "Checked out"} · ${cur}${netTotal.toFixed(2)}`);
+        toast.show(`${lang === "nl" ? "Afgerekend" : lang === "es" ? "Cobrado" : "Checked out"} · ${fmtAmt(cur, netTotal)}`);
       }
       return;
     }
@@ -7154,7 +7154,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         toast.show(lang === "nl" ? "Geen kasboekregels of contante betalingen in deze periode" : lang === "es" ? "Sin movimientos de caja ni pagos en efectivo en este período" : "No cash book lines or cash payments in this period", "error");
         return false;
       }
-      const params = { salon: salonData, movements, cashRows, range: { from, to, label }, lang, currencySymbol: cur, moneyLocale: locale };
+      // moneyLocale volgt de munt (overal komma, 24-09-2026); `locale` hierboven is alleen voor de datumlabels.
+      const params = { salon: salonData, movements, cashRows, range: { from, to, label }, lang, currencySymbol: cur, moneyLocale: currencyForCountry(salonData.country_code).locale };
       if (format === "xlsx") {
         const mod = await import("./reportExcel.js");
         mod.downloadCashbookXlsx(params);
@@ -7212,7 +7213,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         range: { from, to, label },
         lang,
         currencySymbol: cur,
-        moneyLocale: lang === "en" ? "en-GB" : lang === "es" ? "es-ES" : "nl-NL",
+        moneyLocale: currencyForCountry(salonData.country_code).locale, // komma overal (24-09-2026), niet de UI-taal
         taxIdLabel: tax.idLabel,
         taxCfg,
       };
@@ -7853,7 +7854,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${cur}${a.service_price}\\nStatus: ${a.status}`,
+        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${fmtAmt(cur, a.service_price)}\\nStatus: ${a.status}`,
         `LOCATION:${salonData.name}, ${salonData.city}`,
         `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
@@ -7942,7 +7943,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3, wordBreak: "break-word", lineHeight: 1.45 }}>
                 <strong style={{ color: c.text, fontWeight: 600 }}>{window(p.time, p.duration)}</strong> · {p.label}
                 {multiStylist && p.staff ? <span style={{ color: accent, fontWeight: 600 }}> · {p.staff}</span> : null}
-                {p.price != null && bd.length >= 2 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {cur}{p.price.toFixed(2)}</span> : null}
+                {p.price != null && bd.length >= 2 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {fmtAmt(cur, p.price)}</span> : null}
               </div>
             ));
           })()}
@@ -7968,10 +7969,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const share = agendaStaff ? staffShareOf(a, agendaStaff, salonData.services || [], salonData.staff || []) : total;
             const split = agendaStaff && Math.abs(share - total) >= 0.005;
             return (<>
-              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{(split ? share : total).toFixed(2)}</span>
+              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{fmtAmt(cur, (split ? share : total))}</span>
               {split && (
                 <span style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginTop: -2 }}>
-                  {lang === "nl" ? `haar deel · totaal ${cur}${total.toFixed(2)}` : lang === "es" ? `su parte · total ${cur}${total.toFixed(2)}` : `her part · total ${cur}${total.toFixed(2)}`}
+                  {lang === "nl" ? `haar deel · totaal ${fmtAmt(cur, total)}` : lang === "es" ? `su parte · total ${fmtAmt(cur, total)}` : `her part · total ${fmtAmt(cur, total)}`}
                 </span>
               )}
               {!split && a._parts?.length > 1 && (
@@ -8089,7 +8090,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 window.open(getGoogleCalUrl({
                   title: `${a.client_name} — ${a.service_name}`,
                   date: a.date, time: a.time, duration: dur,
-                  description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${cur}${a.service_price}`,
+                  description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${fmtAmt(cur, a.service_price)}`,
                   location: salonData.name + (salonData.city ? ", " + salonData.city : "")
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
@@ -8124,7 +8125,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div>
           <div style={{ fontSize: 11, color: c.warning, marginBottom: 8, lineHeight: 1.45, display: "flex", alignItems: "center", gap: 5 }}>
             <NavIcon name="alerttri" size={11} color={c.warning} />
-            {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"} {cur}{parseFloat(a.service_price || 0).toFixed(2)}
+            {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"} {fmtAmt(cur, parseFloat(a.service_price || 0))}
             {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${fmtDueShort(a.payment_due_at)}` : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -8150,7 +8151,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           echt afgerond, zodat de betaling in één handeling vastligt. */}
       {a.status === "confirmed" && completeFor === a.id && (
         <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${cur}${outstandingOf(a).toFixed(2)} open. Hoe is de rest betaald?` : lang === "es" ? `Quedan ${cur}${outstandingOf(a).toFixed(2)}. ¿Cómo se pagó el resto?` : `${cur}${outstandingOf(a).toFixed(2)} still open. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${fmtAmt(cur, outstandingOf(a))} open. Hoe is de rest betaald?` : lang === "es" ? `Quedan ${fmtAmt(cur, outstandingOf(a))}. ¿Cómo se pagó el resto?` : `${fmtAmt(cur, outstandingOf(a))} still open. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             {[
               ["cash", payMethodLabel("cash", lang)],
@@ -8194,7 +8195,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
               <NavIcon name="alerttri" size={11} color={c.warning} />
-              {lang === "nl" ? `Vooruitbetaald ${cur}${paid.toFixed(2)} · nog ${cur}${open.toFixed(2)} open` : lang === "es" ? `Pagado por adelantado ${cur}${paid.toFixed(2)} · quedan ${cur}${open.toFixed(2)}` : `Paid in advance ${cur}${paid.toFixed(2)} · ${cur}${open.toFixed(2)} still open`}
+              {lang === "nl" ? `Vooruitbetaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, open)} open` : lang === "es" ? `Pagado por adelantado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, open)}` : `Paid in advance ${fmtAmt(cur, paid)} · ${fmtAmt(cur, open)} still open`}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received")}</button>
@@ -8213,7 +8214,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
               <NavIcon name="alerttri" size={11} color={c.warning} />
-              {lang === "nl" ? `Te veel betaald: ${cur}${(-open).toFixed(2)} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${cur}${(-open).toFixed(2)}` : `Overpaid: ${cur}${(-open).toFixed(2)} to refund`}
+              {lang === "nl" ? `Te veel betaald: ${fmtAmt(cur, (-open))} terug te betalen` : lang === "es" ? `Pagado de más: devolver ${fmtAmt(cur, (-open))}` : `Overpaid: ${fmtAmt(cur, (-open))} to refund`}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => recordRefund(a)} title={lang === "nl" ? "Het verschil is teruggestort; klant krijgt een bevestiging" : lang === "es" ? "La diferencia se ha devuelto; el cliente recibe una confirmación" : "The difference has been refunded; the client gets a confirmation"}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded")}</button>
@@ -8246,7 +8247,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ marginTop: 6 }} data-no-show-line>
             <div style={{ fontSize: 11, color: c.danger, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
               <NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}
-              {fee > 0 && <span>· {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {cur}{fee.toFixed(2)} ({pct}%)</span>}
+              {fee > 0 && <span>· {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {fmtAmt(cur, fee)} ({pct}%)</span>}
             </div>
             {fee > 0 && a.client_phone && (salonData.payment_link || salonData.iban) && (
               <a
@@ -8836,7 +8837,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{prodName(p)}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>
-                        {cur}{parseFloat(p.price).toFixed(2)}
+                        {fmtAmt(cur, parseFloat(p.price))}
                         {p.stock != null && <span style={{ marginLeft: 8, color: p.stock === 0 ? c.danger : c.textMuted }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : lang === "es" ? "agotado" : "sold out") : `${lang === "nl" ? "voorraad" : lang === "es" ? "stock" : "stock"}: ${p.stock}`}</span>}
                       </div>
                     </div>
@@ -8860,7 +8861,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               return tot > 0 ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal extra" : "Total extra"}</span>
-                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>+{cur}{tot.toFixed(2)}</span>
+                  <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>+{fmtAmt(cur, tot)}</span>
                 </div>
               ) : null;
             })()}
@@ -8954,22 +8955,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {Math.abs(rest) >= 0.01 && (
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, padding: "5px 0", borderBottom: lines.length ? `1px solid ${c.border}` : "none" }}>
                     <span style={{ minWidth: 0 }}>{String(sale.service_name || "").split(" + ")[0]}</span>
-                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{rest.toFixed(2)}</span>
+                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, rest)}</span>
                   </div>
                 )}
                 {lines.map((it, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, padding: "5px 0", borderBottom: i < lines.length - 1 ? `1px solid ${c.border}` : "none", color: amt(it) < 0 ? c.success : c.text }}>
                     <span style={{ minWidth: 0 }}>{(parseInt(it.qty) || 1) > 1 ? `${it.qty}× ` : ""}{it.name}</span>
-                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{amt(it).toFixed(2)}</span>
+                    <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, amt(it))}</span>
                   </div>
                 ))}
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${c.border}` }}>
-                  {negSum > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${cur}${(gross + Math.max(0, rest)).toFixed(2)}`} />}
-                  {kortingLn > 0 && <Row label={lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"} value={`−${cur}${kortingLn.toFixed(2)}`} tone={c.success} />}
-                  {redeemed > 0 && <Row label={lang === "nl" ? "Kadobon ingewisseld" : lang === "es" ? "Tarjeta canjeada" : "Gift card redeemed"} value={`−${cur}${redeemed.toFixed(2)}`} tone={c.success} />}
+                  {negSum > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${fmtAmt(cur, (gross + Math.max(0, rest)))}`} />}
+                  {kortingLn > 0 && <Row label={lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"} value={`−${fmtAmt(cur, kortingLn)}`} tone={c.success} />}
+                  {redeemed > 0 && <Row label={lang === "nl" ? "Kadobon ingewisseld" : lang === "es" ? "Tarjeta canjeada" : "Gift card redeemed"} value={`−${fmtAmt(cur, redeemed)}`} tone={c.success} />}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal" : "Total"}</span>
-                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, color: accent }}>{cur}{(parseFloat(sale.service_price) || 0).toFixed(2)}</span>
+                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, color: accent }}>{fmtAmt(cur, (parseFloat(sale.service_price) || 0))}</span>
                   </div>
                 </div>
               </div>
@@ -9037,7 +9038,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div key={v.id} style={{ padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 8, opacity: v.active && v.remaining > 0 ? 1 : 0.55 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{v.code}</span>
-                  <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{parseFloat(v.remaining).toFixed(2)} <span style={{ color: c.textMuted, fontSize: 10 }}>/ {cur}{parseFloat(v.amount).toFixed(2)}</span></span>
+                  <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, parseFloat(v.remaining))} <span style={{ color: c.textMuted, fontSize: 10 }}>/ {fmtAmt(cur, parseFloat(v.amount))}</span></span>
                 </div>
                 <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
                   {[v.buyer_name, v.buyer_email, new Date(v.created_at).toLocaleDateString("nl-NL")].filter(Boolean).join(" · ")}
@@ -9055,7 +9056,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       if (error) { toast.show(t.somethingWrong, "error"); return; }
                       setVouchers(list => list.map(x => x.id === v.id ? { ...x, remaining: next } : x));
                       setVoucherRedeem(s => ({ ...s, [v.id]: "" }));
-                      toast.show(lang === "nl" ? `Afgeboekt — restsaldo ${cur}${next.toFixed(2)}` : lang === "es" ? `Descontado — saldo ${cur}${next.toFixed(2)}` : `Deducted — balance ${cur}${next.toFixed(2)}`);
+                      toast.show(lang === "nl" ? `Afgeboekt — restsaldo ${fmtAmt(cur, next)}` : lang === "es" ? `Descontado — saldo ${fmtAmt(cur, next)}` : `Deducted — balance ${fmtAmt(cur, next)}`);
                     }}>{lang === "nl" ? "Afboeken" : lang === "es" ? "Descontar" : "Deduct"}</button>
                     <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "8px 12px", fontSize: 10, color: c.danger, borderColor: `${c.danger}33` }} onClick={async () => {
                       const { error } = await supabase.from("gift_vouchers").update({ active: false }).eq("id", v.id);
@@ -9185,7 +9186,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               {(() => {
                 const svcLabel = (s) => lang === "nl" ? (s.name_nl || s.name) : lang === "es" ? (s.name_es || s.name_en || s.name_nl || s.name) : (s.name_en || s.name_nl || s.name);
                 const varLabel = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
-                const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — ${cur}${n.toFixed(2)}` : ""; };
+                const priceSuffix = (p) => { const n = parseFloat(p || 0); return n > 0 ? ` — ${fmtAmt(cur, n)}` : ""; };
                 // One option per bookable thing: services with variants expand
                 // to one option per variant (value "serviceId::variantId") so
                 // each entry carries its real price; plain services stay one
@@ -9284,7 +9285,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     border: `1px solid ${on ? accent : c.inputBorder}`,
                                     color: on ? accent : c.textSub,
                                   }}>
-                                  + {lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl)} · {cur}{parseFloat(ex.price || 0).toFixed(2)}
+                                  + {lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl)} · {fmtAmt(cur, parseFloat(ex.price || 0))}
                                 </button>
                               );
                             })}
@@ -9333,8 +9334,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}33`, borderRadius: 12 }}>
                   <span style={{ fontSize: 11, color: c.textSub }}>{lang === "nl" ? "Klant betaalt" : lang === "es" ? "El cliente paga" : "Client pays"}</span>
                   <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>
-                    <span style={{ fontSize: 12, color: c.textMuted, textDecoration: "line-through", marginRight: 8, fontFamily: "'Jost',sans-serif" }}>{cur}{basePrice.toFixed(2)}</span>
-                    {cur}{finalPrice.toFixed(2)}
+                    <span style={{ fontSize: 12, color: c.textMuted, textDecoration: "line-through", marginRight: 8, fontFamily: "'Jost',sans-serif" }}>{fmtAmt(cur, basePrice)}</span>
+                    {fmtAmt(cur, finalPrice)}
                   </span>
                 </div>
               )}
@@ -9784,11 +9785,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <ReferralEventCard salonData={salonData} lang={lang} c={c} accent={accent} toast={toast} isMobile={isMobile} />
                   {/* KPI-tegels bovenaan: week, maand, jaar, beoordeling. */}
                   <div data-dash-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
-                    {tile({ key: "week", icon: "money", label: isMobile ? (lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week") : t.weeklyRevenue, sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${cur}${weekRevenue.toFixed(2)}`, chip: weekChip,
+                    {tile({ key: "week", icon: "money", label: isMobile ? (lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week") : t.weeklyRevenue, sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${fmtAmt(cur, weekRevenue)}`, chip: weekChip,
                       body: <div style={{ minHeight: 44 }}>{sparkline(weekDaily, accent, { labels: weekLabels })}</div> })}
-                    {tile({ key: "month", icon: "analytics", label: isMobile ? (lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month") : t.monthlyRevenue, sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: `${cur}${monthRevenue.toFixed(2)}`,
+                    {tile({ key: "month", icon: "analytics", label: isMobile ? (lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month") : t.monthlyRevenue, sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: `${fmtAmt(cur, monthRevenue)}`,
                       body: <div style={{ minHeight: 44 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div> })}
-                    {tile({ key: "year", icon: "calendar", label: isMobile ? (lang === "nl" ? "Dit jaar" : lang === "es" ? "Este año" : "This year") : t.yearlyRevenue, sub: fmt(getToday()).slice(0, 4), value: yearRevTile ? `${cur}${yearRevTile.totaal.toFixed(2)}` : "…",
+                    {tile({ key: "year", icon: "calendar", label: isMobile ? (lang === "nl" ? "Dit jaar" : lang === "es" ? "Este año" : "This year") : t.yearlyRevenue, sub: fmt(getToday()).slice(0, 4), value: yearRevTile ? `${fmtAmt(cur, yearRevTile.totaal)}` : "…",
                       body: <div style={{ minHeight: 44 }}>{sparkline(yearRevTile ? yearRevTile.perMaand : Array(12).fill(0), accent, { labels: (lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN).map(mn => mn[0].toUpperCase()) })}</div> })}
                     {tile({ key: "rating", icon: "star2", label: t.avgRating, sub: `${salonData.reviews?.length || 0} ${t.reviews?.toLowerCase?.() || "reviews"}`, valueColor: c.text,
                       value: <>{avgRating}<svg width={16} height={16} viewBox="0 0 20 20" fill={accent}><path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" /></svg></>,
@@ -9821,7 +9822,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {todayAppts.length > 0 && (
                           <div style={{ textAlign: "right" }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : lang === "es" ? "Previsto" : "Expected"}</div>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(2)}</div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{fmtAmt(cur, todayRevenue)}</div>
                           </div>
                         )}
                       </div>
@@ -9919,7 +9920,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                       <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(2)}</span>
+                                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, stats.revenue)}</span>
                                     </div>
                                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                       <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -10019,7 +10020,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{fmtAmt(cur, total8w)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : lang === "es" ? "últimas 8 semanas" : "last 8 weeks"}</div>
                         </div>
                         <span style={{ fontSize: 10, color: accent, cursor: "pointer", padding: "6px 12px", borderRadius: 8, border: `1px solid ${accent}33`, letterSpacing: "0.06em" }} onClick={() => setView("analytics")}>{t.viewMore}</span>
@@ -10048,7 +10049,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <g>
                               <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                               <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                {cur}{pts[peakIdx].revenue.toFixed(2)}
+                                {fmtAmt(cur, pts[peakIdx].revenue)}
                               </text>
                             </g>
                           )}
@@ -10056,7 +10057,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · {cur}{p.revenue.toFixed(2)}</title>
+                                <title>{p.label} · {fmtAmt(cur, p.revenue)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -10078,11 +10079,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : lang === "es" ? "Mejor semana" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{fmtAmt(cur, pts[peakIdx].revenue)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : lang === "es" ? "Promedio" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{avgWeek.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{fmtAmt(cur, avgWeek)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : lang === "es" ? "Tendencia" : "Trend"}</div>
@@ -10158,7 +10159,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               ? <img src={p.photo_url} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", marginBottom: 6 }} />
                               : <div style={{ width: 44, height: 44, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}><NavIcon name="bag" size={18} color={c.textMuted} /></div>}
                             <div style={{ fontSize: 11, fontWeight: 500, color: c.text, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{prodName(p)}</div>
-                            <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                            <div style={{ fontSize: 11, color: accent, marginTop: 3 }}>{fmtAmt(cur, parseFloat(p.price))}</div>
                             {p.stock != null && <div style={{ fontSize: 8.5, color: p.stock === 0 ? c.danger : c.textMuted, marginTop: 2 }}>{p.stock === 0 ? (lang === "nl" ? "uitverkocht" : lang === "es" ? "agotado" : "sold out") : `${lang === "nl" ? "voorraad" : lang === "es" ? "existencias" : "stock"}: ${p.stock}`}</div>}
                           </div>
                         );
@@ -10261,7 +10262,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                             )}
                           </div>
-                          <span data-kassa-sold-total style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent, lineHeight: 1 }}>{cur}{dayTotal.toFixed(2)}</span>
+                          <span data-kassa-sold-total style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: accent, lineHeight: 1 }}>{fmtAmt(cur, dayTotal)}</span>
                         </div>
                         {dayLoading ? (
                           <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0 10px", textAlign: "center" }}>
@@ -10285,7 +10286,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
                               <span style={{ flex: 1, minWidth: 0, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{what}</span>
                               <span style={{ color: c.textMuted, flexShrink: 0, fontSize: 10 }}>{[a.staff_name ? String(a.staff_name).split(",")[0].trim() : "", payLabel(a.payment_method)].filter(Boolean).join(" · ")}</span>
-                              <span style={{ color: accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{amt.toFixed(2)}</span>
+                              <span style={{ color: accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, amt)}</span>
                             </div>
                           );
                         })}
@@ -10343,7 +10344,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${c.success}1a`, border: `1px solid ${c.success}55`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
                               <NavIcon name="check" size={17} color={c.success} />
                             </div>
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent, lineHeight: 1.1 }}>{cur}{(parseFloat(sale.service_price) || 0).toFixed(2)}</div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent, lineHeight: 1.1 }}>{fmtAmt(cur, (parseFloat(sale.service_price) || 0))}</div>
                             <div style={{ fontSize: 11, color: sale.paid_at ? c.success : c.warning, marginTop: 3 }}>
                               {sale.paid_at
                                 ? `${lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"} · ${payTxt} · ${sale.time}`
@@ -10361,11 +10362,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <div data-kassa-change-done style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: `${c.success}12`, border: `1px solid ${c.success}44` }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textSub }}>
                                     <span>{lang === "nl" ? "Ontvangen (kassa in)" : lang === "es" ? "Recibido" : "Cash received"}</span>
-                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{cur}{ontvangen.toFixed(2)}</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, ontvangen)}</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
                                     <span style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{lang === "nl" ? "Wisselgeld (kassa uit)" : lang === "es" ? "Cambio a devolver" : "Change to give back"}</span>
-                                    <span data-kassa-change-done-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: c.success, fontVariantNumeric: "tabular-nums" }}>{cur}{terug.toFixed(2)}</span>
+                                    <span data-kassa-change-done-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: c.success, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, terug)}</span>
                                   </div>
                                 </div>
                               );
@@ -10375,7 +10376,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {lines.map((it, i) => (
                               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, padding: "3px 0", color: (parseFloat(it.price) || 0) < 0 ? c.success : c.textSub }}>
                                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(parseInt(it.qty) || 1) > 1 ? `${it.qty}× ` : ""}{it.name}</span>
-                                <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{((parseFloat(it.price) || 0) * (parseInt(it.qty) || 1)).toFixed(2)}</span>
+                                <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, ((parseFloat(it.price) || 0) * (parseInt(it.qty) || 1)))}</span>
                               </div>
                             ))}
                           </div>
@@ -10422,13 +10423,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) }))} style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>−</button>
                           <span style={{ minWidth: 14, textAlign: "center", fontSize: 12, fontWeight: 600 }}>{qty}</span>
                           <button type="button" onClick={() => setProductSaleSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) }))} style={{ width: 22, height: 22, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>+</button>
-                          <span style={{ width: 58, textAlign: "right", fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                          <span style={{ width: 58, textAlign: "right", fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, ((parseFloat(p.price) || 0) * qty))}</span>
                         </div>
                       ))}
                       {voucherAmt > 0 && (
                         <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.border}`, fontSize: 12 }}>
                           <span><NavIcon name="gift" size={14} color="currentColor" /> {lang === "nl" ? "Kadobon" : lang === "es" ? "Tarjeta regalo" : "Gift card"}</span>
-                          <span style={{ color: accent }}>{cur}{voucherAmt.toFixed(2)}</span>
+                          <span style={{ color: accent }}>{fmtAmt(cur, voucherAmt)}</span>
                         </div>
                       )}
                       {/* Kadobon INWISSELEN. Het saldo gaat hier al van het
@@ -10442,11 +10443,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>{redeemVoucher.code}</div>
                                 <div style={{ fontSize: 9.5, color: c.textMuted }}>
-                                  {lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} {cur}{redeemVoucher.remaining.toFixed(2)}
-                                  {redeemPreview < redeemVoucher.remaining ? ` · ${lang === "nl" ? "blijft over" : lang === "es" ? "queda" : "left over"} ${cur}${(redeemVoucher.remaining - redeemPreview).toFixed(2)}` : ""}
+                                  {lang === "nl" ? "saldo" : lang === "es" ? "saldo" : "balance"} {fmtAmt(cur, redeemVoucher.remaining)}
+                                  {redeemPreview < redeemVoucher.remaining ? ` · ${lang === "nl" ? "blijft over" : lang === "es" ? "queda" : "left over"} ${fmtAmt(cur, (redeemVoucher.remaining - redeemPreview))}` : ""}
                                 </div>
                               </div>
-                              <span style={{ fontSize: 12, color: c.success, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{"−"}{cur}{redeemPreview.toFixed(2)}</span>
+                              <span style={{ fontSize: 12, color: c.success, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{"−"}{fmtAmt(cur, redeemPreview)}</span>
                               <button type="button" aria-label={lang === "nl" ? "Kadobon loskoppelen" : lang === "es" ? "Quitar la tarjeta regalo" : "Remove gift card"} onClick={() => setRedeemVoucher(null)} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>{"×"}</button>
                             </div>
                           ) : (
@@ -10484,18 +10485,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {(redeemPreview > 0 || discountPreview > 0) && (
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textMuted, marginTop: 12 }}>
                           <span>{lang === "nl" ? "Subtotaal" : "Subtotal"}</span>
-                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{cur}{gross.toFixed(2)}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, gross)}</span>
                         </div>
                       )}
                       {discountPreview > 0 && (
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: c.textMuted, marginTop: 2 }}>
                           <span>{lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"}{kassaDiscountPct && rawK > 0 ? ` (${rawK}%)` : ""}</span>
-                          <span style={{ fontVariantNumeric: "tabular-nums" }}>−{cur}{discountPreview.toFixed(2)}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>−{fmtAmt(cur, discountPreview)}</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: (redeemPreview > 0 || discountPreview > 0) ? "2px 0 12px" : "12px 0" }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{redeemPreview > 0 ? (lang === "nl" ? "Nog te betalen" : lang === "es" ? "A pagar" : "Left to pay") : (lang === "nl" ? "Totaal" : "Total")}</span>
-                        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{cur}{tot.toFixed(2)}</span>
+                        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{fmtAmt(cur, tot)}</span>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
@@ -10564,7 +10565,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     ? (lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Falta por recibir" : "Still to receive")
                                     : (lang === "nl" ? "Wisselgeld (kassa uit)" : lang === "es" ? "Cambio a devolver" : "Change to give back")}
                                 </span>
-                                <span data-kassa-change-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: teWeinig ? c.danger : c.success, fontVariantNumeric: "tabular-nums" }}>{cur}{Math.abs(verschil).toFixed(2)}</span>
+                                <span data-kassa-change-amount style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: teWeinig ? c.danger : c.success, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, Math.abs(verschil))}</span>
                               </div>
                             </div>
                           );
@@ -10574,7 +10575,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
                           {kassaCheckoutBusy
                             ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
-                            : <>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${cur}${tot.toFixed(2)}` : ""}</>}
+                            : <>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${fmtAmt(cur, tot)}` : ""}</>}
                         </button>
                         {/* Een browser kan niet rechtstreeks met een printer koppelen;
                             de brug is het printvenster. De eerste print vraagt éénmalig
@@ -10902,7 +10903,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
                 <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(2)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{fmtAmt(cur, periodRevenue)}</div>
                 </div>
               </div>
 
@@ -11326,7 +11327,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // op de kaart opent het paneel met alle knoppen.
                           const prijs = agendaStaff ? staffShareOf(a, agendaStaff, salonData.services || [], salonData.staff || []) : parseFloat(a.service_price || 0);
                           const priceEl = (
-                            <span data-appt-price style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color, lineHeight: "14px", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{cur}{Math.abs(prijs % 1) > 0.004 ? prijs.toFixed(2) : prijs.toFixed(0)}</span>
+                            <span data-appt-price style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color, lineHeight: "14px", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{Math.abs(prijs % 1) > 0.004 ? fmtAmt(cur, prijs) : cur + prijs.toFixed(0)}</span>
                           );
                           return (
                             <div key={a._slotKey || a.id} onClick={() => setApptDetail(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
@@ -12021,9 +12022,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                   {/* Tegels met icoontegel, zoals op het dashboard (restyle 16-09). */}
                   {[
-                    { key: "total", icon: "money", label: t.totalEarnings, value: `${cur}${visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0).toFixed(2)}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
-                    { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${cur}${thisMonthTotal.toFixed(2)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
-                    { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${cur}${unsentTotal.toFixed(2)}` },
+                    { key: "total", icon: "money", label: t.totalEarnings, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
+                    { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${fmtAmt(cur, thisMonthTotal)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
+                    { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${fmtAmt(cur, unsentTotal)}` },
                     { key: "sent", icon: "check", label: lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", value: sent.length, color: c.success, sub: `${visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%` },
                   ].map(x => (
                     <div key={x.key} className="stat-card" data-invoice-tile={x.key} style={{ padding: isMobile ? "12px 12px" : "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -12175,7 +12176,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
                         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
                         {/* Price */}
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>
 
                         {/* Medewerker-chip tussen prijs en knoppen (Faisal 30-08) —
                             zelfde accent-pill als de dashboard-afspraakkaart,
@@ -12480,7 +12481,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{weekRevenue.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{fmtAmt(cur, weekRevenue)}</div>
                           {weekChange !== 0 && (
                             <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
                               {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
@@ -12498,7 +12499,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days"}</div>
                           </div>
                         </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{cur}{monthRevenue.toFixed(2)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1, marginTop: 6 }}>{fmtAmt(cur, monthRevenue)}</div>
                         <div style={{ flex: 1, minHeight: 56, marginTop: 12 }}>{sparkline(monthDaily, accent, { labels: monthLabels })}</div>
                       </div>
                       {/* Total appointments */}
@@ -12560,7 +12561,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, color: c.text, lineHeight: 1 }}>{fmtAmt(cur, total8w)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : lang === "es" ? "últimas 8 semanas" : "last 8 weeks"}</div>
                         </div>
                       </div>
@@ -12584,7 +12585,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <g>
                                 <rect x={px - 30} y={pts[peakIdx].y - 26} width="60" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                                 <text x={px} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                  {cur}{pts[peakIdx].revenue.toFixed(2)}
+                                  {fmtAmt(cur, pts[peakIdx].revenue)}
                                 </text>
                               </g>
                             );
@@ -12592,7 +12593,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · {cur}{p.revenue.toFixed(2)}</title>
+                                <title>{p.label} · {fmtAmt(cur, p.revenue)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -12612,11 +12613,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : lang === "es" ? "Mejor semana" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{fmtAmt(cur, pts[peakIdx].revenue)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : lang === "es" ? "Promedio" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{cur}{avgWeek.toFixed(2)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{fmtAmt(cur, avgWeek)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : lang === "es" ? "Tendencia" : "Trend"}</div>
@@ -12665,7 +12666,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(2)}</span>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, stats.revenue)}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -12730,7 +12731,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{r.name}</span>
                               {r.role && <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}>{r.role}</span>}
                             </div>
-                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, lineHeight: 1 }}>{cur}{r.revenue.toFixed(2)}</span>
+                            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, lineHeight: 1 }}>{fmtAmt(cur, r.revenue)}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                             <div style={{ flex: 1, height: 4, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -12785,7 +12786,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
-                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{totalRev.toFixed(2)}</span>
+                      <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 300, color: accent, lineHeight: 1 }}>{fmtAmt(cur, totalRev)}</span>
                       <span style={{ fontSize: 10, color: c.textMuted }}>{totalItems} {lang === "nl" ? "stuks verkocht" : lang === "es" ? "unidades vendidas" : "items sold"}</span>
                     </div>
                     <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
@@ -12795,7 +12796,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div key={who} style={{ marginBottom: idx === staffRows.length - 1 ? 0 : 10 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{who}</span>
-                          <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{cur}{g.revenue.toFixed(2)} <span style={{ color: c.textMuted, fontSize: 10 }}>· {g.items}×</span></span>
+                          <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, g.revenue)} <span style={{ color: c.textMuted, fontSize: 10 }}>· {g.items}×</span></span>
                         </div>
                         <div style={{ height: 4, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
                           <div style={{ height: "100%", borderRadius: 4, background: accent, width: `${(g.revenue / maxRev) * 100}%`, transition: "width 0.6s" }} />
@@ -12810,7 +12811,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {topProducts.map(([nm, p]) => (
                           <div key={nm} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 11, marginBottom: 4 }}>
                             <span style={{ color: c.textSub, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nm}</span>
-                            <span style={{ color: c.textMuted, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{p.qty}× · {cur}{p.revenue.toFixed(2)}</span>
+                            <span style={{ color: c.textMuted, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{p.qty}× · {fmtAmt(cur, p.revenue)}</span>
                           </div>
                         ))}
                       </>
@@ -14260,7 +14261,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const photoCount = (s.photos || []).length;
                   const heroPhoto = s.photos?.[0]?.url || s.photos?.[0];
                   const minVariantPrice = variantCount > 0 ? Math.min(...s.variants.map(v => parseFloat(v.price))) : null;
-                  const displayPrice = minVariantPrice !== null ? `${t.from} ${cur}${minVariantPrice.toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`;
+                  const displayPrice = minVariantPrice !== null ? `${t.from} ${fmtAmt(cur, minVariantPrice)}` : `${fmtAmt(cur, parseFloat(s.price))}`;
 
                   return (
                     <SortableService key={s.id} id={s.id}>{({ setNodeRef, style: sortStyle, attributes, listeners }) => (
@@ -14537,7 +14538,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               {(lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
-                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{fmtAmt(cur, parseFloat(v.price))}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button aria-label={lang === "nl" ? "Bewerk variant" : lang === "es" ? "Editar variante" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", name_es: v.name_es || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "", description_es: v.description_es || "", per_unit: !!v.per_unit }); }}
                                                 style={{ height: 30, padding: "0 12px", borderRadius: 8, border: `1px solid ${accent}55`, background: `${accent}14`, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600 }}>
@@ -14578,7 +14579,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                           <input className="input-field" type="number" min="0" step="0.01"
                                                             key={`${mm.id}:${v.id}:${ov ? ov.price : "std"}`}
                                                             defaultValue={ov ? ov.price : ""}
-                                                            placeholder={`${cur}${parseFloat(v.price || 0).toFixed(2)}`}
+                                                            placeholder={`${fmtAmt(cur, parseFloat(v.price || 0))}`}
                                                             onBlur={async ev2 => {
                                                               const raw = ev2.target.value.trim();
                                                               const had = ov ? parseFloat(ov.price) : null;
@@ -14599,14 +14600,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                               );
                                                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                               update(d => { d.staff = d.staff.map(x => x.id === mm.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)), { service_id: s.id, variant_id: v.id, price: val }] } : x); return d; });
-                                                              toast.show(lang === "nl" ? `${mm.name}: ${cur}${val.toFixed(2)} voor deze variant` : lang === "es" ? `${mm.name}: ${cur}${val.toFixed(2)} para esta variante` : `${mm.name}: ${cur}${val.toFixed(2)} for this variant`);
+                                                              toast.show(lang === "nl" ? `${mm.name}: ${fmtAmt(cur, val)} voor deze variant` : lang === "es" ? `${mm.name}: ${fmtAmt(cur, val)} para esta variante` : `${mm.name}: ${fmtAmt(cur, val)} for this variant`);
                                                             }}
                                                             style={{ width: 120, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
                                                         </div>
                                                       );
                                                     })}
                                                     <div style={{ fontSize: 10, color: c.textMuted }}>
-                                                      {lang === "nl" ? `Leeg = variantprijs (${cur}${parseFloat(v.price || 0).toFixed(2)}). De klant ziet de prijs van de gekozen medewerker.` : lang === "es" ? `Vacío = precio de la variante (${cur}${parseFloat(v.price || 0).toFixed(2)}).` : `Empty = variant price (${cur}${parseFloat(v.price || 0).toFixed(2)}). Clients see the chosen staff member's price.`}
+                                                      {lang === "nl" ? `Leeg = variantprijs (${fmtAmt(cur, parseFloat(v.price || 0))}). De klant ziet de prijs van de gekozen medewerker.` : lang === "es" ? `Vacío = precio de la variante (${fmtAmt(cur, parseFloat(v.price || 0))}).` : `Empty = variant price (${fmtAmt(cur, parseFloat(v.price || 0))}). Clients see the chosen staff member's price.`}
                                                     </div>
                                                   </div>
                                                 )}
@@ -14688,7 +14689,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             <input className="input-field" type="number" min="0" step="0.01"
                                               key={`${m.id}:${s.id}:${ovRow ? ovRow.price : "std"}`}
                                               defaultValue={ovRow ? ovRow.price : ""}
-                                              placeholder={`${cur}${parseFloat(s.price || 0).toFixed(2)}`}
+                                              placeholder={`${fmtAmt(cur, parseFloat(s.price || 0))}`}
                                               onBlur={async ev => {
                                                 const raw = ev.target.value.trim();
                                                 const had = ovRow ? parseFloat(ovRow.price) : null;
@@ -14709,7 +14710,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 );
                                                 if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                 update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && !o.variant_id)), { service_id: s.id, variant_id: null, price: val }] } : x); return d; });
-                                                toast.show(lang === "nl" ? `${m.name}: ${cur}${val.toFixed(2)} voor deze dienst` : lang === "es" ? `${m.name}: ${cur}${val.toFixed(2)} para este tratamiento` : `${m.name}: ${cur}${val.toFixed(2)} for this service`);
+                                                toast.show(lang === "nl" ? `${m.name}: ${fmtAmt(cur, val)} voor deze dienst` : lang === "es" ? `${m.name}: ${fmtAmt(cur, val)} para este tratamiento` : `${m.name}: ${fmtAmt(cur, val)} for this service`);
                                               }}
                                               style={{ width: 120, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
                                           </div>
@@ -14728,7 +14729,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                   <input className="input-field" type="number" min="0" step="0.01"
                                                     key={`${m.id}:${v.id}:${vOv ? vOv.price : "std"}`}
                                                     defaultValue={vOv ? vOv.price : ""}
-                                                    placeholder={`${cur}${parseFloat(v.price || 0).toFixed(2)}`}
+                                                    placeholder={`${fmtAmt(cur, parseFloat(v.price || 0))}`}
                                                     onBlur={async ev => {
                                                       const raw = ev.target.value.trim();
                                                       const had = vOv ? parseFloat(vOv.price) : null;
@@ -14749,7 +14750,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                       );
                                                       if (error) { toast.show(t.somethingWrong, "error"); return; }
                                                       update(d => { d.staff = d.staff.map(x => x.id === m.id ? { ...x, price_overrides: [...(x.price_overrides || []).filter(o => !(o.service_id === s.id && o.variant_id === v.id)), { service_id: s.id, variant_id: v.id, price: val }] } : x); return d; });
-                                                      toast.show(lang === "nl" ? `${m.name}: ${cur}${val.toFixed(2)} voor ${vNaam}` : lang === "es" ? `${m.name}: ${cur}${val.toFixed(2)} para ${vNaam}` : `${m.name}: ${cur}${val.toFixed(2)} for ${vNaam}`);
+                                                      toast.show(lang === "nl" ? `${m.name}: ${fmtAmt(cur, val)} voor ${vNaam}` : lang === "es" ? `${m.name}: ${fmtAmt(cur, val)} para ${vNaam}` : `${m.name}: ${fmtAmt(cur, val)} for ${vNaam}`);
                                                     }}
                                                     style={{ width: 110, fontSize: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }} />
                                                 </div>
@@ -14917,7 +14918,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 </div>
                                               )}
                                             </div>
-                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
+                                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{fmtAmt(cur, parseFloat(e.price))}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price, duration: e.duration == null ? "" : String(e.duration), per_unit: !!e.per_unit, excluded_staff_ids: e.excluded_staff_ids || [] }); }}
                                                 style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -15279,7 +15280,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const chip = (label, val, kleur) => (
                           <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: isMobile ? "7px 8px" : "7px 12px", flexShrink: 0, minWidth: 0 }}>
                             <div style={{ fontSize: isMobile ? 8 : 8.5, fontWeight: 600, letterSpacing: isMobile ? "0.05em" : "0.07em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{label}</div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: kleur || c.text, fontVariantNumeric: "tabular-nums" }}>{cur}{val.toFixed(2)}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: kleur || c.text, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, val)}</div>
                           </div>
                         );
                         {/* Mobiel als 3-koloms grid op één rij — als losse
@@ -15507,11 +15508,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               "VOORRAAD" liep anders tegen het oogje aan. */}
                           <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
                             {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Inkoop" : lang === "es" ? "Coste" : "Cost"}</div>}
-                            <div style={{ fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${cur}${parseFloat(p.purchase_price).toFixed(2)}` : "—"}</div>
+                            <div style={{ fontSize: 12, color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{p.purchase_price != null ? `${fmtAmt(cur, parseFloat(p.purchase_price))}` : "—"}</div>
                           </div>
                           <div style={{ width: isMobile ? "auto" : 62, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
                             {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}</div>}
-                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, lineHeight: 1.1 }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, lineHeight: 1.1 }}>{fmtAmt(cur, parseFloat(p.price))}</div>
                           </div>
                           <div style={{ width: isMobile ? "auto" : 72, textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
                             {isMobile && <div style={{ fontSize: 7.5, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: c.textLabel, marginBottom: 1 }}>{lang === "nl" ? "Voorraad" : lang === "es" ? "Stock" : "Stock"}</div>}
@@ -17119,7 +17120,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const daysLeft = expires ? Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000)) : null;
                 const trialEnds = bp.trial_ends_at ? new Date(bp.trial_ends_at) : null;
                 const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
-                const fmtEUR = (n) => `€${parseFloat(n || 0).toFixed(2)}`;
+                const fmtEUR = (n) => fmtAmt("€", n);
                 const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 
                 const statusColor = isActive ? c.success : isTrial ? ACCENT : isPastDue ? c.warning : c.textLabel;
@@ -17800,7 +17801,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, color: c.text, fontFamily: "monospace", letterSpacing: "0.04em" }}>{code.code}</div>
                           <div style={{ fontSize: 11, color: c.textSub, marginTop: 2 }}>
-                            <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `${cur}${code.amount}`}</span>
+                            <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `${fmtAmt(cur, code.amount)}`}</span>
                             {" "}{t.discount.toLowerCase()}
                           </div>
                         </div>
@@ -18417,14 +18418,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "", extra_ids: [], variant_qty: 1, extra_qtys: {} } : r) }))}
                           style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)} — {cur}{parseFloat(s.price).toFixed(2)}</option>)}
+                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)} — {fmtAmt(cur, parseFloat(s.price))}</option>)}
                         </select>
                         {hasVariants && (<>
                           <select className="input-field" value={row.variant_id || ""}
                             onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, variant_id: e.target.value, variant_qty: 1 } : r) }))}
                             style={{ fontSize: 12 }}>
                             <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : lang === "es" ? "Sin variante" : "No variant"}</option>
-                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)} — {cur}{parseFloat(v.price).toFixed(2)} · {v.duration} min</option>)}
+                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)} — {fmtAmt(cur, parseFloat(v.price))} · {v.duration} min</option>)}
                           </select>
                           {(() => {
                             const sv = selSvc.variants.find(v => v.id === row.variant_id);
@@ -18463,7 +18464,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                       fontWeight: on ? 600 : 500,
                                     }}>
                                     {on && <NavIcon name="check" size={10} color={accent} />}
-                                    {label} · +{cur}{parseFloat(ex.price || 0).toFixed(2)}
+                                    {label} · +{fmtAmt(cur, parseFloat(ex.price || 0))}
                                   </button>
                                 );
                               })}

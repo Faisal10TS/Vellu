@@ -19,14 +19,24 @@ export const RELEASES = [
     // salons op Curaçao en Sint Maarten; de rest ziet geen verschil.
     id: "2026-09-24",
     date: "2026-09-24",
-    title: { nl: "Caribische gulden als XCG", en: "Caribbean guilder shown as XCG", es: "Florín caribeño como XCG" },
+    title: { nl: "Bedragen met een komma, en XCG voor Curaçao", en: "Amounts with a decimal comma, and XCG for Curaçao", es: "Importes con coma decimal y XCG para Curazao" },
     items: [
+      {
+        // Faisal 24-09-2026: "not just aura glows i want every where to have
+        // a , instead of a ." — élke munt, élke plek (shared.jsx fmtAmt).
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Bedragen staan nu overal met een komma als decimaalteken: €45,00, $45,00, Afl. 45,00 en XCG 45,00 in plaats van 45.00. Dat geldt voor de boekingspagina, het dashboard, de medewerkers-app, bonnen, facturen, PDF-rapporten, e-mails en WhatsApp-berichten. In Excel-bestanden bepaalt je eigen Excel-instelling hoe getallen worden getoond.",
+          en: "Amounts now use a decimal comma everywhere: €45,00, $45,00, Afl. 45,00 and XCG 45,00 instead of 45.00. This applies to the booking page, the dashboard, the staff app, receipts, invoices, PDF reports, emails and WhatsApp messages. In Excel files your own Excel settings decide how numbers are shown.",
+          es: "Los importes usan ahora coma decimal en todas partes: €45,00, $45,00, Afl. 45,00 y XCG 45,00 en lugar de 45.00. Se aplica a la página de reservas, el panel, la app del equipo, los recibos, las facturas, los informes PDF, los correos y los mensajes de WhatsApp. En los archivos de Excel, tu propia configuración de Excel decide cómo se muestran los números.",
+        },
+      },
       {
         kind: "improved", audience: ["owner", "staff"],
         text: {
-          nl: "Curaçao en Sint Maarten: bedragen tonen nu de ISO-code XCG (bijvoorbeeld XCG 45.00) in plaats van Cg, op de boekingspagina, in het dashboard, op bonnen, facturen, rapporten en in e-mails. XCG is de Caribische gulden, die in 2025 de Antilliaanse gulden (NAf) een op een verving. Voor salons in andere landen verandert er niets.",
-          en: "Curaçao and Sint Maarten: amounts now show the ISO code XCG (for example XCG 45.00) instead of Cg, on the booking page, in the dashboard, on receipts, invoices, reports and in emails. XCG is the Caribbean guilder, which replaced the Antillean guilder (NAf) one to one in 2025. Nothing changes for salons in other countries.",
-          es: "Curazao y San Martín: los importes muestran ahora el código ISO XCG (por ejemplo XCG 45.00) en lugar de Cg, en la página de reservas, el panel, los recibos, las facturas, los informes y los correos. XCG es el florín caribeño, que en 2025 sustituyó al florín antillano (NAf) uno a uno. Para los salones de otros países no cambia nada.",
+          nl: "Curaçao en Sint Maarten: bedragen tonen nu de ISO-code XCG (XCG 45,00) in plaats van Cg. XCG is de Caribische gulden, die in 2025 de Antilliaanse gulden (NAf) een op een verving. Voor salons in andere landen verandert het symbool niet.",
+          en: "Curaçao and Sint Maarten: amounts now show the ISO code XCG (XCG 45,00) instead of Cg. XCG is the Caribbean guilder, which replaced the Antillean guilder (NAf) one to one in 2025. For salons in other countries the symbol does not change.",
+          es: "Curazao y San Martín: los importes muestran ahora el código ISO XCG (XCG 45,00) en lugar de Cg. XCG es el florín caribeño, que en 2025 sustituyó al florín antillano (NAf) uno a uno. Para los salones de otros países el símbolo no cambia.",
         },
       },
     ],

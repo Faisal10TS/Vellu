@@ -760,17 +760,22 @@ const COUNTRIES = [
 // shown. Existing NL/BE salons are unaffected (EUR + BTW); Bonaire salons get
 // USD + ABB, etc. All amounts on the booking page, dashboard, invoices and PDF
 // reports flow through these helpers instead of a hardcoded "€".
+// `locale` bepaalt hoe fmtMoney (WhatsApp-teksten) en de PDF-rapporten het
+// getal schrijven. Overal nl-NL — Faisal 24-09-2026: "everywhere a , instead
+// of a ." — dus "$1.234,50" op Bonaire en "XCG 1.234,50" op Curaçao, niet de
+// Amerikaanse schrijfwijze. In de app zelf: fmtAmt hieronder (komma, zonder
+// duizendtalpunt).
 const CURRENCIES = {
   EUR: { code: "EUR", symbol: "€",     locale: "nl-NL" },
-  USD: { code: "USD", symbol: "$",     locale: "en-US" },
-  GBP: { code: "GBP", symbol: "£",     locale: "en-GB" },
-  AWG: { code: "AWG", symbol: "Afl. ", locale: "en-US" }, // Aruban florin
+  USD: { code: "USD", symbol: "$",     locale: "nl-NL" },
+  GBP: { code: "GBP", symbol: "£",     locale: "nl-NL" },
+  AWG: { code: "AWG", symbol: "Afl. ", locale: "nl-NL" }, // Aruban florin
   // Caribische gulden — verving op 31 maart 2025 de Antilliaanse gulden (ANG)
   // op Curaçao en Sint Maarten, 1:1. De centrale bank (CBCS) schrijft "Cg", maar
   // Vellu toont bewust de ISO-code "XCG" (Faisal, 24-09-2026): eenduidig voor
   // klanten, banken en boekhouders. Zelfde waarde in de edge functions
   // (book-appointment, send-reminders, prepay-watch) — samen wijzigen.
-  XCG: { code: "XCG", symbol: "XCG ",  locale: "en-US" },
+  XCG: { code: "XCG", symbol: "XCG ",  locale: "nl-NL" },
 };
 
 // The language the SALON OWNER receives system emails in, derived from the
@@ -800,6 +805,15 @@ function fmtMoney(amount, countryCode, decimals = 2) {
   const n = Number(amount) || 0;
   const opts = decimals == null ? {} : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
   return cur.symbol + n.toLocaleString(cur.locale, opts);
+}
+// Symbool + bedrag met twee decimalen en een KOMMA, zoals de apps het overal
+// tonen: fmtAmt("€", 45) → "€45,00", fmtAmt("XCG ", 1234.5) → "XCG 1234,50".
+// Faisal 24-09-2026: "everywhere a , instead of a ." — voor élke munt, dus ook
+// "$45,00" op Bonaire. Geen duizendtalpunt (was er ook niet). Vervanger van het
+// oude `{cur}{x.toFixed(2)}`; invoervelden (type=number), betaallinks, de
+// SEPA-QR en CSV houden .toFixed(2) — daar hoort een punt.
+function fmtAmt(sym, n) {
+  return (sym || "") + (Number(n) || 0).toFixed(2).replace(".", ",");
 }
 
 // ─── TAX RULES (per jurisdictie) ─────────────────────────────
@@ -3390,7 +3404,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
-  CURRENCIES, currencyForCountry, curSym, fmtMoney, taxForCountry, ownerLangFor,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, taxForCountry, ownerLangFor,
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,

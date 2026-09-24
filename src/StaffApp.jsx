@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, partPricesOf, useDashboardScrollbars,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
@@ -536,7 +536,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
       setPriceFor(null);
-      toast.show(lang === "nl" ? `Prijs aangepast naar ${cur}${newPrice.toFixed(2)}` : lang === "es" ? `Precio ajustado a ${cur}${newPrice.toFixed(2)}` : `Price changed to ${cur}${newPrice.toFixed(2)}`);
+      toast.show(lang === "nl" ? `Prijs aangepast naar ${fmtAmt(cur, newPrice)}` : lang === "es" ? `Precio ajustado a ${fmtAmt(cur, newPrice)}` : `Price changed to ${fmtAmt(cur, newPrice)}`);
       if (a.client_email && a.status !== "cancelled" && a.status !== "no_show") {
         sendEmails("appointment_updated", {
           client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
@@ -562,10 +562,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const refund = Math.round((paidAmountOf(a) - price) * 100) / 100;
     if (refund <= 0) return;
     const msg = lang === "nl"
-      ? `Terugbetaling van ${cur}${refund.toFixed(2)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
+      ? `Terugbetaling van ${fmtAmt(cur, refund)} aan ${a.client_name} vastleggen? De klant krijgt een bevestiging per e-mail.`
       : lang === "es"
-      ? `¿Registrar la devolución de ${cur}${refund.toFixed(2)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
-      : `Record the refund of ${cur}${refund.toFixed(2)} to ${a.client_name}? The client gets a confirmation by email.`;
+      ? `¿Registrar la devolución de ${fmtAmt(cur, refund)} a ${a.client_name}? El cliente recibe una confirmación por correo.`
+      : `Record the refund of ${fmtAmt(cur, refund)} to ${a.client_name}? The client gets a confirmation by email.`;
     // Neutrale knop: de standaard is de rode "Verwijderen" en dat klopt hier niet.
     if (!(await showConfirm(msg, { tone: "primary", confirmText: lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded" }))) return;
     setProcessingApptId(a.id);
@@ -575,7 +575,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       const { error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
-      toast.show(lang === "nl" ? `Terugbetaling van ${cur}${refund.toFixed(2)} vastgelegd` : lang === "es" ? `Devolución de ${cur}${refund.toFixed(2)} registrada` : `Refund of ${cur}${refund.toFixed(2)} recorded`);
+      toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
       if (a.client_email) {
         sendEmails("refund_sent", {
           client_name: a.client_name, client_email: a.client_email,
@@ -639,7 +639,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
         `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}${showContact ? `\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}` : ""}${showMoney ? `\\n${cur}${a.service_price}` : ""}\\nStatus: ${a.status}`,
+        `DESCRIPTION:${a.client_name}${showContact ? `\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}` : ""}${showMoney ? `\\n${fmtAmt(cur, a.service_price)}` : ""}\\nStatus: ${a.status}`,
         `LOCATION:${salonProfile.business_name}`,
         `STATUS:${icsStatus(a.status)}`,
         `UID:${a.id}@vellu.cc`,
@@ -1011,7 +1011,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
           )}
           {slots.map((s, i) => (
-            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}{showMoney && s.price != null && slots.length > 1 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {cur}{s.price.toFixed(2)}</span> : null}</div>
+            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}{showMoney && s.price != null && slots.length > 1 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {fmtAmt(cur, s.price)}</span> : null}</div>
           ))}
           {showContact && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>}
           {showContact && a.client_phone && (
@@ -1033,7 +1033,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {/* No-show-vergoeding: bij de statuswissel door de database vastgelegd. */}
           {a.status === "no_show" && parseFloat(a.no_show_fee) > 0 && (
             <div data-no-show-fee style={{ fontSize: 10, color: c.danger, marginTop: 3 }}>
-              {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {cur}{parseFloat(a.no_show_fee).toFixed(2)}
+              {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {fmtAmt(cur, parseFloat(a.no_show_fee))}
             </div>
           )}
           {/* Gecombineerde boeking met een collega: JOUW bedrag groot (dat
@@ -1043,8 +1043,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const share = mine ? myShare(a) : total;
             const split = mine && Math.abs(share - total) >= 0.005;
             return (<>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{cur}{(split ? share : total).toFixed(2)}</div>
-              {split && <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "jouw deel · totaal" : lang === "es" ? "tu parte · total" : "your part · total"} {cur}{total.toFixed(2)}</div>}
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, marginTop: 2 }}>{fmtAmt(cur, (split ? share : total))}</div>
+              {split && <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.04em", textTransform: "uppercase", marginTop: 1 }}>{lang === "nl" ? "jouw deel · totaal" : lang === "es" ? "tu parte · total" : "your part · total"} {fmtAmt(cur, total)}</div>}
             </>);
           })()}
         </div>
@@ -1144,7 +1144,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 window.open(getGoogleCalUrl({
                   title: `${a.client_name} — ${a.service_name}`,
                   date: a.date, time: a.time, duration: dur,
-                  description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${cur}${a.service_price}` : ""}`,
+                  description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${fmtAmt(cur, a.service_price)}` : ""}`,
                   location: salonProfile.business_name || ""
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
@@ -1170,7 +1170,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           </div>
           {paidAmountOf(a) > 0 && (
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
-              {lang === "nl" ? `Al betaald: ${cur}${paidAmountOf(a).toFixed(2)}. Bij een hogere prijs krijgt de klant alleen het verschil als betaalverzoek.` : lang === "es" ? `Ya pagado: ${cur}${paidAmountOf(a).toFixed(2)}. Con un precio más alto, el cliente solo recibe la diferencia como solicitud de pago.` : `Already paid: ${cur}${paidAmountOf(a).toFixed(2)}. With a higher price the client only gets the difference as a payment request.`}
+              {lang === "nl" ? `Al betaald: ${fmtAmt(cur, paidAmountOf(a))}. Bij een hogere prijs krijgt de klant alleen het verschil als betaalverzoek.` : lang === "es" ? `Ya pagado: ${fmtAmt(cur, paidAmountOf(a))}. Con un precio más alto, el cliente solo recibe la diferencia como solicitud de pago.` : `Already paid: ${fmtAmt(cur, paidAmountOf(a))}. With a higher price the client only gets the difference as a payment request.`}
             </div>
           )}
         </div>
@@ -1181,7 +1181,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 11, color: c.warning, marginBottom: 6, lineHeight: 1.45, display: "flex", alignItems: "center", gap: 5 }}>
             <NavIcon name="alerttri" size={11} color={c.warning} />
-            {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"}{showMoney ? ` ${cur}${parseFloat(a.service_price || 0).toFixed(2)}` : ""}
+            {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"}{showMoney ? ` ${fmtAmt(cur, parseFloat(a.service_price || 0))}` : ""}
             {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${fmtDueShort(a.payment_due_at)}` : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1194,7 +1194,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           echt afgerond. */}
       {a.status === "confirmed" && mine && completeFor === a.id && (
         <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${showMoney ? `${cur}${outstandingOf(a).toFixed(2)} ` : "een bedrag "}open. Hoe is de rest betaald?` : lang === "es" ? `${showMoney ? `Quedan ${cur}${outstandingOf(a).toFixed(2)}` : "Queda un resto"}. ¿Cómo se pagó el resto?` : `${showMoney ? `${cur}${outstandingOf(a).toFixed(2)} still open` : "Remainder open"}. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${showMoney ? `${fmtAmt(cur, outstandingOf(a))} ` : "een bedrag "}open. Hoe is de rest betaald?` : lang === "es" ? `${showMoney ? `Quedan ${fmtAmt(cur, outstandingOf(a))}` : "Queda un resto"}. ¿Cómo se pagó el resto?` : `${showMoney ? `${fmtAmt(cur, outstandingOf(a))} still open` : "Remainder open"}. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             {[
               ["cash", payMethodLabel("cash")],
@@ -1212,7 +1212,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {(a.status === "completed" || a.status === "confirmed") && (() => {
         const paid = paidAmountOf(a), open = outstandingOf(a);
         if (paid <= 0) return null;
-        const amt = (n) => showMoney ? `${cur}${n.toFixed(2)}` : "";
+        const amt = (n) => showMoney ? `${fmtAmt(cur, n)}` : "";
         if (open > 0.005) return (
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
@@ -2395,7 +2395,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
                                 <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{statusLabelOf(a.status)}</span>
-                                {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
+                                {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>}
                               </div>
                             </div>
                           ))}
@@ -2577,7 +2577,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
 
                         {/* Price */}
-                        {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{parseFloat(a.service_price || 0).toFixed(2)}</div>}
+                        {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>}
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
@@ -2959,7 +2959,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
-                                {varCount > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
+                                {varCount > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
@@ -3018,7 +3018,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                         )}
                                         <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                       </div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{cur}{parseFloat(v.price).toFixed(2)}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent }}>{fmtAmt(cur, parseFloat(v.price))}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingVar(v.id); setEditVarForm({ name_nl: v.name_nl, name_en: v.name_en || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "" }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -3067,7 +3067,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 6 }}>
                                       <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
                                       <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: c.text }}>{e.name_nl}</div>
-                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+{cur}{parseFloat(e.price).toFixed(2)}</div>
+                                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent }}>+{fmtAmt(cur, parseFloat(e.price))}</div>
                                       <div style={{ display: "flex", gap: 4 }}>
                                         <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", price: e.price }); }}
                                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -3148,7 +3148,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <SL>{t.selectServiceFor}</SL>
                     <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
                       <option value="" style={{ background: c.selectBg }}>—</option>
-                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {cur}{parseFloat(s.price).toFixed(2)}</option>)}
+                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {fmtAmt(cur, parseFloat(s.price))}</option>)}
                     </select>
                   </div>
                   {(() => {
@@ -3159,7 +3159,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <SL>{lang === "nl" ? "Variant" : lang === "es" ? "Variante" : "Variant"}</SL>
                         <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {cur}{parseFloat(v.price).toFixed(2)}</option>)}
+                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {fmtAmt(cur, parseFloat(v.price))}</option>)}
                         </select>
                       </div>
                     );

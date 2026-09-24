@@ -57,7 +57,13 @@ const acOf=(b)=>{const a=/^#[0-9a-fA-F]{6}$/.test(String(b.salon_accent||""))?b.
 // te laten werken; waar afgeronde hoeken niet gaan (Outlook desktop) blijft het
 // gewoon een net wit vlak met padding.
 const lH=(b)=>{const ac=acOf(b);const logo=safeImgSrc(b.salon_logo);const n=esc(b.salon_name);if(logo)return`<div style="text-align:center;margin-bottom:32px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;border-collapse:separate;"><tr><td style="background:#ffffff;border-radius:14px;padding:14px 18px;text-align:center;"><img src="${esc(logo)}" alt="${n}" style="width:auto;height:auto;max-width:180px;display:block;border:0;" /></td></tr></table><div style="width:40px;height:1px;background:${ac};margin:0 auto;"></div></div>`;return`<div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:${ac};margin:12px auto;"></div></div>`;};
-let CURSYM="€";const fP=(p)=>`${CURSYM}${parseFloat(p||0).toFixed(2)}`;
+let CURSYM="€";
+// Bedrag achter het symbool zoals de app het toont (shared.jsx fmtAmt): altijd
+// met een komma ("€45,00", "$45,00", "XCG 45,00" — Faisal 24-09-2026). Symbolen
+// als "XCG " en "Afl. " houden hun spatie: b.currency wordt hieronder alleen aan
+// de voorkant getrimd (tot 24-09-2026 stond er "XCG45.00" en "Afl.45.00").
+// Betaallink en SEPA-QR (verderop) houden de punt — dat is een machineformaat.
+const fP=(p)=>`${CURSYM}${parseFloat(p||0).toFixed(2).replace(".",",")}`;
 const W=`<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">`;
 const bS=`style="background:#f9f7f4;border-radius:12px;padding:24px;margin-bottom:28px;"`;
 const tS=`style="width:100%;border-collapse:collapse;"`;
@@ -67,7 +73,7 @@ const gL=`style="border-top:1px solid #e8e0d5;"`;
 const gA=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;"`;
 const gR=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;text-align:right;"`;
 try{
-const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.trim():"€";
+const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.replace(/^\s+/,""):"€";
 // Owner-facing emails (booking_notification, owner_cancellation,
 // waitlist_joined) render in the SALON's language, not the client's booking
 // language — callers pass owner_lang (derived from the salon's country).

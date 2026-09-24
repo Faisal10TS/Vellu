@@ -1205,7 +1205,9 @@ serve(async (req) => {
     // net als de mails — een mislukte push mag de boeking nooit raken.
     {
       const ownerNl = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL");
-      const priceStr = `${emailBase.currency}${Number(totalPrice || 0).toFixed(2)}`;
+      // Zelfde opmaak als de app (shared.jsx fmtAmt): altijd een komma
+      // ("€45,00", "XCG 45,00" — Faisal 24-09-2026).
+      const priceStr = `${emailBase.currency}${Number(totalPrice || 0).toFixed(2).replace(".", ",")}`;
       jobs.push(fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
         method: "POST",
         headers: internalHeaders,

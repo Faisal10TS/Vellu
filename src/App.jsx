@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym,
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym, fmtAmt,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin
 } from "./shared.jsx";
 
@@ -885,7 +885,7 @@ function CancelRoute({ lang }) {
               </div>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.total}</div>
-                <div style={{ fontWeight: 500, color: ACCENT }}>{curSym(appointment.country_code)}{parseFloat(appointment.service_price).toFixed(2)}</div>
+                <div style={{ fontWeight: 500, color: ACCENT }}>{fmtAmt(curSym(appointment.country_code), appointment.service_price)}</div>
               </div>
             </div>
             

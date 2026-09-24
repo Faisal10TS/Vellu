@@ -18,7 +18,7 @@ await build({
   outfile: new URL("./_tmp_shared.mjs", import.meta.url).pathname.slice(1), external: ["react", "react-dom", "react/jsx-runtime", "@supabase/supabase-js", "react-router-dom", "@sentry/react", "qrcode"],
   logLevel: "silent", define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("http://x"), "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify("x"), "import.meta.env.VITE_SENTRY_DSN": JSON.stringify(""), "import.meta.env.VITE_SUPABASE_KEY": JSON.stringify("k"), "import.meta.env.VITE_ANTHROPIC_KEY": JSON.stringify(""), "import.meta.env": "{}", "import.meta.env.MODE": JSON.stringify("test"), "import.meta.env.DEV": "false", "import.meta.env.PROD": "true" },
 });
-const { resolveTax, currencyForCountry } = await import(new URL("./_tmp_shared.mjs", import.meta.url).href);
+const { resolveTax, currencyForCountry, fmtAmt, fmtMoney } = await import(new URL("./_tmp_shared.mjs", import.meta.url).href);
 
 let pass = 0, fail = 0;
 const near = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.005;
@@ -61,6 +61,16 @@ check("oude rij valt terug op btw_id", resolveTax(salonOud).registered, true);
 check("leeg tariefveld wordt niet stiekem 0", resolveTax({ ...salonNL, btw_rate: "" }).serviceRate, 21);
 check("valuta CW is XCG (ISO-code, niet Cg)", currencyForCountry("CW").symbol.trim(), "XCG");
 check("valuta CW code", currencyForCountry("CW").code, "XCG");
+// Bedragen: overal een komma als decimaalteken (Faisal 24-09-2026), elke munt.
+check("XCG bedrag in de app met komma", fmtAmt(currencyForCountry("CW").symbol, 45), "XCG 45,00");
+check("bedrag in de app zonder duizendtalpunt", fmtAmt("XCG ", 1234.5), "XCG 1234,50");
+check("euro bedrag met komma", fmtAmt("€", 45), "€45,00");
+check("dollar bedrag met komma (Bonaire)", fmtAmt(currencyForCountry("BQ").symbol, 1234.5), "$1234,50");
+check("florin bedrag met komma", fmtAmt(currencyForCountry("AW").symbol, 45), "Afl. 45,00");
+check("negatief bedrag", fmtAmt("€", -5), "€-5,00");
+check("XCG in WhatsApp-tekst/PDF: komma en duizendtalpunt", fmtMoney(1234.5, "CW"), "XCG 1.234,50");
+check("dollar in WhatsApp-tekst/PDF: komma en duizendtalpunt", fmtMoney(1234.5, "BQ"), "$1.234,50");
+check("euro in WhatsApp-tekst/PDF", fmtMoney(1234.5, "NL"), "€1.234,50");
 
 console.log("\n== computeTax: Nederland, alles belast ==");
 {

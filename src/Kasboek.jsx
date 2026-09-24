@@ -20,7 +20,7 @@
 // als de verkooplijst, ook voor dagen buiten het 90-dagen-venster.
 
 import { useState, useEffect } from "react";
-import { NavIcon, onAccentInk } from "./shared.jsx";
+import { NavIcon, onAccentInk, fmtAmt } from "./shared.jsx";
 import { cashFlowOf } from "./reportData.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -28,7 +28,7 @@ const str = (v) => (v === null || v === undefined ? "" : String(v));
 
 export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cashRows = [], lang = "nl", c, accent, cur = "€", toast, showConfirm, staffName = "", onExport = null }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
-  const money = (n) => `${cur}${round2(n).toFixed(2)}`;
+  const money = (n) => fmtAmt(cur, round2(n));
   const KIND = {
     open: T("Beginsaldo", "Opening float", "Saldo inicial"),
     in: T("Kas in", "Cash in", "Entrada de caja"),

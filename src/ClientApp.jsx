@@ -11,7 +11,7 @@ import {
   getToday as deviceNow, fmt, parseDate, getDays, salonNow,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
+  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
 } from "./shared.jsx";
 
 // Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
@@ -315,7 +315,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
 function PrepayBlock({ info, lang, accent, c }) {
   if (!info) return null;
   const L = (nl, en, es) => lang === "es" ? es : lang === "en" ? en : nl;
-  const amount = `${info.currency || "€"}${Number(info.amount || 0).toFixed(2)}`;
+  const amount = fmtAmt(info.currency || "€", info.amount);
   const safe = (u, httpsOnly) => { try { const x = new URL(String(u || "")); return (x.protocol === "https:" || (!httpsOnly && x.protocol === "http:")) ? x.toString() : ""; } catch { return ""; } };
   const link = safe(info.link, false);
   const qr = safe(info.qr_url, true);
@@ -2925,7 +2925,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {/* Prijs boven de Boek-knop, rechts uitgelijnd (mockup 15-09). */}
                     <div className="profile-service-side">
                       <div className="profile-service-price">
-                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{cur}{Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}</> : `${cur}${parseFloat(s.price).toFixed(2)}`}
+                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}</> : `${fmtAmt(cur, parseFloat(s.price))}`}
                       </div>
                       <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                         {t.book}
@@ -3033,7 +3033,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         )}
                       </div>
                       {/* Prijs los van de (afgekapte) omschrijving, altijd zichtbaar. */}
-                      <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0, whiteSpace: "nowrap" }}>{cur}{parseFloat(p.price).toFixed(2)}</div>
+                      <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0, whiteSpace: "nowrap" }}>{fmtAmt(cur, parseFloat(p.price))}</div>
                     </div>
                     );
                   })}
@@ -3565,12 +3565,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{cur}{(itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                   <span>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}{e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}</span>
-                  <span>+{cur}{(parseFloat(e.price) * (e.per_unit ? (e.qty || 1) : 1)).toFixed(2)}</span>
+                  <span>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? (e.qty || 1) : 1)))}</span>
                 </div>
               ))}
             </div>
@@ -3591,9 +3591,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           {appliedDiscount && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: "#4ade80" }}>
-                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})
+                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})
               </span>
-              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{cur}{getOriginalPrice().toFixed(2)}</span>
+              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{fmtAmt(cur, getOriginalPrice())}</span>
             </div>
           )}
           {/* Stylist-gebonden code: zeggen waar hij op geldt — en waarschuwen als
@@ -3607,7 +3607,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
-            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}{cur}{getPrice().toFixed(2)}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}{fmtAmt(cur, getPrice())}</span>
           </div>
         </div>
       )}
@@ -3631,7 +3631,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const calEnd = new Date(calStart.getTime() + getDuration() * 60000);
     const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
     const calTitle = `${getServiceLabel()} @ ${initialSalon.name}`;
-    const calDetails = `${t.treatment}: ${getServiceLabel()}\n${t.total}: ${cur}${getPrice().toFixed(2)}\n\nvellu.cc/${initialSalon.id}`;
+    const calDetails = `${t.treatment}: ${getServiceLabel()}\n${t.total}: ${fmtAmt(cur, getPrice())}\n\nvellu.cc/${initialSalon.id}`;
     const calLocation = [initialSalon.name, addr, city].filter(Boolean).join(", ");
     const openGoogleCal = () => window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(calTitle)}&dates=${stamp(calStart)}/${stamp(calEnd)}&details=${encodeURIComponent(calDetails)}&location=${encodeURIComponent(calLocation)}`, "_blank");
     const downloadIcs = () => {
@@ -3705,7 +3705,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
               <div className="flow-done-row-label">{t.total}</div>
               <div className="flow-done-row-sub">{form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival}</div>
             </div>
-            <div style={{ fontFamily: displayFont, fontSize: 24, color: accent, flexShrink: 0 }}>{cur}{getPrice().toFixed(2)}</div>
+            <div style={{ fontFamily: displayFont, fontSize: 24, color: accent, flexShrink: 0 }}>{fmtAmt(cur, getPrice())}</div>
           </div>
         </div>
 
@@ -3912,7 +3912,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
                       <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                     </span>
-                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{cur}{getOriginalPrice().toFixed(2)}</span>
+                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{fmtAmt(cur, getOriginalPrice())}</span>
                   </div>
                 )}
 
@@ -3930,7 +3930,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   // álle gekozen extra's uitvoert is nog kiesbaar.
                   const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`;
                   return (
                   <div key={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -4026,7 +4026,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                         <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{(parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)).toFixed(2)}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtAmt(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
                                   </div>
                                 </div>
                                 );
@@ -4068,7 +4068,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                         <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{cur}{(parseFloat(e.price) * (e.per_unit ? qty : 1)).toFixed(2)}</span>
+                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</span>
                                     {(parseInt(e.duration) || 0) > 0 && <span style={{ fontSize: 10, color: extraSel ? accent : c.textMuted }}>+{(parseInt(e.duration) || 0) * (e.per_unit ? qty : 1)} {t.min}</span>}
                                   </div>
                                 );
@@ -4117,7 +4117,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   <div style={{ fontSize: 12, fontWeight: 500, color: item?.staff?.id === m.id ? accent : c.text }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
                                   {chipPrice != null && Number.isFinite(chipPrice) && (
-                                    <div style={{ fontSize: 10, color: item?.staff?.id === m.id ? accent : c.textSub, fontWeight: 600, marginTop: 2 }}>{cur}{chipPrice.toFixed(2)}</div>
+                                    <div style={{ fontSize: 10, color: item?.staff?.id === m.id ? accent : c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtAmt(cur, chipPrice)}</div>
                                   )}
                                 </div>
                                 );
@@ -4165,7 +4165,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                 <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                               </span>
                             )}
-                            <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0 }}>{qty > 1 ? `${cur}${(parseFloat(p.price) * qty).toFixed(2)}` : `${cur}${parseFloat(p.price).toFixed(2)}`}</div>
+                            <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0 }}>{qty > 1 ? `${fmtAmt(cur, (parseFloat(p.price) * qty))}` : `${fmtAmt(cur, parseFloat(p.price))}`}</div>
                           </div>
                         );
                       })}
@@ -4464,7 +4464,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
                       <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`}</div>
+                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
                     </div>
                     <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                   </div>
@@ -4518,7 +4518,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                         </div>
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{fmtAmt(cur, ((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                       </div>
                     ))}
                   </div>
@@ -4530,7 +4530,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {chosenProducts().map(({ p, qty }) => (
                         <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
-                          <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                          <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{fmtAmt(cur, ((parseFloat(p.price) || 0) * qty))}</span>
                         </div>
                       ))}
                     </div>
@@ -4553,14 +4553,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {appliedDiscount && (
                     <div className="confirm-row">
                       <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})</span>
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                     <div>
-                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{cur}{getOriginalPrice().toFixed(2)}</span>}
-                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{cur}{getPrice().toFixed(2)}</span>
+                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
+                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
                     </div>
                   </div>
                 </div>
@@ -4589,7 +4589,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {selectedServices.length > 0 ? (
-                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}{cur}{getOriginalPrice().toFixed(2)}</>
+                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}{fmtAmt(cur, getOriginalPrice())}</>
                   ) : (
                     <>{t.noServicesSelected}</>
                   )}
@@ -4793,7 +4793,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
-                              {s.variants?.length > 0 ? `${t.from} ${cur}${Math.min(...s.variants.map(v => parseFloat(v.price))).toFixed(2)}` : `${cur}${parseFloat(s.price).toFixed(2)}`}
+                              {s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (
@@ -4828,7 +4828,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                         <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{cur}{(parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)).toFixed(2)}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtAmt(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
                                   </div>
                                 </div>
                               </div>
@@ -4863,7 +4863,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                         <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{cur}{(parseFloat(e.price) * (e.per_unit ? qty : 1)).toFixed(2)}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</div>
                                   </div>
                                 </div>
                               </div>
@@ -4893,7 +4893,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                                   {chipPrice != null && Number.isFinite(chipPrice) && (
-                                    <div style={{ fontSize: 10, color: c.textSub, fontWeight: 600, marginTop: 2 }}>{cur}{chipPrice.toFixed(2)}</div>
+                                    <div style={{ fontSize: 10, color: c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtAmt(cur, chipPrice)}</div>
                                   )}
                                 </div>
                                 );
@@ -4936,7 +4936,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                                   <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                 </span>
                               )}
-                              <div style={{ fontFamily: displayFont, fontSize: 15, color: accent, flexShrink: 0 }}>{cur}{(parseFloat(p.price) * (qty || 1)).toFixed(2)}</div>
+                              <div style={{ fontFamily: displayFont, fontSize: 15, color: accent, flexShrink: 0 }}>{fmtAmt(cur, (parseFloat(p.price) * (qty || 1)))}</div>
                             </div>
                           );
                         })}
@@ -5113,7 +5113,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
                           <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`}</div>
+                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
                         </div>
                         <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                       </div>
@@ -5159,7 +5159,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                             </div>
-                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{cur}{((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)).toFixed(2)}</span>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{fmtAmt(cur, ((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                           </div>
                         ))}
                       </div>
@@ -5171,7 +5171,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                           {chosenProducts().map(({ p, qty }) => (
                             <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
-                              <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{cur}{((parseFloat(p.price) || 0) * qty).toFixed(2)}</span>
+                              <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{fmtAmt(cur, ((parseFloat(p.price) || 0) * qty))}</span>
                             </div>
                           ))}
                         </div>
@@ -5194,14 +5194,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {appliedDiscount && (
                         <div className="confirm-row">
                           <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${cur}${appliedDiscount.amount}`})</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                         <div>
-                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{cur}{getOriginalPrice().toFixed(2)}</span>}
-                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{cur}{getPrice().toFixed(2)}</span>
+                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
+                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
                         </div>
                       </div>
                     </div>
@@ -5252,7 +5252,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
                     {time && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}{cur}{getPrice().toFixed(2)}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}{fmtAmt(cur, getPrice())}</div>
                 </div>
                 {step === 1 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
