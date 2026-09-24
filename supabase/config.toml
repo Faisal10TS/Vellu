@@ -185,6 +185,15 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-rating-request/index.ts"
 
+[functions.send-source-request]
+enabled = true
+# "Hoe heb je Vellu gevonden?"-mail aan nieuwe salons (Faisal 24-09-2026).
+# Zelfde opzet als send-rating-request: óf een beheerders-JWT (app_admins),
+# óf een opdracht-id + geheim uit app_source_send_jobs (aanroep via SQL/curl).
+# Met verify_jwt=true zou de gateway het tweede pad 401'en.
+verify_jwt = false
+entrypoint = "./functions/send-source-request/index.ts"
+
 [functions.send-renewal-reminder]
 enabled = true
 # Cron: waarschuwt een jaarabonnee een week voor plan_expires_at. Aangeroepen
