@@ -34,6 +34,16 @@ export const RELEASES = [
         },
       },
       {
+        // Gevonden 25-09 tijdens de test op TTNB: het effect dat bij een
+        // datumwissel de tijd wist, wiste ook de tijd die "Kies" net had gezet.
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: de knop Kies op de kaart Eerstvolgende plek zette wel de dag maar niet de tijd zodra die plek niet vandaag was, zodat klanten alsnog een tijd moesten aantikken. Nu kiest één tik dag én tijd.",
+          en: "Booking page: the Pick button on the Next available card set the day but not the time whenever that slot was not today, so clients still had to tap a time. One tap now picks day and time.",
+          es: "Página de reservas: el botón Elegir de la tarjeta Próxima disponibilidad fijaba el día pero no la hora cuando esa cita no era hoy, así que los clientes aún tenían que tocar una hora. Ahora un toque elige día y hora.",
+        },
+      },
+      {
         kind: "improved", audience: ["staff"],
         text: {
           nl: "Voltooid met Later / factuur: de factuurmail krijgt nu altijd het betaalblok (QR en betaalknop) voor het openstaande bedrag. De keuze Betaalverzoek na afloop op de boekingspagina is weg; klanten kiezen Betalen bij afspraak of Vooruitbetalen.",

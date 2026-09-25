@@ -1099,6 +1099,18 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // de trigger hierboven.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
+  // "Kies" op de eerstvolgend-kaart (NextSlotCard) zet dag én tijd, maar het
+  // effect hierboven wist de tijd bij elke datumwissel — dus bleef alleen de dag
+  // over zodra het eerstvolgende slot niet vandaag was (TTNB, 25-09-2026; op
+  // Bloom viel het nooit op omdat daar altijd vandaag nog plek is). De knop
+  // parkeert de keuze daarom hier; dit effect staat NÁ het wis-effect en zet de
+  // tijd in dezelfde render-ronde terug zodra de dag is overgenomen.
+  const [pendingPick, setPendingPick] = useState(null);
+  useEffect(() => {
+    if (!pendingPick || pendingPick.date !== date) return;
+    setTime(pendingPick.time);
+    setPendingPick(null);
+  }, [pendingPick, date]);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
 
@@ -2676,7 +2688,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         {chosen ? (
           <span className="flow-next-slot-chosen"><NavIcon name="check" size={12} color={accent} /> {lang === "nl" ? "Gekozen" : lang === "es" ? "Elegido" : "Chosen"}</span>
         ) : (
-          <button type="button" className="flow-next-slot-btn" onClick={() => { setDate(firstOpenSlot.date); setTime(firstOpenSlot.time); }}>{lang === "nl" ? "Kies" : lang === "es" ? "Elegir" : "Pick"}</button>
+          <button type="button" className="flow-next-slot-btn" data-next-slot-pick onClick={() => { setPendingPick({ date: firstOpenSlot.date, time: firstOpenSlot.time }); setDate(firstOpenSlot.date); }}>{lang === "nl" ? "Kies" : lang === "es" ? "Elegir" : "Pick"}</button>
         )}
       </div>
     );
