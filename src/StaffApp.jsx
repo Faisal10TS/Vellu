@@ -10,7 +10,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, partPricesOf, useDashboardScrollbars,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, useDashboardScrollbars,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -452,7 +452,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // Betaald via de kiezer = het hele bedrag is binnen (amount_paid mee,
       // zodat een latere prijswijziging het verschil kan tonen).
       const apptRow = appointments.find(x => x.id === id);
-      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : {}) };
+      // "Later / factuur" (method null): "on-arrival" van de boekingspagina
+      // expliciet naar null, anders blijft de post onzichtbaar als open post en
+      // krijgt de factuur geen betaalblok (zie OwnerApp.markComplete).
+      const patch = { status: "completed", ...(method
+        ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
+        : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
       const { error } = await supabase.from("appointments").update(patch).eq("id", id).eq("owner_id", salonProfile.id);
       if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
       setAppointments(a => a.map(x => x.id === id ? {...x, ...patch} : x));
@@ -774,9 +779,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_kvk: invoiceForm.kvk_number || salonProfile.kvk_number || "",
         salon_btw: invoiceForm.btw_id || salonProfile.btw_id || "",
         salon_iban: invoiceForm.iban || salonProfile.iban || "",
-        // Pay block: only for clients who chose "payment request afterwards"
-        // at booking; routes to THIS worker's own account details.
-        payment_request: a.payment_method === "online",
+        // Betaalblok zodra de post nog open staat ("Later / factuur" = method
+        // null, of een betaalverzoek/op rekening); de klantkeuze bij het boeken
+        // bestaat sinds 25-09-2026 niet meer. Loopt naar de gegevens van DEZE
+        // medewerker.
+        payment_request: OPEN_PAY_METHODS.has(a.payment_method ?? null),
         // Al (vooruit)betaald: de factuur trekt het af en vraagt alleen het restant.
         amount_paid: paidAmountOf(a),
         iban_holder: invoiceForm.iban_holder || myStaff.name || "",
@@ -2845,19 +2852,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       </div>
                     </div>
                     {/* Payment requests — own sub-section: only rendered in
-                        the invoice email when the client picked "payment
-                        request afterwards" at booking, and it routes to THIS
-                        worker's own account. */}
+                        the invoice email when the item is still open ("Later /
+                        factuur" at completion), and it routes to THIS worker's
+                        own account. */}
                     <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 14, marginTop: 4 }}>
                       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : lang === "es" ? "Solicitudes de pago" : "Payment requests"}</div>
                       <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
                         {isSepa
                           ? (lang === "nl"
-                            ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met het exacte factuurbedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet. Klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle banken, gewoon vanuit hun eigen bank-app."
-                            : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with the exact invoice amount: a scan-to-pay QR code based on your IBAN (amount + reference pre-filled) and optionally a button via your own bunq.me or PayPal.Me link, without an amount — it's appended automatically per invoice. Clients don't need to bank where you bank: it works with every bank, straight from their own banking app.")
+                            ? "Rond je een afspraak af met “Later / factuur”, dan krijgt jouw factuur-mail een betaalblok met het exacte openstaande bedrag: een scan-en-betaal QR-code op basis van jouw IBAN (bedrag + omschrijving voor-ingevuld) en optioneel een knop via je eigen bunq.me- of PayPal.Me-link, zónder bedrag — dat wordt er per factuur automatisch achter gezet. Leest de bank-app van de klant de QR niet? IBAN, bedrag en kenmerk staan eronder, dus ze kan het ook zelf overmaken."
+                            : "Complete an appointment with “Later / invoice” and your invoice email gets a pay block with the exact open amount: a scan-to-pay QR code based on your IBAN (amount + reference pre-filled) and optionally a button via your own bunq.me or PayPal.Me link, without an amount — it's appended automatically per invoice. Can't the client's banking app read the QR? The IBAN, amount and reference are printed under it, so she can transfer it herself.")
                           : (lang === "nl"
-                            ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt jouw factuur-mail een betaalblok met jouw bankgegevens (rekeninghouder + rekeningnummer), het exacte factuurbedrag in jouw valuta en een betaalkenmerk, plus optioneel een knop via je eigen betaallink. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet."
-                            : "When a client picks “Payment request afterwards” at booking, your invoice email gets a pay block with your bank details (account holder + account number), the exact invoice amount in your currency and a payment reference, plus optionally a button via your own payment link. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone.")}
+                            ? "Rond je een afspraak af met “Later / factuur”, dan krijgt jouw factuur-mail een betaalblok met jouw bankgegevens (rekeninghouder + rekeningnummer), het exacte openstaande bedrag in jouw valuta en een betaalkenmerk, plus optioneel een knop via je eigen betaallink. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet."
+                            : "Complete an appointment with “Later / invoice” and your invoice email gets a pay block with your bank details (account holder + account number), the exact open amount in your currency and a payment reference, plus optionally a button via your own payment link. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone.")}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>

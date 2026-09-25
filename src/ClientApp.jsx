@@ -3703,7 +3703,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
             <div className="flow-done-row-icon"><NavIcon name="tag" size={14} color={accent} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="flow-done-row-label">{t.total}</div>
-              <div className="flow-done-row-sub">{form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival}</div>
+              <div className="flow-done-row-sub">{form.payment === "prepay" ? t.payPrepay : t.payArrival}</div>
             </div>
             <div style={{ fontFamily: displayFont, fontSize: 24, color: accent, flexShrink: 0 }}>{fmtAmt(cur, getPrice())}</div>
           </div>
@@ -4448,8 +4448,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                 )}
 
                 <SL>{t.payMethod}</SL>
+                {/* Twee keuzes: betalen bij de afspraak, en (als de salon het
+                    aanbiedt) vooruitbetalen. "Betaalverzoek na afloop" is op
+                    25-09-2026 weggehaald (Faisal: "eigenlijk hetzelfde als pay
+                    at appointment"); een betaalverzoek stuurt de salon zelf via
+                    "Later / factuur" bij het afronden of vanuit de Kassa. */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : []), ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
+                  {[["on-arrival","home",t.payArrival], ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
                     <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                       <div className={`radio ${form.payment === v ? "on" : ""}`} />
                       <NavIcon name={icon} size={15} color={c.textSub} />
@@ -4538,7 +4543,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                   {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                    [t.payment, form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
+                    [t.payment, form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -5097,8 +5102,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                     )}
 
                     <SL>{t.payMethod}</SL>
+                    {/* Zelfde twee keuzes als desktop; "Betaalverzoek na afloop" is weg (25-09-2026). */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                      {[["on-arrival","home",t.payArrival], ...(initialSalon.payment_configured ? [["online","creditcard",t.payOnline]] : []), ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
+                      {[["on-arrival","home",t.payArrival], ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
                         <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
                           <div className={`radio ${form.payment === v ? "on" : ""}`} />
                           <NavIcon name={icon} size={15} color={c.textSub} />
@@ -5179,7 +5185,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                       {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                        [t.payment, form.payment === "online" ? t.payOnline : form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
+                        [t.payment, form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>

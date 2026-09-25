@@ -20,7 +20,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
@@ -5870,7 +5870,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Betaald via de kiezer = het hele (huidige) bedrag is binnen; amount_paid
       // meeschrijven zodat een latere prijswijziging het verschil kan tonen.
       const apptRow = (salonData.appointments || []).find(a => a.id === id);
-      const patch = { status: "completed", ...(method ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : {}) };
+      // "Later / factuur" (method null): de klant betaalt nog. De boekingspagina
+      // zet elke afspraak op "on-arrival"; dat zou blijven staan en de post
+      // onzichtbaar maken in Nog te ontvangen én de factuur zonder betaalblok
+      // laten. Daarom dan expliciet naar null (= open post). Vooruitbetaald of
+      // deels betaald ("prepaid") blijft staan: het restant loopt via amount_paid.
+      const patch = { status: "completed", ...(method
+        ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
+        : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
       const { error } = await supabase.from("appointments").update(patch).eq("id", id);
       if (error) { toast.show(t.errorCompleting, "error"); return; }
       update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, ...patch} : a); return d; });
@@ -7696,14 +7703,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_kvk: (p ? p.kvk_number : salonData.kvk_number) || "",
           salon_btw: (p ? p.btw_id : salonData.btw_id) || "",
           salon_iban: (p ? p.iban : salonData.iban) || "",
-          // Pay block: only for clients who chose "payment request afterwards"
-          // at booking — clients who pay in the salon get a plain invoice.
-          // Each invoice profile carries its OWN holder name + pay link so a
-          // second worker's requests route to their own account, never the
-          // salon-wide one.
-          // Op rekening (klantenrekening): ook dan het betaalblok mee, met het
-          // nog openstaande bedrag.
-          payment_request: a.payment_method === "online" || a.payment_method === "account",
+          // Betaalblok: zodra de post in Vellu nog open staat — op rekening of
+          // een betaalverzoek uit de Kassa, of een afspraak afgerond met
+          // "Later / factuur" (payment_method null). Sinds 25-09-2026 kiest de
+          // klant "Betaalverzoek na afloop" niet meer bij het boeken; de salon
+          // bepaalt het dus zelf bij het afronden. Contant/pin/overschrijving =
+          // al betaald → kale factuur. send-emails vraagt alleen het nog
+          // openstaande bedrag (amount_paid hieronder). Elk factuurprofiel
+          // heeft z'n EIGEN tenaamstelling + betaallink, zodat het verzoek van
+          // een tweede medewerker naar haar eigen rekening loopt.
+          payment_request: OPEN_PAY_METHODS.has(a.payment_method ?? null),
           // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
           // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
           amount_paid: paidAmountOf(a),
@@ -12658,9 +12667,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:
                                   make the Tikkie in the app, paste it in this chat.
-                                  Only for clients who chose "payment request afterwards"
-                                  at booking — clients who pay in the salon don't get
-                                  payment requests. */}
+                                  Alleen bij een betaalverzoek uit de Kassa (payment_method
+                                  "online"; de klantkeuze bij het boeken bestaat sinds
+                                  25-09-2026 niet meer). */}
                               {a.payment_method === "online" && a.client_phone && (salonData.payment_link || salonData.iban) && (
                                 <a
                                   href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: a.service_price, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name }))}
@@ -14453,26 +14462,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               </div>
 
               {/* Payment requests — own section, separate from the legal
-                  invoice details. The pay block (button + SEPA QR) is ONLY
-                  added to the invoice email when the client chose "payment
-                  request afterwards" at booking — clients who pay in the
-                  salon never get it. Each extra invoice profile has its own
-                  fields so every worker's requests route to their own
-                  account. */}
+                  invoice details. The pay block (button + SEPA QR) goes into
+                  the invoice email whenever the item is still open in Vellu:
+                  "Later / factuur" at completion, or "Betaalverzoek" / "Op
+                  rekening" in the Kassa (sendInvoiceWith → payment_request).
+                  Clients who pay in the salon never get it. Each extra invoice
+                  profile has its own fields so every worker's requests route
+                  to their own account. */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Betaalverzoeken" : lang === "es" ? "Solicitudes de pago" : "Payment requests"}</div>
                 <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
                   {isSepa
                     ? (lang === "nl"
-                      ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met het exacte factuurbedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Je klanten hoeven hiervoor niet bij dezelfde bank te zitten als jij: het werkt met álle SEPA-banken, gewoon vanuit hun eigen bank-app. Klanten die in de salon betalen krijgen dit blok niet."
+                      ? "Rond je een afspraak af met “Later / factuur”, of kies je in de Kassa “Betaalverzoek” of “Op rekening”, dan krijgt de factuur-mail een betaalblok met het exacte openstaande bedrag. De QR-code (op basis van je IBAN hierboven) vult bedrag én omschrijving automatisch in de bank-app van de klant in — elke factuur het juiste bedrag, ook als je prijzen verschillen. Leest de bank-app van de klant de QR niet? IBAN, bedrag en kenmerk staan eronder, dus ze kan het ook zelf overmaken. Klanten die in de salon betalen (contant, pin, overschrijving) krijgen dit blok niet."
                       : lang === "es"
-                      ? "Si un cliente elige «Solicitud de pago después» al reservar, el correo de la factura incluye un bloque de pago con el importe exacto. El código QR (basado en tu IBAN de arriba) rellena automáticamente el importe y el concepto en la app del banco del cliente — siempre el importe correcto, aunque tus precios varíen. Tus clientes no tienen que tener el mismo banco que tú: funciona con todos los bancos SEPA, desde su propia app. Los clientes que pagan en el salón no reciben este bloque."
-                      : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with the exact invoice amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Your clients don't need to bank where you bank: it works with every SEPA bank, straight from their own banking app. Clients who pay in the salon never get this block.")
+                      ? "Si finalizas una cita con «Después / factura», o eliges «Solicitud de pago» o «A cuenta» en la caja, el correo de la factura incluye un bloque de pago con el importe exacto pendiente. El código QR (basado en tu IBAN de arriba) rellena automáticamente el importe y el concepto en la app del banco del cliente — siempre el importe correcto, aunque tus precios varíen. ¿La app del banco del cliente no lee el QR? Debajo están el IBAN, el importe y el concepto para transferirlo a mano. Los clientes que pagan en el salón (efectivo, tarjeta, transferencia) no reciben este bloque."
+                      : "Complete an appointment with “Later / invoice”, or pick “Payment request” or “On account” in the till, and the invoice email gets a pay block with the exact open amount. The QR code (based on your IBAN above) pre-fills the amount and reference in the client's banking app — always the right amount, even with varying prices. Can't the client's banking app read the QR? The IBAN, amount and reference are printed under it, so she can transfer it herself. Clients who pay in the salon (cash, card, bank transfer) never get this block.")
                     : (lang === "nl"
-                      ? "Kiest een klant bij het boeken voor “Betaalverzoek na afloop”, dan krijgt de factuur-mail een betaalblok met je bankgegevens (rekeninghouder + rekeningnummer) en het exacte factuurbedrag in jouw valuta, plus een betaalkenmerk. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet. Klanten die in de salon betalen krijgen dit blok niet."
+                      ? "Rond je een afspraak af met “Later / factuur”, of kies je in de Kassa “Betaalverzoek” of “Op rekening”, dan krijgt de factuur-mail een betaalblok met je bankgegevens (rekeninghouder + rekeningnummer) en het exacte openstaande bedrag in jouw valuta, plus een betaalkenmerk. De automatische betaal-QR werkt alleen met SEPA/euro-banken, dus buiten de eurozone tonen we die niet. Klanten die in de salon betalen (contant, pin, overschrijving) krijgen dit blok niet."
                       : lang === "es"
-                      ? "Si un cliente elige «Solicitud de pago después» al reservar, el correo de la factura incluye un bloque de pago con tus datos bancarios (titular y número de cuenta), el importe exacto en tu moneda y un concepto de pago. El QR de pago automático solo funciona con bancos SEPA/euro, así que fuera de la eurozona no lo mostramos. Los clientes que pagan en el salón no reciben este bloque."
-                      : "When a client picks “Payment request afterwards” at booking, the invoice email gets a pay block with your bank details (account holder + account number) and the exact invoice amount in your currency, plus a payment reference. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone. Clients who pay in the salon never get this block.")}
+                      ? "Si finalizas una cita con «Después / factura», o eliges «Solicitud de pago» o «A cuenta» en la caja, el correo de la factura incluye un bloque de pago con tus datos bancarios (titular y número de cuenta), el importe exacto pendiente en tu moneda y un concepto de pago. El QR de pago automático solo funciona con bancos SEPA/euro, así que fuera de la eurozona no lo mostramos. Los clientes que pagan en el salón (efectivo, tarjeta, transferencia) no reciben este bloque."
+                      : "Complete an appointment with “Later / invoice”, or pick “Payment request” or “On account” in the till, and the invoice email gets a pay block with your bank details (account holder + account number) and the exact open amount in your currency, plus a payment reference. The automatic pay-QR only works with SEPA/euro banks, so we don't show it outside the eurozone. Clients who pay in the salon (cash, card, bank transfer) never get this block.")}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div>

@@ -24,6 +24,24 @@ export const RELEASES = [
     title: { nl: "Op rekening verkopen en klantenrekening", en: "Selling on account and client accounts", es: "Ventas a cuenta y cuenta de cliente" },
     items: [
       {
+        // Faisal 25-09 (screenshot Esther): "haal die payment request afterwards
+        // weg want het is eigenlijk hetzelfde als pay at appointment".
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: de keuze Betaalverzoek na afloop is weg, die kwam op hetzelfde neer als Betalen bij afspraak. Klanten kiezen nu Betalen bij afspraak of, als je dat aanbiedt, Vooruitbetalen. Een betaalverzoek stuur je zelf: rond de afspraak af met Later / factuur (of kies in de Kassa Betaalverzoek of Op rekening) en stuur de factuur. Die krijgt dan het betaalblok met QR en betaalknop, en de post staat onder Nog te ontvangen.",
+          en: "Booking page: the option Payment request afterwards is gone, it came down to the same thing as Pay at appointment. Clients now choose Pay at appointment or, if you offer it, Pay in advance. You send a payment request yourself: complete the appointment with Later / invoice (or pick Payment request or On account in the till) and send the invoice. It then carries the pay block with QR and pay button, and the item shows under Still to receive.",
+          es: "Página de reservas: la opción Solicitud de pago después ha desaparecido, venía a ser lo mismo que Pagar en la cita. Los clientes eligen ahora Pagar en la cita o, si lo ofreces, Pagar por adelantado. La solicitud de pago la envías tú: finaliza la cita con Después / factura (o elige Solicitud de pago o A cuenta en la caja) y envía la factura. Esta lleva entonces el bloque de pago con QR y botón, y la partida aparece en Por cobrar.",
+        },
+      },
+      {
+        kind: "improved", audience: ["staff"],
+        text: {
+          nl: "Voltooid met Later / factuur: de factuurmail krijgt nu altijd het betaalblok (QR en betaalknop) voor het openstaande bedrag. De keuze Betaalverzoek na afloop op de boekingspagina is weg; klanten kiezen Betalen bij afspraak of Vooruitbetalen.",
+          en: "Completed with Later / invoice: the invoice email now always carries the pay block (QR and pay button) for the open amount. The option Payment request afterwards on the booking page is gone; clients choose Pay at appointment or Pay in advance.",
+          es: "Finalizada con Después / factura: el correo de la factura lleva ahora siempre el bloque de pago (QR y botón) por el importe pendiente. La opción Solicitud de pago después ha desaparecido de la página de reservas; los clientes eligen Pagar en la cita o Pagar por adelantado.",
+        },
+      },
+      {
         kind: "new", audience: ["owner"],
         text: {
           nl: "Kassa: naast Pin, Contant en Betaalverzoek staat nu Op rekening. De klant betaalt later; kies een klant met e-mailadres (typen zoekt in je klantenlijst), de factuur gaat direct mee en de verkoop blijft open staan tot je de betaling registreert. Op de bon staat Op rekening.",
