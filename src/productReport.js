@@ -38,9 +38,9 @@ const fmtDate = (iso, lang = "nl") => {
 // Payment labels — the kassa stores "pin" / "cash" / "online" (pay request).
 // Older rows carry "on-arrival"; show that as "in de salon".
 const PAY_LABEL = {
-  nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", "on-arrival": "In de salon" },
-  en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", "on-arrival": "In salon" },
-  es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", "on-arrival": "En el salón" },
+  nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", account: "Op rekening", "on-arrival": "In de salon" },
+  en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", account: "On account", "on-arrival": "In salon" },
+  es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", account: "A cuenta", "on-arrival": "En el salón" },
 };
 
 /**
@@ -372,7 +372,7 @@ export function generateReceiptPDF({
     + 11 + (sale.client_name ? 11 : 0) + 10
     + itemLines * 11 + 10
     + (redeemed > 0 ? 22 : 0) + 15 + taxBlockLines * 11 + 10
-    + 11 + (sale.payment_method === "online" ? 11 : 0) + (sale.staff_name ? 11 : 0)
+    + 11 + ((sale.payment_method === "online" || sale.payment_method === "account") ? 11 : 0) + (sale.staff_name ? 11 : 0)
     + 14 + 12 + 12 + 16;
 
   const doc = new jsPDF({ unit: "pt", format: [W, Math.round(H)] });
@@ -455,6 +455,12 @@ export function generateReceiptPDF({
   if (sale.payment_method === "online") {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(165, 130, 60);
     doc.text(T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago"), m, y);
+    y += 11;
+  }
+  // Op rekening (klantenrekening, 25-09-2026): de klant betaalt later.
+  if (sale.payment_method === "account") {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(165, 130, 60);
+    doc.text(T("Op rekening — nog te voldoen", "On account — still to be paid", "A cuenta — pendiente de pago"), m, y);
     y += 11;
   }
   // Contant met ingetypt bedrag (22-09-2026): ontvangen en wisselgeld, zoals op
@@ -577,6 +583,7 @@ export function receiptHTML({
   b += `<hr>`;
   b += row(T("Betaald met", "Paid with", "Pagado con"), escHtml(payLabel(sale.payment_method)));
   if (sale.payment_method === "online") b += `<div class="sub klein oranje">${T("Nog te voldoen via het betaalverzoek", "Still to be paid via the payment request", "Pendiente mediante la solicitud de pago")}</div>`;
+  if (sale.payment_method === "account") b += `<div class="sub klein oranje">${T("Op rekening — nog te voldoen", "On account — still to be paid", "A cuenta — pendiente de pago")}</div>`;
   if (sale.payment_method === "cash" && sale.cash_received != null) {
     const ontvangen = parseFloat(sale.cash_received) || 0;
     b += row(T("Ontvangen", "Cash received", "Recibido"), money(ontvangen));

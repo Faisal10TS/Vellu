@@ -2161,6 +2161,38 @@ export const paidAmountOf = (a) => {
   return a.paid_at ? (parseFloat(a.service_price || 0) || 0) : 0;
 };
 export const outstandingOf = (a) => Math.round(((parseFloat(a?.service_price || 0) || 0) - paidAmountOf(a)) * 100) / 100;
+
+// ── Klantenrekening (25-09-2026, My Whims and More: "ora un hende ta paga
+// despues mi por pone den standby? Dus credit?") ─────────────────────────
+// Open post = afgerond, nog niet (volledig) betaald, én bewust open gelaten:
+// "op rekening" (kassa), een betaalverzoek, of "Later / factuur" (method
+// null). Oude rijen met "on-arrival", pin of contant zonder paid_at zijn in
+// de salon betaald vóórdat paid_at bestond — die tellen niet als schuld.
+export const OPEN_PAY_METHODS = new Set(["account", "online", "", null]);
+export const isOpenReceivable = (a) => !!a && a.status === "completed" && a.invoice_view_state !== "deleted"
+  && OPEN_PAY_METHODS.has(a.payment_method ?? null) && outstandingOf(a) > 0.005;
+// Sleutel waarop open posten per klant worden opgeteld: het e-mailadres op de
+// rij (zoals de Klantenlijst), anders de naam.
+export const receivableKeyOf = (a) => {
+  const e = String(a?.client_email || "").trim().toLowerCase();
+  return e ? `mail:${e}` : `name:${String(a?.client_name || "").trim().toLowerCase()}`;
+};
+// "7 maanden geleden" / "3 weken geleden" / "vandaag": ouderdom van een post,
+// zoals Sara Salon het toonde in haar lijst "te ontvangen".
+export const ageLabel = (dateStr, lang = "nl") => {
+  const d = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  const L = (nl, en, es) => (lang === "es" ? es : lang === "en" ? en : nl);
+  if (days === 0) return L("vandaag", "today", "hoy");
+  if (days === 1) return L("gisteren", "yesterday", "ayer");
+  if (days < 14) return L(`${days} dagen geleden`, `${days} days ago`, `hace ${days} días`);
+  if (days < 61) { const w = Math.floor(days / 7); return L(`${w} weken geleden`, `${w} weeks ago`, `hace ${w} semanas`); }
+  const m = Math.floor(days / 30.44);
+  if (m < 24) return L(`${m} maanden geleden`, `${m} months ago`, `hace ${m} meses`);
+  const y = Math.floor(days / 365.25);
+  return L(`${y} jaar geleden`, `${y} years ago`, `hace ${y} años`);
+};
 // Bij een prijswijziging (Bewerk, product erbij): is het nog "volledig
 // betaald"? Niets betaald → niets aanpassen. Wel betaald: paid_at weg zodra er
 // weer iets openstaat, en (opnieuw) gezet als het betaalde bedrag de nieuwe

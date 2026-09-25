@@ -424,9 +424,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [adviceEdit, setAdviceEdit] = useState(null); // { id, text }
   const [noteTab, setNoteTab] = useState({}); // afspraak-id → "note" | "prev"
   const payMethodLabel = (pm) => ({
-    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
-    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", prepay: "Prepayment", prepaid: "Paid in advance" },
-    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", prepay: "Pago por adelantado", prepaid: "Pagado por adelantado" },
+    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", account: "Op rekening", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
+    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", account: "On account", prepay: "Prepayment", prepaid: "Paid in advance" },
+    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", account: "A cuenta", prepay: "Pago por adelantado", prepaid: "Pagado por adelantado" },
   }[lang === "es" ? "es" : lang === "en" ? "en" : "nl"][pm] || "");
   // Statuslabel op de kaarten; "Wacht op betaling" = reservering met vooruitbetaling.
   const statusLabelOf = (s) => s === "confirmed" ? (lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed")

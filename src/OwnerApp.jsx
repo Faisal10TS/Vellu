@@ -20,10 +20,11 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
+import { paymentsAsCashRows } from "./reportData.js";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import PushSettingsCard from "./PushSettings.jsx";
@@ -1261,9 +1262,9 @@ function ClientExportBlock({ ownerId, salonName, lang, c, accent, toast, country
 // overschrijving (verzoek Eydy, Bonaire: daar wordt veel overgemaakt).
 const payMethodLabel = (pm, lang) => {
   const map = {
-    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
-    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", prepay: "Prepayment", prepaid: "Paid in advance" },
-    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", prepay: "Pago por adelantado", prepaid: "Pagado por adelantado" },
+    nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", account: "Op rekening", prepay: "Vooruitbetaling", prepaid: "Vooruitbetaald" },
+    en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", account: "On account", prepay: "Prepayment", prepaid: "Paid in advance" },
+    es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", account: "A cuenta", prepay: "Pago por adelantado", prepaid: "Pagado por adelantado" },
   };
   return (map[lang] || map.nl)[pm] || "";
 };
@@ -2767,7 +2768,7 @@ function csvRowsToClients(rows) {
 
 // `loyalty`: { enabled, visits, pct, since, salonName, slug } — stempelkaart-
 // instellingen van de salon; null/uit = geen stempelkaart-blok op de kaarten.
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL" }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL", onOpenReceivables = null }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
@@ -2785,7 +2786,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [clientsShown, setClientsShown] = useState(CLIENTS_FOLD);
   const [lastAddedClient, setLastAddedClient] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [addForm, setAddForm] = useState({ name: "", email: "", phone: "", notes: "", isBusiness: false, contactName: "" });
   const [saving, setSaving] = useState(false);
   // CSV import flow: pick file → parse → preview → bulk insert. Kept in a
   // separate state slice so it doesn't conflict with the manual-add modal.
@@ -2794,7 +2795,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [importing, setImporting] = useState(false);
   // Edit/delete flow on an individual client.
   const [editing, setEditing] = useState(null); // the client currently being edited
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "", isBusiness: false, contactName: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Merge flow — pick a source client, then pick a target survivor.
@@ -2830,12 +2831,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .from("appointments")
           // staff_id/staff_assignments/service_breakdown: nodig voor de
           // stempelkaart per teamlid (apptInvolvesStaff), anders telt niets.
-          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, client_email, client_name, client_phone, staff_id, staff_assignments, service_breakdown, clients(id, first_name, last_name, email, phone, birthday)")
+          // paid_at/amount_paid/invoice_view_state: voor de klantenrekening
+          // (wat staat er per klant nog open — isOpenReceivable).
+          .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, paid_at, amount_paid, invoice_view_state, client_email, client_name, client_phone, staff_id, staff_assignments, service_breakdown, clients(id, first_name, last_name, email, phone, birthday)")
           .eq("owner_id", ownerId)
           .order("date", { ascending: false }),
         supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off")
+          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name")
           .eq("owner_id", ownerId),
         supabase
           .from("waitlist")
@@ -2881,7 +2884,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         let agg = byEmail.get(email);
         if (!agg) {
           const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
-          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, loyaltyOptIn: false, appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, loyaltyOptIn: false, isBusiness: false, contactName: "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           byEmail.set(email, agg);
         }
         if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
@@ -2893,6 +2896,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         if (!agg.birthday && a.clients?.birthday) agg.birthday = a.clients.birthday;
         agg.appts.push(a);
         if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
+        // Klantenrekening: wat deze klant nog moet betalen (op rekening,
+        // betaalverzoek, "later / factuur"), voor de badge en de kaart.
+        if (isOpenReceivable(a)) { agg.outstanding = Math.round((agg.outstanding + outstandingOf(a)) * 100) / 100; agg.openItems.push(a); }
       }
       // Merge manual clients: enrich an existing entry by email, otherwise add
       // a contact-only entry. Manual values WIN over appointment-derived data
@@ -2912,8 +2918,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           existing.hidden = !!m.hidden;
           existing.loyaltyOptIn = !!m.loyalty_opt_in;
           existing.loyaltyStaffOff = Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [];
+          existing.isBusiness = !!m.is_business;
+          existing.contactName = m.contact_name || "";
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [], isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
         }
       }
       const list = [...Array.from(byEmail.values()), ...extra]
@@ -2953,11 +2961,13 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       email: addForm.email.trim() || null,
       phone: addForm.phone.trim() || null,
       notes: addForm.notes.trim() || null,
+      is_business: !!addForm.isBusiness,
+      contact_name: addForm.isBusiness ? (addForm.contactName.trim() || null) : null,
     });
     setSaving(false);
     if (error) { toast.show(lang === "nl" ? "Toevoegen mislukt — probeer opnieuw" : lang === "es" ? "Error al añadir — inténtalo de nuevo" : "Failed to add — try again", "error"); return; }
     toast.show(lang === "nl" ? "Klant toegevoegd" : lang === "es" ? "Cliente añadido" : "Customer added");
-    setAddForm({ name: "", email: "", phone: "", notes: "" });
+    setAddForm({ name: "", email: "", phone: "", notes: "", isBusiness: false, contactName: "" });
     setAddOpen(false);
     setLastAddedClient(name);
     setRefreshKey((k) => k + 1);
@@ -2971,6 +2981,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       phone: cl.phone || "",
       notes: cl.notes || "",
       birthday: cl.birthday || "",
+      isBusiness: !!cl.isBusiness,
+      contactName: cl.contactName || "",
     });
   };
 
@@ -2989,6 +3001,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       notes: editForm.notes.trim() || null,
       // Empty string → null so the DB doesn't try to parse "" as a date.
       birthday: editForm.birthday && /^\d{4}-\d{2}-\d{2}$/.test(editForm.birthday) ? editForm.birthday : null,
+      is_business: !!editForm.isBusiness,
+      contact_name: editForm.isBusiness ? (editForm.contactName.trim() || null) : null,
     };
     // Update existing manual_clients row if one already backs this client;
     // otherwise create one so future loads pick the override up.
@@ -3475,7 +3489,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div key={cl.key} data-client-row onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
               <div style={{ width: 42, height: 42, borderRadius: 10, background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
+                  {/* Klantenrekening (25-09-2026): zakelijke klant en wat er nog openstaat. */}
+                  {cl.isBusiness && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>{lang === "nl" ? "Zakelijk" : lang === "es" ? "Empresa" : "Business"}</span>}
+                  {cl.outstanding > 0.005 && <span data-client-open style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtAmt(cur, cl.outstanding)} {lang === "nl" ? "open" : lang === "es" ? "pendiente" : "open"}</span>}
+                </div>
                 <div style={{ fontSize: 11, color: cl.next ? accent : c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {cl.next ? `${lang === "nl" ? "Volgende afspraak" : lang === "es" ? "Próxima cita" : "Next appointment"}: ${fmtNext(cl.next)}` : (lang === "nl" ? "Geen aankomende afspraak" : lang === "es" ? "Sin próximas citas" : "No upcoming appointment")}
                 </div>
@@ -3714,6 +3733,39 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               </div>
             </div>
 
+            {/* Klantenrekening (25-09-2026): wat deze klant nog moet betalen, met
+                de oudste post. De betaling zelf registreer je onder Facturen →
+                Nog te ontvangen — één plek voor alle open posten. */}
+            {selected.outstanding > 0.005 && (() => {
+              const openSorted = [...selected.openItems].sort((x, y) => x.date.localeCompare(y.date));
+              const oldest = openSorted[0];
+              return (
+                <div data-client-receivable style={{ background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.warning }}>{lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Por cobrar" : "Still to receive"}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, color: c.warning, lineHeight: 1 }}>{fmtAmt(cur, selected.outstanding)}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textSub, marginTop: 4 }}>
+                    {openSorted.length} {openSorted.length === 1 ? (lang === "nl" ? "post" : lang === "es" ? "partida" : "item") : (lang === "nl" ? "posten" : lang === "es" ? "partidas" : "items")}{oldest ? ` · ${lang === "nl" ? "oudste" : lang === "es" ? "la más antigua" : "oldest"} ${ageLabel(oldest.date, lang)}` : ""}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                    {openSorted.slice(0, 5).map((a) => (
+                      <div key={a.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, color: c.textSub }}>
+                        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmtDate(a.date).replace(/ \d{4}$/, "")} · {a.service_name}</span>
+                        <span style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, outstandingOf(a))}</span>
+                      </div>
+                    ))}
+                    {openSorted.length > 5 && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? `en nog ${openSorted.length - 5}` : lang === "es" ? `y ${openSorted.length - 5} más` : `and ${openSorted.length - 5} more`}</div>}
+                  </div>
+                  {onOpenReceivables && (
+                    <button className="btn-ghost" data-client-receive onClick={() => onOpenReceivables(selected)} style={{ width: "100%", marginTop: 10, fontSize: 11, padding: "9px 12px", color: c.warning, borderColor: `${c.warning}66` }}>
+                      {lang === "nl" ? "Betaling registreren" : lang === "es" ? "Registrar pago" : "Record payment"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Samenvoegen als benoemde knop: het icoontje in de kop las als
                 "scan" (Faisal, 08-09). Twee kaarten van dezelfde klant → één. */}
             <button className="btn-ghost" data-merge-btn="1" onClick={() => { setMergeSource(selected); setMergeSearch(""); }}
@@ -3759,6 +3811,18 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
+              {/* Zakelijke klant (klantenrekening, 25-09-2026): school, supermarkt —
+                  koopt in de Kassa op rekening; de naam is dan de bedrijfsnaam. */}
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: c.text, cursor: "pointer" }}>
+                  <input type="checkbox" data-client-business checked={!!addForm.isBusiness} onChange={(e) => setAddForm((f) => ({ ...f, isBusiness: e.target.checked }))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+                  {lang === "nl" ? "Zakelijke klant (bedrijf of instelling)" : lang === "es" ? "Cliente empresa (negocio o institución)" : "Business client (company or institution)"}
+                </label>
+                {addForm.isBusiness && (
+                  <div style={{ marginTop: 8 }}><label style={lbl}>{lang === "nl" ? "Contactpersoon (optioneel)" : lang === "es" ? "Persona de contacto (opcional)" : "Contact person (optional)"}</label><input className="input-field" value={addForm.contactName} onChange={(e) => setAddForm((f) => ({ ...f, contactName: e.target.value }))} placeholder={lang === "nl" ? "Wie regelt de bestellingen?" : lang === "es" ? "¿Quién gestiona los pedidos?" : "Who handles the orders?"} style={{ width: "100%" }} /></div>
+                )}
+                <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.4 }}>{lang === "nl" ? "Zakelijke klanten kopen in de Kassa op rekening; vul als naam de bedrijfsnaam in." : lang === "es" ? "Los clientes empresa compran a cuenta en la Caja; pon como nombre el de la empresa." : "Business clients buy on account in the till; use the company name as the name."}</div>
+              </div>
             </div>
             ); })()}
             <div style={{ display: "flex", gap: 8 }}>
@@ -4139,6 +4203,16 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
+              {/* Zakelijke klant (klantenrekening, 25-09-2026). */}
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: c.text, cursor: "pointer" }}>
+                  <input type="checkbox" data-client-business checked={!!editForm.isBusiness} onChange={(e) => setEditForm((f) => ({ ...f, isBusiness: e.target.checked }))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
+                  {lang === "nl" ? "Zakelijke klant (bedrijf of instelling)" : lang === "es" ? "Cliente empresa (negocio o institución)" : "Business client (company or institution)"}
+                </label>
+                {editForm.isBusiness && (
+                  <div style={{ marginTop: 8 }}><label style={lbl}>{lang === "nl" ? "Contactpersoon (optioneel)" : lang === "es" ? "Persona de contacto (opcional)" : "Contact person (optional)"}</label><input className="input-field" value={editForm.contactName} onChange={(e) => setEditForm((f) => ({ ...f, contactName: e.target.value }))} placeholder={lang === "nl" ? "Wie regelt de bestellingen?" : lang === "es" ? "¿Quién gestiona los pedidos?" : "Who handles the orders?"} style={{ width: "100%" }} /></div>
+                )}
+              </div>
               {/* Alleen als de verjaardagsactie aanstaat — precies zoals het veld
                   bij "+ Afspraak". Staat hij uit, dan bewaren we een bestaande
                   datum gewoon (editForm.birthday gaat ongewijzigd mee in payload). */}
@@ -5376,8 +5450,64 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [walkinEmail, setWalkinEmail] = useState("");
   const [walkinStaff, setWalkinStaff] = useState("");
   // Kassa: hoe er is afgerekend. "request" wordt payment_method "online"
-  // zodat de factuur-mail het betaalverzoek-blok meestuurt.
+  // zodat de factuur-mail het betaalverzoek-blok meestuurt; "account" = op
+  // rekening (klantenrekening, 25-09-2026): de klant betaalt later, de post
+  // blijft open onder Facturen → Nog te ontvangen.
   const [walkinPay, setWalkinPay] = useState("pin");
+  // ── Klantenrekening (25-09-2026, My Whims and More: "ora un hende ta paga
+  //    despues mi por pone den standby? Dus credit?") ──────────────────────
+  // Klantkiezer in de kassa: bestaande klanten (handmatige lijst incl. zakelijke
+  // klanten, boekingen) zoeken op naam of e-mail — een post op rekening moet
+  // op een klant met e-mailadres staan.
+  const [kassaClients, setKassaClients] = useState(null);
+  const [kassaClientOpen, setKassaClientOpen] = useState(false);
+  // Ontvangen (deel)betalingen op open posten (client_payments): betaalhistorie
+  // én bron voor het kasboek — contant telt op de dag van ontvangst.
+  const [clientPayments, setClientPayments] = useState([]);
+  // Alle open posten van de salon, los van het 90-dagenvenster (een post op
+  // rekening kan maanden oud zijn), voor Facturen → Nog te ontvangen.
+  const [receivables, setReceivables] = useState([]);
+  const [payFor, setPayFor] = useState(null); // open post waarop een betaling wordt geregistreerd
+  const [payForm, setPayForm] = useState({ amount: "", method: "cash", date: "", note: "" });
+  const [payBusy, setPayBusy] = useState(false);
+  const reloadClientPayments = useCallback(async () => {
+    if (!salonData?.owner_id) return;
+    const { data } = await supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).order("paid_on", { ascending: false }).order("created_at", { ascending: false });
+    setClientPayments(data || []);
+  }, [salonData?.owner_id]);
+  const reloadReceivables = useCallback(async () => {
+    if (!salonData?.owner_id) return;
+    // paid_at leeg = nog niet volledig betaald; de rest (betaalwijze, bedrag)
+    // toetst isOpenReceivable, dezelfde regel als de Klantenlijst.
+    const { data } = await supabase.from("appointments").select("*").eq("owner_id", salonData.owner_id).eq("status", "completed").is("paid_at", null).order("date", { ascending: true });
+    setReceivables((data || []).filter(isOpenReceivable));
+  }, [salonData?.owner_id]);
+  useEffect(() => { reloadClientPayments(); reloadReceivables(); }, [reloadClientPayments, reloadReceivables]);
+  useEffect(() => {
+    if (view !== "kassa" || !salonData?.owner_id) return;
+    let alive = true;
+    (async () => {
+      const [{ data: manual }, { data: booked }] = await Promise.all([
+        supabase.from("manual_clients").select("id, name, email, phone, is_business, contact_name").eq("owner_id", salonData.owner_id).eq("hidden", false),
+        supabase.from("appointments").select("client_name, client_email, client_phone").eq("owner_id", salonData.owner_id).neq("client_email", "").order("date", { ascending: false }).limit(2000),
+      ]);
+      if (!alive) return;
+      const byKey = new Map();
+      for (const m of manual || []) {
+        const k = m.email ? `mail:${String(m.email).toLowerCase()}` : `manual:${m.id}`;
+        byKey.set(k, { key: k, name: m.name || "", email: String(m.email || "").toLowerCase(), phone: m.phone || "", isBusiness: !!m.is_business, contactName: m.contact_name || "" });
+      }
+      for (const a of booked || []) {
+        const e = String(a.client_email || "").toLowerCase();
+        if (!e) continue;
+        const k = `mail:${e}`;
+        if (!byKey.has(k)) byKey.set(k, { key: k, name: a.client_name || e, email: e, phone: a.client_phone || "", isBusiness: false, contactName: "" });
+      }
+      // Zakelijke klanten bovenaan, daarna op naam.
+      setKassaClients([...byKey.values()].sort((x, y) => (Number(y.isBusiness) - Number(x.isBusiness)) || x.name.localeCompare(y.name)));
+    })();
+    return () => { alive = false; };
+  }, [view, salonData?.owner_id]);
   // Contant afrekenen (22-09-2026, Faisal: "kassa in, kassa uit"): wat de klant
   // geeft. Leeg = gepast. Wisselgeld = ontvangen - totaal, uitgerekend in beeld
   // en op de bon; het ontvangen bedrag gaat mee op de verkoop (cash_received).
@@ -6997,6 +7127,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       return;
     }
     const saleLabel = items.filter(it => it.kind !== "voucher_redeem" && it.kind !== "discount").map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
+    // Op rekening (klantenrekening): alleen op naam van een klant met e-mail —
+    // de post moet ergens aan hangen, en de factuur gaat direct mee.
+    const onAccount = walkinPay === "account";
+    if (onAccount && !walkinEmail.trim()) {
+      await rollbackVouchers();
+      toast.show(lang === "nl" ? "Kies een klant met e-mailadres om op rekening te zetten" : lang === "es" ? "Elige un cliente con correo para vender a cuenta" : "Pick a client with an email address to sell on account", "error");
+      return;
+    }
     {
       const now = new Date();
       const pad2 = (n) => String(n).padStart(2, "0");
@@ -7025,11 +7163,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         client_email: walkinEmail.trim().toLowerCase(),
         // "request" → "online": zo stuurt de factuur-mail automatisch het
         // betaalverzoek-blok mee. Contant/pin = al betaald → kale factuur/bon.
+        // "account" (op rekening) gaat als zodanig de database in.
         payment_method: walkinPay === "request" ? "online" : walkinPay,
         status: "completed",
         // Pin/contant is op dat moment afgerekend → meteen als betaald
-        // gemarkeerd. Een betaalverzoek blijft openstaan tot je 'm afvinkt.
-        paid_at: (walkinPay === "request" && netTotal > 0) ? null : new Date().toISOString(),
+        // gemarkeerd. Een betaalverzoek of een verkoop op rekening blijft
+        // openstaan tot de betaling is geregistreerd.
+        paid_at: ((walkinPay === "request" || onAccount) && netTotal > 0) ? null : new Date().toISOString(),
         // Contant: wat de klant gaf (kassa in); de bon en de bevestiging
         // rekenen daar het wisselgeld (kassa uit) uit. NULL = niet ingevuld.
         cash_received: cashInAmt,
@@ -7064,6 +7204,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       update(d => { d.next_receipt_number = receiptNo + 1; return d; });
       await decrementStock(items);
       update(d => { d.appointments = [data, ...d.appointments]; return d; });
+      // Op rekening: meteen in de lijst Nog te ontvangen, zonder herladen.
+      if (isOpenReceivable(data)) setReceivables(r => [...r.filter(x => x.id !== data.id), data]);
+      if (onAccount) toast.show(`${lang === "nl" ? "Op rekening gezet" : lang === "es" ? "Puesto a cuenta" : "Put on account"} · ${fmtAmt(cur, netTotal)}`);
       setProductSaleFor(null); setProductSaleSel({}); setWalkinName(""); setWalkinEmail(""); setWalkinStaff(""); setWalkinPay("pin"); setKassaCashIn(""); setKassaVoucher(""); setRedeemVoucher(null); setRedeemCode(""); setKassaDiscount(""); setKassaDiscountPct(false);
       // Bevestiging in beeld houden: bedrag, betaalwijze en knoppen voor de bon.
       setLastSale(data);
@@ -7140,16 +7283,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     else { from = `${d.getFullYear()}-01-01`; to = `${d.getFullYear()}-12-31`; label = String(d.getFullYear()); }
     if (to > today) to = today;
     try {
-      const [mv, appts] = await Promise.all([
+      const [mv, appts, pays] = await Promise.all([
         supabase.from("cash_movements").select("*").eq("owner_id", salonData.owner_id).gte("date", from).lte("date", to).order("date").order("created_at"),
         fetchApptsBetween(from, to),
+        // Klantenrekening: contante (deel)betalingen op open posten, op de dag
+        // van ontvangst — die staan niet in de verkoopregels van de periode.
+        supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).eq("method", "cash").gte("paid_on", from).lte("paid_on", to).order("paid_on").order("created_at"),
       ]);
-      if (mv.error || appts === null) {
+      if (mv.error || appts === null || pays.error) {
         toast.show(lang === "nl" ? "Kon de periode niet ophalen — probeer het opnieuw" : lang === "es" ? "No se pudo cargar el período — inténtalo de nuevo" : "Could not load the period — please try again", "error");
         return false;
       }
       const movements = mv.data || [];
-      const cashRows = (appts || []).filter(a => a.payment_method === "cash" && a.status === "completed");
+      const cashRows = [...(appts || []).filter(a => a.payment_method === "cash" && a.status === "completed"), ...paymentsAsCashRows(pays.data || [], lang)];
       if (!movements.length && !cashRows.length) {
         toast.show(lang === "nl" ? "Geen kasboekregels of contante betalingen in deze periode" : lang === "es" ? "Sin movimientos de caja ni pagos en efectivo en este período" : "No cash book lines or cash payments in this period", "error");
         return false;
@@ -7528,7 +7674,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // Each invoice profile carries its OWN holder name + pay link so a
           // second worker's requests route to their own account, never the
           // salon-wide one.
-          payment_request: a.payment_method === "online",
+          // Op rekening (klantenrekening): ook dan het betaalblok mee, met het
+          // nog openstaande bedrag.
+          payment_request: a.payment_method === "online" || a.payment_method === "account",
           // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
           // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
           amount_paid: paidAmountOf(a),
@@ -7623,6 +7771,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Toggle the paid flag on an invoice row — light bookkeeping so the owner
   // can see who still owes after a payment request went out.
   const togglePaid = async (a) => {
+    // Klantenrekening: een post op rekening, of een post waarop al (deel)-
+    // betalingen zijn geregistreerd, loopt via het betalingsvenster — daar
+    // staan bedrag, betaalwijze en datum, en de historie blijft kloppen.
+    const hasPayments = clientPayments.some(p => p.appointment_id === a.id);
+    if (!a.paid_at && (a.payment_method === "account" || hasPayments)) { openPayModal(a); return; }
+    if (a.paid_at && hasPayments) {
+      toast.show(lang === "nl" ? "Deze post heeft geregistreerde betalingen — open het betalingsvenster om er een te verwijderen" : lang === "es" ? "Esta partida tiene pagos registrados — abre la ventana de pagos para eliminar uno" : "This item has recorded payments — open the payment window to remove one", "error");
+      openPayModal(a);
+      return;
+    }
     const newVal = a.paid_at ? null : new Date().toISOString();
     // Betaald = het hele bedrag; terugzetten = niets ontvangen.
     const patch = { paid_at: newVal, amount_paid: newVal ? (parseFloat(a.service_price || 0) || 0) : 0 };
@@ -7632,7 +7790,71 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       return;
     }
     update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+    // Lijst Nog te ontvangen mee laten bewegen (betaald = eruit, teruggezet = erin).
+    const merged = { ...a, ...patch };
+    setReceivables(r => isOpenReceivable(merged) ? [...r.filter(x => x.id !== a.id), merged].sort((x, y) => x.date.localeCompare(y.date)) : r.filter(x => x.id !== a.id));
     toast.show(newVal ? (lang === "nl" ? "Gemarkeerd als betaald" : lang === "es" ? "Marcada como pagada" : "Marked as paid") : (lang === "nl" ? "Betaling teruggezet naar open" : lang === "es" ? "Pago restablecido a pendiente" : "Payment set back to open"));
+  };
+
+  // ── Klantenrekening: (deel)betaling registreren op een open post ─────────
+  // Elke betaling is een rij in client_payments (logboek + kasboekbron); de
+  // post zelf houdt amount_paid/paid_at bij zodat outstandingOf en de
+  // factuur-mail ("Al betaald / Nog te betalen") gewoon blijven werken.
+  const openPayModal = (a) => {
+    setPayFor(a);
+    setPayForm({ amount: outstandingOf(a).toFixed(2), method: "cash", date: fmt(getToday()), note: "" });
+  };
+  const applyPaymentPatch = (a, patch) => {
+    const merged = { ...a, ...patch };
+    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+    setReceivables(r => isOpenReceivable(merged) ? [...r.filter(x => x.id !== a.id), merged].sort((x, y) => x.date.localeCompare(y.date)) : r.filter(x => x.id !== a.id));
+    return merged;
+  };
+  const recordClientPayment = async () => {
+    if (!payFor || payBusy) return;
+    const a = payFor;
+    const open = outstandingOf(a);
+    const amount = Math.round((parseFloat(payForm.amount) || 0) * 100) / 100;
+    if (amount <= 0) { toast.show(lang === "nl" ? "Vul een bedrag in" : lang === "es" ? "Introduce un importe" : "Enter an amount", "error"); return; }
+    if (amount > open + 0.005) { toast.show(lang === "nl" ? `Meer dan er openstaat (${fmtAmt(cur, open)})` : lang === "es" ? `Más de lo pendiente (${fmtAmt(cur, open)})` : `More than is outstanding (${fmtAmt(cur, open)})`, "error"); return; }
+    const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(payForm.date) ? payForm.date : fmt(getToday());
+    setPayBusy(true);
+    try {
+      const { data: pay, error } = await supabase.from("client_payments").insert({
+        owner_id: salonData.owner_id, appointment_id: a.id, amount, method: payForm.method, paid_on: paidOn,
+        note: payForm.note.trim() || null, client_name: a.client_name || null, label: a.service_name || null,
+      }).select().single();
+      if (error || !pay) throw error || new Error("insert");
+      const paidNow = Math.round((paidAmountOf(a) + amount) * 100) / 100;
+      const settled = paidNow + 0.005 >= (parseFloat(a.service_price) || 0);
+      const patch = { amount_paid: paidNow, paid_at: settled ? new Date().toISOString() : null };
+      const { error: e2 } = await supabase.from("appointments").update(patch).eq("id", a.id);
+      if (e2) throw e2;
+      const merged = applyPaymentPatch(a, patch);
+      setClientPayments(p => [pay, ...p]);
+      if (settled) { setPayFor(null); }
+      else { setPayFor(merged); setPayForm({ amount: outstandingOf(merged).toFixed(2), method: payForm.method, date: paidOn, note: "" }); }
+      toast.show(settled
+        ? (lang === "nl" ? "Betaald · post gesloten" : lang === "es" ? "Pagado · partida cerrada" : "Paid · item settled")
+        : (lang === "nl" ? `${fmtAmt(cur, amount)} ontvangen · nog ${fmtAmt(cur, outstandingOf(merged))} open` : lang === "es" ? `${fmtAmt(cur, amount)} recibido · quedan ${fmtAmt(cur, outstandingOf(merged))}` : `${fmtAmt(cur, amount)} received · ${fmtAmt(cur, outstandingOf(merged))} still open`));
+    } catch (e) {
+      console.error("klantbetaling:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally { setPayBusy(false); }
+  };
+  const deleteClientPayment = async (pay) => {
+    const a = (payFor && payFor.id === pay.appointment_id) ? payFor : ((salonData.appointments || []).find(x => x.id === pay.appointment_id) || receivables.find(x => x.id === pay.appointment_id));
+    if (!a) return;
+    if (!(await showConfirm(lang === "nl" ? `Betaling van ${fmtAmt(cur, pay.amount)} verwijderen? Het bedrag komt weer open te staan.` : lang === "es" ? `¿Eliminar el pago de ${fmtAmt(cur, pay.amount)}? El importe vuelve a quedar pendiente.` : `Delete the payment of ${fmtAmt(cur, pay.amount)}? The amount becomes outstanding again.`))) return;
+    const { error } = await supabase.from("client_payments").delete().eq("id", pay.id);
+    if (error) { toast.show(t.somethingWrong, "error"); return; }
+    const paidNow = Math.max(0, Math.round((paidAmountOf(a) - (parseFloat(pay.amount) || 0)) * 100) / 100);
+    const patch = { amount_paid: paidNow, paid_at: null };
+    await supabase.from("appointments").update(patch).eq("id", a.id);
+    const merged = applyPaymentPatch(a, patch);
+    setClientPayments(p => p.filter(x => x.id !== pay.id));
+    setPayFor(merged);
+    setPayForm(f => ({ ...f, amount: outstandingOf(merged).toFixed(2) }));
   };
 
   const addService = async () => {
@@ -8917,6 +9139,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const rest = Math.round(((parseFloat(sale.service_price) || 0) - (gross - negSum)) * 100) / 100;
         const payTxt = sale.payment_method === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
           : sale.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request")
+          : sale.payment_method === "account" ? (lang === "nl" ? "Op rekening" : lang === "es" ? "A cuenta" : "On account")
           : (lang === "es" ? "Tarjeta" : "Pin");
         const close = () => { setSaleDetail(null); setSaleDeleteArm(false); };
         const Row = ({ label, value, tone }) => (
@@ -10214,6 +10437,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       : pm === "pin" ? (lang === "es" ? "Tarjeta" : "Pin")
                       : pm === "transfer" ? (lang === "nl" ? "Overschrijving" : lang === "es" ? "Transferencia" : "Bank transfer")
                       : pm === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request")
+                      : pm === "account" ? (lang === "nl" ? "Op rekening" : lang === "es" ? "A cuenta" : "On account")
                       : (lang === "nl" ? "In de salon" : lang === "es" ? "En el salón" : "In salon");
                     // Een dag bladeren; vooruit klemt op vandaag (geen toekomst).
                     const shiftDay = (delta) => {
@@ -10229,10 +10453,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // Kasboek: alles wat die dag contant in de la kwam — kassa-
                     // verkopen én afspraken die contant zijn afgerekend. Zelfde
                     // dagbron als de verkooplijst (kassaDayExtra buiten het venster).
-                    const cashRows = (outOfRange
-                      ? (extraReady ? kassaDayExtra.rows : [])
-                      : (salonData.appointments || []).filter(a => a.date === day))
-                      .filter(a => a.payment_method === "cash" && a.status === "completed");
+                    const cashRows = [
+                      ...(outOfRange
+                        ? (extraReady ? kassaDayExtra.rows : [])
+                        : (salonData.appointments || []).filter(a => a.date === day))
+                        .filter(a => a.payment_method === "cash" && a.status === "completed"),
+                      // Klantenrekening: contante (deel)betalingen op open posten
+                      // tellen in de la op de dag van ontvangst.
+                      ...paymentsAsCashRows(clientPayments.filter(p => p.paid_on === day), lang),
+                    ];
                     return (
                       <div data-kassa-sold style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         {/* Gecentreerd zoals het kadobon-blok (Faisal 16-09): label +
@@ -10337,6 +10566,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       const lines = Array.isArray(sale.products) ? sale.products : [];
                       const payTxt = sale.payment_method === "cash" ? (lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash")
                         : sale.payment_method === "online" ? (lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Solicitud de pago" : "Payment request")
+                        : sale.payment_method === "account" ? (lang === "nl" ? "Op rekening" : lang === "es" ? "A cuenta" : "On account")
                         : (lang === "es" ? "Tarjeta" : "Pin");
                       return (
                         <div>
@@ -10499,7 +10729,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, color: accent }}>{fmtAmt(cur, tot)}</span>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
+                        {/* Klantkiezer (klantenrekening, 25-09-2026): typen zoekt in
+                            de bestaande klanten; kiezen vult naam én e-mail. Vrij
+                            typen blijft kunnen voor een losse klant. */}
+                        <div style={{ position: "relative" }}>
+                          <input className="input-field" data-kassa-client autoComplete="off" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre (opcional)" : "Client name (optional)"} value={walkinName}
+                            onChange={e => { setWalkinName(e.target.value); setKassaClientOpen(true); }} onFocus={() => setKassaClientOpen(true)} onBlur={() => setTimeout(() => setKassaClientOpen(false), 150)} style={{ fontSize: 12, width: "100%" }} />
+                          {kassaClientOpen && walkinName.trim().length >= 1 && (() => {
+                            const q = walkinName.trim().toLowerCase();
+                            const hits = (kassaClients || []).filter(k => k.name.toLowerCase().includes(q) || k.email.includes(q) || (k.contactName || "").toLowerCase().includes(q)).slice(0, 8);
+                            if (!hits.length) return null;
+                            return (
+                              <div data-kassa-client-list style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 4, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, boxShadow: "0 12px 28px -12px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+                                {hits.map(k => (
+                                  <button key={k.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setWalkinName(k.name); setWalkinEmail(k.email || ""); setKassaClientOpen(false); }}
+                                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "8px 10px", background: "transparent", border: "none", borderBottom: `1px solid ${c.border}`, cursor: "pointer", color: c.text, fontSize: 12, fontFamily: "inherit" }}>
+                                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {k.name}{k.contactName ? <span style={{ color: c.textMuted }}> · {k.contactName}</span> : null}
+                                      <span style={{ display: "block", fontSize: 10, color: c.textMuted }}>{k.email || (lang === "nl" ? "geen e-mail" : lang === "es" ? "sin correo" : "no email")}</span>
+                                    </span>
+                                    {k.isBusiness && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>{lang === "nl" ? "Zakelijk" : lang === "es" ? "Empresa" : "Business"}</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
                         <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — factuur gaat direct mee)" : lang === "es" ? "Correo (opcional)" : "Email (optional — invoice sent instantly)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
                         {(salonData.staff || []).length > 0 && (
                           <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
@@ -10508,7 +10763,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </select>
                         )}
                         <div style={{ display: "flex", gap: 6 }}>
-                          {[["pin", lang === "es" ? "Tarjeta" : "Pin"], ["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["request", lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request"]].map(([val, label]) => (
+                          {[["pin", lang === "es" ? "Tarjeta" : "Pin"], ["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["request", lang === "nl" ? "Betaalverzoek" : lang === "es" ? "Sol. de pago" : "Pay request"], ["account", lang === "nl" ? "Op rekening" : lang === "es" ? "A cuenta" : "On account"]].map(([val, label]) => (
                             <button key={val} type="button" data-kassa-pay={val} onClick={() => { setWalkinPay(val); if (val !== "cash") setKassaCashIn(""); }}
                               style={{ flex: 1, padding: "9px 6px", borderRadius: 10, fontSize: 10, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${walkinPay === val ? accent : c.inputBorder}`, background: walkinPay === val ? `${accent}14` : "transparent", color: walkinPay === val ? accent : c.textSub }}>
                               {label}
@@ -10518,11 +10773,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {walkinPay === "request" && !walkinEmail.trim() && (
                           <div style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Vul een e-mailadres in — het betaalverzoek gaat via de factuur-mail." : lang === "es" ? "Introduce un correo electrónico — la solicitud de pago viaja en el correo de la factura." : "Add an email — the payment request travels in the invoice email."}</div>
                         )}
+                        {/* Op rekening (klantenrekening, 25-09-2026): de klant betaalt
+                            later; de post blijft open op naam van de klant. */}
+                        {walkinPay === "account" && !walkinEmail.trim() && (
+                          <div data-kassa-account-warn style={{ fontSize: 10, color: c.warning }}>{lang === "nl" ? "Kies een klant met e-mailadres — de post komt op naam van de klant te staan en de factuur gaat direct mee." : lang === "es" ? "Elige un cliente con correo — la partida queda a nombre del cliente y la factura sale al momento." : "Pick a client with an email address — the item is booked in the client's name and the invoice goes out right away."}</div>
+                        )}
+                        {walkinPay === "account" && (
+                          <div style={{ fontSize: 9.5, color: c.textMuted, lineHeight: 1.45 }}>
+                            {lang === "nl" ? "Op rekening: de klant betaalt later. Tot die tijd staat de verkoop onder Facturen → Nog te ontvangen; daar registreer je ook deelbetalingen."
+                              : lang === "es" ? "A cuenta: el cliente paga después. Hasta entonces la venta está en Facturas → Por cobrar; allí registras también pagos parciales."
+                              : "On account: the client pays later. Until then the sale sits under Invoices → Still to receive, where you also record partial payments."}
+                          </div>
+                        )}
                         {/* Vellu verwerkt zelf geen kaartbetalingen: de klant
                             pint op de eigen betaalautomaat van de salon en hier
                             leg je alleen vast HOE er betaald is. Alleen het
                             betaalverzoek loopt echt via Vellu (link in de mail). */}
-                        {walkinPay !== "request" && (
+                        {walkinPay !== "request" && walkinPay !== "account" && (
                           <div style={{ fontSize: 9.5, color: c.textMuted, lineHeight: 1.45 }}>
                             {walkinPay === "pin"
                               ? (lang === "nl" ? "De klant pint op je eigen betaalautomaat; Vellu legt de betaalwijze vast voor je kasoverzicht."
@@ -10571,11 +10838,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           );
                         })()}
                         <button className="btn-primary" data-kassa-checkout style={{ width: "100%", padding: "13px 16px", fontSize: 12, opacity: kassaCheckoutBusy ? 0.6 : 1 }}
-                          disabled={(items.length === 0 && voucherAmt <= 0) || (walkinPay === "request" && !walkinEmail.trim()) || !!processingApptId || kassaCheckoutBusy || (walkinPay === "cash" && kassaCashIn.trim() !== "" && (Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100) + 0.005 < tot)}
+                          disabled={(items.length === 0 && voucherAmt <= 0) || ((walkinPay === "request" || walkinPay === "account") && !walkinEmail.trim()) || !!processingApptId || kassaCheckoutBusy || (walkinPay === "cash" && kassaCashIn.trim() !== "" && (Math.round((parseFloat(kassaCashIn) || 0) * 100) / 100) + 0.005 < tot)}
                           onClick={() => { setProductSaleFor(null); completeWalkinSale(); }}>
                           {kassaCheckoutBusy
                             ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
-                            : <>{lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out"}{tot > 0 ? ` · ${fmtAmt(cur, tot)}` : ""}</>}
+                            : <>{walkinPay === "account" ? (lang === "nl" ? "Op rekening zetten" : lang === "es" ? "Poner a cuenta" : "Put on account") : (lang === "nl" ? "Afrekenen" : lang === "es" ? "Cobrar" : "Check out")}{tot > 0 ? ` · ${fmtAmt(cur, tot)}` : ""}</>}
                         </button>
                         {/* Een browser kan niet rechtstreeks met een printer koppelen;
                             de brug is het printvenster. De eerste print vraagt éénmalig
@@ -10634,6 +10901,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {/* CUSTOMERS */}
           {view === "klanten" && (
             <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} countryCode={salonData.country_code}
+              onOpenReceivables={(cl) => { setInvoiceFilter("receivable"); setInvoiceSearch(cl.email || cl.name || ""); setInvoicesShown(INVOICES_FOLD); setView("facturen"); }}
               loyalty={salonData.loyalty_enabled ? { enabled: true, perStaff: !!salonData.loyalty_per_staff, selectedOnly: salonData.loyalty_scope === "selected", visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
           )}
 
@@ -11974,6 +12242,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
             const thisMonthAppts = visibleCompleted.filter(a => a.date?.startsWith(thisMonthPrefix));
             const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            // Klantenrekening (25-09-2026): alle open posten van de salon (op
+            // rekening, betaalverzoek, "later / factuur"), los van het
+            // 90-dagenvenster — een post op rekening kan maanden oud zijn.
+            const openReceivables = invoiceStaffFilter ? receivables.filter(a => apptInvolvesStaff(a, invoiceStaffFilter)) : receivables;
+            const openTotal = Math.round(openReceivables.reduce((s, a) => s + outstandingOf(a), 0) * 100) / 100;
 
             const formatDate = (ds) => {
               if (!ds) return "";
@@ -12019,15 +12292,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     match the rows the owner sees in the tabs below. Hidden
                     invoices live in their own bucket; deleted ones are excluded
                     everywhere. */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, gridAutoRows: "1fr" }}>
                   {/* Tegels met icoontegel, zoals op het dashboard (restyle 16-09). */}
                   {[
+                    // Nog te ontvangen (klantenrekening): op de telefoon over de
+                    // volle breedte bovenaan — dit is het getal waar de eigenaar
+                    // op stuurt ("te ontvangen" in Sara Salon).
+                    { key: "receivable", icon: "tag", label: lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Por cobrar" : "Still to receive", value: `${fmtAmt(cur, openTotal)}`, color: openTotal > 0.005 ? c.warning : c.text, sub: `${openReceivables.length} ${openReceivables.length === 1 ? (lang === "nl" ? "post" : lang === "es" ? "partida" : "item") : (lang === "nl" ? "posten" : lang === "es" ? "partidas" : "items")}`, span: true },
                     { key: "total", icon: "money", label: t.totalEarnings, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
                     { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${fmtAmt(cur, thisMonthTotal)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
                     { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${fmtAmt(cur, unsentTotal)}` },
                     { key: "sent", icon: "check", label: lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", value: sent.length, color: c.success, sub: `${visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%` },
                   ].map(x => (
-                    <div key={x.key} className="stat-card" data-invoice-tile={x.key} style={{ padding: isMobile ? "12px 12px" : "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div key={x.key} className="stat-card" data-invoice-tile={x.key} style={{ padding: isMobile ? "12px 12px" : "14px 16px", display: "flex", flexDirection: "column", gap: 8, gridColumn: isMobile && x.span ? "1 / -1" : undefined }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                         <span className="vl-ico-tile"><NavIcon name={x.icon} size={15} color="currentColor" /></span>
                         <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, textAlign: "right" }}>{x.label}</div>
@@ -12071,6 +12348,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined, width: isMobile ? "100%" : undefined, gap: 4, padding: 3, background: c.inputBg, borderRadius: isMobile ? 12 : 8, border: `1px solid ${c.inputBorder}`, flexWrap: isMobile ? undefined : "wrap" }}>
                     {[
                       ["all", lang === "nl" ? "Alles" : lang === "es" ? "Todos" : "All", visibleCompleted.length],
+                      ["receivable", lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Por cobrar" : "To receive", openReceivables.length],
                       ["unsent", lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length],
                       ["sent", lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", sent.length],
                       ["hidden", lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden", hiddenAppts.length],
@@ -12084,7 +12362,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         border: isMobile ? `1px solid ${invoiceFilter === key ? accent : c.inputBorder}` : "1px solid transparent",
                         color: invoiceFilter === key ? c.btnOnDark : c.textSub,
                         display: "inline-flex", alignItems: "center", gap: 6,
-                        justifyContent: isMobile ? "space-between" : "flex-start", minWidth: 0
+                        justifyContent: isMobile ? "space-between" : "flex-start", minWidth: 0,
+                        // Vijf tabs in een 2-koloms raster: Nog te ontvangen over de volle breedte.
+                        gridColumn: isMobile && key === "receivable" ? "1 / -1" : undefined,
                       }}>
                         <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
                         <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: invoiceFilter === key ? `${c.btnOnDark}22` : c.inputBorder, color: invoiceFilter === key ? c.btnOnDark : c.textMuted, fontWeight: 700, flexShrink: 0 }}>{count}</span>
@@ -12100,13 +12380,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 // Source bucket per tab: the 3 operational tabs run on visible
                 // invoices only, "hidden" gets its own bucket. Deleted invoices
                 // never appear here regardless of tab.
-                const source = invoiceFilter === "hidden" ? hiddenAppts : visibleCompleted;
+                const source = invoiceFilter === "hidden" ? hiddenAppts : invoiceFilter === "receivable" ? openReceivables : visibleCompleted;
                 const filtered = source.filter(a => {
                   if (invoiceFilter === "sent" && !a.invoice_sent) return false;
                   if (invoiceFilter === "unsent" && a.invoice_sent) return false;
-                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower)) return false;
+                  if (searchLower && !a.client_name?.toLowerCase().includes(searchLower) && !a.service_name?.toLowerCase().includes(searchLower) && !a.client_email?.toLowerCase().includes(searchLower)) return false;
                   return true;
                 });
+                // Per klant (klantenrekening): wie moet hoeveel, hoeveel posten,
+                // hoe oud is de oudste — de lijst "te ontvangen" van Sara Salon.
+                const byClient = invoiceFilter === "receivable" ? (() => {
+                  const m = new Map();
+                  for (const a of openReceivables) {
+                    const k = receivableKeyOf(a);
+                    const g = m.get(k) || { key: k, name: a.client_name || a.client_email || "—", email: String(a.client_email || "").toLowerCase(), total: 0, count: 0, oldest: a.date };
+                    g.total = Math.round((g.total + outstandingOf(a)) * 100) / 100; g.count++; if (a.date < g.oldest) g.oldest = a.date;
+                    m.set(k, g);
+                  }
+                  return [...m.values()].sort((x, y) => y.total - x.total);
+                })() : [];
                 if (completedAppts.length === 0) return (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
@@ -12130,9 +12422,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const open = invoicesShown > INVOICES_FOLD;
                 const box = open && !isMobile;
                 return <>
+                {invoiceFilter === "receivable" && (
+                  <div data-receivable-summary style={{ marginBottom: 12, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: byClient.length ? 8 : 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Per klant" : lang === "es" ? "Por cliente" : "Per client"}</div>
+                      <div style={{ fontSize: 11, color: c.textSub }}>{lang === "nl" ? "Totaal" : "Total"} <strong style={{ color: openTotal > 0.005 ? c.warning : c.text }}>{fmtAmt(cur, openTotal)}</strong></div>
+                    </div>
+                    {byClient.length === 0 ? (
+                      <div style={{ fontSize: 12, color: c.textMuted }}>{lang === "nl" ? "Niets openstaand. Een verkoop op rekening (Kassa) of een afspraak met \"Later / factuur\" komt hier te staan." : lang === "es" ? "Nada pendiente. Una venta a cuenta (Caja) o una cita con \"Después / factura\" aparecerá aquí." : "Nothing outstanding. A sale on account (till) or an appointment with \"Later / invoice\" shows up here."}</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {byClient.slice(0, 12).map(g => (
+                          <button key={g.key} type="button" data-receivable-client onClick={() => setInvoiceSearch(invoiceSearch === (g.email || g.name) ? "" : (g.email || g.name))}
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "7px 10px", borderRadius: 8, border: `1px solid ${invoiceSearch && invoiceSearch === (g.email || g.name) ? accent : c.border}`, background: invoiceSearch && invoiceSearch === (g.email || g.name) ? `${accent}12` : "transparent", cursor: "pointer", color: c.text, fontFamily: "inherit" }}>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap" }}>{g.count} {g.count === 1 ? (lang === "nl" ? "post" : lang === "es" ? "partida" : "item") : (lang === "nl" ? "posten" : lang === "es" ? "partidas" : "items")} · {ageLabel(g.oldest, lang)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: c.warning, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, g.total)}</span>
+                          </button>
+                        ))}
+                        {byClient.length > 12 && <div style={{ fontSize: 10, color: c.textMuted, padding: "2px 10px" }}>{lang === "nl" ? `en nog ${byClient.length - 12} klanten — zoek op naam` : lang === "es" ? `y ${byClient.length - 12} clientes más — busca por nombre` : `and ${byClient.length - 12} more clients — search by name`}</div>}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div data-invoice-list className={box ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, ...(box ? { maxHeight: "clamp(360px, calc(100vh - 330px), 760px)", overflowY: "auto", paddingRight: 6, paddingBottom: 10 } : {}) }}>
                   {visible.map(a => {
                     const isSending = processingApptId === a.id;
+                    // Klantenrekening: een open post krijgt "Betaling ontvangen"
+                    // (bedrag, betaalwijze, datum) in plaats van het kale vinkje —
+                    // altijd in de tab Nog te ontvangen, en overal voor posten op
+                    // rekening of met een deelbetaling.
+                    const receivable = isOpenReceivable(a);
+                    const showReceive = receivable && (invoiceFilter === "receivable" || a.payment_method === "account" || paidAmountOf(a) > 0);
                     return (
                       <div key={a.id} style={{
                         // Mobiel: twee regels (klant boven, prijs+acties onder) —
@@ -12158,7 +12479,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                             <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name}</span>
-                            {!a.invoice_sent && (
+                            {invoiceFilter === "receivable" ? (
+                              <span data-receivable-age style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, whiteSpace: "nowrap" }}>
+                                {ageLabel(a.date, lang)}{a.payment_method === "account" ? ` · ${lang === "nl" ? "op rekening" : lang === "es" ? "a cuenta" : "on account"}` : ""}
+                              </span>
+                            ) : !a.invoice_sent && (
                               <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Open" : lang === "es" ? "Sin enviar" : "Unsent"}
                               </span>
@@ -12175,8 +12500,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, flexShrink: 0, justifyContent: isMobile ? "space-between" : "flex-end" }}>
-                        {/* Price */}
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>
+                        {/* Price — bij een open post het nog openstaande bedrag,
+                            met het totaal eronder als er al deels is betaald. */}
+                        {receivable && paidAmountOf(a) > 0 ? (
+                          <div style={{ flexShrink: 0, textAlign: "right" }}>
+                            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: c.warning, lineHeight: 1 }}>{fmtAmt(cur, outstandingOf(a))}</div>
+                            <div style={{ fontSize: 9, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? "van" : lang === "es" ? "de" : "of"} {fmtAmt(cur, parseFloat(a.service_price || 0))}</div>
+                          </div>
+                        ) : (
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: invoiceFilter === "receivable" ? c.warning : accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>
+                        )}
 
                         {/* Medewerker-chip tussen prijs en knoppen (Faisal 30-08) —
                             zelfde accent-pill als de dashboard-afspraakkaart,
@@ -12233,7 +12566,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   {isSending ? "..." : t.send}
                                 </button>
                               )}
-                              {/* Paid toggle — bookkeeping for payment requests */}
+                              {/* Paid toggle — bookkeeping for payment requests. Een open
+                                  post op rekening (of met een deelbetaling) krijgt in
+                                  plaats daarvan "Betaling ontvangen": bedrag, wijze, datum. */}
+                              {showReceive ? (
+                                <button type="button" className="btn-primary" data-receive-btn onClick={() => openPayModal(a)}
+                                  style={{ padding: isMobile ? "8px 10px" : "8px 12px", fontSize: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                  {lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received"}
+                                </button>
+                              ) : (
                               <button
                                 aria-label={a.paid_at ? (lang === "nl" ? "Betaald — klik om terug te zetten" : lang === "es" ? "Pagada — haz clic para deshacer" : "Paid — click to undo") : (lang === "nl" ? "Markeer als betaald" : lang === "es" ? "Marcar como pagada" : "Mark as paid")}
                                 onClick={() => togglePaid(a)}
@@ -12244,6 +12585,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                     het "Paid"-label at de ruimte van de medewerker-chip op. */}
                                 {cur}{a.paid_at && !isMobile ? (lang === "nl" ? " Betaald" : lang === "es" ? " Pagada" : " Paid") + (payMethodLabel(a.payment_method, lang) && a.payment_method !== "online" ? ` · ${payMethodLabel(a.payment_method, lang)}` : "") : ""}
                               </button>
+                              )}
                               {/* WhatsApp payment request — prefilled with amount + pay
                                   link (or IBAN details). This is also the Tikkie flow:
                                   make the Tikkie in the app, paste it in this chat.
@@ -12314,6 +12656,89 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
             );
           })()}
+
+          {/* Klantenrekening (25-09-2026): (deel)betaling registreren op een open
+              post. Boven de verkoopdetails (z 400): de knop "Markeer als betaald"
+              op een verkoop op rekening komt hier ook uit. */}
+          {payFor && createPortal((() => {
+            const a = payFor;
+            const total = parseFloat(a.service_price || 0) || 0;
+            const paid = paidAmountOf(a);
+            const open = outstandingOf(a);
+            const history = clientPayments.filter(p => p.appointment_id === a.id);
+            const methods = [["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["pin", lang === "es" ? "Tarjeta" : "Pin"], ["transfer", lang === "nl" ? "Overschrijving" : lang === "es" ? "Transferencia" : "Bank transfer"], ["online", lang === "nl" ? "Betaallink" : lang === "es" ? "Enlace de pago" : "Pay link"]];
+            const amt = Math.round((parseFloat(payForm.amount) || 0) * 100) / 100;
+            const partial = amt > 0 && amt + 0.005 < open;
+            const close = () => { if (!payBusy) setPayFor(null); };
+            // Datum als "25 sep 2026" — formatDate van de Facturen-tab leeft in
+            // die tab, dus hier een eigen korte variant met dezelfde maandnamen.
+            const dLabel = (ds) => { const d = parseDate(ds); return `${d.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[d.getMonth()]} ${d.getFullYear()}`; };
+            return (
+              <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={close}>
+                <div data-pay-modal style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 22, maxWidth: 440, width: "100%", color: c.text, maxHeight: "92vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 2 }}>{lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received"}</div>
+                  <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14 }}>{a.client_name} · {dLabel(a.date)} · {ageLabel(a.date, lang)}</div>
+                  <div style={{ fontSize: 12, color: c.textSub, marginBottom: 12, lineHeight: 1.5 }}>{a.service_name}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+                    {[[lang === "nl" ? "Totaal" : "Total", total, c.text], [lang === "nl" ? "Al betaald" : lang === "es" ? "Ya pagado" : "Paid so far", paid, c.success], [lang === "nl" ? "Nog open" : lang === "es" ? "Pendiente" : "Still open", open, c.warning]].map(([label, v, color]) => (
+                      <div key={label} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 6px", textAlign: "center" }}>
+                        <div data-pay-stat={label} style={{ fontSize: 15, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, v)}</div>
+                        <div style={{ fontSize: 9, color: c.textLabel, letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {open > 0.005 ? (() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                      <div>
+                        <label style={lbl}>{lang === "nl" ? "Ontvangen bedrag" : lang === "es" ? "Importe recibido" : "Amount received"}</label>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input data-pay-amount className="input-field" type="number" inputMode="decimal" min="0.01" step="0.01" max={open} value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} style={{ flex: 1, fontSize: 14, textAlign: "right" }} />
+                          <button type="button" className="btn-ghost" onClick={() => setPayForm(f => ({ ...f, amount: open.toFixed(2) }))} style={{ padding: "0 12px", fontSize: 10, whiteSpace: "nowrap" }}>{lang === "nl" ? "Alles" : lang === "es" ? "Todo" : "All"}</button>
+                        </div>
+                        {partial && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? `Deelbetaling — daarna nog ${fmtAmt(cur, Math.round((open - amt) * 100) / 100)} open.` : lang === "es" ? `Pago parcial — quedarán ${fmtAmt(cur, Math.round((open - amt) * 100) / 100)}.` : `Partial payment — ${fmtAmt(cur, Math.round((open - amt) * 100) / 100)} stays open.`}</div>}
+                      </div>
+                      <div>
+                        <label style={lbl}>{lang === "nl" ? "Betaalwijze" : lang === "es" ? "Forma de pago" : "Payment method"}</label>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {methods.map(([val, label]) => (
+                            <button key={val} type="button" data-pay-method={val} onClick={() => setPayForm(f => ({ ...f, method: val }))}
+                              style={{ flex: "1 0 auto", padding: "8px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1.5px solid ${payForm.method === val ? accent : c.inputBorder}`, background: payForm.method === val ? `${accent}14` : "transparent", color: payForm.method === val ? accent : c.textSub }}>{label}</button>
+                          ))}
+                        </div>
+                        {payForm.method === "cash" && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Contant telt in het kasboek op de dag van ontvangst." : lang === "es" ? "El efectivo cuenta en el libro de caja el día de recepción." : "Cash counts in the cash book on the day received."}</div>}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label><input data-pay-date className="input-field" type="date" max={fmt(getToday())} value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%", fontSize: 12 }} /></div>
+                        <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={payForm.note} onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))} placeholder={lang === "nl" ? "bijv. via Maria" : lang === "es" ? "p. ej. vía María" : "e.g. via Maria"} style={{ width: "100%", fontSize: 12 }} /></div>
+                      </div>
+                      <button className="btn-primary" data-pay-submit disabled={payBusy || amt <= 0 || amt > open + 0.005} onClick={recordClientPayment} style={{ width: "100%", padding: "12px 16px", fontSize: 12, opacity: payBusy ? 0.6 : 1 }}>
+                        {payBusy ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Guardando…" : "Saving…") : `${lang === "nl" ? "Registreren" : lang === "es" ? "Registrar" : "Record"}${amt > 0 ? ` · ${fmtAmt(cur, amt)}` : ""}`}
+                      </button>
+                    </div>
+                  ); })() : (
+                    <div style={{ fontSize: 12, color: c.success, marginBottom: 14 }}>{lang === "nl" ? "Deze post is volledig betaald." : lang === "es" ? "Esta partida está pagada por completo." : "This item is fully paid."}</div>
+                  )}
+                  {history.length > 0 && (
+                    <div style={{ borderTop: `1px solid ${c.border}`, paddingTop: 12, marginBottom: 6 }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{lang === "nl" ? "Ontvangen betalingen" : lang === "es" ? "Pagos recibidos" : "Payments received"}</div>
+                      {history.map(p => (
+                        <div key={p.id} data-pay-row style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "5px 0" }}>
+                          <span style={{ color: c.textSub, width: 78, flexShrink: 0 }}>{dLabel(p.paid_on)}</span>
+                          <span style={{ flex: 1, minWidth: 0, color: c.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{payMethodLabel(p.method, lang) || p.method}{p.note ? ` · ${p.note}` : ""}</span>
+                          <span style={{ fontWeight: 600, color: c.success, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, p.amount)}</span>
+                          <button type="button" aria-label={lang === "nl" ? "Betaling verwijderen" : lang === "es" ? "Eliminar pago" : "Delete payment"} onClick={() => deleteClientPayment(p)} disabled={payBusy}
+                            style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <NavIcon name="xmark" size={10} color="currentColor" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button className="btn-ghost" onClick={close} disabled={payBusy} style={{ width: "100%", marginTop: 6, fontSize: 11, padding: "10px 14px" }}>{lang === "nl" ? "Sluiten" : lang === "es" ? "Cerrar" : "Close"}</button>
+                </div>
+              </div>
+            );
+          })(), document.body)}
 
           {/* ANALYTICS — Professional-only; paid Starter sees the upgrade card */}
           {view === "analytics" && isStarter && (

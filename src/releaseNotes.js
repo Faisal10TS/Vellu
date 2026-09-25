@@ -14,6 +14,50 @@
 
 export const RELEASES = [
   {
+    // Klantenrekening (25-09-2026). My Whims and More (Bonaire) vroeg in het
+    // Papiaments of ze een betaling "in standby" kon zetten, zoals in haar
+    // oude Sara Salon: een lijst "te ontvangen" per klant met totaal en
+    // ouderdom. Faisal: "bouw die drie er ook bij" + "het moet zijn voor bij
+    // de kassa als ze ook gewoon een product verkopen".
+    id: "2026-09-25",
+    date: "2026-09-25",
+    title: { nl: "Op rekening verkopen en klantenrekening", en: "Selling on account and client accounts", es: "Ventas a cuenta y cuenta de cliente" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Kassa: naast Pin, Contant en Betaalverzoek staat nu Op rekening. De klant betaalt later; kies een klant met e-mailadres (typen zoekt in je klantenlijst), de factuur gaat direct mee en de verkoop blijft open staan tot je de betaling registreert. Op de bon staat Op rekening.",
+          en: "Till: next to Card, Cash and Payment request there is now On account. The client pays later; pick a client with an email address (typing searches your client list), the invoice goes out right away and the sale stays open until you record the payment. The receipt says On account.",
+          es: "Caja: junto a Tarjeta, Efectivo y Solicitud de pago ahora está A cuenta. El cliente paga después; elige un cliente con correo (al escribir buscas en tu lista), la factura sale al momento y la venta queda pendiente hasta que registres el pago. En el recibo pone A cuenta.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Facturen: nieuwe tegel en tab Nog te ontvangen met alles wat klanten nog moeten betalen (op rekening, betaalverzoeken en afspraken met Later / factuur), per klant opgeteld met het aantal posten en hoe oud de oudste is. Tik op een klant om alleen die posten te zien. Op de klantkaart onder Klanten zie je hetzelfde bedrag.",
+          en: "Invoices: new tile and tab Still to receive with everything clients still owe (on account, payment requests and appointments with Later / invoice), totalled per client with the number of items and the age of the oldest. Tap a client to see only their items. The client card under Clients shows the same amount.",
+          es: "Facturas: nueva tarjeta y pestaña Por cobrar con todo lo que los clientes aún deben (a cuenta, solicitudes de pago y citas con Después / factura), sumado por cliente con el número de partidas y la antigüedad de la más antigua. Toca un cliente para ver solo sus partidas. La ficha del cliente muestra el mismo importe.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Betaling ontvangen: bij een open post kies je bedrag, betaalwijze en datum, ook een deel. Wat er nog open staat blijft zichtbaar, elke betaling staat in de historie, en contant geld telt in het kasboek op de dag dat je het ontvangt.",
+          en: "Payment received: on an open item you choose amount, payment method and date, partial payments included. What is still open stays visible, every payment is in the history, and cash counts in the cash book on the day you receive it.",
+          es: "Pago recibido: en una partida pendiente eliges importe, forma de pago y fecha, también parcial. Lo que queda pendiente sigue visible, cada pago queda en el historial y el efectivo cuenta en el libro de caja el día que lo recibes.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Klanten: vink Zakelijke klant aan voor een bedrijf of instelling, met contactpersoon. Zakelijke klanten staan bovenaan in de klantkiezer van de Kassa, met een label Zakelijk.",
+          en: "Clients: tick Business client for a company or institution, with a contact person. Business clients appear at the top of the till's client picker with a Business label.",
+          es: "Clientes: marca Cliente empresa para un negocio o institución, con persona de contacto. Los clientes empresa aparecen arriba en el selector de la Caja con la etiqueta Empresa.",
+        },
+      },
+    ],
+  },
+  {
     // Faisal 24-09-2026: liever de ISO-code "XCG" dan het CBCS-symbool "Cg" —
     // eenduidig voor klanten, banken en boekhouders. Alleen zichtbaar voor
     // salons op Curaçao en Sint Maarten; de rest ziet geen verschil.

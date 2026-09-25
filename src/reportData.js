@@ -19,9 +19,9 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // Betaalwijze-labels — de kassa slaat "pin" / "cash" / "online" (betaalverzoek)
 // op; oudere rijen dragen "on-arrival": toon dat als "in de salon".
 export const PAY_LABEL = {
-  nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", "on-arrival": "In de salon" },
-  en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", "on-arrival": "In salon" },
-  es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", "on-arrival": "En el salón" },
+  nl: { pin: "Pin", cash: "Contant", transfer: "Overschrijving", online: "Betaalverzoek", account: "Op rekening", "on-arrival": "In de salon" },
+  en: { pin: "Card", cash: "Cash", transfer: "Bank transfer", online: "Payment request", account: "On account", "on-arrival": "In salon" },
+  es: { pin: "Tarjeta", cash: "Efectivo", transfer: "Transferencia", online: "Solicitud de pago", account: "A cuenta", "on-arrival": "En el salón" },
 };
 export const payLabel = (pm, lang = "nl") => (PAY_LABEL[lang] || PAY_LABEL.nl)[pm] || (PAY_LABEL[lang] || PAY_LABEL.nl)["on-arrival"];
 
@@ -269,4 +269,31 @@ export function cashbookData({ movements, cashRows, from, to }) {
     days: days.length,
   };
   return { days, movements: mv, cashRows: cs, totals };
+}
+
+// ── Klantenrekening (25-09-2026) ─────────────────────────────────────────
+// Een contante (deel)betaling op een open post (verkoop op rekening, "later /
+// factuur") telt in het kasboek op de dag van ONTVANGST, niet op de dag van
+// de verkoop. Elke client_payments-rij met method "cash" wordt hier een
+// kasregel in dezelfde vorm als een contant afgerekende verkoop, zodat
+// cashbookData en cashFlowOf er niets van hoeven te weten: bedrag = ontvangen,
+// geen wisselgeld. Naam en omschrijving staan op de betaling zelf (kopie van
+// de verkoop), dus de vaak maanden oudere verkooprij is niet nodig.
+export function paymentsAsCashRows(payments, lang = "nl") {
+  const L = (nl, en, es) => (lang === "es" ? es : lang === "en" ? en : nl);
+  return (Array.isArray(payments) ? payments : [])
+    .filter((p) => p && p.method === "cash" && (parseFloat(p.amount) || 0) > 0)
+    .map((p) => {
+      const t = p.created_at ? new Date(p.created_at) : null;
+      const time = t && !Number.isNaN(t.getTime()) ? `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : "";
+      const amount = round2(p.amount);
+      return {
+        id: `pay:${p.id}`, payment_id: p.id, appointment_id: p.appointment_id, is_payment: true,
+        date: p.paid_on, time, created_at: p.created_at,
+        client_name: s(p.client_name), client_email: "",
+        service_name: `${L("Betaling op rekening", "Payment on account", "Pago a cuenta")}${p.label ? ` · ${s(p.label)}` : ""}`,
+        staff_name: p.staff_name || null,
+        service_price: amount, cash_received: amount, payment_method: "cash", status: "completed",
+      };
+    });
 }
