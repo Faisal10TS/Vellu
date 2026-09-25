@@ -7797,6 +7797,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     else toast.show(lang === "nl" ? "Factuur teruggezet" : lang === "es" ? "Factura restaurada" : "Invoice restored");
   };
 
+  // Betaalgegevens voor een afspraak (Esther/TTNB 25-09-2026: "als het Lady's
+  // klant is die vooruitbetaalt, moet het naar Lady's rekening"): staat er
+  // precies één teamlid op en heeft zij eigen IBAN/betaallink (in haar eigen
+  // app onder Instellingen → Factuur), dan haar rekening — anders de salon.
+  // Dezelfde regel als book-appointment (betaalblok + bevestigingsmail) en
+  // prepay-watch (herinnering), zodat elke tekst dezelfde rekening noemt.
+  const payDetailsForAppt = (a) => {
+    const ids = [...new Set([a?.staff_id, ...Object.values(a?.staff_assignments || {})].filter(Boolean))];
+    const s = ids.length === 1 ? (salonData.staff || []).find(x => x.id === ids[0]) : null;
+    if (s && ((s.iban || "").trim() || (s.payment_link || "").trim())) return { paymentLink: s.payment_link || "", iban: s.iban || "", ibanHolder: s.iban_holder || s.name };
+    return { paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name };
+  };
+
   // Toggle the paid flag on an invoice row — light bookkeeping so the owner
   // can see who still owes after a payment request went out.
   const togglePaid = async (a) => {
@@ -8381,9 +8394,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize: 10, padding: "8px 14px", whiteSpace: "nowrap", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received")}</button>
-            {a.client_phone && (salonData.payment_link || salonData.iban) && (
+            {a.client_phone && (payDetailsForAppt(a).paymentLink || payDetailsForAppt(a).iban) && (
               <a
-                href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: a.service_price, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: a.service_price, ...payDetailsForAppt(a), countryCode: salonData.country_code }), salonData.country_code)}
                 target="_blank" rel="noopener noreferrer" className="btn-ghost"
                 style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
                 title={lang === "nl" ? "Betaalherinnering via WhatsApp" : lang === "es" ? "Recordatorio de pago por WhatsApp" : "Payment reminder via WhatsApp"}
@@ -8450,9 +8463,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received")}</button>
-              {a.client_phone && (salonData.payment_link || salonData.iban) && (
+              {a.client_phone && (payDetailsForAppt(a).paymentLink || payDetailsForAppt(a).iban) && (
                 <a
-                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: open, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: open, ...payDetailsForAppt(a), countryCode: salonData.country_code }), salonData.country_code)}
                   target="_blank" rel="noopener noreferrer" className="btn-ghost"
                   style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
                   title={lang === "nl" ? "Betaalverzoek voor het verschil via WhatsApp" : lang === "es" ? "Solicitud de pago del resto por WhatsApp" : "Payment request for the difference via WhatsApp"}
@@ -14477,8 +14490,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     gegevens is er niets om naar te betalen, dus dan staat de
                     schakelaar uit en op slot. */}
                 {(() => {
-                  const ready = !!((salonData.iban || "").trim() || (salonData.payment_link || "").trim());
+                  // Ook klaar als een teamlid eigen betaalgegevens heeft: dan gaat een
+                  // vooruitbetaling voor háár afspraak naar haar rekening (25-09-2026).
+                  const staffReady = (salonData.staff || []).some(s => (s.iban || "").trim() || (s.payment_link || "").trim());
+                  const ready = !!((salonData.iban || "").trim() || (salonData.payment_link || "").trim()) || staffReady;
                   const on = !!salonData.prepay_enabled && ready;
+                  const perStaffNote = lang === "nl"
+                    ? " Heeft een teamlid eigen betaalgegevens ingevuld in haar eigen app (Instellingen → Factuur), dan gaat een vooruitbetaling voor een afspraak bij haar naar háár rekening; bij twee stylistes op één boeking, of zonder eigen gegevens, naar die van de salon."
+                    : lang === "es"
+                    ? " Si un miembro del equipo ha rellenado sus propios datos de pago en su app (Ajustes → Factura), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
+                    : " If a team member has filled in her own payment details in her own app (Settings → Invoice), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
                   return (
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -14489,7 +14510,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               ? "Klanten kunnen bij het boeken kiezen om vooraf te betalen. De afspraak staat dan als reservering in je agenda met een betaaltermijn (24 uur; 48 uur als de afspraak meer dan een week weg is). Jij tikt op 'Betaling ontvangen' zodra het geld er is, dan krijgt de klant haar bevestiging. Niet betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij."
                               : lang === "es"
                               ? "Los clientes pueden elegir pagar por adelantado al reservar. La cita queda como reserva en tu agenda con un plazo de pago (24 horas; 48 si la cita es dentro de más de una semana). Pulsa 'Pago recibido' en cuanto llegue el dinero y el cliente recibirá su confirmación. ¿No paga? La reserva caduca sola y la hora vuelve a quedar libre."
-                              : "Clients can choose to pay in advance when booking. The appointment then sits in your agenda as a reservation with a payment deadline (24 hours; 48 hours if the appointment is more than a week away). Tap 'Payment received' once the money is in and the client gets her confirmation. Not paid? The reservation expires by itself and the slot frees up.")
+                              : "Clients can choose to pay in advance when booking. The appointment then sits in your agenda as a reservation with a payment deadline (24 hours; 48 hours if the appointment is more than a week away). Tap 'Payment received' once the money is in and the client gets her confirmation. Not paid? The reservation expires by itself and the slot frees up.") + perStaffNote
                             : (lang === "nl"
                               ? "Vul eerst een betaallink hierboven of je IBAN (bij Factuurgegevens) in; anders kan de klant nergens naartoe betalen."
                               : lang === "es"

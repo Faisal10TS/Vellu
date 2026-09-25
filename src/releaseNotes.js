@@ -48,6 +48,16 @@ export const RELEASES = [
         },
       },
       {
+        // Esther/TTNB 25-09: "als het Lady's klant is die vooruitbetaalt, moet
+        // het naar Lady's rekening".
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Vooruitbetalen per teamlid: heeft een teamlid eigen betaalgegevens ingevuld in haar eigen app (Instellingen, Factuur), dan gaat een vooruitbetaling voor een afspraak bij haar naar haar rekening. De boekingspagina, de bevestigingsmail, de herinnering en de WhatsApp-knop noemen dan haar IBAN of betaallink. Bij twee stylistes op een boeking, of zonder eigen gegevens, blijft het de rekening van de salon.",
+          en: "Prepayment per team member: if a team member has filled in her own payment details in her own app (Settings, Invoice), a prepayment for an appointment with her goes to her account. The booking page, the confirmation email, the reminder and the WhatsApp button then show her IBAN or payment link. With two stylists on one booking, or without her own details, it stays the salon's account.",
+          es: "Pago por adelantado por miembro del equipo: si un miembro del equipo ha rellenado sus propios datos de pago en su app (Ajustes, Factura), el pago por adelantado de una cita con ella va a su cuenta. La página de reservas, el correo de confirmación, el recordatorio y el botón de WhatsApp muestran entonces su IBAN o enlace de pago. Con dos estilistas en una reserva, o sin datos propios, sigue siendo la cuenta del salón.",
+        },
+      },
+      {
         kind: "new", audience: ["owner"],
         text: {
           nl: "Klanten: vink Zakelijke klant aan voor een bedrijf of instelling, met contactpersoon. Zakelijke klanten staan bovenaan in de klantkiezer van de Kassa, met een label Zakelijk.",

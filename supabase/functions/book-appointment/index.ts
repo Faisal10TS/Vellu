@@ -358,7 +358,7 @@ serve(async (req) => {
   if (staffIdsFlat.length > 0) {
     const { data: staff, error: stErr } = await supabase
       .from("staff_members")
-      .select("id, name, email, owner_id")
+      .select("id, name, email, owner_id, iban, iban_holder, payment_link")
       .in("id", staffIdsFlat)
       .eq("owner_id", salon.id);
     if (stErr) return err(500, "db_error_staff", origin);
@@ -931,14 +931,28 @@ serve(async (req) => {
     })
     .filter(Boolean);
 
+  // ---------- 12a. Betaalgegevens voor deze boeking ----------
+  // Esther/TTNB 25-09-2026: "als het Lady's klant is die vooruitbetaalt, moet
+  // het naar Lady's rekening". Staat er precies één teamlid op de boeking en
+  // heeft zij eigen betaalgegevens (in haar eigen app onder Instellingen →
+  // Factuur), dan gaan vooruitbetaling en herinnering naar háár IBAN/betaallink.
+  // Twee stylistes op één boeking, of geen eigen gegevens: de salon. Dezelfde
+  // regel staat in prepay-watch (herinnering) en OwnerApp (WhatsApp-knoppen).
+  const payStaff = staffIdsFlat.length === 1 ? staffById[staffIdsFlat[0]] : null;
+  const staffHasPay = !!(payStaff && (String(payStaff.iban || "").trim() || String(payStaff.payment_link || "").trim()));
+  const payDetails = staffHasPay
+    ? { iban: String(payStaff.iban || ""), iban_holder: String(payStaff.iban_holder || payStaff.name || ""), payment_link: String(payStaff.payment_link || "") }
+    : { iban: String(salon.iban || ""), iban_holder: String(salon.iban_holder || salon.business_name || ""), payment_link: String(salon.payment_link || "") };
+
   // ---------- 12b. Vooruitbetalen ----------
   // De klant koos "Vooruitbetalen": de afspraak wordt een RESERVERING (status
   // pending_payment) die het slot vasthoudt tot payment_due_at. De salon zet
   // hem in de app op "Betaling ontvangen" (→ confirmed); prepay-watch laat hem
   // na de termijn vervallen en geeft de tijd weer vrij. Kan alleen als de salon
-  // het aanzet én een betaallink of IBAN heeft — anders valt er nergens naar te
-  // betalen. Gratis (bv. 100% korting): niets te betalen, gewoon bevestigen.
-  const prepayReady = !!salon.prepay_enabled && !!(salon.payment_link || salon.iban);
+  // het aanzet én er een betaallink of IBAN is (van de salon, of van het ene
+  // teamlid op de boeking) — anders valt er nergens naar te betalen. Gratis
+  // (bv. 100% korting): niets te betalen, gewoon bevestigen.
+  const prepayReady = !!salon.prepay_enabled && !!(salon.payment_link || salon.iban || staffHasPay);
   if (payment_method === "prepay" && !prepayReady) return err(400, "prepay_not_available", origin);
   const prepay = payment_method === "prepay" && prepayReady && Number(totalPrice) > 0;
   let dueAt: Date | null = null;
@@ -1095,13 +1109,15 @@ serve(async (req) => {
     if (!prepay || !dueAt) return null;
     const amount = Number(totalPrice);
     const isEur = emailBase.currency === "€";
-    const ibanP = String(salon.iban || "").replace(/\s+/g, "");
-    const holder = String(salon.iban_holder || salon.business_name || "");
+    // Rekening van het teamlid op de boeking als zij eigen gegevens heeft,
+    // anders die van de salon (payDetails, stap 12a).
+    const ibanP = payDetails.iban.replace(/\s+/g, "");
+    const holder = payDetails.iban_holder;
     const reference = `${salon.business_name} ${date} ${time}`.slice(0, 100);
     // bunq.me / PayPal.Me nemen het bedrag als padsegment (zelfde regel als
     // getPaymentLinkWithAmount in shared.jsx en het betaalblok in send-emails).
     const link = (() => {
-      const base = String(salon.payment_link || "").trim().replace(/\/+$/, "");
+      const base = payDetails.payment_link.trim().replace(/\/+$/, "");
       if (!base) return "";
       try {
         const u = new URL(base);
@@ -1142,9 +1158,10 @@ serve(async (req) => {
         // Reservering: "betaal vóór … om te bevestigen", met betaalblok.
         ? sendMail("booking_pending_payment", {
             ...cancelBits,
-            payment_link: salon.payment_link || "",
-            salon_iban: salon.iban || "",
-            iban_holder: salon.iban_holder || "",
+            // Zelfde rekening als het betaalblok op de boekingspagina (stap 12a).
+            payment_link: payDetails.payment_link,
+            salon_iban: payDetails.iban,
+            iban_holder: payDetails.iban_holder,
             payment_ref: prepayInfo.reference,
             due_text: prepayInfo.due_text,
             salon_slug,

@@ -71,7 +71,22 @@ const sendMail = (type: string, booking: Record<string, unknown>) =>
     .then(async (r) => { if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => "")); })
     .catch((e) => console.error(`send-emails ${type} failed:`, e));
 
-const SELECT = "id, owner_id, date, time, service_name, service_price, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled)";
+const SELECT = "id, owner_id, date, time, service_name, service_price, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled)";
+
+// Betaalgegevens van een reservering (Esther/TTNB 25-09-2026): staat er precies
+// één teamlid op en heeft zij eigen IBAN/betaallink, dan haar rekening — anders
+// die van de salon. Zelfde regel als book-appointment (stap 12a), zodat de
+// herinnering dezelfde rekening noemt als de boekingsbevestiging.
+async function payDetailsFor(a: any, p: any) {
+  const ids = Array.from(new Set([a.staff_id, ...Object.values(a.staff_assignments || {})].filter(Boolean))) as string[];
+  if (ids.length === 1) {
+    const { data: s } = await supabase.from("staff_members").select("name, iban, iban_holder, payment_link").eq("id", ids[0]).eq("owner_id", a.owner_id).maybeSingle();
+    if (s && (String(s.iban || "").trim() || String(s.payment_link || "").trim())) {
+      return { payment_link: s.payment_link || "", iban: s.iban || "", iban_holder: s.iban_holder || s.name || "" };
+    }
+  }
+  return { payment_link: p.payment_link || "", iban: p.iban || "", iban_holder: p.iban_holder || "" };
+}
 
 // Alles wat de mails nodig hebben, uit één rij (met de salon erbij gejoind).
 function baseOf(a: any) {
@@ -193,9 +208,10 @@ serve(async () => {
       processed++;
       const b = baseOf(a);
       const p = a.profiles || {};
+      const pay = await payDetailsFor(a, p);
       await sendMail("prepay_reminder", {
         ...b.booking,
-        payment_link: p.payment_link || "", salon_iban: p.iban || "", iban_holder: p.iban_holder || "",
+        payment_link: pay.payment_link, salon_iban: pay.iban, iban_holder: pay.iban_holder,
         payment_ref: `${p.business_name} ${a.date} ${String(a.time || "").slice(0, 5)}`.slice(0, 100),
         due_text: fmtDue(a.payment_due_at, b.lang, b.tz),
       });
