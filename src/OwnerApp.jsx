@@ -14496,10 +14496,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const ready = !!((salonData.iban || "").trim() || (salonData.payment_link || "").trim()) || staffReady;
                   const on = !!salonData.prepay_enabled && ready;
                   const perStaffNote = lang === "nl"
-                    ? " Heeft een teamlid eigen betaalgegevens ingevuld in haar eigen app (Instellingen → Factuur), dan gaat een vooruitbetaling voor een afspraak bij haar naar háár rekening; bij twee stylistes op één boeking, of zonder eigen gegevens, naar die van de salon."
+                    ? " Heeft een teamlid eigen betaalgegevens (jij vult ze in bij Team → Bewerk, of zij in haar eigen app), dan gaat een vooruitbetaling voor een afspraak bij haar naar háár rekening; bij twee stylistes op één boeking, of zonder eigen gegevens, naar die van de salon."
                     : lang === "es"
-                    ? " Si un miembro del equipo ha rellenado sus propios datos de pago en su app (Ajustes → Factura), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
-                    : " If a team member has filled in her own payment details in her own app (Settings → Invoice), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
+                    ? " Si un miembro del equipo tiene sus propios datos de pago (los rellenas tú en Equipo → Editar, o ella en su app), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
+                    : " If a team member has her own payment details (you fill them in under Team → Edit, or she does in her own app), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
                   return (
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
