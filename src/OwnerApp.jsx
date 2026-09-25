@@ -8772,12 +8772,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           is true + not on login screen). Puts Vellu one tap from the home
           screen for owners — the install story matters more for them than
           for customers since they open the app daily. */}
-      <InstallAppPrompt
-        dismissKey="vellu_install_dismissed_owner"
-        title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
-        subtitle={lang === "nl" ? "Snelle toegang tot je dashboard" : lang === "es" ? "Acceso rápido a tu panel" : "Quick access to your dashboard"}
-        lang={lang} c={c}
-      />
+      {/* Op de telefoon staat deze balk ÍN de app-schil (zie <main> hieronder):
+          als los blok hierboven maakte hij de pagina in Safari net hoger dan
+          het scherm, waardoor de hele schil omhoog scrolde en de onderbalk
+          achter de Safari-balk zakte (Faisal 25-09, dashboard via WhatsApp-
+          link in Safari). In de geïnstalleerde app toont hij zich nooit. */}
+      {!isMobile && (
+        <InstallAppPrompt
+          dismissKey="vellu_install_dismissed_owner"
+          title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
+          subtitle={lang === "nl" ? "Snelle toegang tot je dashboard" : lang === "es" ? "Acceso rápido a tu panel" : "Quick access to your dashboard"}
+          lang={lang} c={c}
+        />
+      )}
 
       {qrOpen && (
         <QRCodeModal
@@ -9740,6 +9747,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           ...(isMobile ? { minHeight: 0, overflow: "hidden" } : {}),
           marginLeft: isMobile ? 0 : 260
         }}>
+          {/* Installeerbalk als eerste rij van de app-schil (25-09-2026): binnen
+              de 100dvh-kolom, dus de pagina wordt er in Safari niet hoger van. */}
+          {isMobile && (
+            <div style={{ flexShrink: 0 }}>
+              <InstallAppPrompt
+                dismissKey="vellu_install_dismissed_owner"
+                title={lang === "nl" ? "Installeer Vellu" : lang === "es" ? "Instalar Vellu" : "Install Vellu"}
+                subtitle={lang === "nl" ? "Snelle toegang tot je dashboard" : lang === "es" ? "Acceso rápido a tu panel" : "Quick access to your dashboard"}
+                lang={lang} c={c}
+              />
+            </div>
+          )}
+
           {/* Mobile Header */}
           {isMobile && (
             <div style={{
