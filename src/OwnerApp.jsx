@@ -12572,9 +12572,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   post op rekening (of met een deelbetaling) krijgt in
                                   plaats daarvan "Betaling ontvangen": bedrag, wijze, datum. */}
                               {showReceive ? (
-                                <button type="button" className="btn-primary" data-receive-btn onClick={() => openPayModal(a)}
-                                  style={{ padding: isMobile ? "8px 10px" : "8px 12px", fontSize: 10, whiteSpace: "nowrap", flexShrink: 0 }}>
-                                  {lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received"}
+                                // Compacte pil in de maat van het betaald-vinkje ernaast; de
+                                // primaire knop rekte over de hele rij en bedekte de prijs
+                                // (Faisal 25-09: "way too big for nothing").
+                                <button type="button" data-receive-btn onClick={() => openPayModal(a)}
+                                  aria-label={lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received"}
+                                  style={{ height: 30, width: "auto", padding: "0 10px", borderRadius: 8, border: `1px solid ${accent}66`, background: `${accent}14`, color: accent, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 10, fontWeight: 700, fontFamily: "'Jost',sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                  {cur} {isMobile ? (lang === "nl" ? "Ontvangen" : lang === "es" ? "Recibido" : "Received") : (lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received")}
                                 </button>
                               ) : (
                               <button
