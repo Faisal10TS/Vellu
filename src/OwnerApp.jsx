@@ -10740,7 +10740,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             const hits = (kassaClients || []).filter(k => k.name.toLowerCase().includes(q) || k.email.includes(q) || (k.contactName || "").toLowerCase().includes(q)).slice(0, 8);
                             if (!hits.length) return null;
                             return (
-                              <div data-kassa-client-list style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 4, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, boxShadow: "0 12px 28px -12px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+                              {/* selectBg is dekkend (bgCard is 3% doorschijnend en liet
+                                  de velden eronder doorschemeren — Faisal 25-09). */}
+                              <div data-kassa-client-list style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 4, background: c.selectBg, border: `1px solid ${c.border}`, borderRadius: 10, boxShadow: "0 12px 28px -12px rgba(0,0,0,0.45)", overflow: "hidden" }}>
                                 {hits.map(k => (
                                   <button key={k.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setWalkinName(k.name); setWalkinEmail(k.email || ""); setKassaClientOpen(false); }}
                                     style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "8px 10px", background: "transparent", border: "none", borderBottom: `1px solid ${c.border}`, cursor: "pointer", color: c.text, fontSize: 12, fontFamily: "inherit" }}>
