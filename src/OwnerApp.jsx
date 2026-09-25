@@ -4716,7 +4716,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState({ name_nl: "", name_en: "" });
   const [editingStaff, setEditingStaff] = useState(null);
-  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [] });
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", role: "", bio: "", working_hours: {}, service_ids: [], iban: "", iban_holder: "", payment_link: "" });
   // Manual appointment
   const [showAddAppt, setShowAddAppt] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
@@ -16396,6 +16396,23 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             </div>
                             <input className="input-field" type="email" value={editStaffForm.email || ""} onChange={e => setEditStaffForm(f => ({...f, email: e.target.value}))} placeholder={lang === "nl" ? "E-mail voor login (optioneel)" : lang === "es" ? "Correo de acceso (opcional)" : "Login email (optional)"} style={{ fontSize: 12, padding: "7px 10px" }} />
                             <textarea className="input-field" value={editStaffForm.bio} onChange={e => setEditStaffForm(f => ({...f, bio: e.target.value}))} placeholder={t.staffBio} rows={2} style={{ fontSize: 12, padding: "7px 10px", resize: "vertical" }} />
+                            {/* Betaalgegevens van het teamlid (Faisal 25-09: "ik wil dat de
+                                eigenaar het ook kan invullen"). Zelfde velden als in haar
+                                eigen app (Instellingen → Factuur): voor haar facturen en voor
+                                vooruitbetalingen bij afspraken met haar. Leeg = de salon. */}
+                            <div data-staff-pay style={{ marginTop: 4, paddingTop: 8, borderTop: `1px solid ${c.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Betaalgegevens van dit teamlid (optioneel)" : lang === "es" ? "Datos de pago de este miembro (opcional)" : "This team member's payment details (optional)"}</div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <input className="input-field" data-staff-iban value={editStaffForm.iban || ""} onChange={e => setEditStaffForm(f => ({...f, iban: e.target.value}))} placeholder={isSepa ? "IBAN · NL00 RABO 0000 0000 00" : (lang === "nl" ? "Rekeningnummer" : lang === "es" ? "Número de cuenta" : "Account number")} style={{ fontSize: 12, padding: "7px 10px", flex: "1 1 200px", fontFamily: "monospace", letterSpacing: "0.04em" }} />
+                                <input className="input-field" data-staff-holder value={editStaffForm.iban_holder || ""} onChange={e => setEditStaffForm(f => ({...f, iban_holder: e.target.value}))} placeholder={lang === "nl" ? "Naam op de rekening" : lang === "es" ? "Nombre en la cuenta" : "Name on the account"} style={{ fontSize: 12, padding: "7px 10px", flex: "1 1 160px" }} />
+                              </div>
+                              <input className="input-field" data-staff-link type="url" value={editStaffForm.payment_link || ""} onChange={e => setEditStaffForm(f => ({...f, payment_link: e.target.value}))} placeholder={lang === "nl" ? "Betaallink (optioneel) · bunq.me of PayPal.Me, zonder bedrag" : lang === "es" ? "Enlace de pago (opcional) · bunq.me o PayPal.Me, sin importe" : "Payment link (optional) · bunq.me or PayPal.Me, without an amount"} style={{ fontSize: 12, padding: "7px 10px" }} />
+                              <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.45 }}>
+                                {lang === "nl" ? "Voor haar eigen facturen en voor vooruitbetalingen bij afspraken met haar: dan gaat het geld naar deze rekening. Leeg = de rekening van de salon. Ze kan dit ook zelf invullen in haar app."
+                                  : lang === "es" ? "Para sus propias facturas y para pagos por adelantado de citas con ella: el dinero va a esta cuenta. Vacío = la cuenta del salón. Ella también puede rellenarlo en su app."
+                                  : "For her own invoices and for prepayments of appointments with her: the money then goes to this account. Empty = the salon's account. She can also fill this in herself in her app."}
+                              </div>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -16436,13 +16453,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 12px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }} onClick={async () => {
                               const emailTrim = (editStaffForm.email || "").trim().toLowerCase();
                               if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) { toast.show(lang === "nl" ? "Ongeldig e-mailadres" : lang === "es" ? "Dirección de correo no válida" : "Invalid email address", "error"); return; }
-                              const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, email: emailTrim || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours }).eq("id", m.id).eq("owner_id", salonData.owner_id);
+                              // Betaalgegevens: spaties uit de IBAN, lege velden = null (= salonrekening).
+                              const payPatch = { iban: (editStaffForm.iban || "").replace(/\s+/g, "") || null, iban_holder: (editStaffForm.iban_holder || "").trim() || null, payment_link: (editStaffForm.payment_link || "").trim() || null };
+                              if (payPatch.payment_link && !/^https?:\/\//i.test(payPatch.payment_link)) { toast.show(lang === "nl" ? "Betaallink moet met https:// beginnen" : lang === "es" ? "El enlace de pago debe empezar por https://" : "Payment link must start with https://", "error"); return; }
+                              const { error } = await supabase.from("staff_members").update({ name: editStaffForm.name, role: editStaffForm.role || null, email: emailTrim || null, bio: editStaffForm.bio || null, working_hours: editStaffForm.working_hours, ...payPatch }).eq("id", m.id).eq("owner_id", salonData.owner_id);
                               if (error) { toast.show(t.somethingWrong, "error"); return; }
                               await supabase.from("staff_services").delete().eq("staff_id", m.id);
                               if (editStaffForm.service_ids.length > 0) {
                                 await supabase.from("staff_services").insert(editStaffForm.service_ids.map(sid => ({ staff_id: m.id, service_id: sid })));
                               }
-                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, email: emailTrim || null, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids} : s); return d; });
+                              update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, name: editStaffForm.name, role: editStaffForm.role, email: emailTrim || null, bio: editStaffForm.bio, working_hours: editStaffForm.working_hours, service_ids: editStaffForm.service_ids, ...payPatch} : s); return d; });
                               setEditingStaff(null);
                             }}><NavIcon name="check" size={12} />{lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
                             {/* Zelfde hoogte als de Opslaan-pil ernaast, icoon
@@ -16451,7 +16471,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           </>
                         ) : (
                           <>
-                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 12px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [] }); }}><NavIcon name="edit" size={10} color={accent} />{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
+                            <button className="btn-ghost" style={{ fontSize: 10, padding: "5px 12px", color: accent, borderColor: `${accent}33`, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }} onClick={() => { setEditingStaff(m.id); setEditStaffForm({ name: m.name, role: m.role || "", email: m.email || "", bio: m.bio || "", working_hours: m.working_hours || {}, service_ids: m.service_ids || [], iban: m.iban || "", iban_holder: m.iban_holder || "", payment_link: m.payment_link || "" }); }}><NavIcon name="edit" size={10} color={accent} />{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
                             {/* Delete is guarded for the owner-self row — the owner
                                 is the salon's anchor and losing that row breaks
                                 agenda ownership and the "eigenaar" badge. */}
