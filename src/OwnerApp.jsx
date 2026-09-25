@@ -5483,6 +5483,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     setReceivables((data || []).filter(isOpenReceivable));
   }, [salonData?.owner_id]);
   useEffect(() => { reloadClientPayments(); reloadReceivables(); }, [reloadClientPayments, reloadReceivables]);
+  // Nog te ontvangen loopt mee met wat er in het geheugen verandert (afspraak
+  // op "Later / factuur" afgerond, prijs gewijzigd, betaald gemarkeerd): rijen
+  // binnen het venster worden vervangen door de versie in het geheugen en
+  // vallen af zodra ze niet meer open zijn; open posten die er nog niet in
+  // staan komen erbij. Posten buiten het venster (ouder dan 90 dagen) blijven
+  // zoals opgehaald. Verwijderen doet deleteSale zelf (de rij is dan weg).
+  useEffect(() => {
+    const mem = salonData?.appointments;
+    if (!Array.isArray(mem)) return;
+    const byId = new Map(mem.map(a => [a.id, a]));
+    setReceivables(r => {
+      const kept = r.map(x => byId.get(x.id) || x).filter(isOpenReceivable);
+      const have = new Set(kept.map(x => x.id));
+      const added = mem.filter(a => isOpenReceivable(a) && !have.has(a.id));
+      const next = added.length ? [...kept, ...added].sort((x, y) => x.date.localeCompare(y.date)) : kept;
+      const same = next.length === r.length && next.every((x, i) => x === r[i]);
+      return same ? r : next;
+    });
+  }, [salonData?.appointments]);
   useEffect(() => {
     if (view !== "kassa" || !salonData?.owner_id) return;
     let alive = true;
@@ -7008,6 +7027,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         }
       }
       update(d => { d.appointments = d.appointments.filter(a => a.id !== sale.id); return d; });
+      // Klantenrekening: ook uit Nog te ontvangen en uit de betaalhistorie
+      // (de betalingen zijn in de database met de verkoop mee verwijderd).
+      // Faisal 25-09: verkoop weg uit de Kassa, maar nog zichtbaar onder
+      // Facturen → Nog te ontvangen.
+      setReceivables(r => r.filter(x => x.id !== sale.id));
+      setClientPayments(p => p.filter(x => x.appointment_id !== sale.id));
+      setPayFor(f => (f && f.id === sale.id ? null : f));
       // Ook uit de apart opgehaalde kassalijst-dag (buiten het 90-dagen-venster)
       // halen, anders blijft de verwijderde verkoop daar in beeld staan.
       setKassaDayExtra(prev => prev ? { ...prev, rows: prev.rows.filter(a => a.id !== sale.id) } : prev);
@@ -7763,6 +7789,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       d.appointments = d.appointments.map(a => a.id === apptId ? { ...a, invoice_view_state: state } : a);
       return d;
     });
+    // Nog te ontvangen: een verwijderde factuur telt niet meer mee, een
+    // teruggezette weer wel — ook als de post buiten het 90-dagenvenster ligt.
+    reloadReceivables();
     if (state === "hidden") toast.show(lang === "nl" ? "Factuur verborgen" : lang === "es" ? "Factura ocultada" : "Invoice hidden");
     else if (state === "deleted") toast.show(lang === "nl" ? "Factuur verwijderd" : lang === "es" ? "Factura eliminada" : "Invoice deleted");
     else toast.show(lang === "nl" ? "Factuur teruggezet" : lang === "es" ? "Factura restaurada" : "Invoice restored");
