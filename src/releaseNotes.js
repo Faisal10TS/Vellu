@@ -58,6 +58,15 @@ export const RELEASES = [
         },
       },
       {
+        // Esther/TTNB 25-09: "can I also change how many days they have to pay?"
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Vooruitbetalen: de betaaltermijn stel je nu zelf in, onder de schakelaar bij Instellingen, Salon, Betaalverzoeken: 12 uur, 24 uur, 2 dagen, 3 dagen of 1 week vanaf het boeken. De termijn blijft altijd uiterlijk 2 uur vóór de afspraak, zodat je de betaling nog kunt zien.",
+          en: "Paying in advance: you now set the payment deadline yourself, under the toggle in Settings, Salon, Payment requests: 12 hours, 24 hours, 2 days, 3 days or 1 week from the moment of booking. The deadline always stays at the latest 2 hours before the appointment, so you can still see the payment.",
+          es: "Pago por adelantado: ahora fijas tú el plazo de pago, bajo el interruptor en Ajustes, Salón, Solicitudes de pago: 12 horas, 24 horas, 2 días, 3 días o 1 semana desde la reserva. El plazo siempre queda como máximo 2 horas antes de la cita, para que puedas ver el pago.",
+        },
+      },
+      {
         kind: "new", audience: ["owner"],
         text: {
           nl: "Klanten: vink Zakelijke klant aan voor een bedrijf of instelling, met contactpersoon. Zakelijke klanten staan bovenaan in de klantkiezer van de Kassa, met een label Zakelijk.",

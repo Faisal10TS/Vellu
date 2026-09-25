@@ -199,7 +199,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -959,11 +959,13 @@ serve(async (req) => {
   if (prepay) {
     const nowMs = Date.now();
     const startMs = apptStart.getTime();
-    const daysAhead = (startMs - nowMs) / 86400000;
-    // 24 uur (48 bij een afspraak over meer dan een week), maar uiterlijk 2 uur
-    // vóór de afspraak zodat de salon de betaling nog kan zien; en nooit korter
-    // dan 2 uur vanaf nu, behalve als de afspraak zelf eerder begint.
-    let due = nowMs + (daysAhead > 7 ? 48 : 24) * 3600000;
+    // Betaaltermijn van de salon (Instellingen → Vooruitbetalen, sinds
+    // 25-09-2026; was vast 24 uur, of 48 bij een afspraak over meer dan een
+    // week), maar uiterlijk 2 uur vóór de afspraak zodat de salon de betaling
+    // nog kan zien; en nooit korter dan 2 uur vanaf nu, behalve als de
+    // afspraak zelf eerder begint.
+    const termHours = Math.min(336, Math.max(1, Number(salon.prepay_term_hours) || 24));
+    let due = nowMs + termHours * 3600000;
     due = Math.min(due, startMs - 2 * 3600000);
     due = Math.max(due, Math.min(nowMs + 2 * 3600000, startMs));
     dueAt = new Date(due);

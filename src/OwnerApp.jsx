@@ -4928,6 +4928,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           iban_holder: data.iban_holder || "",
           payment_link: data.payment_link || "",
           prepay_enabled: !!data.prepay_enabled,
+          prepay_term_hours: data.prepay_term_hours ?? 24,
           no_show_fee_enabled: !!data.no_show_fee_enabled,
           no_show_fee_pct: data.no_show_fee_pct ?? 20,
           invoice_prefix: data.invoice_prefix || "INV",
@@ -14500,17 +14501,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     : lang === "es"
                     ? " Si un miembro del equipo tiene sus propios datos de pago (los rellenas tú en Equipo → Editar, o ella en su app), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
                     : " If a team member has her own payment details (you fill them in under Team → Edit, or she does in her own app), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
-                  return (
+                  return (<>
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 3 }}>{lang === "nl" ? "Vooruitbetalen aanbieden" : lang === "es" ? "Ofrecer pago por adelantado" : "Offer paying in advance"}</div>
                         <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5 }}>
                           {ready
                             ? (lang === "nl"
-                              ? "Klanten kunnen bij het boeken kiezen om vooraf te betalen. De afspraak staat dan als reservering in je agenda met een betaaltermijn (24 uur; 48 uur als de afspraak meer dan een week weg is). Jij tikt op 'Betaling ontvangen' zodra het geld er is, dan krijgt de klant haar bevestiging. Niet betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij."
+                              ? "Klanten kunnen bij het boeken kiezen om vooraf te betalen. De afspraak staat dan als reservering in je agenda met een betaaltermijn (standaard 24 uur, hieronder aan te passen). Jij tikt op 'Betaling ontvangen' zodra het geld er is, dan krijgt de klant haar bevestiging. Niet betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij."
                               : lang === "es"
-                              ? "Los clientes pueden elegir pagar por adelantado al reservar. La cita queda como reserva en tu agenda con un plazo de pago (24 horas; 48 si la cita es dentro de más de una semana). Pulsa 'Pago recibido' en cuanto llegue el dinero y el cliente recibirá su confirmación. ¿No paga? La reserva caduca sola y la hora vuelve a quedar libre."
-                              : "Clients can choose to pay in advance when booking. The appointment then sits in your agenda as a reservation with a payment deadline (24 hours; 48 hours if the appointment is more than a week away). Tap 'Payment received' once the money is in and the client gets her confirmation. Not paid? The reservation expires by itself and the slot frees up.") + perStaffNote
+                              ? "Los clientes pueden elegir pagar por adelantado al reservar. La cita queda como reserva en tu agenda con un plazo de pago (24 horas por defecto, ajustable abajo). Pulsa 'Pago recibido' en cuanto llegue el dinero y el cliente recibirá su confirmación. ¿No paga? La reserva caduca sola y la hora vuelve a quedar libre."
+                              : "Clients can choose to pay in advance when booking. The appointment then sits in your agenda as a reservation with a payment deadline (24 hours by default, adjustable below). Tap 'Payment received' once the money is in and the client gets her confirmation. Not paid? The reservation expires by itself and the slot frees up.") + perStaffNote
                             : (lang === "nl"
                               ? "Vul eerst een betaallink hierboven of je IBAN (bij Factuurgegevens) in; anders kan de klant nergens naartoe betalen."
                               : lang === "es"
@@ -14523,7 +14524,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                       </div>
                     </div>
-                  );
+                    {/* Betaaltermijn (Esther/TTNB 25-09-2026: "can I also change how many
+                        days they have to pay?"). Uren vanaf het boeken; de boekingsfunctie
+                        houdt 'm altijd op uiterlijk 2 uur vóór de afspraak. */}
+                    {on && (
+                      <div data-prepay-term style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 3 }}>{lang === "nl" ? "Betaaltermijn" : lang === "es" ? "Plazo de pago" : "Payment deadline"}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5 }}>
+                            {lang === "nl" ? "Hoe lang de klant heeft om over te maken, gerekend vanaf het boeken. Altijd uiterlijk 2 uur vóór de afspraak, zodat jij de betaling nog kunt zien; de mail en de herinnering noemen de precieze datum en tijd."
+                              : lang === "es" ? "Cuánto tiempo tiene el cliente para pagar, contado desde la reserva. Siempre como máximo 2 horas antes de la cita, para que puedas ver el pago; el correo y el recordatorio indican la fecha y hora exactas."
+                              : "How long the client has to pay, counted from the moment of booking. Always at the latest 2 hours before the appointment, so you can still see the payment; the email and the reminder state the exact date and time."}
+                          </div>
+                        </div>
+                        <select className="input-field" data-prepay-term-select value={String([12, 24, 48, 72, 168].includes(salonData.prepay_term_hours) ? salonData.prepay_term_hours : 24)}
+                          onChange={e => { const v = parseInt(e.target.value) || 24; update(d => { d.prepay_term_hours = v; return d; }); }}
+                          style={{ width: "auto", minWidth: 150, fontSize: 12, padding: "9px 12px" }}>
+                          {[[12, lang === "nl" ? "12 uur" : lang === "es" ? "12 horas" : "12 hours"], [24, lang === "nl" ? "24 uur" : lang === "es" ? "24 horas" : "24 hours"], [48, lang === "nl" ? "2 dagen" : lang === "es" ? "2 días" : "2 days"], [72, lang === "nl" ? "3 dagen" : lang === "es" ? "3 días" : "3 days"], [168, lang === "nl" ? "1 week" : lang === "es" ? "1 semana" : "1 week"]].map(([h, label]) => (
+                            <option key={h} value={h}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>);
                 })()}
               </div>
 
@@ -18802,6 +18825,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   iban_holder: salonData.iban_holder || null,
                   payment_link: salonData.payment_link || null,
                   prepay_enabled: !!salonData.prepay_enabled,
+                  prepay_term_hours: [12, 24, 48, 72, 168].includes(salonData.prepay_term_hours) ? salonData.prepay_term_hours : 24,
                   no_show_fee_enabled: !!salonData.no_show_fee_enabled,
                   no_show_fee_pct: salonData.no_show_fee_pct ?? 20,
                   invoice_prefix: salonData.invoice_prefix || "INV",
