@@ -114,6 +114,10 @@ if(ibanP&&gross>0&&isEur){
 const qrUrl=`${SU}/functions/v1/payment-qr?iban=${encodeURIComponent(ibanP)}&name=${encodeURIComponent(String(b.iban_holder||b.salon_name||"").slice(0,70))}&amount=${gross.toFixed(2)}&ref=${encodeURIComponent(payRef)}&currency=EUR`;
 h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of scan met je bank-app:":"Scan met je bank-app:",link?"Or scan with your banking app:":"Scan with your banking app:",link?"O escanea con tu app bancaria:":"Escanea con tu app bancaria:")}</div>`;
 h+=`<img src="${esc(qrUrl)}" width="150" height="150" alt="SEPA QR" style="display:block;margin:0 auto 10px;border-radius:8px;" />`;
+// Niet elke bank-app leest deze SEPA-QR (25-09-2026: ABN AMRO weigerde 'm,
+// ING niet). Faisal: geen bank bij naam noemen, gewoon zeggen dat het IBAN
+// hieronder ook te kopiëren is.
+h+=`<div style="font-size:11px;color:#888;line-height:1.5;margin:0 0 8px;">${txt(lang,"Werkt de QR-code niet in je bank-app? Kopieer dan gewoon het IBAN hieronder en maak het bedrag zelf over, met het kenmerk erbij.","QR code not working in your banking app? Just copy the IBAN below and transfer the amount yourself, adding the reference.","¿El código QR no funciona en tu app bancaria? Copia el IBAN de abajo y transfiere el importe tú mismo, añadiendo la referencia.")}</div>`;
 h+=`<div style="font-size:12px;color:#666;line-height:1.6;">${esc(ibanP)}${holder?` ${txt(lang,"t.n.v.","in the name of","a nombre de")} ${holder}`:""}<br/>${txt(lang,"o.v.v.","reference:","referencia:")} ${esc(payRef)}</div>`;
 }else if(ibanP&&gross>0){
 h+=`<div style="margin:${link?"14px":"0"} 0 8px;font-size:12px;color:#666;">${txt(lang,link?"Of maak het bedrag over naar:":"Maak het bedrag over naar:",link?"Or transfer the amount to:":"Transfer the amount to:",link?"O transfiere el importe a:":"Transfiere el importe a:")}</div>`;

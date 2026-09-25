@@ -313,8 +313,15 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
 // kenmerk en QR-url terug), zodat de klant meteen kan betalen zonder eerst
 // haar mail te openen. De link komt van de salon: alleen http(s) laten we door.
 function PrepayBlock({ info, lang, accent, c }) {
+  // "Kopieer IBAN": niet elke bank-app leest de SEPA-QR (25-09-2026), dus het
+  // IBAN moet met één tik over te nemen zijn. Clipboard kan ontbreken (http,
+  // oude webview) — dan blijft het gewoon selecteerbare tekst.
+  const [copied, setCopied] = useState(false);
   if (!info) return null;
   const L = (nl, en, es) => lang === "es" ? es : lang === "en" ? en : nl;
+  const copyIban = async () => {
+    try { await navigator.clipboard.writeText(String(info.iban || "").replace(/\s+/g, "")); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* geen clipboard: tekst blijft selecteerbaar */ }
+  };
   const amount = fmtAmt(info.currency || "€", info.amount);
   const safe = (u, httpsOnly) => { try { const x = new URL(String(u || "")); return (x.protocol === "https:" || (!httpsOnly && x.protocol === "http:")) ? x.toString() : ""; } catch { return ""; } };
   const link = safe(info.link, false);
@@ -330,12 +337,16 @@ function PrepayBlock({ info, lang, accent, c }) {
         <div style={{ textAlign: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 8 }}>{link ? L("Of scan met je bank-app:", "Or scan with your banking app:", "O escanea con tu app bancaria:") : L("Scan met je bank-app:", "Scan with your banking app:", "Escanea con tu app bancaria:")}</div>
           <img src={qr} width={150} height={150} alt="SEPA QR" style={{ display: "block", margin: "0 auto", borderRadius: 8, background: "#fff", padding: 6, boxSizing: "content-box" }} />
+          {info.iban && <div data-qr-fallback style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginTop: 8 }}>{L("Werkt de QR-code niet in je bank-app? Kopieer dan gewoon het IBAN hieronder en maak het bedrag zelf over, met het kenmerk erbij.", "QR code not working in your banking app? Just copy the IBAN below and transfer the amount yourself, adding the reference.", "¿El código QR no funciona en tu app bancaria? Copia el IBAN de abajo y transfiere el importe tú mismo, añadiendo la referencia.")}</div>}
         </div>
       )}
       {info.iban && (
         <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, textAlign: "center" }}>
           {!qr && <div style={{ color: c.textMuted, marginBottom: 4 }}>{link ? L("Of maak het bedrag over naar:", "Or transfer the amount to:", "O transfiere el importe a:") : L("Maak het bedrag over naar:", "Transfer the amount to:", "Transfiere el importe a:")}</div>}
-          <div style={{ fontWeight: 600, color: c.text, letterSpacing: "0.04em" }}>{info.iban}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600, color: c.text, letterSpacing: "0.04em" }}>{info.iban}</span>
+            <button type="button" data-copy-iban onClick={copyIban} style={{ border: `1px solid ${accent}55`, background: copied ? `${accent}1a` : "transparent", color: accent, borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{copied ? L("Gekopieerd", "Copied", "Copiado") : L("Kopieer IBAN", "Copy IBAN", "Copiar IBAN")}</button>
+          </div>
           {info.iban_holder && <div>{L("t.n.v.", "in the name of", "a nombre de")} {info.iban_holder}</div>}
           {info.reference && <div>{L("o.v.v.", "reference:", "referencia:")} {info.reference}</div>}
         </div>

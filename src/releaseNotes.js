@@ -34,6 +34,16 @@ export const RELEASES = [
         },
       },
       {
+        // Faisal 25-09 na de ABN AMRO-foto: "geef gewoon aan dat ze de IBAN
+        // kunnen kopiëren als de QR niet werkt" — geen bank bij naam.
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Betaalblok: onder de QR-code staat nu in de mail en op de boekingspagina dat een klant het IBAN gewoon kan kopiëren als de QR niet werkt in haar bank-app. Op de boekingspagina staat daarvoor een knop Kopieer IBAN naast het rekeningnummer.",
+          en: "Pay block: under the QR code, the email and the booking page now say that a client can simply copy the IBAN if the QR does not work in her banking app. The booking page has a Copy IBAN button next to the account number for that.",
+          es: "Bloque de pago: debajo del código QR, el correo y la página de reservas indican ahora que el cliente puede copiar el IBAN si el QR no funciona en su app bancaria. En la página de reservas hay un botón Copiar IBAN junto al número de cuenta.",
+        },
+      },
+      {
         // Gevonden 25-09 tijdens de test op TTNB: het effect dat bij een
         // datumwissel de tijd wist, wiste ook de tijd die "Kies" net had gezet.
         kind: "fix", audience: ["owner"],
