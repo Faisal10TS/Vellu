@@ -21,7 +21,7 @@ import {
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
-  useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars,
+  useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
 import { paymentsAsCashRows } from "./reportData.js";
@@ -1083,8 +1083,8 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       const rows = await parse(file);
       // Wat is er al? Handmatige klanten én klanten uit bestaande afspraken.
       const [{ data: existing }, { data: fromAppts }] = await Promise.all([
-        supabase.from("manual_clients").select("id, name, email, birthday").eq("owner_id", ownerId),
-        supabase.from("appointments").select("client_email").eq("owner_id", ownerId),
+        fetchAllRows(() => supabase.from("manual_clients").select("id, name, email, birthday").eq("owner_id", ownerId).order("id")),
+        fetchAllRows(() => supabase.from("appointments").select("client_email").eq("owner_id", ownerId).order("id")),
       ]);
       const seenMail = new Set([
         ...(existing || []).map(x => (x.email || "").toLowerCase()).filter(Boolean),
@@ -1190,7 +1190,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
           <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
-          <NavIcon name="upload" size={13} color="currentColor" />
+          <NavIcon name="import" size={13} color="currentColor" />
           {busy ? (lang === "nl" ? "Bezig\u2026" : lang === "es" ? "Procesando\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
         </label>
         <button className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, color: c.textMuted }} onClick={template}>
@@ -2836,10 +2836,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, paid_at, amount_paid, invoice_view_state, client_email, client_name, client_phone, staff_id, staff_assignments, service_breakdown, clients(id, first_name, last_name, email, phone, birthday)")
           .eq("owner_id", ownerId)
           .order("date", { ascending: false }),
-        supabase
+        fetchAllRows(() => supabase
           .from("manual_clients")
           .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name")
-          .eq("owner_id", ownerId),
+          .eq("owner_id", ownerId)
+          .order("id")),
         supabase
           .from("waitlist")
           .select("id, staff_id, date, client_name, client_email, client_phone, service_ids, notes, status, created_at, notified_at")
@@ -3332,7 +3333,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     const emails = importPreview.rows.map(r => r.email).filter(Boolean).map(e => e.toLowerCase());
     let existingEmails = new Set();
     if (emails.length > 0) {
-      const { data: existing } = await supabase.from("manual_clients").select("email").eq("owner_id", ownerId).not("email", "is", null);
+      const { data: existing } = await fetchAllRows(() => supabase.from("manual_clients").select("email").eq("owner_id", ownerId).not("email", "is", null).order("id"));
       existingEmails = new Set((existing || []).map(r => (r.email || "").toLowerCase()).filter(Boolean));
     }
     const toInsert = importPreview.rows
@@ -3417,7 +3418,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           style={{ width: "auto", padding: "0 14px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, color: accent, borderColor: `${accent}55` }}
           title={lang === "nl" ? "Importeer CSV/Excel" : lang === "es" ? "Importar CSV/Excel" : "Import CSV/Excel"}
         >
-          <NavIcon name="upload" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
+          <NavIcon name="import" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
         </button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv,.txt" onChange={onCSVPicked} style={{ display: "none" }} />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ width: "auto", padding: "0 16px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -4590,7 +4591,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     (async () => {
       const md = fmt(getToday()).slice(5);
       const [{ data: manual }, { data: booked }] = await Promise.all([
-        supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null),
+        fetchAllRows(() => supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null).order("id")),
         supabase.from("clients").select("first_name, last_name, email, birthday").not("birthday", "is", null),
       ]);
       if (dood) return;
@@ -5387,10 +5388,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // Samenvoegregel gelijk aan CustomersView: op e-mail matchen, en de
         // handmatig ingevoerde waarden winnen van de afspraakgegevens.
         const extra = [];
-        const { data: manual } = await supabase
+        const { data: manual } = await fetchAllRows(() => supabase
           .from("manual_clients")
           .select("id, name, email, phone, notes, hidden, birthday")
-          .eq("owner_id", salonData.owner_id);
+          .eq("owner_id", salonData.owner_id)
+          .order("id"));
         for (const m of manual || []) {
           if (m.hidden) continue;
           const email = String(m.email || "").toLowerCase();
@@ -5508,7 +5510,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     let alive = true;
     (async () => {
       const [{ data: manual }, { data: booked }] = await Promise.all([
-        supabase.from("manual_clients").select("id, name, email, phone, is_business, contact_name").eq("owner_id", salonData.owner_id).eq("hidden", false),
+        fetchAllRows(() => supabase.from("manual_clients").select("id, name, email, phone, is_business, contact_name").eq("owner_id", salonData.owner_id).eq("hidden", false).order("id")),
         supabase.from("appointments").select("client_name, client_email, client_phone").eq("owner_id", salonData.owner_id).neq("client_email", "").order("date", { ascending: false }).limit(2000),
       ]);
       if (!alive) return;

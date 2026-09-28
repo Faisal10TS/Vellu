@@ -11,7 +11,7 @@
 //   • Backup / migration (full client list)
 
 import { supabase } from "./supabase.js";
-import { curSym } from "./shared.jsx";
+import { curSym, fetchAllRows } from "./shared.jsx";
 
 // RFC 4180: wrap in double quotes, escape embedded quotes by doubling.
 function csvCell(v) {
@@ -43,10 +43,11 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
     // Imported / manually-added clients — they may not have booked an
     // appointment yet (e.g. a salon that just imported its list), but must
     // still be part of the export.
-    supabase
+    fetchAllRows(() => supabase
       .from("manual_clients")
       .select("name, email, phone, created_at, hidden")
-      .eq("owner_id", ownerId),
+      .eq("owner_id", ownerId)
+      .order("id")),
   ]);
   if (apptRes.error) throw apptRes.error;
   if (manualRes.error) throw manualRes.error;
