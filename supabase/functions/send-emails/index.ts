@@ -63,7 +63,9 @@ let CURSYM="€";
 // als "XCG " en "Afl. " houden hun spatie: b.currency wordt hieronder alleen aan
 // de voorkant getrimd (tot 24-09-2026 stond er "XCG45.00" en "Afl.45.00").
 // Betaallink en SEPA-QR (verderop) houden de punt — dat is een machineformaat.
-const fP=(p)=>`${CURSYM}${parseFloat(p||0).toFixed(2).replace(".",",")}`;
+// Duizendtallen met een punt ("$1.500,00"), gelijk aan fmtAmt in de app (28-09).
+const fN=(p)=>{const v=parseFloat(p)||0;const [i,d]=Math.abs(v).toFixed(2).split(".");return (v<0&&+Math.abs(v).toFixed(2)!==0?"-":"")+i.replace(/\B(?=(\d{3})+(?!\d))/g,".")+","+d;};
+const fP=(p)=>`${CURSYM}${fN(p)}`;
 const W=`<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">`;
 const bS=`style="background:#f9f7f4;border-radius:12px;padding:24px;margin-bottom:28px;"`;
 const tS=`style="width:100%;border-collapse:collapse;"`;
@@ -364,7 +366,7 @@ await send(plainText(b.owner_email),plainText(txt(oLang,"Je proefperiode van Vel
 if(type==="payment_failed"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
 const intervalLabel=b.billing_interval==="yearly"?txt(oLang,"jaarlijks","yearly","anual"):txt(oLang,"maandelijks","monthly","mensual");
-const bedrag=b.amount?`€ ${parseFloat(b.amount).toFixed(2).replace(".",",")}`:"";
+const bedrag=b.amount?`€ ${fN(b.amount)}`:"";
 const rc=String(b.reason_code||"");
 // Per code: wat er aan de hand is, en wat de salon eraan kan doen.
 const redenen={

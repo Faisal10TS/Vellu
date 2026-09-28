@@ -829,8 +829,12 @@ function fmtMoney(amount, countryCode, decimals = 2) {
 // "$45,00" op Bonaire. Geen duizendtalpunt (was er ook niet). Vervanger van het
 // oude `{cur}{x.toFixed(2)}`; invoervelden (type=number), betaallinks, de
 // SEPA-QR en CSV houden .toFixed(2) — daar hoort een punt.
+// Duizendtallen met een punt: "$80.458,53" i.p.v. "$80458,53" (Faisal 28-09).
 function fmtAmt(sym, n) {
-  return (sym || "") + (Number(n) || 0).toFixed(2).replace(".", ",");
+  const v = Number(n) || 0;
+  const [int, dec] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  return (sym || "") + (neg ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
 }
 
 // ─── TAX RULES (per jurisdictie) ─────────────────────────────
