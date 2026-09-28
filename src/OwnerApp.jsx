@@ -1190,7 +1190,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
           <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
-          <NavIcon name="import" size={13} color="currentColor" />
+          <NavIcon name="download" size={13} color="currentColor" />
           {busy ? (lang === "nl" ? "Bezig\u2026" : lang === "es" ? "Procesando\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
         </label>
         <button className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, color: c.textMuted }} onClick={template}>
@@ -3418,7 +3418,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           style={{ width: "auto", padding: "0 14px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, color: accent, borderColor: `${accent}55` }}
           title={lang === "nl" ? "Importeer CSV/Excel" : lang === "es" ? "Importar CSV/Excel" : "Import CSV/Excel"}
         >
-          <NavIcon name="import" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
+          <NavIcon name="download" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
         </button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv,.txt" onChange={onCSVPicked} style={{ display: "none" }} />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ width: "auto", padding: "0 16px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -7452,7 +7452,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
-        else if (ch === '"') q = true;
+        // Alleen een aanhalingsteken aan het BEGIN van een veld opent een
+        // quote; midden in een naam (TT "Cutie-file" 3-in-1) is het tekst.
+        else if (ch === '"' && cur === "") q = true;
         else if (ch === delim) { out.push(cur); cur = ""; }
         else cur += ch;
       }
@@ -7488,7 +7490,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const name = pick(r, ["naam", "name", "product", "productnaam", "product naam", "nombre", "artikel", "omschrijving"]);
         const price = numOf(pick(r, ["verkoopprijs", "prijs", "price", "sale price", "verkoop", "precio", "verkoopprijs (incl)"]));
         if (!name || price === null) { skipped++; continue; }
-        const barcode = String(pick(r, ["barcode", "ean", "streepjescode", "código de barras"]) || "").trim();
+        // "artikelnr" = de EAN in de export van boekingapp.nl (Tammy Taylor
+        // Bonaire, 28-09: 703 barcodes vielen weg). Hun "SKU" is meestal een
+        // eigen leverancierscode (15016, 7807P) — alleen overnemen als het er
+        // als een EAN/UPC uitziet, anders scant hij nooit.
+        const skuRaw = String(pick(r, ["sku"]) || "").trim();
+        const barcode = String(pick(r, ["barcode", "ean", "ean13", "ean-code", "ean code", "streepjescode", "código de barras", "artikelnr", "artikelnummer", "artikel nr", "artikel nr."]) || (/^\d{8}$|^\d{12,14}$/.test(skuRaw) ? skuRaw : "")).trim();
         // Duplicaat = zelfde barcode, of zelfde naam (hoofdletterongevoelig).
         const dupe = existing.some(p =>
           (barcode && (p.barcode || "").trim() === barcode) ||
@@ -7501,8 +7508,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           name_nl: name, name_en: name, name_es: name,
           price,
           purchase_price: numOf(pick(r, ["inkoopprijs", "inkoop", "cost", "purchase price", "precio compra"])),
-          stock: (() => { const v = numOf(pick(r, ["voorraad", "stock", "existencias", "aantal", "huidig"])); return v === null ? null : Math.max(0, Math.round(v)); })(),
-          min_stock: (() => { const v = numOf(pick(r, ["min. voorraad", "min voorraad", "minimum", "min", "min stock", "min. stock", "mínimo"])); return v === null ? null : Math.max(0, Math.round(v)); })(),
+          stock: (() => { const v = numOf(pick(r, ["voorraad", "stock", "existencias", "aantal", "huidig", "huidigvoorraad", "huidige voorraad"])); return v === null ? null : Math.max(0, Math.round(v)); })(),
+          min_stock: (() => { const v = numOf(pick(r, ["min. voorraad", "min voorraad", "minimum", "min", "min stock", "min. stock", "mínimo", "doelvoorraad", "doel voorraad"])); return v === null || v <= 0 ? null : Math.round(v); })(),
           barcode: barcode || null,
           supplier: String(pick(r, ["leverancier", "supplier", "proveedor"]) || "").trim() || null,
           active: true,
