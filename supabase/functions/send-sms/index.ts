@@ -190,8 +190,17 @@ function buildMessage(type: string, b: Booking): string {
   // dollars. De aanroeper (book-appointment) leidt het symbool af uit het
   // salon-land en stuurt het mee, exact zoals bij send-emails; ontbreekt het
   // veld (een oudere aanroeper), dan blijft € de terugval.
-  const cur = (typeof b.currency === "string" && b.currency.trim()) ? b.currency.trim() : "€";
-  const priceStr = b.price != null ? `${cur}${parseFloat(String(b.price)).toFixed(0)}` : "";
+  // Alleen vooraan trimmen, net als send-emails: "XCG " en "Afl. " houden hun
+  // spatie ("XCG 45", niet "XCG45").
+  const cur = (typeof b.currency === "string" && b.currency.trim()) ? b.currency.replace(/^\s+/, "") : "€";
+  // Hele bedragen zonder decimalen (kort voor een SMS), duizendtallen met een
+  // punt ("$1.500", 28-09-2026). Centen blijven staan ("$22,50"), anders stond
+  // er een afgerond en dus verkeerd bedrag in de bevestiging.
+  const priceNum = parseFloat(String(b.price));
+  const priceStr = b.price != null && Number.isFinite(priceNum) ? (() => {
+    const [i, d] = Math.abs(priceNum).toFixed(2).split(".");
+    return `${cur}${i.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}${d === "00" ? "" : "," + d}`;
+  })() : "";
   if (type === "booking_confirmation") {
     return txt(lang,
       `Afspraak bevestigd bij ${salon}: ${date} ${time}. ${service}${priceStr ? " - " + priceStr : ""}.`,
