@@ -17,7 +17,16 @@
 //   buildXlsx({ sheets, currencySymbol }) → Uint8Array
 //     sheet = { name, cols: [breedte in tekens, ...], rows: [rij, ...],
 //               freeze: true  (kopregel bevriezen),
-//               filter: aantalRijen  (filter over A1..laatsteKolom<aantalRijen>) }
+//               filter: aantalRijen  (filter over A1..laatsteKolom<aantalRijen>),
+//               // Afdrukken (30-09-2026, Esther/TTNB maakte van de Excel zelf
+//               // een PDF en kreeg de kolommen over losse pagina's verdeeld):
+//               landscape: true|false (standaard: liggend als de kolommen samen
+//                          breder zijn dan ~95 tekens), altijd passend op één
+//                          paginabreedte (fitToWidth), zo veel pagina's hoog als nodig,
+//               printTitleRow: rijnummer (1-based) dat op elke pagina bovenaan
+//                          terugkomt (de kopregel van de tabel),
+//               header: tekst linksboven op elke pagina,
+//               footer: tekst in de voet; &P = paginanummer, &N = totaal }
 //     rij   = [cel, ...]; cel = tekst | getal | null |
 //             { v, s }            waarde met stijl (s = naam hieronder)
 //             { f, v, s }         formule met vooraf berekende waarde
@@ -25,7 +34,9 @@
 //   saveXlsx(filename, bytes)  → download in de browser
 //
 // Stijlen: text, bold, title, header, money, moneyTotal, int, intTotal, date,
-// muted, textTotal, num.
+// muted, textTotal, num, wrap (tekst die over meerdere regels loopt; de rij
+// krijgt dan een passende hoogte, want Excel past die bij het openen van een
+// bestand van buitenaf niet zelf aan).
 
 const enc = new TextEncoder();
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -34,7 +45,7 @@ const esc = (v) => String(v)
   .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const XF = { text: 0, bold: 1, title: 2, header: 3, money: 4, moneyTotal: 5, int: 6, intTotal: 7, date: 8, muted: 9, textTotal: 10, num: 11 };
+export const XF = { text: 0, bold: 1, title: 2, header: 3, money: 4, moneyTotal: 5, int: 6, intTotal: 7, date: 8, muted: 9, textTotal: 10, num: 11, wrap: 12 };
 
 // Kolomletter: 0 → A, 25 → Z, 26 → AA.
 export const colLetter = (i) => { let n = i + 1, out = ""; while (n > 0) { const r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); } return out; };
@@ -85,25 +96,49 @@ function sheetXml(sheet, index) {
   if (Array.isArray(sheet.cols) && sheet.cols.length) {
     cols = "<cols>" + sheet.cols.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${Math.max(2, Number(w) || 10)}" customWidth="1"/>`).join("") + "</cols>";
   }
+  // Rijhoogte voor cellen met stijl "wrap": geschat aantal regels × 15 pt.
+  // Een kolombreedte van w tekens biedt ruwweg w-1 tekens per regel.
+  const widthOf = (ci) => Math.max(2, Number((sheet.cols || [])[ci]) || 10);
+  const linesOf = (cell, ci) => {
+    if (!cell || typeof cell !== "object" || cell.s !== "wrap") return 1;
+    const txt = String(cell.v ?? "");
+    const perLine = Math.max(4, widthOf(ci) - 1);
+    return Math.max(1, ...txt.split(/\r?\n/).map((l) => Math.ceil(l.length / perLine)));
+  };
   let data = "";
   rows.forEach((row, ri) => {
     if (!Array.isArray(row) || row.length === 0) return;
     const cells = row.map((cell, ci) => cellXml(`${colLetter(ci)}${ri + 1}`, cell)).join("");
-    if (cells) data += `<row r="${ri + 1}">${cells}</row>`;
+    if (!cells) return;
+    const lines = Math.max(1, ...row.map((cell, ci) => linesOf(cell, ci)));
+    const ht = lines > 1 ? ` ht="${Math.min(409, lines * 15 + 2)}" customHeight="1"` : "";
+    data += `<row r="${ri + 1}"${ht}>${cells}</row>`;
   });
   const pane = sheet.freeze
     ? `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/>`
     : "";
   const filterRef = sheet.filter ? `A1:${lastCol}${Math.max(1, Math.min(rows.length, Number(sheet.filter) || rows.length))}` : "";
+  // Afdrukstand: liggend zodra de kolommen samen breder zijn dan een staande
+  // A4 (~95 tekens), en altijd op één paginabreedte geschaald — anders zet
+  // Excel de rechterkolommen op aparte pagina's ("eerst omlaag, dan opzij").
+  const totalWidth = (sheet.cols || []).reduce((n, w) => n + (Number(w) || 10), 0);
+  const landscape = sheet.landscape ?? totalWidth > 95;
+  const hf = (t) => esc(String(t || "").replace(/&(?![LCRPNDTFA])/g, "&&"));
+  const headerFooter = (sheet.header || sheet.footer)
+    ? `<headerFooter>${sheet.header ? `<oddHeader>&amp;L${hf(sheet.header)}</oddHeader>` : ""}${sheet.footer ? `<oddFooter>&amp;R${hf(sheet.footer)}</oddFooter>` : ""}</headerFooter>`
+    : "";
   return XML_HEAD +
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>` +
     `<dimension ref="${dim}"/>` +
     `<sheetViews><sheetView workbookViewId="0"${index === 0 ? ' tabSelected="1"' : ""}>${pane}</sheetView></sheetViews>` +
     `<sheetFormatPr defaultRowHeight="15"/>` +
     cols +
     `<sheetData>${data}</sheetData>` +
     (filterRef ? `<autoFilter ref="${filterRef}"/>` : "") +
-    `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>` +
+    `<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>` +
+    `<pageSetup paperSize="9" orientation="${landscape ? "landscape" : "portrait"}" fitToWidth="1" fitToHeight="0"/>` +
+    headerFooter +
     `</worksheet>`;
 }
 
@@ -127,7 +162,7 @@ function stylesXml(currencySymbol) {
       `<border><left/><right/><top style="thin"><color rgb="FF8A7356"/></top><bottom/><diagonal/></border>` +
     `</borders>` +
     `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-    `<cellXfs count="12">` +
+    `<cellXfs count="13">` +
       `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +                                                        // 0 text
       `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +                                          // 1 bold
       `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +                                          // 2 title
@@ -140,6 +175,7 @@ function stylesXml(currencySymbol) {
       `<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +                                          // 9 muted
       `<xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>` +                          // 10 textTotal
       `<xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +                                  // 11 num
+      `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1"/></xf>` + // 12 wrap (onderaan uitgelijnd, net als de rest van de rij)
     `</cellXfs>` +
     `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
     `</styleSheet>`;
@@ -211,13 +247,20 @@ export function buildXlsx({ sheets, currencySymbol = "€", creator = "Vellu" })
     `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>` +
     `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>` +
     `</Relationships>`;
-  // Filters horen een verborgen naam _FilterDatabase per blad te hebben.
+  // Filters horen een verborgen naam _FilterDatabase per blad te hebben; een
+  // kopregel die op elke afgedrukte pagina terugkomt heet _xlnm.Print_Titles.
   const defined = list.map((sh, i) => {
-    if (!sh.filter) return "";
-    const rows = Array.isArray(sh.rows) ? sh.rows : [];
-    const maxCols = Math.max(1, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), (sh.cols || []).length);
-    const last = Math.max(1, Math.min(rows.length, Number(sh.filter) || rows.length));
-    return `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${esc(names[i].replace(/'/g, "''"))}'!$A$1:$${colLetter(maxCols - 1)}$${last}</definedName>`;
+    const q = `'${esc(names[i].replace(/'/g, "''"))}'`;
+    let out = "";
+    if (sh.filter) {
+      const rows = Array.isArray(sh.rows) ? sh.rows : [];
+      const maxCols = Math.max(1, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), (sh.cols || []).length);
+      const last = Math.max(1, Math.min(rows.length, Number(sh.filter) || rows.length));
+      out += `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">${q}!$A$1:$${colLetter(maxCols - 1)}$${last}</definedName>`;
+    }
+    const pt = parseInt(sh.printTitleRow);
+    if (pt > 0) out += `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">${q}!$${pt}:$${pt}</definedName>`;
+    return out;
   }).join("");
   const workbook = XML_HEAD +
     `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +

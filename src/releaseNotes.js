@@ -30,6 +30,16 @@ export const RELEASES = [
         },
       },
       {
+        // Esther 30-09: bewerkt de Excel en maakt er zelf een PDF van; die
+        // viel in losse kolompagina's uiteen en de blokken stonden scheef.
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Omzetrapport als Excel: gemaakt om zelf te bewerken en af te drukken. Alles staat in één kolomindeling onder elkaar, liggend op één paginabreedte, met de kopregel en het paginanummer op elke pagina en lange behandelnamen over meerdere regels. Kerncijfers, belastingtabel en totalen zijn formules: pas je een bedrag aan, dan rekent alles mee, ook als je er daarna in Excel een PDF van maakt.",
+          en: "Revenue report as Excel: built to edit and print yourself. Everything sits in one column layout, landscape on one page width, with the header row and page number on every page and long treatment names wrapped over several lines. Key figures, tax table and totals are formulas: change an amount and everything recalculates, also when you then save it as PDF from Excel.",
+          es: "Informe de ingresos en Excel: pensado para editarlo e imprimirlo tú misma. Todo va en una sola disposición de columnas, apaisado en un ancho de página, con la fila de encabezado y el número de página en cada hoja y los nombres largos de tratamientos en varias líneas. Cifras clave, tabla de impuestos y totales son fórmulas: cambia un importe y todo se recalcula, también al guardarlo después como PDF desde Excel.",
+        },
+      },
+      {
         kind: "fix", audience: ["staff"],
         text: {
           nl: "Gedeelde boeking met een collega: je omzet van vandaag, de balk boven je agenda, je factuurtegels en je omzetrapport tellen nu alleen jouw deel, ook bij oudere boekingen.",
