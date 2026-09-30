@@ -2169,6 +2169,30 @@ export const staffShareOf = (a, staffId, services, staff) => {
   const mine = bd.reduce((s, p, i) => s + (p.staff_id === staffId ? parts[i] : 0), 0);
   return Math.round(mine * 100) / 100;
 };
+// Rapportregel voor ÉÉN stylist: bij een gecombineerde boeking alleen háár
+// behandeling(en), haar naam, haar begintijd en haar bedrag. Zonder dit stond
+// in het maandoverzicht van Esther de hele boeking van Chanty ("Esther, Lady",
+// beide behandelingen, €125) terwijl alleen de BIAB van €67 van haar was
+// (TTNB, 30-09-2026). Eén stylist op de boeking → alleen het bedrag (= totaal).
+export const staffScopedRow = (a, staffId, staffName, services, staff) => {
+  const row = { ...a, service_price: staffShareOf(a, staffId, services, staff) };
+  const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
+  if (new Set(bd.map(p => p.staff_id).filter(Boolean)).size < 2) return row;
+  const mine = bd.filter(p => p.staff_id === staffId);
+  if (mine.length === 0) return row;
+  const label = mine.map(p => p.label).filter(Boolean).join(" · ");
+  if (label) row.service_name = label;
+  if (staffName) row.staff_name = staffName;
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(a.time || ""));
+  const off = parseInt(mine[0].offset_min) || 0;
+  if (m && off > 0) {
+    const t = parseInt(m[1]) * 60 + parseInt(m[2]) + off;
+    row.time = `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  }
+  const dur = mine.reduce((s, p) => s + (parseInt(p.duration) || 0), 0);
+  if (dur > 0) row.service_duration = dur;
+  return row;
+};
 
 // Betaald bedrag per afspraak. appointments.amount_paid (sinds 07-09-2026) is
 // het totaal ontvangen bedrag; oudere rijen hebben NULL en vallen terug op

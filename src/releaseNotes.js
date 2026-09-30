@@ -24,9 +24,9 @@ export const RELEASES = [
       {
         kind: "fix", audience: ["owner"],
         text: {
-          nl: "Gedeelde boeking (twee stylistes op één afspraak): met een medewerker gekozen telden de omzettegels soms de hele boeking mee in plaats van alleen haar deel. Dat is rechtgezet op het dashboard, in de agenda, bij Facturen, in het omzetrapport en bij Team prestaties in Analytics. Daar telt nu ook de tweede stylist mee met haar eigen deel.",
-          en: "Shared booking (two stylists on one appointment): with a team member selected, the revenue tiles sometimes counted the whole booking instead of only her part. This is fixed on the dashboard, in the calendar, under Invoices, in the revenue report and in Staff performance under Analytics, where the second stylist now also counts with her own part.",
-          es: "Reserva compartida (dos estilistas en una cita): con un miembro del equipo seleccionado, los ingresos contaban a veces la reserva entera en lugar de solo su parte. Corregido en el panel, la agenda, Facturas, el informe de ingresos y Rendimiento del personal en Analíticas, donde la segunda estilista cuenta ahora también con su parte.",
+          nl: "Gedeelde boeking (twee stylistes op één afspraak): met een medewerker gekozen telden de omzettegels soms de hele boeking mee in plaats van alleen haar deel. Dat is rechtgezet op het dashboard, in de agenda, bij Facturen, in het omzetrapport en bij Team prestaties in Analytics. Daar telt nu ook de tweede stylist mee met haar eigen deel. Het omzetrapport van één medewerker toont bij zo'n boeking alleen haar behandeling, tijd en bedrag.",
+          en: "Shared booking (two stylists on one appointment): with a team member selected, the revenue tiles sometimes counted the whole booking instead of only her part. This is fixed on the dashboard, in the calendar, under Invoices, in the revenue report and in Staff performance under Analytics, where the second stylist now also counts with her own part. The revenue report for one team member shows only her treatment, time and amount for such a booking.",
+          es: "Reserva compartida (dos estilistas en una cita): con un miembro del equipo seleccionado, los ingresos contaban a veces la reserva entera en lugar de solo su parte. Corregido en el panel, la agenda, Facturas, el informe de ingresos y Rendimiento del personal en Analíticas, donde la segunda estilista cuenta ahora también con su parte. El informe de ingresos de un miembro muestra en esas reservas solo su tratamiento, hora e importe.",
         },
       },
       {

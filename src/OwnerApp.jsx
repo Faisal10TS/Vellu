@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
 } from "./shared.jsx";
@@ -1410,7 +1410,9 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       const shareId = fixedStaffId || selectedStaff?.id || null;
       // Mét catalogus: een boeking zonder opgeslagen deelprijzen kwam anders
       // voor de hele prijs in het rapport van elke stylist (30-09-2026).
-      const rows = shareId ? inRange.map(a => ({ ...a, service_price: staffShareOf(a, shareId, services || salonData.services || [], staff || salonData.staff || []) })) : inRange;
+      // staffScopedRow: ook de omschrijving, de naam en de tijd worden die van
+      // háár deel — anders staat de hele boeking ("Esther, Lady") in haar lijst.
+      const rows = shareId ? inRange.map(a => staffScopedRow(a, shareId, fixedStaffName || selectedStaff?.name || "", services || salonData.services || [], staff || salonData.staff || [])) : inRange;
       const params = {
         salon: salonData, appointments: rows, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
