@@ -19,7 +19,7 @@ import {
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
-  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow,
+  AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow, partLabelOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
 } from "./shared.jsx";
@@ -1325,7 +1325,9 @@ async function loadLogoForPdf(salonData) {
 // `services`: de dienstencatalogus voor het aandeel per stylist. De eigenaars-app
 // heeft die op salonData; de medewerkers-app geeft een kale profielrij mee en
 // levert de catalogus daarom los aan.
-function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null, services = null, staff = null }) {
+// `staffEmail`: e-mail van het teamlid voor het bedrijfsblok van háár rapport
+// (de medewerkers-app geeft die mee; de eigenaars-app leest hem uit salonData.staff).
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null, services = null, staff = null, staffEmail = "" }) {
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -1413,8 +1415,26 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       // staffScopedRow: ook de omschrijving, de naam en de tijd worden die van
       // háár deel — anders staat de hele boeking ("Esther, Lady") in haar lijst.
       const rows = shareId ? inRange.map(a => staffScopedRow(a, shareId, fixedStaffName || selectedStaff?.name || "", services || salonData.services || [], staff || salonData.staff || [])) : inRange;
+      // Rapport van één stylist: het bedrijfsblok komt van HAAR factuurprofiel
+      // (Instellingen → Extra factuurprofielen, label = haar naam) als dat
+      // bestaat — Esther/TTNB 30-09-2026: Lady's maandrapport droeg Esthers
+      // KVK, btw-id en IBAN, "kan het de gegevens gebruiken die zij voor de
+      // factuur heeft ingevuld?". Naam "Salon — Lady", net als op haar factuur;
+      // e-mail die van het teamlid. Geen profiel → het salonblok zoals altijd.
+      const reportStaffName = fixedStaffName || selectedStaff?.name || "";
+      const norm = (v) => String(v || "").trim().toLowerCase();
+      const ownProfile = shareId ? (salonData.invoice_profiles || []).find(p => norm(p.label) === norm(reportStaffName) || (p.iban_holder && norm(p.iban_holder) === norm(reportStaffName))) : null;
+      const member = shareId ? (salonData.staff || []).find(m => m.id === shareId) : null;
+      const reportSalon = ownProfile ? {
+        ...salonData,
+        business_name: `${salonData.business_name || salonData.name} — ${ownProfile.label || reportStaffName}`,
+        name: `${salonData.business_name || salonData.name} — ${ownProfile.label || reportStaffName}`,
+        address: ownProfile.address || "", postcode: "", city: "",
+        kvk_number: ownProfile.kvk_number || "", btw_id: ownProfile.btw_id || "", iban: ownProfile.iban || "",
+        salon_email: staffEmail || member?.email || "",
+      } : salonData;
       const params = {
-        salon: salonData, appointments: rows, range, lang,
+        salon: reportSalon, appointments: rows, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
         currencySymbol: _money.symbol, moneyLocale: _money.locale,
         taxCfg: _tax,
@@ -5278,7 +5298,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // hiervandaan (offset_min), niet vanaf deze al verschoven deeltijd.
             _baseTime: a.time,
             service_duration: p.duration || a.service_duration,
-            service_name: p.label || a.service_name,
+            // Mét extra's (partLabelOf) — het kale deel-label verzweeg ze.
+            service_name: partLabelOf(a, breakdown.indexOf(p), salonData.staff || []),
             _slotKey: `${a.id}::${p.offset_min || 0}`,
             // Expliciete vlag: deze rij is een weergave-fragment, geen
             // databaserij. Wie hem doorgeeft aan opslaan/verplaatsen schrijft
@@ -7711,7 +7732,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           if (bdx.length < 2) return prod.length ? [{ name: String(a.service_name || "").split(" + ")[0], price: Math.max(0, parseFloat(a.service_price || 0) - prod.reduce((s, x) => s + x.price, 0)) }, ...prod] : null;
           const pp = partPricesOf(a, salonData.services || [], salonData.staff || []);
           if (!pp) return null;
-          return [...bdx.map((p2, i) => ({ name: p2.label || a.service_name, staff: (salonData.staff || []).find(s => s.id === p2.staff_id)?.name || "", price: pp[i] })), ...prod];
+          return [...bdx.map((p2, i) => ({ name: partLabelOf(a, i, salonData.staff || []), staff: (salonData.staff || []).find(s => s.id === p2.staff_id)?.name || "", price: pp[i] })), ...prod];
         })();
         await sendEmails("invoice", {
           client_name: a.client_name,
@@ -8233,7 +8254,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const parts = bd.length >= 2
               ? bd.map((p, i) => ({ p, i })).filter(({ p }) => !agendaStaff || p.staff_id === agendaStaff).map(({ p, i }) => {
                   const startMin = baseMin + (p.offset_min || 0);
-                  return { time: `${pad(Math.floor(startMin / 60) % 24)}:${pad(startMin % 60)}`, duration: p.duration || a.service_duration, label: p.label || a.service_name, staff: p.staff_id ? staffName(p.staff_id) : "", price: prices ? prices[i] : null };
+                  return { time: `${pad(Math.floor(startMin / 60) % 24)}:${pad(startMin % 60)}`, duration: p.duration || a.service_duration, label: partLabelOf(a, i, salonData.staff || []), staff: p.staff_id ? staffName(p.staff_id) : "", price: prices ? prices[i] : null };
                 })
               : (a._parts?.length ? a._parts : [{ time: a.time, duration: a.service_duration, label: a.service_name }]);
             return parts.map((p, i) => (

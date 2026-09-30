@@ -10,7 +10,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
-  paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, useDashboardScrollbars,
+  paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -1004,7 +1004,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       return {
         time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
         duration: p.duration || a.service_duration,
-        label: p.label || a.service_name,
+        // Mét extra's (partLabelOf): het opgeslagen deel-label verzweeg ze.
+        label: partLabelOf(a, i, [myStaff, ...salonStaff]),
         price: prices ? prices[i] : null,
       };
     });
@@ -2505,6 +2506,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   fixedStaffId={staffMember.id}
                   services={shareCat.services}
                   staff={shareCat.staff}
+                  staffEmail={myStaff.email || staffMember.email || ""}
                 />}
 
                 {/* Search + filter toolbar */}

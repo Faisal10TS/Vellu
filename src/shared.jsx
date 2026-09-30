@@ -2169,6 +2169,30 @@ export const staffShareOf = (a, staffId, services, staff) => {
   const mine = bd.reduce((s, p, i) => s + (p.staff_id === staffId ? parts[i] : 0), 0);
   return Math.round(mine * 100) / 100;
 };
+// Label van één deel van een boeking, MET de extra's. Het opgeslagen
+// deel-label (service_breakdown[i].label) was tot 30-09-2026 "dienst — variant"
+// zonder extra's, terwijl service_name ze wél heeft ("… (Esther) + Gel x/Biab
+// verlenging"). Esther (TTNB): "in de e-mail staan de extra's die ze heeft
+// toegevoegd, in de website niet". book-appointment zet ze sinds 30-09 ook in
+// het deel-label; voor oudere boekingen halen we ze uit service_name: het
+// i-de stuk (gescheiden door " · "), zonder de "(stylist)"-toevoeging en zonder
+// een kortingscode "[CODE]" aan het eind. Klopt dat stuk niet met het
+// opgeslagen label (bewerkte naam), dan gewoon het opgeslagen label.
+export const partLabelOf = (a, i, staff = []) => {
+  const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
+  const base = String(bd[i]?.label || "");
+  const full = String(a?.service_name || "").split(" · ")[i];
+  if (!full) return base || String(a?.service_name || "");
+  let s = full.replace(/\s\[[^\]]*\]$/, "");
+  const names = (staff || []).map((m) => (typeof m === "string" ? m : m?.name)).filter(Boolean);
+  for (const n of names) {
+    const tag = ` (${n})`;
+    const k = s.lastIndexOf(tag);
+    if (k >= 0 && (k + tag.length === s.length || s.slice(k + tag.length).startsWith(" + "))) { s = s.slice(0, k) + s.slice(k + tag.length); break; }
+  }
+  if (base && !s.startsWith(base)) return base;
+  return s || base;
+};
 // Rapportregel voor ÉÉN stylist: bij een gecombineerde boeking alleen háár
 // behandeling(en), haar naam, haar begintijd en haar bedrag. Zonder dit stond
 // in het maandoverzicht van Esther de hele boeking van Chanty ("Esther, Lady",
@@ -2178,18 +2202,18 @@ export const staffScopedRow = (a, staffId, staffName, services, staff) => {
   const row = { ...a, service_price: staffShareOf(a, staffId, services, staff) };
   const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
   if (new Set(bd.map(p => p.staff_id).filter(Boolean)).size < 2) return row;
-  const mine = bd.filter(p => p.staff_id === staffId);
+  const mine = bd.map((p, i) => ({ p, i })).filter(({ p }) => p.staff_id === staffId);
   if (mine.length === 0) return row;
-  const label = mine.map(p => p.label).filter(Boolean).join(" · ");
+  const label = mine.map(({ i }) => partLabelOf(a, i, [...(staff || []), staffName])).filter(Boolean).join(" · ");
   if (label) row.service_name = label;
   if (staffName) row.staff_name = staffName;
   const m = /^(\d{1,2}):(\d{2})/.exec(String(a.time || ""));
-  const off = parseInt(mine[0].offset_min) || 0;
+  const off = parseInt(mine[0].p.offset_min) || 0;
   if (m && off > 0) {
     const t = parseInt(m[1]) * 60 + parseInt(m[2]) + off;
     row.time = `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
   }
-  const dur = mine.reduce((s, p) => s + (parseInt(p.duration) || 0), 0);
+  const dur = mine.reduce((s, { p }) => s + (parseInt(p.duration) || 0), 0);
   if (dur > 0) row.service_duration = dur;
   return row;
 };

@@ -30,6 +30,27 @@ export const RELEASES = [
         },
       },
       {
+        // Esther 30-09: "Lady kan het maandrapport sturen, maar er staan mijn
+        // gegevens in; kan het de gegevens gebruiken die zij voor de factuur
+        // heeft ingevuld?"
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Omzetrapport van één medewerker: staat er onder Instellingen, Extra factuurprofielen een profiel met haar naam, dan gebruikt het rapport dat profiel voor het bedrijfsblok (adres, KVK, btw-id, IBAN) en haar eigen e-mailadres, net als op haar facturen. Zonder profiel blijven het de gegevens van de salon.",
+          en: "Revenue report for one team member: if there is a profile with her name under Settings, Extra invoice profiles, the report uses that profile for the business block (address, CoC, VAT id, IBAN) and her own email address, just like her invoices. Without a profile it keeps the salon's details.",
+          es: "Informe de ingresos de un miembro del equipo: si en Ajustes, Perfiles de factura adicionales hay un perfil con su nombre, el informe usa ese perfil para el bloque de empresa (dirección, registro, NIF-IVA, IBAN) y su propio correo, igual que en sus facturas. Sin perfil se mantienen los datos del salón.",
+        },
+      },
+      {
+        // Esther 30-09: "in de e-mail staan de extra's die ze heeft
+        // toegevoegd, in de website niet".
+        kind: "fix", audience: ["owner", "staff"],
+        text: {
+          nl: "Extra's staan nu ook in de app bij de behandeling, met een medewerker gekozen en op de afspraakkaart, net als in de boekingsmail. Voorbeeld: Nieuwe set BIAB + Gel x/Biab verlenging.",
+          en: "Extras now also show in the app with the treatment, with a team member selected and on the appointment card, just like in the booking email. Example: Full set BIAB + Gel x/Biab extension.",
+          es: "Los extras aparecen ahora también en la app junto al tratamiento, con un miembro seleccionado y en la tarjeta de la cita, igual que en el correo de reserva.",
+        },
+      },
+      {
         // Esther 30-09: bewerkt de Excel en maakt er zelf een PDF van; die
         // viel in losse kolompagina's uiteen en de blokken stonden scheef.
         kind: "improved", audience: ["owner", "staff"],

@@ -476,11 +476,15 @@ serve(async (req) => {
     }
     serviceNameParts.push(label);
 
-    // Compact label for the agenda card (service name + variant only,
+    // Compact label for the agenda card: service name + variant + extras,
     // without the parenthetical staff name — the agenda already renders
-    // that separately via the filter pill).
+    // that separately via the filter pill. Extras included since 30-09-2026
+    // (Esther/TTNB: the mail showed "+ Gel x/Biab verlenging", the app not).
     let shortLabel = nmOf(svc);
     if (variant) shortLabel += " — " + nmOf(variant) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
+    if (svcExtras.length > 0) {
+      shortLabel += " + " + svcExtras.map((e: any) => { const q = extraQty(e); return q > 1 ? `${nmOf(e)} ×${q}` : nmOf(e); }).join(", ");
+    }
     serviceBreakdown.push({
       service_id: svc.id,
       staff_id: staffId || null,
