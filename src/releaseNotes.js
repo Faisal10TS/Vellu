@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // Esther (TTNB) 30-09-2026: gedeelde boeking van €125 (€67 bij haar, €58
+    // bij Lady) telde in de omzettegel bij allebei voor €125 mee, terwijl de
+    // kaart wél het juiste deel toonde.
+    id: "2026-09-30",
+    date: "2026-09-30",
+    title: { nl: "Omzet per medewerker bij een gedeelde boeking", en: "Revenue per team member on a shared booking", es: "Ingresos por miembro en una reserva compartida" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Gedeelde boeking (twee stylistes op één afspraak): met een medewerker gekozen telden de omzettegels soms de hele boeking mee in plaats van alleen haar deel. Dat is rechtgezet op het dashboard, in de agenda, bij Facturen, in het omzetrapport en bij Team prestaties in Analytics. Daar telt nu ook de tweede stylist mee met haar eigen deel.",
+          en: "Shared booking (two stylists on one appointment): with a team member selected, the revenue tiles sometimes counted the whole booking instead of only her part. This is fixed on the dashboard, in the calendar, under Invoices, in the revenue report and in Staff performance under Analytics, where the second stylist now also counts with her own part.",
+          es: "Reserva compartida (dos estilistas en una cita): con un miembro del equipo seleccionado, los ingresos contaban a veces la reserva entera en lugar de solo su parte. Corregido en el panel, la agenda, Facturas, el informe de ingresos y Rendimiento del personal en Analíticas, donde la segunda estilista cuenta ahora también con su parte.",
+        },
+      },
+      {
+        kind: "fix", audience: ["staff"],
+        text: {
+          nl: "Gedeelde boeking met een collega: je omzet van vandaag, de balk boven je agenda, je factuurtegels en je omzetrapport tellen nu alleen jouw deel, ook bij oudere boekingen.",
+          en: "Shared booking with a colleague: today's revenue, the bar above your calendar, your invoice tiles and your revenue report now count only your part, also for older bookings.",
+          es: "Reserva compartida con una compañera: tus ingresos de hoy, la barra sobre tu agenda, tus tarjetas de facturas y tu informe de ingresos cuentan ahora solo tu parte, también en reservas antiguas.",
+        },
+      },
+    ],
+  },
+  {
     // Klantenrekening (25-09-2026). My Whims and More (Bonaire) vroeg in het
     // Papiaments of ze een betaling "in standby" kon zetten, zoals in haar
     // oude Sara Salon: een lijst "te ontvangen" per klant met totaal en

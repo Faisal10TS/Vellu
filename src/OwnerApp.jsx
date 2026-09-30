@@ -1322,7 +1322,10 @@ async function loadLogoForPdf(salonData) {
 // herkenbaar. Ontbreekt de prop (staff-app), dan blijft het oude gedrag.
 // `fixedStaffId`: hoort bij fixedStaffName — de id waarmee staffShareOf het
 // aandeel van die stylist in gecombineerde boekingen uitrekent.
-function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null }) {
+// `services`: de dienstencatalogus voor het aandeel per stylist. De eigenaars-app
+// heeft die op salonData; de medewerkers-app geeft een kale profielrij mee en
+// levert de catalogus daarom los aan.
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null, services = null, staff = null }) {
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -1405,7 +1408,9 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       // aandeel (staffShareOf), zodat het rapport optelt tot wat het dashboard
       // voor haar laat zien. Het teamrapport houdt de hele prijzen.
       const shareId = fixedStaffId || selectedStaff?.id || null;
-      const rows = shareId ? inRange.map(a => ({ ...a, service_price: staffShareOf(a, shareId) })) : inRange;
+      // Mét catalogus: een boeking zonder opgeslagen deelprijzen kwam anders
+      // voor de hele prijs in het rapport van elke stylist (30-09-2026).
+      const rows = shareId ? inRange.map(a => ({ ...a, service_price: staffShareOf(a, shareId, services || salonData.services || [], staff || salonData.staff || []) })) : inRange;
       const params = {
         salon: salonData, appointments: rows, range, lang,
         staffName: fixedStaffName || selectedStaff?.name || "",
@@ -5215,6 +5220,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Dashboard staff scope — everything on that tab (today's list, expected
   // revenue, the week/month KPI cards and their sparklines) reads from these
   // so the numbers always match the appointments shown right above them.
+  // Aandeel van één stylist in een gecombineerde boeking — ALTIJD met de
+  // catalogus erbij. Zonder catalogus kan staffShareOf een boeking zonder
+  // opgeslagen deelprijzen niet verdelen en geeft hij de hele prijs terug:
+  // Chanty bij TTNB (€67 Esther + €58 Lady) stond zo bij allebei voor €125 in
+  // de omzettegel, terwijl de kaart wél €58 toonde (Esther, 30-09-2026).
+  // Elke optelling per stylist loopt daarom via deze ene functie.
+  const shareOf = (a, staffId) => staffShareOf(a, staffId, salonData.services || [], salonData.staff || []);
   const dashAppts = dashStaff ? appts.filter(a => apptInvolvesStaff(a, dashStaff)) : appts;
   const todayAppts = (dashStaff ? activeAppts.filter(a => apptInvolvesStaff(a, dashStaff)) : activeAppts)
     .filter(a => a.date === fmt(getToday()));
@@ -9947,7 +9959,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
                 // Met een stylist-chip aan telt alleen háár aandeel in een
                 // gecombineerde boeking (staffShareOf); zonder chip de hele prijs.
-                const dashPrice = (a) => dashStaff ? staffShareOf(a, dashStaff) : parseFloat(a.service_price || 0);
+                const dashPrice = (a) => dashStaff ? shareOf(a, dashStaff) : parseFloat(a.service_price || 0);
                 const weekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + dashPrice(a), 0);
                 const prevWeekRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + dashPrice(a), 0);
                 const monthRevenue = dashAppts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + dashPrice(a), 0);
@@ -9958,7 +9970,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const revByDay = {};
                 dashAppts.forEach(a => {
                   if (a.status !== "completed") return;
-                  revByDay[a.date] = (revByDay[a.date] || 0) + parseFloat(a.service_price || 0);
+                  revByDay[a.date] = (revByDay[a.date] || 0) + dashPrice(a);
                 });
                 const weekDaily = [];
                 const weekLabels = [];
@@ -10057,7 +10069,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const pct = salonData.reviews?.length > 0 ? (count / salonData.reviews.length) * 100 : 0;
                   return { rating: r, count, pct };
                 });
-                const todayRevenue = todayAppts.reduce((s, a) => s + (dashStaff ? staffShareOf(a, dashStaff) : parseFloat(a.service_price || 0)), 0);
+                const todayRevenue = todayAppts.reduce((s, a) => s + dashPrice(a), 0);
                 const todayDate = now.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
                 // KPI-tegel (restyle 16-09): icoontegel + label, serif-getal,
                 // trend-chip, daaronder de grafiek of de sterrenverdeling.
@@ -11031,7 +11043,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               periodLabel = String(yr);
             }
             // Medewerkerfilter: haar aandeel in een gecombineerde boeking, niet de hele prijs.
-            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + (agendaStaff ? staffShareOf(a, agendaStaff) : parseFloat(a.service_price || 0)), 0);
+            const periodRevenue = periodAppts.filter(a => a.status === "completed").reduce((s, a) => s + (agendaStaff ? shareOf(a, agendaStaff) : parseFloat(a.service_price || 0)), 0);
             const periodConfirmed = periodAppts.filter(a => a.status === "confirmed").length;
             const periodDone = periodAppts.filter(a => a.status === "completed").length;
 
@@ -12321,10 +12333,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const hiddenAppts = staffScoped.filter(a => a.invoice_view_state === "hidden");
             const unsent = visibleCompleted.filter(a => !a.invoice_sent);
             const sent = visibleCompleted.filter(a => a.invoice_sent);
-            const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            // Met een stylist gekozen tellen de tegels háár aandeel in een
+            // gecombineerde boeking, niet de hele prijs (zelfde regel als de
+            // agenda en het dashboard). De rijen eronder blijven de hele
+            // factuur tonen: één boeking = één factuur.
+            const invPrice = (a) => invoiceStaffFilter ? shareOf(a, invoiceStaffFilter) : parseFloat(a.service_price || 0);
+            const unsentTotal = unsent.reduce((s, a) => s + invPrice(a), 0);
             const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
             const thisMonthAppts = visibleCompleted.filter(a => a.date?.startsWith(thisMonthPrefix));
-            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + invPrice(a), 0);
             // Klantenrekening (25-09-2026): alle open posten van de salon (op
             // rekening, betaalverzoek, "later / factuur"), los van het
             // 90-dagenvenster — een post op rekening kan maanden oud zijn.
@@ -12382,7 +12399,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // volle breedte bovenaan — dit is het getal waar de eigenaar
                     // op stuurt ("te ontvangen" in Sara Salon).
                     { key: "receivable", icon: "tag", label: lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Por cobrar" : "Still to receive", value: `${fmtAmt(cur, openTotal)}`, color: openTotal > 0.005 ? c.warning : c.text, sub: `${openReceivables.length} ${openReceivables.length === 1 ? (lang === "nl" ? "post" : lang === "es" ? "partida" : "item") : (lang === "nl" ? "posten" : lang === "es" ? "partidas" : "items")}`, span: true },
-                    { key: "total", icon: "money", label: t.totalEarnings, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + parseFloat(a.service_price || 0), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
+                    { key: "total", icon: "money", label: t.totalEarnings, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + invPrice(a), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
                     { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${fmtAmt(cur, thisMonthTotal)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
                     { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${fmtAmt(cur, unsentTotal)}` },
                     { key: "sent", icon: "check", label: lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", value: sent.length, color: c.success, sub: `${visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%` },
@@ -13209,13 +13226,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   };
                 }
                 for (const a of appts) {
-                  if (!a.staff_id || !stats[a.staff_id]) continue;
-                  const row = stats[a.staff_id];
-                  row.total++;
-                  if (a.status === "completed") { row.completed++; row.revenue += parseFloat(a.service_price || 0); }
-                  else if (a.status === "cancelled") row.cancelled++;
-                  else if (a.status === "no_show") row.no_show++;
-                  if (a.client_email) row.unique_clients.add(a.client_email);
+                  // Gecombineerde boeking: élke stylist met een eigen deel telt
+                  // mee, met háár aandeel. Voorheen kreeg alleen staff_id (de
+                  // eerste) de hele prijs en de tweede stylist niets.
+                  const bdIds = Array.isArray(a.service_breakdown) ? a.service_breakdown.map(p => p.staff_id).filter(Boolean) : [];
+                  const ids = bdIds.length ? Array.from(new Set(bdIds)) : (a.staff_id ? [a.staff_id] : []);
+                  // Niet te verdelen (een deel staat niet meer in de catalogus en
+                  // er is geen opgeslagen deelprijs)? Dan de hele prijs één keer,
+                  // bij de eerste stylist — anders telt het team hem dubbel.
+                  const splitsbaar = ids.length > 1 && !!partPricesOf(a, salonData.services || [], salonData.staff || []);
+                  const eerste = ids.includes(a.staff_id) ? a.staff_id : ids[0];
+                  for (const id of ids) {
+                    const row = stats[id];
+                    if (!row) continue;
+                    row.total++;
+                    if (a.status === "completed") { row.completed++; row.revenue += ids.length > 1 ? (splitsbaar ? shareOf(a, id) : (id === eerste ? parseFloat(a.service_price || 0) : 0)) : parseFloat(a.service_price || 0); }
+                    else if (a.status === "cancelled") row.cancelled++;
+                    else if (a.status === "no_show") row.no_show++;
+                    if (a.client_email) row.unique_clients.add(a.client_email);
+                  }
                 }
                 const rows = Object.values(stats)
                   .filter(r => r.total > 0)

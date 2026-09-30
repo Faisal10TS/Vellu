@@ -97,6 +97,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [salonStaff, setSalonStaff] = useState([]);
   const [staffFilter, setStaffFilter] = useState(staffMember.id);
   const [services, setServices] = useState([]);
+  // Catalogus voor het aandeel in een gecombineerde boeking: ALLE diensten van
+  // de salon (niet alleen de eigen, zoals `services`) plus de teamprijzen. Het
+  // deel van de collega moet ook te prijzen zijn, anders is de boeking niet te
+  // verdelen en telt de hele prijs mee — bij TTNB doet Lady de pedicure en
+  // Esther de BIAB, dus geen van beiden had het deel van de ander in haar
+  // eigen dienstenlijst (30-09-2026).
+  const [shareCat, setShareCat] = useState({ services: [], staff: [] });
   const [myStaff, setMyStaff] = useState(staffMember);
   const [saved, setSaved] = useState(false);
   const [editingWH, setEditingWH] = useState(false);
@@ -246,13 +253,27 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         }
         setClientNotes(notesMap);
         const mySvcIds = staffMember.service_ids || [];
-        const filtered = (svcs || []).filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id));
-        setServices(filtered.map(s => ({
+        const mapped = (svcs || []).map(s => ({
           ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
           extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)).map(e => ({ ...e, excluded_staff_ids: (e.staff_extra_exclusions || []).map(x => x.staff_id) })),
           photos: (s.service_photos || []).map(p => ({ id: p.id, url: p.storage_path }))
-        })));
+        }));
+        setServices(mapped.filter(s => mySvcIds.length === 0 || mySvcIds.includes(s.id)));
+        // Aandeel-catalogus: alle diensten meteen, de teamprijzen erachteraan
+        // (losse vraag; mislukt die, dan rekenen we met de standaardprijzen —
+        // de delen worden toch naar rato op het totaal geschaald).
+        setShareCat({ services: mapped, staff: [] });
+        try {
+          const ids = mapped.map(s => s.id);
+          if (ids.length) {
+            const { data: ov } = await supabase.from("staff_service_prices").select("staff_id, service_id, variant_id, price").in("service_id", ids);
+            if (cancelled) return;
+            const perStaff = {};
+            for (const o of ov || []) (perStaff[o.staff_id] = perStaff[o.staff_id] || []).push({ service_id: o.service_id, variant_id: o.variant_id, price: o.price });
+            setShareCat({ services: mapped, staff: Object.entries(perStaff).map(([id, price_overrides]) => ({ id, price_overrides })) });
+          }
+        } catch (e) { console.error("Teamprijzen laden mislukt:", e); }
       } catch (e) {
         console.error("Staff dashboard load error:", e);
       }
@@ -385,11 +406,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // prijzen per deel (oudere boekingen) is dat gewoon de hele prijs.
   // Met de catalogus erbij: ook oudere boekingen zonder opgeslagen deelprijs
   // krijgen haar echte aandeel (gereconstrueerd uit dienst/variant/extra's).
-  const myShare = (a) => staffShareOf(a, staffMember.id, services, []);
+  const myShare = (a) => staffShareOf(a, staffMember.id, shareCat.services, shareCat.staff);
   // Voor de door de chip bepaalde set (dashboard vandaag, agenda-balk): één
   // stylist gekozen → haar aandeel; "Iedereen" → de hele prijs.
   const scopedShareId = !seeAll ? staffMember.id : staffFilter;
-  const scopedPrice = (a) => scopedShareId ? staffShareOf(a, scopedShareId) : parseFloat(a.service_price || 0);
+  // Mét de catalogus, net als myShare: anders telt een boeking zonder
+  // opgeslagen deelprijzen voor de hele prijs mee (TTNB, 30-09-2026).
+  const scopedPrice = (a) => scopedShareId ? staffShareOf(a, scopedShareId, shareCat.services, shareCat.staff) : parseFloat(a.service_price || 0);
   const totalEarnings = completedAppts.reduce((s, a) => s + myShare(a), 0);
   const calAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.date === calDate);
 
@@ -975,7 +998,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const pad = n => String(n).padStart(2, "0");
     // Prijs per deel (alleen zinvol bij meerdere delen): opgeslagen of uit de
     // catalogus; de klant rekent per stylist af, dus elk deel zijn bedrag.
-    const prices = breakdown.length >= 2 ? partPricesOf(a, services, []) : null;
+    const prices = breakdown.length >= 2 ? partPricesOf(a, shareCat.services, shareCat.staff) : null;
     return breakdown.map((p, i) => ({ p, i })).filter(({ p }) => p.staff_id === staffMember.id).map(({ p, i }) => {
       const startMin = baseMin + (p.offset_min || 0);
       return {
@@ -2418,10 +2441,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           {view === "facturen" && canInvoice && (() => {
             const unsent = completedAppts.filter(a => !a.invoice_sent);
             const sent = completedAppts.filter(a => a.invoice_sent);
-            const unsentTotal = unsent.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            // Eigen aandeel (myShare): de factuur die zij verstuurt bevat ook
+            // alleen haar deel van een gecombineerde boeking.
+            const unsentTotal = unsent.reduce((s, a) => s + myShare(a), 0);
             const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
             const thisMonthAppts = completedAppts.filter(a => a.date?.startsWith(thisMonthPrefix));
-            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+            const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + myShare(a), 0);
 
             const formatDate = (ds) => {
               if (!ds) return "";
@@ -2478,6 +2503,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   toast={toast}
                   fixedStaffName={myStaff.name}
                   fixedStaffId={staffMember.id}
+                  services={shareCat.services}
+                  staff={shareCat.staff}
                 />}
 
                 {/* Search + filter toolbar */}
@@ -2584,7 +2611,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
 
                         {/* Price */}
-                        {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>}
+                        {showMoney && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtAmt(cur, myShare(a))}</div>}
 
                         {/* Action */}
                         <div style={{ flexShrink: 0, minWidth: 90, display: "flex", justifyContent: "flex-end" }}>
