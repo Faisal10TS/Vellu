@@ -14297,14 +14297,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // factuur tonen: één boeking = één factuur.
             const invPrice = (a) => invoiceStaffFilter ? shareOf(a, invoiceStaffFilter) : parseFloat(a.service_price || 0);
             const unsentTotal = unsent.reduce((s, a) => s + invPrice(a), 0);
-            const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            // "Deze maand" op de klok van de SALON, niet van het apparaat: een
+            // eigenaar of beheerder in NL die 's avonds een Bonaire-salon opent
+            // zat anders op de 1e al in de volgende maand.
+            const salonToday = salonNow(salonData.country_code);
+            const thisMonthPrefix = `${salonToday.getFullYear()}-${String(salonToday.getMonth() + 1).padStart(2, "0")}`;
             const thisMonthAppts = visibleCompleted.filter(a => a.date?.startsWith(thisMonthPrefix));
             const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + invPrice(a), 0);
             // Klantenrekening (25-09-2026): alle open posten van de salon (op
             // rekening, betaalverzoek, "later / factuur"), los van het
             // 90-dagenvenster — een post op rekening kan maanden oud zijn.
             const openReceivables = invoiceStaffFilter ? receivables.filter(a => apptInvolvesStaff(a, invoiceStaffFilter)) : receivables;
-            const openTotal = Math.round(openReceivables.reduce((s, a) => s + outstandingOf(a), 0) * 100) / 100;
+            // Met een stylist gekozen: háár deel van wat nog openstaat (naar
+            // rato van haar aandeel in de boeking), net als de andere tegels.
+            // Anders telde een gedeelde open boeking (Esther €67 + Lady €58)
+            // bij allebei voor de volle €125.
+            const openOf = (a) => {
+              const o = outstandingOf(a);
+              if (!invoiceStaffFilter) return o;
+              // Bij een gedeelde boeking tellen de delen samen op tot de prijs
+              // ZONDER de aangeslagen producten (partPricesOf); daardoor delen,
+              // anders bleef het productdeel van de open post bij niemand. Zonder
+              // deelprijzen geeft shareOf de hele prijs: dan telt de hele post.
+              const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+              const split = new Set(bd.map(p => p.staff_id).filter(Boolean)).size > 1;
+              const products = (Array.isArray(a.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
+              const total = parseFloat(a.service_price || 0) || 0;
+              const whole = split ? Math.max(0, total - products) : total;
+              return whole > 0 ? Math.round(o * Math.min(1, shareOf(a, invoiceStaffFilter) / whole) * 100) / 100 : o;
+            };
+            const openTotal = Math.round(openReceivables.reduce((s, a) => s + openOf(a), 0) * 100) / 100;
 
             const formatDate = (ds) => {
               if (!ds) return "";
@@ -14325,7 +14347,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={t.completedTreatments}>{t.invoices}</PTitle>}
 
-              {completedAppts.length > 0 && (<>
+              {/* Ook zonder afgeronde afspraak in de laatste 90 dagen: open
+                  posten op rekening kunnen ouder zijn en moeten bereikbaar blijven. */}
+              {(completedAppts.length > 0 || receivables.length > 0) && (<>
                 {/* Team-member scope for the tiles + list below. Whole team by
                     default; the report block further down has its own filter. */}
                 {(salonData.staff || []).length > 0 && (
@@ -14357,7 +14381,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // volle breedte bovenaan — dit is het getal waar de eigenaar
                     // op stuurt ("te ontvangen" in Sara Salon).
                     { key: "receivable", icon: "tag", label: lang === "nl" ? "Nog te ontvangen" : lang === "es" ? "Por cobrar" : "Still to receive", value: `${fmtAmt(cur, openTotal)}`, color: openTotal > 0.005 ? c.warning : c.text, sub: `${openReceivables.length} ${openReceivables.length === 1 ? (lang === "nl" ? "post" : lang === "es" ? "partida" : "item") : (lang === "nl" ? "posten" : lang === "es" ? "partidas" : "items")}`, span: true },
-                    { key: "total", icon: "money", label: t.totalEarnings, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + invPrice(a), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
+                    // Het geheugen bevat de laatste 90 dagen; "Totale inkomsten"
+                    // las als alles ooit. Zelfde label als de analytics-tegel.
+                    { key: "total", icon: "money", label: t.totalRevenue, value: `${fmtAmt(cur, visibleCompleted.reduce((s, a) => s + invPrice(a), 0))}`, color: accent, sub: `${visibleCompleted.length} ${t.treatments}` },
                     { key: "month", icon: "calendar", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", value: `${fmtAmt(cur, thisMonthTotal)}`, color: c.text, sub: `${thisMonthAppts.length} ${t.treatments}` },
                     { key: "unsent", icon: "send", label: lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", value: unsent.length, color: unsent.length > 0 ? c.warning : c.text, sub: `${fmtAmt(cur, unsentTotal)}` },
                     { key: "sent", icon: "check", label: lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", value: sent.length, color: c.success, sub: `${visibleCompleted.length > 0 ? Math.round((sent.length / visibleCompleted.length) * 100) : 0}%` },
@@ -14452,35 +14478,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   for (const a of openReceivables) {
                     const k = receivableKeyOf(a);
                     const g = m.get(k) || { key: k, name: a.client_name || a.client_email || "—", email: String(a.client_email || "").toLowerCase(), total: 0, count: 0, oldest: a.date };
-                    g.total = Math.round((g.total + outstandingOf(a)) * 100) / 100; g.count++; if (a.date < g.oldest) g.oldest = a.date;
+                    g.total = Math.round((g.total + openOf(a)) * 100) / 100; g.count++; if (a.date < g.oldest) g.oldest = a.date;
                     m.set(k, g);
                   }
                   return [...m.values()].sort((x, y) => y.total - x.total);
                 })() : [];
-                if (completedAppts.length === 0) return (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
-                    <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{t.noCompleted}</div>
-                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : lang === "es" ? "Las facturas aparecen aquí una vez que marcas una cita como completada." : "Invoices appear here once you mark an appointment as completed."}</div>
-                  </div>
-                );
-                if (filtered.length === 0) return (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
-                    <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
-                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : lang === "es" ? "No hay resultados para este filtro" : "No results for this filter"}</div>
-                    {(invoiceSearch || invoiceFilter !== "all") && (
-                      <button className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => { setInvoiceSearch(""); setInvoiceFilter("all"); }}>
-                        {lang === "nl" ? "Filter wissen" : lang === "es" ? "Borrar filtro" : "Clear filter"}
-                      </button>
-                    )}
-                  </div>
-                );
-                const visible = filtered.slice(0, invoicesShown);
-                const hidden = filtered.length - visible.length;
-                const open = invoicesShown > INVOICES_FOLD;
-                const box = open && !isMobile;
-                return <>
-                {invoiceFilter === "receivable" && (
+                // De samenvatting "Per klant" staat bovenaan de tab Nog te
+                // ontvangen, óók als er niets (meer) openstaat: dan legt hij uit
+                // wat hier komt te staan. Voorheen ving de lege-filtermelding
+                // ("Geen resultaten voor deze filter") dat geval eerst af.
+                const receivableSummary = invoiceFilter === "receivable" ? (
                   <div data-receivable-summary style={{ marginBottom: 12, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: byClient.length ? 8 : 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Per klant" : lang === "es" ? "Por cliente" : "Per client"}</div>
@@ -14502,7 +14509,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       </div>
                     )}
                   </div>
-                )}
+                ) : null;
+                if (completedAppts.length === 0 && (invoiceFilter !== "receivable" || receivables.length === 0)) return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "60px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="facturen" size={36} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{t.noCompleted}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", maxWidth: 320 }}>{lang === "nl" ? "Facturen verschijnen hier zodra je een afspraak als voltooid markeert." : lang === "es" ? "Las facturas aparecen aquí una vez que marcas una cita como completada." : "Invoices appear here once you mark an appointment as completed."}</div>
+                  </div>
+                );
+                if (filtered.length === 0) return (<>
+                  {receivableSummary}
+                  {/* Niets openstaand: de samenvatting hierboven zegt al genoeg. */}
+                  {!(invoiceFilter === "receivable" && byClient.length === 0) && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "40px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
+                    <div style={{ opacity: 0.4 }}><NavIcon name="eye" size={30} color={c.textMuted} /></div>
+                    <div style={{ fontSize: 12, color: c.textSub }}>{lang === "nl" ? "Geen resultaten voor deze filter" : lang === "es" ? "No hay resultados para este filtro" : "No results for this filter"}</div>
+                    {(invoiceSearch || invoiceFilter !== "all") && (
+                      <button className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => { setInvoiceSearch(""); setInvoiceFilter("all"); }}>
+                        {lang === "nl" ? "Filter wissen" : lang === "es" ? "Borrar filtro" : "Clear filter"}
+                      </button>
+                    )}
+                  </div>
+                  )}
+                </>);
+                const visible = filtered.slice(0, invoicesShown);
+                const hidden = filtered.length - visible.length;
+                const open = invoicesShown > INVOICES_FOLD;
+                const box = open && !isMobile;
+                return <>
+                {receivableSummary}
                 <div data-invoice-list className={box ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, ...(box ? { maxHeight: "clamp(360px, calc(100vh - 330px), 760px)", overflowY: "auto", paddingRight: 6, paddingBottom: 10 } : {}) }}>
                   {visible.map(a => {
                     const isSending = processingApptId === a.id;
@@ -14512,6 +14547,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     // rekening of met een deelbetaling.
                     const receivable = isOpenReceivable(a);
                     const showReceive = receivable && (invoiceFilter === "receivable" || a.payment_method === "account" || paidAmountOf(a) > 0);
+                    // Een verwijderde factuur telt niet meer als open post: zeg
+                    // dat erbij, anders verdwijnt een schuld zonder dat de
+                    // eigenaar het doorheeft.
+                    const openLossNote = receivable
+                      ? (lang === "nl" ? ` Let op: het openstaande bedrag van ${fmtAmt(cur, outstandingOf(a))} verdwijnt dan ook uit "Nog te ontvangen".`
+                        : lang === "es" ? ` Atención: el importe pendiente de ${fmtAmt(cur, outstandingOf(a))} también desaparece de "Por cobrar".`
+                        : ` Note: the open amount of ${fmtAmt(cur, outstandingOf(a))} also disappears from "Still to receive".`)
+                      : "";
                     return (
                       <div key={a.id} style={{
                         // Mobiel: twee regels (klant boven, prijs+acties onder) —
@@ -14599,7 +14642,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                               <button
                                 aria-label={lang === "nl" ? "Definitief verwijderen" : lang === "es" ? "Eliminar permanentemente" : "Delete permanently"}
-                                onClick={async () => { if (await showConfirm(lang === "nl" ? "Factuur definitief verwijderen? (afspraak blijft bestaan)" : lang === "es" ? "¿Eliminar la factura permanentemente? (la cita se conserva)" : "Delete invoice permanently? (the appointment itself stays)")) setInvoiceViewState(a.id, "deleted"); }}
+                                onClick={async () => { if (await showConfirm((lang === "nl" ? "Factuur definitief verwijderen? (afspraak blijft bestaan)" : lang === "es" ? "¿Eliminar la factura permanentemente? (la cita se conserva)" : "Delete invoice permanently? (the appointment itself stays)") + openLossNote)) setInvoiceViewState(a.id, "deleted"); }}
                                 style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                                 title={lang === "nl" ? "Definitief verwijderen" : lang === "es" ? "Eliminar permanentemente" : "Delete permanently"}
                               >
@@ -14612,8 +14655,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: isMobile ? 4 : 5, padding: isMobile ? "6px 9px" : "6px 12px", borderRadius: 8, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", flexShrink: 0 }}>
                                   <NavIcon name="check" size={10} color={c.success} /> {t.sent}
                                 </span>
+                              ) : !String(a.client_email || "").trim() ? (
+                                // Geen e-mailadres op de rij (inloop of kassaverkoop
+                                // zonder mail): er is niemand om de factuur naar te
+                                // sturen. Zelfde regel als de afspraakkaart, die de
+                                // knop dan ook niet toont.
+                                <span data-invoice-no-email title={lang === "nl" ? "Geen e-mailadres bekend: deze factuur kan niet per mail worden verstuurd." : lang === "es" ? "No hay correo electrónico: esta factura no se puede enviar por correo." : "No email address on file: this invoice cannot be emailed."}
+                                  style={{ fontSize: 10, color: c.textMuted, display: "inline-flex", alignItems: "center", gap: 5, padding: isMobile ? "6px 9px" : "6px 12px", borderRadius: 8, background: c.inputBg, border: `1px solid ${c.inputBorder}`, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                  <NavIcon name="mail" size={10} color="currentColor" /> {lang === "nl" ? "Geen e-mail" : lang === "es" ? "Sin correo" : "No email"}
+                                </span>
                               ) : (
-                                <button className="btn-ghost" style={{ padding: isMobile ? "8px 12px" : "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1, flexShrink: 0 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>
+                                // De rij zelf gaat mee: een open post uit "Nog te
+                                // ontvangen" kan ouder zijn dan het 90-dagenvenster
+                                // en staat dan niet in salonData.appointments.
+                                <button className="btn-ghost" style={{ padding: isMobile ? "8px 12px" : "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1, flexShrink: 0 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id, a)}>
                                   {isSending ? (
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}>
                                       <path d="M21 12a9 9 0 11-6.219-8.56" />
@@ -14653,10 +14708,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                   make the Tikkie in the app, paste it in this chat.
                                   Alleen bij een betaalverzoek uit de Kassa (payment_method
                                   "online"; de klantkeuze bij het boeken bestaat sinds
-                                  25-09-2026 niet meer). */}
-                              {a.payment_method === "online" && a.client_phone && (salonData.payment_link || salonData.iban) && (
+                                  25-09-2026 niet meer). Zelfde regel als de
+                                  afspraakkaart: het verzoek vraagt alleen wat nog
+                                  open staat (na een deelbetaling als "restant"),
+                                  naar de rekening die bij de afspraak hoort (eigen
+                                  rekening van de stylist, anders de salon), en
+                                  verdwijnt zodra de post betaald is. */}
+                              {a.payment_method === "online" && a.client_phone && outstandingOf(a) > 0.005 && (payDetailsForAppt(a).paymentLink || payDetailsForAppt(a).iban) && (
                                 <a
-                                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { clientName: a.client_name, salonName: salonData.name, price: a.service_price, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                                  href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, paidAmountOf(a) > 0
+                                    ? { kind: "remainder", visited: true, clientName: a.client_name, salonName: salonData.name, price: outstandingOf(a), paid: paidAmountOf(a), date: a.date, time: a.time, ...payDetailsForAppt(a), countryCode: salonData.country_code }
+                                    : { clientName: a.client_name, salonName: salonData.name, price: outstandingOf(a), ...payDetailsForAppt(a), countryCode: salonData.country_code }), salonData.country_code)}
                                   target="_blank" rel="noopener noreferrer"
                                   aria-label={lang === "nl" ? "Betaalverzoek via WhatsApp" : lang === "es" ? "Solicitud de pago por WhatsApp" : "Payment request via WhatsApp"}
                                   title={lang === "nl" ? "Betaalverzoek via WhatsApp" : lang === "es" ? "Solicitud de pago por WhatsApp" : "Payment request via WhatsApp"}
@@ -14675,7 +14737,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </button>
                               <button
                                 aria-label={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}
-                                onClick={async () => { if (await showConfirm(lang === "nl" ? "Factuur verwijderen? De afspraak zelf blijft in je agenda en klanthistorie." : lang === "es" ? "¿Eliminar la factura? La cita se conserva en tu agenda y en el historial del cliente." : "Delete invoice? The appointment itself stays in your agenda and customer history.")) setInvoiceViewState(a.id, "deleted"); }}
+                                onClick={async () => { if (await showConfirm((lang === "nl" ? "Factuur verwijderen? De afspraak zelf blijft in je agenda en klanthistorie." : lang === "es" ? "¿Eliminar la factura? La cita se conserva en tu agenda y en el historial del cliente." : "Delete invoice? The appointment itself stays in your agenda and customer history.") + openLossNote)) setInvoiceViewState(a.id, "deleted"); }}
                                 style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                                 title={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}
                               >
@@ -14728,7 +14790,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const paid = paidAmountOf(a);
             const open = outstandingOf(a);
             const history = clientPayments.filter(p => p.appointment_id === a.id);
-            const methods = [["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["pin", lang === "es" ? "Tarjeta" : "Pin"], ["transfer", lang === "nl" ? "Overschrijving" : lang === "es" ? "Transferencia" : "Bank transfer"], ["online", lang === "nl" ? "Betaallink" : lang === "es" ? "Enlace de pago" : "Pay link"]];
+            const methods = [["cash", lang === "nl" ? "Contant" : lang === "es" ? "Efectivo" : "Cash"], ["pin", lang === "nl" ? "Pin" : lang === "es" ? "Tarjeta" : "Card"], ["transfer", lang === "nl" ? "Overschrijving" : lang === "es" ? "Transferencia" : "Bank transfer"], ["online", lang === "nl" ? "Betaallink" : lang === "es" ? "Enlace de pago" : "Pay link"]];
             const amt = Math.round((parseFloat(payForm.amount) || 0) * 100) / 100;
             const partial = amt > 0 && amt + 0.005 < open;
             const close = () => { if (!payBusy) setPayFor(null); };
@@ -14770,7 +14832,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {payForm.method === "cash" && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Contant telt in het kasboek op de dag van ontvangst." : lang === "es" ? "El efectivo cuenta en el libro de caja el día de recepción." : "Cash counts in the cash book on the day received."}</div>}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label><input data-pay-date className="input-field" type="date" max={fmt(getToday())} value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%", fontSize: 12 }} /></div>
+                        <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label><input data-pay-date className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%", fontSize: 12 }} /></div>
                         <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={payForm.note} onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))} placeholder={lang === "nl" ? "bijv. via Maria" : lang === "es" ? "p. ej. vía María" : "e.g. via Maria"} style={{ width: "100%", fontSize: 12 }} /></div>
                       </div>
                       <button className="btn-primary" data-pay-submit disabled={payBusy || amt <= 0 || amt > open + 0.005} onClick={recordClientPayment} style={{ width: "100%", padding: "12px 16px", fontSize: 12, opacity: payBusy ? 0.6 : 1 }}>
@@ -14809,21 +14871,44 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <UpgradeCard feature={t.analytics} lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
             </div>
           )}
-          {view === "analytics" && !isStarter && (
+          {view === "analytics" && !isStarter && (() => {
+            // Alles hieronder op de klok van de SALON (een beheerder in NL die
+            // 's avonds een Bonaire-salon bekijkt zit anders al op morgen).
+            const anNow = salonNow(salonData.country_code);
+            const anToday = fmt(anNow);
+            const an90 = fmt(new Date(anNow.getFullYear(), anNow.getMonth(), anNow.getDate() - 90));
+            // Het geheugen bevat de laatste 90 dagen PLUS alle toekomstige
+            // boekingen. Tellingen onder "90 dagen" gaan alleen over wat al
+            // geweest is: anders telde een salon die ver vooruit boekt haar
+            // komende afspraken mee en leek het team maar een derde af te ronden.
+            const inPast90 = (a) => !!a.date && a.date >= an90 && a.date <= anToday;
+            const pastNoSales = apptsNoSales.filter(inPast90);
+            const pastDone = pastNoSales.filter(a => a.status === "completed").length;
+            return (
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto", overflowX: "hidden" }}>
               {isMobile && <PTitle sub={t.salonInsight}>{t.analytics}</PTitle>}
 
               {/* Key metrics + Revenue chart — combined IIFE to share computed data */}
               {(() => {
-                const now = new Date();
+                const now = anNow;
                 // Compare date strings to avoid UTC/local mismatch at day boundaries.
-                const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
-                const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
-                const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14));
-                const weekRevenue = appts.filter(a => a.status === "completed" && a.date >= weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                // "7 dagen" = vandaag en de 6 dagen ervoor, "30 dagen" = vandaag
+                // en de 29 ervoor: precies de dagen die de staafjes eronder
+                // tekenen. Met -7/-30 telde de tegel 8 en 31 dagen en vergeleek
+                // de weekbadge 8 dagen met 7.
+                const weekAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+                const monthAgoStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
+                const prevWeekStartStr = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13));
+                const weekRevenue = appts.filter(a => a.status === "completed" && a.date >= weekAgoStr && a.date <= anToday).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const prevWeekRevenue = appts.filter(a => a.status === "completed" && a.date >= prevWeekStartStr && a.date < weekAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                const monthRevenue = appts.filter(a => a.status === "completed" && a.date >= monthAgoStr).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                const monthRevenue = appts.filter(a => a.status === "completed" && a.date >= monthAgoStr && a.date <= anToday).reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
                 const weekChange = prevWeekRevenue > 0 ? Math.round(((weekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100) : 0;
+                // Pijltje omhoog/omlaag als SVG (de pijltekens worden op iOS emoji).
+                const trendArrow = (up, size = 9) => (
+                  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                    {up ? <><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></> : <><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></>}
+                  </svg>
+                );
                 const avgRating = salonData.reviews?.length > 0 ? (salonData.reviews.reduce((s, r) => s + r.rating, 0) / salonData.reviews.length).toFixed(1) : "—";
 
                 // Daily revenue for sparklines — key by the stored a.date string directly.
@@ -14868,9 +14953,6 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   let peakIdx = 0;
                   data.forEach((v, i) => { if (v > data[peakIdx]) peakIdx = i; });
                   const peakVal = data[peakIdx];
-                  // Zie de toelichting bij de sparkline op het dashboard: ook
-                  // hier twee decimalen, zodat label en tegel gelijk lopen.
-                  const fmtN = (n) => (Number(n) || 0).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                   return (
                     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
                       <line x1={padL} y1={padT + innerH + 0.5} x2={padL + innerW} y2={padT + innerH + 0.5} stroke={c.border} strokeWidth="0.5" />
@@ -14884,7 +14966,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       {peakVal > 0 && (() => {
                         const x = padL + peakIdx * (barW + gap) + barW / 2;
                         const y = padT + innerH - (peakVal / max) * innerH - 3;
-                        const label = cur + fmtN(peakVal);
+                        // fmtAmt, net als de tegel erboven: komma als decimaal,
+                        // punt voor duizendtallen, ook in het Engels.
+                        const label = fmtAmt(cur, peakVal);
                         const labelW = Math.max(22, label.length * 5 + 8);
                         const lx = Math.max(0, Math.min(W - labelW, x - labelW / 2));
                         return (
@@ -14971,7 +15055,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: accent, lineHeight: 1 }}>{fmtAmt(cur, weekRevenue)}</div>
                           {weekChange !== 0 && (
                             <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
-                              {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                              {trendArrow(weekChange > 0)} {Math.abs(weekChange)}%
                             </div>
                           )}
                         </div>
@@ -14995,15 +15079,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <span className="vl-ico-tile"><NavIcon name="calendar" size={15} color="currentColor" /></span>
                           <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, textAlign: "right" }}>{t.totalAppts}</div>
                         </div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{apptsNoSales.length}</div>
+                        {/* "Afspraken (90 dagen)": alleen afspraken t/m vandaag, zonder
+                            kassaverkopen. Teller, balk en getal eronder tellen
+                            dezelfde rijen (het getal telde verkopen wel mee). */}
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1, marginTop: 6 }}>{pastNoSales.length}</div>
                         <div style={{ flex: 1, marginTop: 12, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 6 }}>
                           <div>
                             <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>{t.treatments}</div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: c.textSub }}>
                               <div style={{ flex: 1, height: 4, background: c.inputBg, borderRadius: 3, overflow: "hidden" }}>
-                                <div style={{ height: "100%", background: accent, width: `${apptsNoSales.length > 0 ? (apptsNoSales.filter(a => a.status === "completed").length / apptsNoSales.length) * 100 : 0}%` }} />
+                                <div style={{ height: "100%", background: accent, width: `${pastNoSales.length > 0 ? (pastDone / pastNoSales.length) * 100 : 0}%` }} />
                               </div>
-                              <span style={{ fontVariantNumeric: "tabular-nums" }}>{completedAppts.length}</span>
+                              <span style={{ fontVariantNumeric: "tabular-nums" }}>{pastDone}</span>
                             </div>
                           </div>
                         </div>
@@ -15108,8 +15195,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Trend" : lang === "es" ? "Tendencia" : "Trend"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text }}>
-                            {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "—"} {Math.abs(trendPct)}%
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text, display: "flex", alignItems: "center", gap: 4 }}>
+                            {trendPct !== 0 ? trendArrow(trendPct > 0, 13) : "—"} {Math.abs(trendPct)}%
                           </div>
                         </div>
                       </div>
@@ -15122,18 +15209,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: "20px 22px", marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.popularServices}</div>
-                  <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5</div>
+                  <div style={{ fontSize: 9, color: c.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>Top 5 · {lang === "nl" ? "90 dagen" : lang === "es" ? "90 días" : "90 days"}</div>
                 </div>
                 {(() => {
+                  // Per DIENST (id uit de catalogus), niet per opgeslagen naamtekst:
+                  // die verschilt per boekingstaal, extra's en stylist, zodat één
+                  // dienst in vier regels uiteenviel. Elke behandeling van een
+                  // gecombineerde boeking telt bij haar eigen dienst, met haar
+                  // eigen deel van de prijs (zonder producten). Kassaverkopen en
+                  // toekomstige boekingen tellen niet mee; omzet alleen van
+                  // afgeronde afspraken.
+                  const svcList = salonData.services || [];
+                  const svcName = (s) => lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
+                  // Oude rijen zonder dienst-id: de naam terugzoeken in de catalogus (elke taal).
+                  const byStoredName = (txt) => {
+                    const n = String(txt || "").trim().toLowerCase();
+                    return n ? svcList.find(s => [s.name_nl, s.name_en, s.name_es].some(x => String(x || "").trim().toLowerCase() === n)) || null : null;
+                  };
                   const svcStats = {};
                   appts.forEach(a => {
+                    if (isSaleRow(a) || !inPast90(a)) return;
                     if (a.status !== "completed" && a.status !== "confirmed") return;
-                    const n = a.service_name?.split(" — ")[0] || "?";
-                    if (!svcStats[n]) svcStats[n] = { count: 0, revenue: 0, serviceId: a.service_id };
-                    svcStats[n].count += 1;
-                    svcStats[n].revenue += parseFloat(a.service_price || 0);
+                    const done = a.status === "completed";
+                    const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+                    const baseLabel = (s) => String(s || "").split(" — ")[0].split(" + ")[0].trim();
+                    const parts = bd.length
+                      ? bd.map(p => ({ id: p.service_id || null, label: baseLabel(p.label) }))
+                      : [{ id: a.service_id || null, label: baseLabel(String(a.service_name || "").split(" · ")[0]) }];
+                    const prices = bd.length > 1 ? partPricesOf(a, svcList, salonData.staff || []) : null;
+                    const productsSum = (Array.isArray(a.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
+                    const servicesTotal = Math.max(0, (parseFloat(a.service_price || 0) || 0) - productsSum);
+                    parts.forEach((p, i) => {
+                      const svc = (p.id && svcList.find(s => s.id === p.id)) || (!p.id ? byStoredName(p.label) : null);
+                      const id = svc?.id || p.id;
+                      const key = id ? `id:${id}` : `name:${p.label.toLowerCase() || "?"}`;
+                      const g = svcStats[key] || (svcStats[key] = { count: 0, revenue: 0, serviceId: id, label: (svc && svcName(svc)) || p.label || "?" });
+                      g.count += 1;
+                      // Niet te verdelen? Dan de hele prijs één keer, bij het eerste deel.
+                      if (done) g.revenue += prices ? prices[i] : (i === 0 ? servicesTotal : 0);
+                    });
                   });
-                  const sorted = Object.entries(svcStats).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                  const sorted = Object.entries(svcStats).sort((a, b) => (b[1].count - a[1].count) || (b[1].revenue - a[1].revenue)).slice(0, 5);
                   if (sorted.length === 0) return (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, gap: 10, padding: "24px 0" }}>
                       <div style={{ opacity: 0.4 }}><NavIcon name="chart" size={32} color={c.textMuted} /></div>
@@ -15141,11 +15257,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </div>
                   );
                   const max = sorted[0][1].count;
-                  return sorted.map(([name, stats], idx) => {
-                    const svc = (salonData.services || []).find(s => s.id === stats.serviceId || (lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)) === name);
+                  return sorted.map(([key, stats], idx) => {
+                    const name = stats.label;
+                    const svc = stats.serviceId ? svcList.find(s => s.id === stats.serviceId) : null;
                     const thumb = svc?.photos?.[0]?.url || svc?.photos?.[0];
                     return (
-                      <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
+                      <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: idx === sorted.length - 1 ? 0 : 14 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}>
                           {thumb ? <img src={thumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0, zIndex: 1 }} /> : null}
                           {!thumb && <NavIcon name="scissors" size={16} color={c.textMuted} />}
@@ -15183,7 +15300,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     revenue: 0, unique_clients: new Set(),
                   };
                 }
-                for (const a of appts) {
+                // Alleen afspraken t/m vandaag (label: "Laatste 90 dagen"): een
+                // komende, nog bevestigde afspraak drukte het percentage
+                // "voltooid" (Eydy 38% i.p.v. 93%).
+                for (const a of appts.filter(inPast90)) {
                   // Gecombineerde boeking: élke stylist met een eigen deel telt
                   // mee, met háár aandeel. Voorheen kreeg alleen staff_id (de
                   // eerste) de hele prijs en de tweede stylist niets.
@@ -15239,7 +15359,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           </div>
                           <div style={{ display: "flex", gap: 14, fontSize: 10, color: c.textMuted, flexWrap: "wrap" }}>
                             <span>{r.total} {lang === "nl" ? "afspraken" : lang === "es" ? "citas" : "appointments"}</span>
-                            <span style={{ color: completionRate >= 85 ? c.success : c.textMuted }}>✓ {completionRate}% {lang === "nl" ? "voltooid" : lang === "es" ? "completadas" : "done"}</span>
+                            <span style={{ color: completionRate >= 85 ? c.success : c.textMuted, display: "inline-flex", alignItems: "center", gap: 4 }}><NavIcon name="check" size={10} color="currentColor" /> {completionRate}% {lang === "nl" ? "voltooid" : lang === "es" ? "completadas" : "done"}</span>
                             <span style={{ color: noShowRate >= 15 ? c.danger : c.textMuted }}>{noShowRate}% {lang === "nl" ? "no-show" : lang === "es" ? "ausencias" : "no-show"}</span>
                             <span>{r.unique_clients.size} {lang === "nl" ? "unieke klanten" : lang === "es" ? "clientes únicos" : "unique clients"}</span>
                           </div>
@@ -15351,9 +15471,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <SL>{lang === "nl" ? "Drukste uren" : lang === "es" ? "Horas de mayor actividad" : "Busiest hours"}</SL>
                 {(() => {
                   const hourCounts = {};
-                  apptsNoSales.forEach(a => { if (a.time) { const h = parseInt(a.time.split(":")[0]); hourCounts[h] = (hourCounts[h] || 0) + 1; } });
+                  apptsNoSales.forEach(a => { if (a.time) { const h = parseInt(a.time.split(":")[0]); if (Number.isFinite(h)) hourCounts[h] = (hourCounts[h] || 0) + 1; } });
+                  // Bereik uit de openingstijden én de afspraken zelf, niet vast
+                  // 8-21: een salon die om 07:00 opent of om 22:00 nog boekt,
+                  // zag die afspraken anders nergens. Niets bekend: 8-21.
+                  let lo = Infinity, hi = -Infinity;
+                  Object.values(salonData.business_hours || {}).forEach(d => {
+                    if (!d || d.closed || !d.open || !d.close) return;
+                    const o = parseInt(String(d.open).split(":")[0]);
+                    const [ch, cm] = String(d.close).split(":").map(Number);
+                    if (Number.isFinite(o)) lo = Math.min(lo, o);
+                    if (Number.isFinite(ch)) hi = Math.max(hi, cm > 0 ? ch : ch - 1);
+                  });
+                  Object.keys(hourCounts).map(Number).forEach(h => { lo = Math.min(lo, h); hi = Math.max(hi, h); });
+                  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi < lo) { lo = 8; hi = 21; }
                   const hours = [];
-                  for (let h = 8; h <= 21; h++) hours.push(h);
+                  for (let h = Math.max(0, lo); h <= Math.min(23, hi); h++) hours.push(h);
                   const max = Math.max(...hours.map(h => hourCounts[h] || 0), 1);
                   return (
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
@@ -15376,8 +15509,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{lang === "nl" ? "Klant retentie" : lang === "es" ? "Retención de clientes" : "Client retention"}</SL>
                 {(() => {
+                  // Alleen echte bezoeken (afgerond, geen kassaverkoop), per
+                  // e-mailadres in kleine letters zoals de klantenlijst: een
+                  // geannuleerde en opnieuw geboekte afspraak maakte iemand
+                  // anders al "terugkerend", en Anna@ en anna@ telden dubbel.
                   const clientVisits = {};
-                  appts.forEach(a => { if (a.client_email) clientVisits[a.client_email] = (clientVisits[a.client_email] || 0) + 1; });
+                  appts.forEach(a => {
+                    if (a.status !== "completed" || isSaleRow(a)) return;
+                    const k = String(a.client_email || "").trim().toLowerCase();
+                    if (k) clientVisits[k] = (clientVisits[k] || 0) + 1;
+                  });
                   const total = Object.keys(clientVisits).length;
                   const returning = Object.values(clientVisits).filter(v => v > 1).length;
                   const pct = total > 0 ? Math.round((returning / total) * 100) : 0;
@@ -15412,10 +15553,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                           {/* Anoniem geplaatst = de klant koos dat bewust; dan ook hier geen naam. */}
                           <span style={{ fontWeight: 500, fontSize: 13, ...(r.anonymous ? { fontStyle: "italic", color: c.textSub } : {}) }}>{r.anonymous ? t.anonymousClient : r.client_name}</span>
-                          <span style={{ color: accent, fontSize: 13 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                          {/* Sterren als SVG: de ster-tekens werden op iOS emoji. */}
+                          <span role="img" aria-label={`${r.rating}/5`} style={{ color: accent, display: "inline-flex", gap: 1, flexShrink: 0 }}>
+                            {[1, 2, 3, 4, 5].map(i => (
+                              <svg key={i} width="12" height="12" viewBox="0 0 20 20" fill={i <= r.rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                              </svg>
+                            ))}
+                          </span>
                         </div>
                         {r.comment && <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
-                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString()}</div>
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "short", year: "numeric" })}</div>
                       </div>
                     ))}
                     {salonData.reviews.length > 5 && (
@@ -15429,7 +15577,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 })()}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           </div>
           ) : (
@@ -15534,8 +15683,106 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               ), document.body)}
 
+              {/* Dubbel factuurvoorvoegsel, gezien vanaf een ander tabblad: de
+                  grote Opslaan-knop stuurt de factuurprofielen altijd mee en de
+                  database weigert een opslag die een dubbel voorvoegsel toevoegt.
+                  De rode uitleg staat alleen op het tabblad Salon; zonder deze
+                  balk zag een eigenaar op Planning alleen "Opslaan mislukt". */}
+              {settingsTab !== "salon" && settingsTab !== "diensten" && settingsTab !== "billing" && (() => {
+                const seen = new Set();
+                let dup = null;
+                for (const v of [salonData.invoice_prefix, ...(salonData.invoice_profiles || []).map(p => p.invoice_prefix)]) {
+                  const k = String(v || "").trim().toUpperCase() || "INV";
+                  if (seen.has(k)) { dup = k; break; }
+                  seen.add(k);
+                }
+                if (!dup) return null;
+                return (
+                  <div role="alert" style={{ fontSize: 12, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 220px", lineHeight: 1.5 }}>
+                      {lang === "nl" ? `Twee factuurprofielen hebben hetzelfde voorvoegsel (${dup}). Dan krijgen twee facturen hetzelfde nummer en kan opslaan mislukken. Geef elk profiel een eigen voorvoegsel onder Salon.`
+                        : lang === "es" ? `Dos perfiles de factura tienen el mismo prefijo (${dup}). Así dos facturas recibirían el mismo número y puede que no se guarde. Da a cada perfil su propio prefijo en Salón.`
+                        : `Two invoice profiles share the prefix ${dup}. Two invoices would then get the same number and saving may fail. Give each profile its own prefix under Salon.`}
+                    </div>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33` }}
+                      onClick={() => { setSettingsTab("salon"); setTimeout(() => { try { document.querySelector("[data-dup-prefix]")?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* older browsers */ } }, 150); }}>
+                      {lang === "nl" ? "Naar Salon" : lang === "es" ? "Ir a Salón" : "Go to Salon"}
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* ═══ SALON TAB ═══ */}
-              {settingsTab === "salon" && <>
+              {settingsTab === "salon" && (() => {
+                // Factuurvoorvoegsels: het hoofdprofiel en elk extra profiel
+                // hebben een EIGEN reeks nodig. Een nieuw extra profiel kreeg
+                // "INV" mee, net als het hoofdprofiel, en begon dan opnieuw
+                // bij INV-0001: twee klanten met hetzelfde factuurnummer (en
+                // de unieke index op appointments liet het opslaan van
+                // "verstuurd" mislukken). Leeg telt als "INV", zoals bij
+                // versturen en opslaan. De database weigert sinds 05-10 een
+                // opslag die een dubbel voorvoegsel toevoegt; hier ziet de
+                // eigenaar het al vóór ze op Opslaan drukt.
+                const normPrefix = (v) => String(v || "").trim().toUpperCase() || "INV";
+                const prefixCount = [salonData.invoice_prefix, ...(salonData.invoice_profiles || []).map(p => p.invoice_prefix)]
+                  .map(normPrefix).reduce((m, v) => m.set(v, (m.get(v) || 0) + 1), new Map());
+                const isDupPrefix = (v) => (prefixCount.get(normPrefix(v)) || 0) > 1;
+                // Het voorvoegsel waarmee een teamlid in haar eigen app
+                // factureert: het opgeslagen voorvoegsel, of, als dat leeg is of
+                // gelijk aan dat van de salon, de eerste drie letters van haar
+                // naam ("TM" zonder letters, met een 2 erachter als dat toevallig
+                // het salonvoorvoegsel is). Exact de regel van derivedPrefix /
+                // effectivePrefix in StaffApp.jsx: anders kreeg een extra profiel
+                // "Mel" hier MEL terwijl stylist Mel in haar app ook MEL gebruikt
+                // (zelfde reeks onder dezelfde salon, het tweede nummer geweigerd).
+                const staffPrefixOf = (s, mainPrefix) => {
+                  const salonPrefix = String(mainPrefix || "INV").trim().toUpperCase();
+                  const v = String(s?.invoice_prefix || "").trim();
+                  if (v && v.toUpperCase() !== salonPrefix) return v.toUpperCase();
+                  const p = String(s?.name || "").normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) || "TM";
+                  return p === salonPrefix ? `${p}2` : p;
+                };
+                const staffPrefixes = (d) => (d.staff || []).map(s => staffPrefixOf(s, d.invoice_prefix));
+                const staffPrefixSet = new Set(staffPrefixes(salonData));
+                // Alleen bij extra profielen: het hoofdvoorvoegsel valt volgens
+                // dezelfde regel nooit samen met dat van een teamlid.
+                const isStaffPrefix = (v) => staffPrefixSet.has(normPrefix(v));
+                const prefixNote = (staff) => (
+                  <div data-dup-prefix style={{ fontSize: 10, color: c.danger, marginTop: 5, lineHeight: 1.5 }}>
+                    {staff
+                      ? (lang === "nl" ? "Een teamlid factureert al met dit voorvoegsel. Kies een ander, anders krijgen twee facturen hetzelfde nummer."
+                        : lang === "es" ? "Un miembro del equipo ya factura con este prefijo. Elige otro; si no, dos facturas reciben el mismo número."
+                        : "A team member already invoices with this prefix. Choose another one, otherwise two invoices get the same number.")
+                      : (lang === "nl" ? "Dit voorvoegsel gebruikt een ander factuurprofiel al. Elk profiel heeft een eigen voorvoegsel nodig, anders krijgen twee facturen hetzelfde nummer en kan opslaan mislukken."
+                        : lang === "es" ? "Otro perfil de factura ya usa este prefijo. Cada perfil necesita su propio prefijo; si no, dos facturas reciben el mismo número y puede que no se guarde."
+                        : "Another invoice profile already uses this prefix. Each profile needs its own prefix, otherwise two invoices get the same number and saving may fail.")}
+                  </div>
+                );
+                const dupPrefixNote = prefixNote(false);
+                // Voorvoegsel voor een extra profiel: de eerste letters van het
+                // label ("Lady" wordt "LADY"), zonder label "INV2", "INV3"…, en
+                // nooit een voorvoegsel dat al in gebruik is (hoofdprofiel,
+                // andere extra's of het voorvoegsel waarmee een teamlid zelf
+                // factureert, zie staffPrefixOf).
+                const derivePrefix = (label, taken) => {
+                  const base = String(label || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+                  const root = base || "INV";
+                  for (let n = base ? 1 : 2; n < 100; n++) {
+                    const cand = n === 1 ? root : `${root}${n}`;
+                    if (!taken.has(cand)) return cand;
+                  }
+                  return `${root}${Date.now() % 1000}`;
+                };
+                const takenPrefixes = (d, skipIdx) => new Set([
+                  normPrefix(d.invoice_prefix),
+                  ...(d.invoice_profiles || []).filter((_, i) => i !== skipIdx).map(p => normPrefix(p.invoice_prefix)),
+                  ...staffPrefixes(d),
+                ]);
+                // Een locatie met afspraken wordt gearchiveerd (active=false) in
+                // plaats van verwijderd; die staat niet meer op de
+                // boekingspagina en hoort hier dus ook niet meer.
+                const activeLocations = (salonData.locations || []).filter(l => l.active !== false);
+                return <>
 
 
               {/* Profile */}
@@ -15664,7 +15911,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         : c.danger,
                       display: "flex", alignItems: "center", gap: 6,
                     }}>
-                      {slugStatus.state === "available" && <span>✓</span>}
+                      {slugStatus.state === "available" && <NavIcon name="check" size={12} color="currentColor" />}
                       {slugStatus.state === "taken" && <NavIcon name="alerttri" size={12} color="currentColor" />}
                       {slugStatus.state === "invalid" && <NavIcon name="alerttri" size={12} color="currentColor" />}
                       {slugStatus.state === "checking" && <span>…</span>}
@@ -15876,7 +16123,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {salonData.logo_url ? (
                       <div style={{ position: "relative" }}>
                         <img src={salonData.logo_url} style={{ width: 72, height: 72, borderRadius: 14, objectFit: "cover", border: `1px solid ${c.inputBorder}` }} />
-                        <button onClick={() => update(d => { d.logo_url = ""; return d; })}
+                        <button type="button" onClick={() => update(d => { d.logo_url = ""; return d; })}
+                          aria-label={lang === "nl" ? "Logo verwijderen" : lang === "es" ? "Quitar el logo" : "Remove logo"}
                           style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: c.danger, color: "#fff", border: `2px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                         </button>
@@ -15926,11 +16174,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           {lang === "nl" ? "Aan: je eigen logo bovenaan. Uit: het Vellu-merk." : lang === "es" ? "Activado: tu propio logo arriba. Desactivado: la marca Vellu." : "On: your own logo at the top. Off: the Vellu wordmark."}
                         </div>
                       </div>
-                      <div
+                      {/* Echte schakelaar (knop met role="switch"): met het
+                          toetsenbord en een schermlezer te bedienen. */}
+                      <button type="button" role="switch" aria-checked={!!salonData.show_logo_on_invoice}
+                        aria-label={lang === "nl" ? "Logo op facturen en rapporten" : lang === "es" ? "Logo en facturas e informes" : "Logo on invoices and reports"}
                         onClick={() => update(d => { d.show_logo_on_invoice = !d.show_logo_on_invoice; return d; })}
-                        style={{ width: 36, height: 20, borderRadius: 10, background: salonData.show_logo_on_invoice ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.show_logo_on_invoice ? 18 : 2, transition: "left 0.2s" }} />
-                      </div>
+                        style={{ width: 36, height: 20, borderRadius: 10, background: salonData.show_logo_on_invoice ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0, border: "none", padding: 0, display: "block" }}>
+                        <span style={{ display: "block", width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.show_logo_on_invoice ? 18 : 2, transition: "left 0.2s" }} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -16000,9 +16251,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             const zet = (stap) => update(d => { d.cover_zoom = Math.round(Math.max(1, Math.min(3, (Number(d.cover_zoom) || 1) + stap)) * 100) / 100; return d; });
                             const knop = { width: 26, height: 26, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
                             return (<>
-                              <button onClick={() => zet(-0.15)} disabled={z <= 1} style={{ ...knop, opacity: z <= 1 ? 0.4 : 1 }} aria-label="Zoom uit">−</button>
+                              <button onClick={() => zet(-0.15)} disabled={z <= 1} style={{ ...knop, opacity: z <= 1 ? 0.4 : 1 }} aria-label={lang === "nl" ? "Zoom uit" : lang === "es" ? "Alejar" : "Zoom out"}>−</button>
                               <span style={{ fontSize: 10, color: c.textSub, minWidth: 32, textAlign: "center" }}>{z.toFixed(2).replace(/\.?0+$/, "")}×</span>
-                              <button onClick={() => zet(0.15)} disabled={z >= 3} style={{ ...knop, opacity: z >= 3 ? 0.4 : 1 }} aria-label="Zoom in">+</button>
+                              <button onClick={() => zet(0.15)} disabled={z >= 3} style={{ ...knop, opacity: z >= 3 ? 0.4 : 1 }} aria-label={lang === "nl" ? "Zoom in" : lang === "es" ? "Acercar" : "Zoom in"}>+</button>
                               {(z !== 1 || (salonData.cover_focal_x ?? 50) !== 50) && (
                                 <button onClick={() => update(d => { d.cover_zoom = 1; d.cover_focal_x = 50; d.cover_focal_y = 50; return d; })}
                                   style={{ ...knop, width: "auto", padding: "0 8px", fontSize: 10 }}>
@@ -16013,7 +16264,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           })()}
                         </div>
                       </div>
-                      <button onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; d.cover_focal_x = 50; d.cover_zoom = 1; return d; })}
+                      <button type="button" onClick={() => update(d => { d.cover_image_url = ""; d.cover_focal_y = 50; d.cover_focal_x = 50; d.cover_zoom = 1; return d; })}
+                        aria-label={lang === "nl" ? "Omslagfoto verwijderen" : lang === "es" ? "Quitar la foto de portada" : "Remove cover image"}
                         style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, backdropFilter: "blur(8px)" }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </button>
@@ -16048,11 +16300,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 18, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>{t.locations}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted }}>{(salonData.locations || []).length}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{activeLocations.length}</div>
                 </div>
 
                 {/* Main location from profile — shown when no explicit locations exist */}
-                {(salonData.locations || []).length === 0 && (salonData.address || salonData.city) && (
+                {activeLocations.length === 0 && (salonData.address || salonData.city) && (
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 10, background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 14 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}33`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <NavIcon name="mappin" size={14} color={accent} />
@@ -16070,9 +16322,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 )}
 
-                {(salonData.locations || []).length === 0 && !(salonData.address || salonData.city) ? (
+                {activeLocations.length === 0 && !(salonData.address || salonData.city) ? (
                   <div style={{ fontSize: 11, color: c.textMuted, textAlign: "center", padding: "14px 0", fontStyle: "italic" }}>{t.noLocations}</div>
-                ) : (salonData.locations || []).length === 0 ? (
+                ) : activeLocations.length === 0 ? (
                   <div style={{ fontSize: 11, color: c.textMuted, padding: "4px 2px 10px", lineHeight: 1.5 }}>
                     {lang === "nl"
                       ? "Voeg extra locaties toe als je op meerdere plekken werkt — klanten kunnen dan kiezen bij het boeken."
@@ -16082,7 +16334,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-                    {(salonData.locations || []).map(loc => {
+                    {activeLocations.map(loc => {
                       const isEditing = editingLocation === loc.id;
                       return (
                         <div key={loc.id} style={{ background: c.bg, border: `1px solid ${isEditing ? `${accent}44` : c.border}`, borderRadius: 14, padding: isEditing ? 14 : "12px 14px", transition: "border-color 0.2s" }}>
@@ -16108,13 +16360,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </div>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <button className="btn-ghost" style={{ flex: 1, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", color: accent, borderColor: `${accent}55` }} onClick={async () => {
-                                  await supabase.from("locations").update({ name: editLocForm.name, address: editLocForm.address || null, city: editLocForm.city || null, phone: editLocForm.phone || null }).eq("id", loc.id);
+                                  // Naam is verplicht in de database; zonder deze check
+                                  // mislukte het opslaan stil en bleef het veld leeg staan.
+                                  if (!String(editLocForm.name || "").trim()) {
+                                    toast.show(lang === "nl" ? "Vul een naam in" : lang === "es" ? "Introduce un nombre" : "Enter a name", "error");
+                                    return;
+                                  }
+                                  const { error } = await supabase.from("locations").update({ name: editLocForm.name, address: editLocForm.address || null, city: editLocForm.city || null, phone: editLocForm.phone || null }).eq("id", loc.id);
+                                  if (error) {
+                                    console.error("locatie opslaan:", error);
+                                    toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+                                    return;
+                                  }
                                   update(d => { d.locations = d.locations.map(l => l.id === loc.id ? {...l, ...editLocForm} : l); return d; });
                                   setEditingLocation(null);
                                 }}>
                                   <NavIcon name="check" size={12} color="currentColor" /> {t.saveChanges}
                                 </button>
-                                <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingLocation(null)}>
+                                <button className="btn-ghost" style={{ padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }} onClick={() => setEditingLocation(null)}
+                                  aria-label={lang === "nl" ? "Annuleer" : lang === "es" ? "Cancelar" : "Cancel"}>
                                   <NavIcon name="xmark" size={12} color="currentColor" />
                                 </button>
                               </div>
@@ -16130,14 +16394,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{loc.phone}</div>}
                               </div>
                               <div style={{ display: "flex", gap: 4 }}>
-                                <button onClick={() => { setEditingLocation(loc.id); setEditLocForm({ name: loc.name, address: loc.address || "", city: loc.city || "", phone: loc.phone || "" }); }}
+                                <button type="button" onClick={() => { setEditingLocation(loc.id); setEditLocForm({ name: loc.name, address: loc.address || "", city: loc.city || "", phone: loc.phone || "" }); }}
+                                  aria-label={lang === "nl" ? `Locatie ${loc.name} bewerken` : lang === "es" ? `Editar la ubicación ${loc.name}` : `Edit location ${loc.name}`}
                                   style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <NavIcon name="edit" size={11} color="currentColor" />
                                 </button>
-                                <button onClick={async () => {
+                                <button type="button" aria-label={lang === "nl" ? `Locatie ${loc.name} verwijderen` : lang === "es" ? `Eliminar la ubicación ${loc.name}` : `Delete location ${loc.name}`} onClick={async () => {
                                   if (!await showConfirm(lang === "nl" ? "Locatie verwijderen?" : lang === "es" ? "¿Eliminar ubicación?" : "Delete location?")) return;
-                                  await supabase.from("locations").delete().eq("id", loc.id);
-                                  update(d => { d.locations = (d.locations || []).filter(l => l.id !== loc.id); return d; });
+                                  // Hangen er afspraken aan deze locatie, dan weigert de
+                                  // database het verwijderen (appointments.location_id,
+                                  // zonder ON DELETE). Voorheen verdween hij dan alleen
+                                  // van het scherm en stond hij na herladen gewoon weer
+                                  // op de boekingspagina. Nu archiveren we hem
+                                  // (active=false): weg van de boekingspagina, en de
+                                  // oude afspraken houden hun locatie.
+                                  let { error } = await supabase.from("locations").delete().eq("id", loc.id);
+                                  let archived = false;
+                                  if (error && error.code === "23503") {
+                                    ({ error } = await supabase.from("locations").update({ active: false }).eq("id", loc.id));
+                                    archived = !error;
+                                  }
+                                  if (error) {
+                                    console.error("locatie verwijderen:", error);
+                                    toast.show(lang === "nl" ? "Verwijderen mislukt" : lang === "es" ? "No se pudo eliminar" : "Delete failed", "error");
+                                    return;
+                                  }
+                                  update(d => { d.locations = archived ? (d.locations || []).map(l => l.id === loc.id ? { ...l, active: false } : l) : (d.locations || []).filter(l => l.id !== loc.id); return d; });
+                                  if (archived) toast.show(lang === "nl" ? "Er staan afspraken op deze locatie. Hij is van je boekingspagina gehaald; die afspraken blijven bewaard."
+                                    : lang === "es" ? "Hay citas en esta ubicación. Se ha quitado de tu página de reservas; esas citas se conservan."
+                                    : "This location has appointments. It has been removed from your booking page; those appointments are kept.", "info");
                                 }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <NavIcon name="xmark" size={11} color="currentColor" />
                                 </button>
@@ -16151,7 +16436,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 )}
                 {/* Multiple locations are a Professional feature; Starter
                     keeps its first location but can't add a second one. */}
-                {isStarter && (salonData.locations || []).length >= 1 ? (
+                {isStarter && activeLocations.length >= 1 ? (
                   <UpgradeCard feature={lang === "nl" ? "Meerdere locaties" : lang === "es" ? "Varias ubicaciones" : "Multiple locations"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
                 ) : (
                 <LocationAdder ownerId={salonData.owner_id} lang={lang} t={t} accent={accent} onAdd={(loc) => {
@@ -16189,9 +16474,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     : lang === "es" ? "En tu página, el cliente elige junto al número entre llamar (teléfono) o WhatsApp (número de WhatsApp)."
                     : "On your salon page a client taps the number and chooses between calling (phone number) and WhatsApp (WhatsApp number)."}
                   {(salonData.salon_phone || "").trim() && !(salonData.whatsapp_number || "").trim() && (
-                    <> <span onClick={() => update(d => { d.whatsapp_number = d.salon_phone; return d; })} style={{ color: accent, cursor: "pointer", fontWeight: 600 }}>
-                      {lang === "nl" ? "Zelfde nummer ook voor WhatsApp gebruiken →" : lang === "es" ? "Usar el mismo número para WhatsApp →" : "Use the same number for WhatsApp →"}
-                    </span></>
+                    <> <button type="button" onClick={() => update(d => { d.whatsapp_number = d.salon_phone; return d; })} style={{ color: accent, cursor: "pointer", fontWeight: 600, background: "none", border: "none", padding: 0, font: "inherit", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                      {lang === "nl" ? "Zelfde nummer ook voor WhatsApp gebruiken" : lang === "es" ? "Usar el mismo número para WhatsApp" : "Use the same number for WhatsApp"}
+                    </button></>
                   )}
                 </div>
                 {/* Salon-finder visibility — the landing page's "find your
@@ -16211,11 +16496,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           : "Clients can find your salon via the finder on vellu.cc. Your own link always keeps working, even with this off."}
                     </div>
                   </div>
-                  <div
+                  <button type="button" role="switch" aria-checked={!!salonData.directory_visible}
+                    aria-label={lang === "nl" ? "Vindbaar in de Vellu salon-zoeker" : lang === "es" ? "Visible en el buscador de salones de Vellu" : "Discoverable in the Vellu salon finder"}
                     onClick={() => update(d => { d.directory_visible = !d.directory_visible; return d; })}
-                    style={{ width: 36, height: 20, borderRadius: 10, background: salonData.directory_visible ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.directory_visible ? 18 : 2, transition: "left 0.2s" }} />
-                  </div>
+                    style={{ width: 36, height: 20, borderRadius: 10, background: salonData.directory_visible ? accent : c.inputBorder, cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0, border: "none", padding: 0, display: "block" }}>
+                    <span style={{ display: "block", width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: salonData.directory_visible ? 18 : 2, transition: "left 0.2s" }} />
+                  </button>
                 </div>
               </div>
 
@@ -16445,7 +16731,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
-                      <input className="input-field" placeholder="INV" value={salonData.invoice_prefix || "INV"} onChange={e => update(d => { d.invoice_prefix = e.target.value; return d; })} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                      <input className="input-field" placeholder="INV" value={salonData.invoice_prefix || "INV"} onChange={e => update(d => { d.invoice_prefix = e.target.value.toUpperCase(); return d; })} aria-invalid={isDupPrefix(salonData.invoice_prefix) || undefined} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase", ...(isDupPrefix(salonData.invoice_prefix) ? { borderColor: c.danger } : {}) }} />
+                      {isDupPrefix(salonData.invoice_prefix) && dupPrefixNote}
                     </div>
                     <div>
                       <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : lang === "es" ? "Siguiente número" : "Next number"}</div>
@@ -16503,10 +16790,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const ready = !!((salonData.iban || "").trim() || (salonData.payment_link || "").trim()) || staffReady;
                   const on = !!salonData.prepay_enabled && ready;
                   const perStaffNote = lang === "nl"
-                    ? " Heeft een teamlid eigen betaalgegevens (jij vult ze in bij Team → Bewerk, of zij in haar eigen app), dan gaat een vooruitbetaling voor een afspraak bij haar naar háár rekening; bij twee stylistes op één boeking, of zonder eigen gegevens, naar die van de salon."
+                    ? " Heeft een teamlid eigen betaalgegevens (jij vult ze in onder Team, via Bewerk, of zij in haar eigen app), dan gaat een vooruitbetaling voor een afspraak bij haar naar háár rekening; bij twee stylistes op één boeking, of zonder eigen gegevens, naar die van de salon."
                     : lang === "es"
-                    ? " Si un miembro del equipo tiene sus propios datos de pago (los rellenas tú en Equipo → Editar, o ella en su app), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
-                    : " If a team member has her own payment details (you fill them in under Team → Edit, or she does in her own app), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
+                    ? " Si un miembro del equipo tiene sus propios datos de pago (los rellenas tú en Equipo, con Editar, o ella en su app), el pago por adelantado de una cita con ella va a su cuenta; con dos estilistas en una reserva, o sin datos propios, a la del salón."
+                    : " If a team member has her own payment details (you fill them in under Team, via Edit, or she does in her own app), a prepayment for an appointment with her goes to her account; with two stylists on one booking, or without her own details, to the salon's.";
                   return (<>
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -16525,10 +16812,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               : "First fill in a payment link above or your IBAN (under Invoice details); otherwise the client has nowhere to pay.")}
                         </div>
                       </div>
-                      <div role="switch" aria-checked={on} aria-disabled={!ready} onClick={() => { if (!ready) return; update(d => { d.prepay_enabled = !d.prepay_enabled; return d; }); }}
-                        style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: on ? accent : c.inputBorder, opacity: ready ? 1 : 0.45, transition: "background 0.2s", flexShrink: 0, cursor: ready ? "pointer" : "not-allowed" }}>
-                        <div style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-                      </div>
+                      {/* Knop i.p.v. div: met het toetsenbord te bedienen (Tab,
+                          spatie/Enter); zonder betaalgegevens uitgeschakeld. */}
+                      <button type="button" role="switch" aria-checked={on} disabled={!ready} onClick={() => { if (!ready) return; update(d => { d.prepay_enabled = !d.prepay_enabled; return d; }); }}
+                        aria-label={lang === "nl" ? "Vooruitbetalen aanbieden" : lang === "es" ? "Ofrecer pago por adelantado" : "Offer paying in advance"}
+                        style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: on ? accent : c.inputBorder, opacity: ready ? 1 : 0.45, transition: "background 0.2s", flexShrink: 0, cursor: ready ? "pointer" : "not-allowed", border: "none", padding: 0, display: "block" }}>
+                        <span style={{ display: "block", position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                      </button>
                     </div>
                     {/* Betaaltermijn (Esther/TTNB 25-09-2026: "can I also change how many
                         days they have to pay?"). Uren vanaf het boeken; de boekingsfunctie
@@ -16589,7 +16879,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Naam / label" : lang === "es" ? "Nombre / etiqueta" : "Name / label"}</div>
-                        <input className="input-field" placeholder={lang === "nl" ? "bijv. Lady" : lang === "es" ? "p. ej. Lady" : "e.g. Lady"} value={p.label || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, label: e.target.value} : x); return d; })} style={{ width: "100%" }} />
+                        <input className="input-field" placeholder={lang === "nl" ? "bijv. Lady" : lang === "es" ? "p. ej. Lady" : "e.g. Lady"} value={p.label || ""} onChange={e => update(d => {
+                          d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => {
+                            if (i !== idx) return x;
+                            const next = { ...x, label: e.target.value };
+                            // Het voorvoegsel volgt het label zolang het nog het
+                            // automatische is én er onder dit profiel nog geen
+                            // factuur is verstuurd (een lopende reeks blijft staan).
+                            if ((parseInt(x.next_invoice_number) || 1) <= 1) {
+                              const taken = takenPrefixes(d, i);
+                              if (!String(x.invoice_prefix || "").trim() || normPrefix(x.invoice_prefix) === derivePrefix(x.label, taken)) next.invoice_prefix = derivePrefix(e.target.value, taken);
+                            }
+                            return next;
+                          });
+                          return d;
+                        })} style={{ width: "100%" }} />
                       </div>
                       <div>
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.address}</div>
@@ -16626,7 +16930,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         <div>
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
-                          <input className="input-field" placeholder="INV" value={p.invoice_prefix || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, invoice_prefix: e.target.value} : x); return d; })} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                          {/* Hoofdletters ook in de opgeslagen waarde: de CSS liet
+                              "ttnb" als TTNB zien terwijl de factuur ttnb-0012 kreeg. */}
+                          <input className="input-field" placeholder="INV" value={p.invoice_prefix || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, invoice_prefix: e.target.value.toUpperCase()} : x); return d; })} aria-invalid={(isDupPrefix(p.invoice_prefix) || isStaffPrefix(p.invoice_prefix)) || undefined} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase", ...((isDupPrefix(p.invoice_prefix) || isStaffPrefix(p.invoice_prefix)) ? { borderColor: c.danger } : {}) }} />
+                          {isDupPrefix(p.invoice_prefix) ? dupPrefixNote : isStaffPrefix(p.invoice_prefix) ? prefixNote(true) : null}
                         </div>
                         <div>
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : lang === "es" ? "Siguiente número" : "Next number"}</div>
@@ -16642,13 +16949,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <button className="btn-ghost" style={{ width: "100%", padding: "12px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", fontSize: 11 }}
                   onClick={() => update(d => {
                     const rid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `p_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-                    d.invoice_profiles = [...(d.invoice_profiles || []), { id: rid, label: "", address: "", kvk_number: "", btw_id: "", iban: "", iban_holder: "", payment_link: "", invoice_prefix: "INV", next_invoice_number: 1 }];
+                    // Eigen voorvoegsel vanaf de start (INV2, INV3…); zodra er
+                    // een label staat volgt het dat label (zie het labelveld).
+                    const prefix = derivePrefix("", takenPrefixes(d, -1));
+                    d.invoice_profiles = [...(d.invoice_profiles || []), { id: rid, label: "", address: "", kvk_number: "", btw_id: "", iban: "", iban_holder: "", payment_link: "", invoice_prefix: prefix, next_invoice_number: 1 }];
                     return d;
                   })}>
                   <NavIcon name="plus" size={13} color={accent} /> {lang === "nl" ? "Extra profiel toevoegen" : lang === "es" ? "Añadir perfil adicional" : "Add extra profile"}
                 </button>
               </div>
-              </>}
+              </>;
+              })()}
 
               {/* ═══ DIENSTEN TAB ═══ */}
               {settingsTab === "diensten" && <>
