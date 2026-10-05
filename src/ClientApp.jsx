@@ -773,6 +773,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   });
   const hasLocations = (initialSalon.locations || []).length > 1;
   const hasAnyLocation = (initialSalon.locations || []).length > 0;
+  // Uitleg als een gekozen tijd intussen niet meer kan (goToStep hieronder en
+  // "Kies" op de eerstvolgend-kaart), anders springt de pagina zonder reden terug.
+  const timeGoneText = lang === "nl" ? "Deze tijd is niet meer beschikbaar, kies een andere tijd." : lang === "es" ? "Esta hora ya no está disponible, elige otra." : "This time is no longer available, please pick another.";
+  const showTimeGone = () => {
+    setErrorToast(timeGoneText);
+    setTimeout(() => setErrorToast(""), 5000);
+  };
+  // Geeft false als de klant terug moest naar de tijdkeuze (stap 2).
   const goToStep = (s) => {
     if (s === 2) setSlotsRefreshKey(k => k + 1);
     // Een gekozen tijd die intussen niet meer kan (andere dienst, stylist of
@@ -781,9 +789,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     // Bevestigen (outside_hours / slot_conflict).
     if (s >= 2 && time && !isChosenTimeValid(time)) {
       setTime(null);
-      if (s > 2) { setSlotsRefreshKey(k => k + 1); setStep(2); return; }
+      if (s > 2) { setSlotsRefreshKey(k => k + 1); setStep(2); showTimeGone(); return false; }
     }
     setStep(s);
+    return true;
   };
   const goBack = () => {
     if (step <= (hasLocations ? 0 : 1)) { setMode("profile"); return; }
@@ -1230,7 +1239,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       if (!booked) booked = rangeBooked[pick.date] || [];
       const ok = getAvailableTimes(pick.date).includes(pick.time) && !isTimeSlotBooked(pick.time, booked);
       if (ok) setTime(pick.time);
-      else setSlotsRefreshKey(k => k + 1);
+      else { setSlotsRefreshKey(k => k + 1); showTimeGone(); }
       setPendingPick(null);
     })();
     return () => { cancelled = true; };
@@ -1878,7 +1887,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           }
         } catch { /* geen leesbare body — algemene melding */ }
       } else {
-        ok = !!data?.success;
+        // Alleen de nieuwe functie meldt `inserted` (aantal aangemaakte rijen,
+        // 0 = wacht al op die dagen). De oude gaf {success:true} zonder iets op
+        // te slaan; dat tonen we nooit als gelukt.
+        ok = !!data?.success && typeof data?.inserted === "number";
       }
     } catch (e) { console.error("waitlist-notify failed:", e); }
     setWaitlistSubmitting(false);
@@ -2051,7 +2063,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             : allStaff.filter(s => (!s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id))
                 && (item.extras || []).every(e => extraAllowedFor(e, s.id))),
         }))
-      : [{ duration: Math.max(getDuration(), 30), eligible: [] }];
+      // Geen dienst gekozen (profiel: "eerstvolgend vrij"): bij een TEAM-account
+      // telt een tijd als vrij zodra één actieve stylist geen afspraak heeft,
+      // net als een boeking zonder voorkeur; anders blokkeert elke afspraak.
+      : [{ duration: Math.max(getDuration(), 30), eligible: initialSalon.account_type === "team" ? allStaff : [] }];
 
     // Does this staff member have a conflicting appointment in [start, end)?
     // Appointments without staff_id (solo-era / unassigned) block everyone —
@@ -2130,6 +2145,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           );
       return { duration, eligible, serviceId: item.service.id };
     });
+    // Geen dienst gekozen (profiel: "eerstvolgend vrij") bij een TEAM-account:
+    // er moet wel een stylist zijn die dat half uur werkt en niet geblokkeerd
+    // is (zelfde toets als een boeking zonder voorkeur), anders noemde de hero
+    // een tijd waarop niemand er is. Duur blijft 30 (totalDuration hieronder).
+    if (selectedServices.length === 0 && initialSalon.account_type === "team") {
+      serviceSlots.push({ duration: 30, eligible: allStaff, serviceId: null });
+    }
 
     // If any service has zero eligible staff at all (misconfigured salon), bail.
     // A single service with no eligible set means nobody in the salon can do it
@@ -2437,14 +2459,17 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     // klant wordt teruggebracht naar het telefoonveld, dat rood oplicht met
     // dezelfde uitleg eronder.
     if (initialSalon.phone_required && (form.phone || "").replace(/[^0-9]/g, "").length < 6) {
-      setErrorToast(lang === "nl"
+      const phoneMsg = lang === "nl"
         ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak."
         : lang === "es"
         ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita."
-        : "You also need to fill in your phone number — this salon needs it for your appointment.");
-      setTimeout(() => setErrorToast(""), 6000);
+        : "You also need to fill in your phone number — this salon needs it for your appointment.";
       setPhoneError(true);
-      goToStep(3);
+      // Moest de klant terug naar de tijdkeuze (tijd intussen weg), dan noemt
+      // de melding beide redenen; het telefoonveld staat al rood klaar.
+      const landed = goToStep(3);
+      setErrorToast(landed ? phoneMsg : `${timeGoneText} ${phoneMsg}`);
+      setTimeout(() => setErrorToast(""), 6000);
       setTimeout(() => {
         try {
           const el = document.getElementById("vl-booking-phone");
@@ -2610,6 +2635,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         // De salon zette Vooruitbetalen uit (of haalde haar betaalgegevens weg)
         // terwijl deze pagina al open stond.
         prepay_not_available: lang === "es" ? "Pagar por adelantado ya no está disponible en este salón. Elige otra forma de pago." : isNl ? "Vooruitbetalen is bij deze salon niet meer beschikbaar. Kies een andere betaalwijze." : "Paying in advance is no longer available at this salon. Please choose another payment method.",
+        // book-appointment weigert vooruitbetalen voor een afspraak binnen 4 uur
+        // (de betaaltermijn zou dan in de laatste 2 uur vallen).
+        prepay_too_late: lang === "es" ? "Pagar por adelantado ya no es posible para una cita dentro de 4 horas. Elige otra forma de pago." : isNl ? "Vooruitbetalen kan niet meer voor een afspraak binnen 4 uur. Kies een andere betaalwijze." : "Paying in advance is no longer possible for an appointment within 4 hours. Please choose another payment method.",
         invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
         phone_required: lang === "es" ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita." : isNl ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak." : "You also need to fill in your phone number — this salon needs it for your appointment.",
@@ -2674,7 +2702,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         // De rode uitleg onder het veld zegt "vul je nummer in"; bij een
         // ongeldig nummer volstaan de melding hierboven en de focus op het veld.
         if (code === "phone_required") setPhoneError(true);
-        goToStep(3);
+        // Moest de klant terug naar de tijdkeuze, dan noemt de melding dat ook.
+        if (!goToStep(3)) msg = `${timeGoneText} ${msg}`;
         setTimeout(() => {
           try {
             const el = document.getElementById("vl-booking-phone");
@@ -2682,6 +2711,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             el?.focus();
           } catch { /* focus is best-effort */ }
         }, 300);
+      } else if (code === "prepay_too_late" || code === "prepay_not_available") {
+        // Terug naar de betaalkeuze (stap 3) met "bij de afspraak" gekozen.
+        setForm(f => ({ ...f, payment: "on-arrival" }));
+        if (!goToStep(3)) msg = `${timeGoneText} ${msg}`;
       }
       setErrorToast(msg);
       setTimeout(() => setErrorToast(""), 5000);
