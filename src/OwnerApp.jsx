@@ -2895,7 +2895,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .order("id")),
         fetchAllRows(() => supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name")
+          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name, created_at")
           .eq("owner_id", ownerId)
           .order("id")),
         supabase
@@ -2967,7 +2967,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // toegevoegde afspraken zonder e-mail hebben er geen), dus vullen zolang
         // het veld nog leeg is. manual_clients wint hieronder alsnog.
         if (!agg.clientId && a.clients?.id) agg.clientId = a.clients.id;
-        if (!agg.birthday && a.clients?.birthday) agg.birthday = a.clients.birthday;
+        // bookingBirthday onthoudt die datum apart: de salon kan hem niet wissen
+        // (UPDATE op clients is dicht), dus Bewerken legt dat uit.
+        if (!agg.birthday && a.clients?.birthday) agg.birthday = agg.bookingBirthday = a.clients.birthday;
         agg.appts.push(a);
         // Besteed telt alles (ook Kassa-verkopen); Bezoeken en Laatst alleen
         // echte afspraken — wie alleen een nagelolie kocht was niet op bezoek.
@@ -2986,22 +2988,47 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // the display can soft-hide clients whose appointments we can't remove.
       // Een klant zonder e-mailadres hangt aan de afspraken met hetzelfde
       // telefoonnummer (of, zonder nummer, dezelfde naam). Meerdere rijen voor
-      // één klant (oude dubbelingen) komen op één kaart; manualIds houdt ze
-      // allemaal bij, zodat bewerken, verbergen en de stempelkaart ze samen
-      // bijwerken en een gewist veld niet uit een oudere rij terugkomt.
+      // één klant (oude dubbelingen: zelfde adres ÉN zelfde naam) komen op één
+      // kaart; manualIds houdt ze allemaal bij, zodat bewerken, verbergen en de
+      // stempelkaart ze samen bijwerken en een gewist veld niet uit een oudere
+      // rij terugkomt.
+      // Eén adres is niet altijd één persoon: bij TTB staan tot 22 mensen op
+      // één organisatieadres en gezinnen op één hotmail. Een klantrij komt dus
+      // alleen op een bestaande kaart als die nog geen klantrij heeft (de kaart
+      // uit de afspraken, zoals altijd) of als de klantrij daar dezelfde naam
+      // draagt (manualNameKey). Anders krijgt ze haar eigen kaart, zodat
+      // bewerken, verwijderen en samenvoegen nooit de rijen van een ander
+      // raken. Oudste rij eerst (created_at), zodat een later toegevoegd
+      // gezinslid de kaart uit de afspraken niet overneemt; heeft een rij
+      // precies de naam van die afspraken, dan gaat zij voor.
       const extra = [];
-      for (const m of manual || []) {
+      const byMailName = new Map(); // `${email}|${naamsleutel}` → kaart
+      const manualSorted = (manual || []).slice().sort((x, y) => String(x.created_at || "").localeCompare(String(y.created_at || "")) || String(x.id).localeCompare(String(y.id)));
+      for (const m of manualSorted) {
         const email = String(m.email || "").trim().toLowerCase();
-        const existing = email ? byEmail.get(email) : (byEmail.get(telKeyOf(m.phone)) || byEmail.get(nameKeyOf(m.name)));
+        const card = email ? byEmail.get(email) : null;
+        if (card && card.manualNameKey === undefined && nameKeyOf(m.name) && nameKeyOf(m.name) === nameKeyOf(card.name)) card.manualNameKey = nameKeyOf(m.name);
+      }
+      for (const m of manualSorted) {
+        const email = String(m.email || "").trim().toLowerCase();
+        const nk = nameKeyOf(m.name);
+        const base = email ? byEmail.get(email) : (byEmail.get(telKeyOf(m.phone)) || byEmail.get(nameKeyOf(m.name)));
+        const fits = (cl) => !!cl && (cl.manualNameKey === undefined || cl.manualNameKey === nk);
+        const existing = (email && byMailName.get(`${email}|${nk}`)) || (fits(base) ? base : null);
         const staffOff = Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [];
         if (existing) {
+          const first = !(existing.manualIds || []).length;
+          existing.manualNameKey = nk;
           if (m.name && m.name.trim()) existing.name = m.name;
           if (m.phone) existing.phone = m.phone;
           if (m.notes) existing.notes = m.notes;
           if (m.birthday) existing.birthday = m.birthday;
           existing.manualId = m.id;
           existing.manualIds = [...(existing.manualIds || []), m.id];
-          existing.hidden = !!m.hidden;
+          // Verborgen alleen als ÁLLE rijen achter de kaart verborgen zijn —
+          // anders besliste de volgorde van de rijen of de klant zichtbaar was.
+          existing.hidden = first ? !!m.hidden : (!!existing.hidden && !!m.hidden);
+          if (email) byMailName.set(`${email}|${nk}`, existing);
           // Zelfde regel als de trigger: één rij met het vinkje is genoeg, en
           // uitgezette stylisten tellen over alle rijen samen.
           existing.loyaltyOptIn = !!existing.loyaltyOptIn || !!m.loyalty_opt_in;
@@ -3009,10 +3036,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           existing.isBusiness = !!m.is_business;
           existing.contactName = m.contact_name || "";
         } else {
-          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           extra.push(card);
-          // Een volgende rij met hetzelfde adres komt op deze kaart.
-          if (email) byEmail.set(email, card);
+          // Een volgende rij met hetzelfde adres én dezelfde naam komt op deze
+          // kaart; een andere naam op hetzelfde adres krijgt een eigen kaart.
+          if (email) byMailName.set(`${email}|${nk}`, card);
         }
       }
       const list = [...new Set([...byEmail.values(), ...extra])]
@@ -3062,11 +3090,13 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     const email = addForm.email.trim();
     const phone = addForm.phone.trim();
     const notes = addForm.notes.trim();
-    // Staat dit e-mailadres al met een eigen klantrij in de lijst (ook
-    // verborgen)? Dan die bijwerken in plaats van een tweede rij — dubbele
-    // rijen lieten gewiste velden terugkomen en een uitgezette stempelkaart
-    // gewoon doorlopen.
-    const known = email ? [...clients, ...hiddenClients].find((cl) => cl.email === email.toLowerCase() && manualIdsOf(cl).length > 0) : null;
+    // Staat deze klant (zelfde e-mailadres ÉN dezelfde naam) al met een eigen
+    // klantrij in de lijst (ook verborgen)? Dan die bijwerken in plaats van een
+    // tweede rij — dubbele rijen lieten gewiste velden terugkomen en een
+    // uitgezette stempelkaart gewoon doorlopen. Een andere naam op hetzelfde
+    // adres (gezinslid, collega op een organisatieadres) is een andere klant
+    // en krijgt een nieuwe rij.
+    const known = email ? [...clients, ...hiddenClients].find((cl) => cl.email === email.toLowerCase() && manualIdsOf(cl).length > 0 && cl.manualNameKey === nameKeyOf(name)) : null;
     setSaving(true);
     let error;
     if (known) {
@@ -3131,16 +3161,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         toast.show(lang === "nl" ? "Een klant met afspraken houdt een e-mailadres. Pas het aan of laat het staan." : lang === "es" ? "Un cliente con citas conserva su correo. Cámbialo o déjalo como está." : "A client with appointments keeps an email address. Change it or leave it as it is.", "error");
         return;
       }
-      if (newEmail && emailChanged) apptPatch = { client_email: newEmail };
+      // Kleingeschreven, zoals Samenvoegen en de Kassa: de crons zoeken met een
+      // hoofdlettergevoelige .eq op client_email.
+      if (newEmail && emailChanged) apptPatch = { client_email: newEmail.toLowerCase() };
       else if (!newEmail && (telKeyOf(newPhone) || nameKeyOf(name)) !== editing.key) apptPatch = { client_name: name, client_phone: newPhone || null };
     }
     // Hoort het nieuwe adres (of, zonder adres, het nummer/de naam) al bij een
     // andere kaart? Dan niet stilzwijgend samenvoegen maar naar Samenvoegen
-    // verwijzen.
+    // verwijzen. Afspraken hangen alleen aan het adres, dus met afspraken aan
+    // een van beide kanten is hetzelfde adres altijd een botsing. Tussen twee
+    // klanten ZONDER afspraken alleen bij dezelfde naam: een andere naam op
+    // een gedeeld adres (gezin, organisatie) houdt bij het laden haar eigen
+    // kaart.
     const clashMail = newEmail && emailChanged ? newEmail.toLowerCase() : "";
     const clashKey = !newEmail ? (telKeyOf(newPhone) || nameKeyOf(name)) : "";
     const other = (clashMail || clashKey)
-      ? [...clients, ...hiddenClients].find((cl) => cl.key !== editing.key && (clashMail ? cl.email === clashMail : cl.key === clashKey))
+      ? [...clients, ...hiddenClients].find((cl) => cl.key !== editing.key && (clashMail
+          ? cl.email === clashMail && (ids.length > 0 || (cl.appts || []).length > 0 || cl.manualNameKey === nameKeyOf(name))
+          : cl.key === clashKey))
       : null;
     if (other) {
       toast.show(lang === "nl" ? `Deze gegevens horen al bij ${other.name}. Gebruik Samenvoegen om de twee kaarten samen te voegen.` : lang === "es" ? `Estos datos ya pertenecen a ${other.name}. Usa Combinar para unir las dos fichas.` : `These details already belong to ${other.name}. Use Merge to combine the two cards.`, "error");
@@ -3241,6 +3279,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     const { error } = await supabase.from("manual_clients").update({ hidden: false }).eq("owner_id", ownerId).in("id", mids);
     if (error) { toast.show(lang === "nl" ? "Terugzetten mislukt" : lang === "es" ? "Error al restaurar" : "Restore failed", "error"); return; }
     toast.show(lang === "nl" ? "Klant staat weer in je lijst" : lang === "es" ? "El cliente vuelve a estar en tu lista" : "Client is back in your list");
+    // Laatste verborgen klant terug: terug naar de gewone lijst, anders sprong
+    // de volgende "Klant verwijderen" meteen naar de verborgen weergave.
+    if (hiddenClients.length <= 1) setShowHidden(false);
     setSelected(null);
     setRefreshKey((k) => k + 1);
   };
@@ -3367,6 +3408,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       if ((source.loyaltyStaffOff || []).length > 0) patch.loyalty_staff_off = [...new Set([...(target.loyaltyStaffOff || []), ...source.loyaltyStaffOff])];
       // Zakelijke klant blijft zakelijk.
       if (source.isBusiness && !target.isBusiness) { patch.is_business = true; if (source.contactName && !target.contactName) patch.contact_name = source.contactName; }
+      // Blijft een verborgen kaart over (de andere kaart had als enige een
+      // e-mailadres of afspraken), dan komt die terug in de lijst — anders
+      // verdween de samengevoegde klant.
+      if (target.hidden) patch.hidden = false;
       if (Object.keys(patch).length > 0) {
         const tids = manualIdsOf(target);
         let err;
@@ -3543,9 +3588,22 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       }
       // Hoeveel ingevulde verjaardagen konden we niet lezen (bijv. 12/31/1990)?
       // Die klanten komen zonder verjaardag binnen; de preview zegt het erbij.
+      // Alleen regels die ook echt een klant worden: zonder naam, voor-/
+      // achternaam én e-mail slaat csvRowsToClients de regel over (zelfde
+      // kolomnamen als daar).
       const head = (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
-      const iBday = ["birthday", "verjaardag", "geboortedatum", "date of birth", "dob", "birth date"].map((n) => head.indexOf(n)).find((i) => i !== -1);
-      const badBirthdays = iBday === undefined ? 0 : rows.slice(1).filter((r) => { const raw = String(r[iBday] || "").trim(); return raw && !parseBirthday(raw); }).length;
+      const col = (...names) => names.map((n) => head.indexOf(n)).find((i) => i !== -1);
+      const iBday = col("birthday", "verjaardag", "geboortedatum", "date of birth", "dob", "birth date");
+      const iWho = [
+        col("name", "naam", "klant", "client", "customer", "full name", "volledige naam"),
+        col("first_name", "first name", "voornaam", "given name"),
+        col("last_name", "last name", "achternaam", "surname", "family name"),
+        col("email", "e-mail", "e_mail", "mail", "emailadres", "e-mailadres"),
+      ].filter((i) => i !== undefined);
+      const badBirthdays = iBday === undefined ? 0 : rows.slice(1).filter((r) => {
+        const raw = String(r[iBday] || "").trim();
+        return raw && !parseBirthday(raw) && iWho.some((i) => String(r[i] || "").trim());
+      }).length;
       setImportPreview({ rows: records, skipped, badBirthdays, fileName: file.name });
     } catch (err) {
       console.error("CSV parse error:", err);
@@ -3561,7 +3619,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     // clients known from bookings (de geladen lijst, ook verborgen): een
     // geïmporteerde rij voor een boekende klant overschreef anders haar naam,
     // telefoon en notities op de kaart. Dubbele regels in het bestand zelf
-    // gaan er één keer in. Zonder e-mailadres: zelfde naam + nummer telt als
+    // (zelfde e-mailadres ÉN zelfde naam) gaan er één keer in; verschillende
+    // mensen op één adres (gezin, organisatie — bij TTB tot 22 op één adres)
+    // komen er allemaal in. Zonder e-mailadres: zelfde naam + nummer telt als
     // bekend (anders zette een tweede import na een afgebroken eerste alle
     // e-mailloze contacten er nog eens in).
     const emails = importPreview.rows.map(r => r.email).filter(Boolean).map(e => e.toLowerCase());
@@ -3573,12 +3633,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     }
     const contactKey = (name, phone) => `${nameKeyOf(name)}|${waDigits(phone, countryCode)}`;
     const existingContacts = new Set(known.filter(cl => !cl.email).map(cl => contactKey(cl.name, cl.phone)));
+    const seenInFile = new Set(); // `${email}|${naamsleutel}` uit dit bestand
     const toInsert = importPreview.rows
       .filter(r => {
         if (r.email) {
           const e = r.email.trim().toLowerCase();
           if (existingEmails.has(e)) return false;
-          existingEmails.add(e);
+          const k = `${e}|${nameKeyOf(r.name)}`;
+          if (seenInFile.has(k)) return false;
+          seenInFile.add(k);
           return true;
         }
         const k = contactKey(r.name, r.phone);
@@ -4605,6 +4668,19 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                       : lang === "es" ? "Para la acción de cumpleaños — este cliente recibirá ese día su felicitación con código de descuento."
                       : "For the birthday campaign — this client gets their birthday wish and discount code on that day."}
                   </div>
+                  {/* Een verjaardag die de klant zelf bij het boeken invulde
+                      (clients.birthday) kan de salon niet wissen: die rij is van
+                      alle salons samen en UPDATE erop is dicht. Leeg opslaan wist
+                      alleen de eigen datum; daarna staat de boekingsdatum weer op
+                      de kaart en telt die voor de verjaardagsmail. Zeg dat hier,
+                      anders lijkt het opslaan mislukt. */}
+                  {editing.bookingBirthday && !editForm.birthday && (
+                    <div data-client-booking-birthday style={{ fontSize: 10, color: c.warning, marginTop: 4, lineHeight: 1.4 }}>
+                      {lang === "nl" ? `Deze klant vulde bij het boeken zelf een verjaardag in (${fmtDate(editing.bookingBirthday)}). Die kun je hier wel aanpassen, maar niet wissen: na opslaan staat die datum weer op de kaart en geldt hij voor de verjaardagsactie.`
+                        : lang === "es" ? `Este cliente indicó su cumpleaños al reservar (${fmtDate(editing.bookingBirthday)}). Aquí puedes cambiarlo, pero no borrarlo: al guardar, esa fecha vuelve a la ficha y se usa para la acción de cumpleaños.`
+                        : `This client entered their own birthday when booking (${fmtDate(editing.bookingBirthday)}). You can change it here, but not remove it: after saving, that date is back on the card and is used for the birthday campaign.`}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
