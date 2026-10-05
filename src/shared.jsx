@@ -160,12 +160,25 @@ function storedRef() {
 // (redeem_referral_code) bepaalt de echte beloning; dit is alleen voor de
 // teksten en de actiekaart. Eén keer ophalen per sessie, gedeeld via een
 // module-cache. Geeft { days, endsAt, promo } — promo=false = geen actie.
+// De cache verloopt met de actie zelf: een dashboard dat de nacht openblijft
+// bleef anders na het einde "1 maand gratis" beloven terwijl de server al
+// 14 dagen gaf. Op endsAt rendert de hook opnieuw en vraagt hij de actie
+// opnieuw op (er kan direct een volgende actie lopen).
 const REFERRAL_BASE_DAYS = 14;
 let referralPromoCache = null;
+const referralPromoEnded = (v) => !!(v && v.promo && v.endsAt && !(new Date(v.endsAt).getTime() > Date.now()));
+const referralPromoResolved = () => (referralPromoCache && typeof referralPromoCache.then !== "function") ? referralPromoCache : null;
+const referralPromoBase = () => ({ days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: true });
 function useReferralPromo() {
-  const [state, setState] = useState(() => (referralPromoCache && typeof referralPromoCache.then !== "function") ? referralPromoCache : { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: false });
+  const [state, setState] = useState(() => {
+    const v = referralPromoResolved();
+    if (!v) return { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: false };
+    return referralPromoEnded(v) ? referralPromoBase() : v;
+  });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let off = false;
+    if (referralPromoEnded(referralPromoResolved())) referralPromoCache = null;
     if (!referralPromoCache) {
       referralPromoCache = Promise.resolve(supabase.rpc("active_referral_promo"))
         .then(({ data }) => {
@@ -178,9 +191,21 @@ function useReferralPromo() {
         })
         .catch(() => { referralPromoCache = { days: REFERRAL_BASE_DAYS, endsAt: null, promo: false, loaded: true }; return referralPromoCache; });
     }
-    Promise.resolve(referralPromoCache).then((v) => { if (!off) setState(v); });
+    Promise.resolve(referralPromoCache).then((v) => { if (!off) setState(referralPromoEnded(v) ? referralPromoBase() : v); });
     return () => { off = true; };
-  }, []);
+  }, [tick]);
+  // Wekker op het einde van de actie (setTimeout kan hooguit ~24,8 dagen;
+  // gaat hij eerder af, dan plant de volgende ronde hem opnieuw).
+  useEffect(() => {
+    if (!state.promo || !state.endsAt) return;
+    const ms = new Date(state.endsAt).getTime() - Date.now();
+    if (!Number.isFinite(ms)) return;
+    const id = setTimeout(() => {
+      setState((s) => (referralPromoEnded(s) ? referralPromoBase() : s));
+      setTick((n) => n + 1);
+    }, Math.min(Math.max(0, ms) + 1000, 2147483000));
+    return () => clearTimeout(id);
+  }, [state.promo, state.endsAt, tick]);
   return state;
 }
 // "1 maand" / "2 weken" / "10 dagen" in de taal van het scherm.
@@ -241,34 +266,50 @@ function useToast() {
   return { toasts, show };
 }
 
+// Kleuren uit het thema (c.success / c.danger): de vaste lichtgroen/lichtrood
+// tekst van het donkere thema was op het lichte thema bijna onleesbaar
+// (≈1,3:1). Nu draagt het icoon, de rand en de tint de kleur van de melding en
+// staat de tekst zelf in c.text (ook het groen van het lichte thema haalt als
+// tekst geen 4,5:1). De tint ligt op een DICHTE themaondergrond (c.bg), anders
+// schemert de pagina erdoorheen. De role=status-container blijft altijd
+// gemonteerd (ook leeg), zodat schermlezers de eerste melding ook echt
+// voorlezen. Bovenaan rekening houden met de statusbalk van de iPhone-app
+// (viewport-fit=cover); op een smal scherm nooit breder dan het scherm.
 function ToastContainer({ toasts }) {
   const { colors: c } = useTheme();
-  if (toasts.length === 0) return null;
   return (
-    <div role="status" aria-live="polite" style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
-      {toasts.map(t => (
-        <div key={t.id} style={{
-          padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 500,
-          fontFamily: "var(--body-font, 'Jost', sans-serif)", animation: "fadeUp 0.3s ease",
-          background: t.type === "success" ? "rgba(134,239,172,0.15)" : t.type === "error" ? "rgba(248,113,113,0.15)" : c.bgCard,
-          color: t.type === "success" ? "#86efac" : t.type === "error" ? "#f87171" : c.text,
-          border: `1px solid ${t.type === "success" ? "rgba(134,239,172,0.3)" : t.type === "error" ? "rgba(248,113,113,0.3)" : c.border}`,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
-        }}>
-          {t.type === "success" ? "✓ " : t.type === "error" ? "✕ " : ""}{t.message}
-        </div>
-      ))}
+    <div role="status" aria-live="polite" style={{ position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 12px)", right: 16, left: "auto", maxWidth: "calc(100vw - 32px)", zIndex: 9999, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}>
+      {toasts.map(t => {
+        const tone = t.type === "success" ? c.success : t.type === "error" ? c.danger : null;
+        return (
+          <div key={t.id} style={{
+            padding: "12px 18px", borderRadius: 14, fontSize: 13, fontWeight: 500,
+            fontFamily: "var(--body-font, 'Jost', sans-serif)", animation: "fadeUp 0.3s ease",
+            display: "flex", alignItems: "center", gap: 8, maxWidth: "100%", boxSizing: "border-box",
+            overflowWrap: "anywhere", pointerEvents: "auto",
+            background: tone ? `linear-gradient(${tone}1f, ${tone}1f), ${c.bg}` : c.bg,
+            color: c.text,
+            border: `1px solid ${tone ? `${tone}59` : c.border}`,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+          }}>
+            {tone && <span style={{ display: "inline-flex", flexShrink: 0, color: tone }}><NavIcon name={t.type === "success" ? "check" : "xmark"} size={15} color="currentColor" /></span>}
+            <span>{t.message}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ─── CONFIRM MODAL ───────────────────────────────────────────
 function useConfirm() {
-  const [state, setState] = useState(null); // { message, resolve, tone?, confirmText? }
+  const [state, setState] = useState(null); // { message, resolve, tone?, confirmText?, cancelText? }
   // Tweede argument is optioneel en backward-compatibel: zonder opts blijft het
   // gedrag exact zoals vroeger (rode knop met t.delete). tone "primary" is voor
   // niet-destructieve vragen (regiowissel e.d.) zodat er geen "Verwijderen" staat.
-  const confirm = (message, opts = {}) => new Promise((resolve) => setState({ message, resolve, tone: opts.tone || "danger", confirmText: opts.confirmText }));
+  // cancelText geeft de terug-knop een eigen tekst ("Terug"), voor vragen waarin
+  // "Annuleren" zelf de actie is (afspraak annuleren).
+  const confirm = (message, opts = {}) => new Promise((resolve) => setState({ message, resolve, tone: opts.tone || "danger", confirmText: opts.confirmText, cancelText: opts.cancelText }));
   const handleYes = () => { state?.resolve(true); setState(null); };
   const handleNo = () => { state?.resolve(false); setState(null); };
   return { confirmState: state, confirm, handleYes, handleNo };
@@ -292,7 +333,7 @@ function ConfirmModal({ state, onYes, onNo, lang }) {
         <div style={{ fontSize: 14, fontWeight: 500, color: c.text, marginBottom: 20, lineHeight: 1.5, fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>{state.message}</div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onNo} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1px solid " + c.border, background: "transparent", color: c.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
-            {t.cancel}
+            {state.cancelText || t.cancel}
           </button>
           <button onClick={onYes} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: isDanger ? "#f87171" : c.text, color: isDanger ? "#fff" : c.bg, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--body-font, 'Jost', sans-serif)" }}>
             {confirmLabel}
@@ -337,7 +378,26 @@ function useSEO({ title, description, ogImage, url }) {
     if (title) { setMeta("og:title", title); setMeta("twitter:title", title); }
     if (ogImage) { setMeta("og:image", ogImage); setMeta("twitter:image", ogImage); }
     if (url) { setMeta("og:url", url); }
-    return () => { document.title = "Vellu - Beauty Booking Platform | 0% Commissie"; };
+    // Canonical volgt de pagina. index.html zet hem vast op https://vellu.cc/,
+    // en daarmee verklaarde elke salon- en juridische pagina zichzelf een
+    // kopie van de homepage (Google vouwde ze daarin op). Bij het verlaten van
+    // de pagina gaat de vorige waarde terug.
+    let canon = null;
+    let prevCanon = null;
+    let createdCanon = false;
+    if (url && /^https:\/\//.test(url)) {
+      canon = document.querySelector('link[rel="canonical"]');
+      if (canon) prevCanon = canon.getAttribute("href");
+      else { canon = document.createElement("link"); canon.setAttribute("rel", "canonical"); document.head.appendChild(canon); createdCanon = true; }
+      canon.setAttribute("href", url);
+    }
+    return () => {
+      document.title = "Vellu - Beauty Booking Platform | 0% Commissie";
+      if (canon) {
+        if (createdCanon) canon.remove();
+        else if (prevCanon != null) canon.setAttribute("href", prevCanon);
+      }
+    };
   }, [title, description, ogImage, url]);
 }
 
@@ -472,10 +532,16 @@ function tzOffsetMs(at, tz) {
 // "2026-08-18" + "14:30" in zone tz → het echte UTC-moment. Null bij onleesbare
 // invoer, zodat de caller de knop kan weglaten in plaats van een Invalid Date
 // door te geven aan toISOString() (dat gooit).
+// Twee rondes (R-09, zomertijdcontrole 05-10): de afwijking wordt eerst op het
+// "naïeve" moment gemeten en daarna nog eens op de eerste schatting. Met één
+// ronde lag 01:00-02:00 op de wisselnacht (25-10, eind maart) een uur verkeerd,
+// omdat het naïeve moment al ná de wissel valt terwijl de echte tijd ervóór
+// ligt. Overdag geven beide rondes hetzelfde; de Caribische zones wisselen niet.
 function localToUtc(dateStr, timeStr, tz) {
   const naive = new Date(`${dateStr}T${timeStr}:00Z`);
   if (isNaN(naive.getTime())) return null;
-  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  const guess = new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  return new Date(naive.getTime() - tzOffsetMs(guess, tz));
 }
 
 // Create a cancellation token for a manually-booked appointment so the
@@ -550,12 +616,30 @@ async function sendSMS(type, booking) {
 const ACCENT = "#c9a96e";
 
 // ─── GOOGLE CALENDAR HELPER ──────────────────────────────────
-function getGoogleCalUrl({ title, date, time, duration, description, location }) {
-  const start = new Date(date + "T" + time + ":00");
-  const end = new Date(start.getTime() + (duration || 60) * 60000);
+// `tz` (optioneel, bijv. tzFor(country_code)): de tijd is de wandklok van de
+// SALON. Dan nemen we de cijfers letterlijk over uit date/time (geen Date-parse
+// in de zone van het apparaat) en zeggen we Google met &ctz= in welke zone ze
+// staan. Een bezoeker in NL die een Bonaire-salon om 14:00 boekt kreeg anders
+// een afspraak om 08:00 Bonaire-tijd in zijn agenda. Zonder tz: als vroeger
+// (zwevende tijd in de zone van het apparaat).
+function getGoogleCalUrl({ title, date, time, duration, description, location, tz }) {
   const pad = (n) => String(n).padStart(2, "0");
-  const fmtCal = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmtCal(start)}/${fmtCal(end)}&details=${encodeURIComponent(description || "")}&location=${encodeURIComponent(location || "")}`;
+  let dates;
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  const tm = /^(\d{1,2}):(\d{2})/.exec(String(time || ""));
+  if (tz && dm && tm) {
+    // Rekenen op een "naïeve" UTC-klok: alleen de wandklokcijfers, geen zone.
+    const s = new Date(Date.UTC(+dm[1], +dm[2] - 1, +dm[3], +tm[1], +tm[2], 0));
+    const e = new Date(s.getTime() + (duration || 60) * 60000);
+    const fmtNaive = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`;
+    dates = `${fmtNaive(s)}/${fmtNaive(e)}&ctz=${encodeURIComponent(tz)}`;
+  } else {
+    const start = new Date(date + "T" + time + ":00");
+    const end = new Date(start.getTime() + (duration || 60) * 60000);
+    const fmtCal = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    dates = `${fmtCal(start)}/${fmtCal(end)}`;
+  }
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${dates}&details=${encodeURIComponent(description || "")}&location=${encodeURIComponent(location || "")}`;
 }
 
 // ─── ALLE RIJEN OPHALEN ──────────────────────────────────────
@@ -584,14 +668,22 @@ export async function fetchAllRows(build, pageSize = 1000) {
 // en dan 7 cijfers. Lokaal schrijft men alleen die 7 ("510 1234"), soms met de
 // 9 ervoor ("9 510 1234"); allebei worden ze 59995101234. Zonder die 9 kwam
 // het 7-cijferige nummer uit op 5995101234, en dat bestaat niet op WhatsApp.
+// Caribische nummers hebben geen 0 vooraan. Een "06 12345678" (0 + 9 cijfers,
+// het Nederlandse formaat) bij een salon op Bonaire, Curaçao, Aruba of Sint
+// Maarten is dus een Nederlandse toerist of bewoner: +31, niet +599 6…
+// Sint Maarten valt onder +1: een 10-cijferig "721 542 1234" krijgt de 1 ervoor
+// (anders las wa.me het als +7).
 const WA_COUNTRY_PREFIX = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
+const WA_CARIBBEAN = new Set(["BQ", "CW", "AW", "SX"]);
 export function waDigits(phone, countryCode) {
   let d = String(phone || "").replace(/[^0-9]/g, "");
   if (!d) return "";
   const country = String(countryCode || "NL").toUpperCase();
   const cc = WA_COUNTRY_PREFIX[country] || "31";
   if (d.startsWith("00")) return d.slice(2);
+  if (d.startsWith("0") && WA_CARIBBEAN.has(country) && d.length === 10) return "31" + d.slice(1);
   if (d.startsWith("0")) return cc + d.slice(1);
+  if (country === "SX" && d.length === 10 && d.startsWith("721")) return "1" + d;
   if (country === "CW") {
     if (d.length === 7) return "5999" + d;
     if (d.length === 8 && d.startsWith("9")) return "599" + d;
@@ -728,12 +820,17 @@ function getWhatsAppNoShowFeeMsg(lang, { clientName, salonName, amount, pct, pay
   const money = fmtMoney(amount, countryCode);
   const linkWithAmount = getPaymentLinkWithAmount(paymentLink, amount);
   const payVia = linkWithAmount
-    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
+    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : lang === "es" ? `Puedes pagar aquí: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
     : (lang === "nl"
       ? `Je kunt het overmaken naar ${iban}${ibanHolder ? ` t.n.v. ${ibanHolder}` : ""}.`
+      : lang === "es"
+      ? `Puedes transferirlo a ${iban}${ibanHolder ? ` (a nombre de ${ibanHolder})` : ""}.`
       : `You can transfer it to ${iban}${ibanHolder ? ` (${ibanHolder})` : ""}.`);
   if (lang === "nl") {
     return `Hoi ${firstName},\n\nJe afspraak bij ${salonName} is helaas niet doorgegaan zonder afmelding. Volgens ons boekingsbeleid rekenen we daarvoor ${pct}% van het afspraakbedrag: ${money}.\n\n${payVia}\n\nBedankt voor je begrip.`;
+  }
+  if (lang === "es") {
+    return `Hola ${firstName}:\n\nLamentablemente no acudiste a tu cita en ${salonName} y no la cancelaste. Según nuestra política de reservas, cobramos por ello el ${pct}% del importe de la cita: ${money}.\n\n${payVia}\n\nGracias por tu comprensión.`;
   }
   return `Hi ${firstName},\n\nUnfortunately your appointment at ${salonName} was missed without cancelling. As stated in our booking policy we charge ${pct}% of the appointment price for this: ${money}.\n\n${payVia}\n\nThank you for your understanding.`;
 }
@@ -817,16 +914,31 @@ const parseDate = (ds) => {
   const [y, m, d] = (ds || "").split("-").map(Number);
   return (y && m && d) ? new Date(y, m - 1, d) : new Date(ds);
 };
-const getDays = (n = 14) => { const t = getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
+// `from` (optioneel): de eerste dag van de strip. De boekingspagina geeft
+// salonNow(country_code) mee, zodat de datumstrip op de klok van de SALON
+// begint en niet op die van het apparaat (bezoeker in NL, salon op Bonaire).
+// Zonder `from` precies als vroeger (apparaatklok, tijd van nu op elke dag).
+const getDays = (n = 14, from = getToday()) => { const t = from instanceof Date && !isNaN(from.getTime()) ? from : getToday(); return Array.from({ length: n }, (_, i) => { const d = new Date(t); d.setDate(t.getDate() + i); return d; }); };
 const TIMES = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 // Candidate appointment START times on the salon's own slot grid
 // (profiles.slot_interval_minutes, default 30). Wider range than TIMES —
-// the salon's open/close bounds filter it down, so early birds (06:00)
-// and late-night salons (until 22:00) both work.
-const genTimes = (intervalMin = 30, startHour = 6, endHour = 22) => {
+// the salon's open/close bounds filter it down, so early birds (05:00)
+// and late-night salons (until 23:30) both work.
+// `anchor` ("HH:MM", optioneel): het raster loopt door dat tijdstip, meestal de
+// openingstijd van die dag. Zonder anker begon elk raster op 06:00, waardoor
+// een salon met 45-minutenslots die om 10:00 opent pas 10:30 aanbood (en met
+// 60 minuten en opening 09:30 pas 10:00). Zonder anker blijft het raster
+// hetzelfde als vroeger (door 06:00), alleen het bereik is ruimer.
+const genTimes = (intervalMin = 30, startHour = 5, endHour = 23.5, anchor = null) => {
   const step = Math.max(5, parseInt(intervalMin) || 30);
+  const lo = Math.round(startHour * 60);
+  const hi = Math.round(endHour * 60);
+  const am = /^(\d{1,2}):(\d{2})/.exec(String(anchor || ""));
+  const base = am ? parseInt(am[1]) * 60 + parseInt(am[2]) : 6 * 60;
+  // Eerste minuut >= lo die op het raster van `base` ligt.
+  const first = lo + ((((base - lo) % step) + step) % step);
   const out = [];
-  for (let m = startHour * 60; m <= endHour * 60; m += step) {
+  for (let m = first; m <= hi; m += step) {
     out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
   }
   return out;
@@ -1119,7 +1231,7 @@ const _T_RAW = {
     firstName:"Voornaam", lastName:"Achternaam", email:"E-mailadres",
     phone:"Telefoonnummer", optional:"optioneel",
     payMethod:"Betaalmethode", payOnline:"Betaalverzoek na afloop", payArrival:"Betalen bij Afspraak", payPrepay:"Vooruitbetalen",
-    next:"Volgende →", confirm:"Bevestigen", newBooking:"Nieuwe Afspraak",
+    next:"Volgende", confirm:"Bevestigen", newBooking:"Nieuwe Afspraak",
     treatment:"Behandeling", date:"Datum", time:"Tijd", name:"Naam", payment:"Betaling",
     total:"Totaal", confirmedSub:"We zien je op", at:"om",
     confirmationSent:"Bevestiging verstuurd naar", noAppts:"Nog geen afspraken",
@@ -1171,7 +1283,7 @@ const _T_RAW = {
     pushTest:"Stuur testmelding", pushTestSent:"Testmelding verstuurd — kijk op je vergrendelscherm of in de meldingen.",
     pushDenied:"Meldingen zijn geblokkeerd in je browser. Zet ze aan via de site-instellingen van je browser en probeer opnieuw.",
     pushUnsupported:"Deze browser ondersteunt geen meldingen.",
-    pushIosHint:"Op iPhone werkt dit alleen vanuit de app op je beginscherm: tik in Safari op Delen → 'Zet op beginscherm', open Vellu daarna vanaf je beginscherm en zet meldingen hier aan.",
+    pushIosHint:"Op iPhone werkt dit alleen vanuit de app op je beginscherm: tik in Safari op Delen en kies 'Zet op beginscherm', open Vellu daarna vanaf je beginscherm en zet meldingen hier aan.",
     pushDevices:"Actief op {n} apparaat/apparaten", pushBusy:"Bezig…",
     // New customization translations
     bookingPolicy:"Boekingsvoorwaarden", bookingPolicyDesc:"Voorwaarden waar klanten mee akkoord moeten gaan",
@@ -1270,8 +1382,8 @@ const _T_RAW = {
     onboardingStep2:"Eerste behandeling", onboardingStep2Sub:"Voeg je eerste behandeling toe",
     onboardingStep3:"Openingstijden", onboardingStep3Sub:"Wanneer ben je open?",
     onboardingDone:"Je salon is klaar!", onboardingDoneSub:"Je kunt nu je link delen en boekingen ontvangen.",
-    onboardingNext:"Volgende stap →", onboardingSkip:"Later instellen", onboardingFinish:"Naar je dashboard →",
-    onboardingServiceName:"Behandeling naam", onboardingServicePrice:"Prijs (€)", onboardingServiceDuration:"Duur (min)",
+    onboardingNext:"Volgende stap", onboardingSkip:"Later instellen", onboardingFinish:"Naar je dashboard",
+    onboardingServiceName:"Behandeling naam", onboardingServicePrice:"Prijs", onboardingServiceDuration:"Duur (min)",
     // Google Calendar
     googleCalendarDesc:"Synchroniseer afspraken automatisch met je Google Agenda",
     googleCalendarConnect:"Google Agenda koppelen", googleCalendarConnected:"Google Agenda gekoppeld",
@@ -1329,15 +1441,15 @@ const _T_RAW = {
     poweredBy:"Aangedreven door", noCommission:"0% commissie boekingsplatform",
     writeAReview:"Schrijf een review", sortBy:"Sorteer op", highestRated:"Hoogst beoordeeld",
     mostRecent:"Meest recent", openingHours:"Openingstijden",
-    backToProfile:"← Terug naar profiel",
+    backToProfile:"Terug naar profiel",
     nDaysAgo:"dagen geleden", nWeeksAgo:"weken geleden", nMonthsAgo:"maanden geleden",
     gallery:"Galerij", noGallery:"Nog geen foto's in de galerij",
     // Landing page
     heroTag:"Voor nail techs, lash artists, kappers & meer",
     heroTitle:"Jouw salon.", heroTitle2:"Jouw regels.", heroBrand:"Jouw omzet.",
     heroSub:"Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie. Klaar in 2 minuten.",
-    startFree:"Start 14-daagse trial →", howItWork:"Hoe werkt het?",
-    findSalonNav:"Klant? Vind een salon →",
+    startFree:"Start 14-daagse trial", howItWork:"Hoe werkt het?",
+    findSalonNav:"Klant? Vind een salon",
     createPageNav:"Maak je pagina",
     findSalonTitle:"Vind een salon of studio",
     findSalonSub:"Van nagelstudio tot kapper — zoek op naam, plaats of behandeling en boek direct online.",
@@ -1356,7 +1468,7 @@ const _T_RAW = {
     calcTreatwellCost:"Andere platformen (~8% commissie)",
     calcVelluCost:"Vellu (vast tarief)",
     calcSavingsYear:"Je houdt extra per jaar",
-    calcFootnote:"Commissie-tarief is een marktindicatie (5–10%) van vergelijkbare booking platformen. Vellu = €19/maand of €15,80/maand bij jaarlijks. Geen verborgen kosten.",
+    calcFootnote:"Commissie-tarief is een marktindicatie (5–10%) van vergelijkbare booking platformen. Vellu = €19/maand of €15,83/maand bij jaarlijks. Geen verborgen kosten.",
     yearlyEquivalent:"= €{m}/maand",
     trustOrigin:"Gemaakt in Den Haag",
     backToTop:"Naar boven",
@@ -1394,7 +1506,7 @@ const _T_RAW = {
     contactOwnerServices:"Neem contact op met de saloneigenaar om diensten toe te voegen of te verwijderen.",
     add:"Toevoegen", preview:"Preview", owner:"eigenaar", ownerDashboard:"EIGENAAR DASHBOARD",
     salonInsight:"Inzicht in je salon", vsLastWeek:"vs vorige week", previewPage:"Bekijk pagina",
-    exportCalendar:"Exporteer agenda", viewMore:"Bekijk meer →", everyone:"Iedereen",
+    exportCalendar:"Exporteer agenda", viewMore:"Bekijk meer", everyone:"Iedereen",
     confirmed:"Bevestigd", cancelled:"Geannuleerd", completed:"Voltooid",
     apptCompleted:"Afspraak voltooid", errorCompleting:"Fout bij voltooien",
     client:"Klant",
@@ -1405,6 +1517,7 @@ const _T_RAW = {
     bookingLegalNotice:"Door te bevestigen bevestig je dat je 16 jaar of ouder bent (of toestemming hebt van een ouder), ga je akkoord met ons",
     bookingLegalNoticeAnd:"en",
     bookingLegalNoticeRefund:"Voltooide behandelingen kunnen niet worden terugbetaald; annuleren kan tot je afspraak via de link in je bevestigingsmail.",
+    bookingLegalNoticeRefundHours:"Voltooide behandelingen kunnen niet worden terugbetaald; annuleren kan tot {n} uur voor je afspraak via de link in je bevestigingsmail.",
     noTreatmentsCatYet:"Nog geen behandelingen beschikbaar",
   },
   en: {
@@ -1417,7 +1530,7 @@ const _T_RAW = {
     firstName:"First Name", lastName:"Last Name", email:"Email address",
     phone:"Phone number", optional:"optional",
     payMethod:"Payment Method", payOnline:"Payment request afterwards", payArrival:"Pay at Appointment", payPrepay:"Pay in advance",
-    next:"Next →", confirm:"Confirm", newBooking:"New Booking",
+    next:"Next", confirm:"Confirm", newBooking:"New Booking",
     treatment:"Treatment", date:"Date", time:"Time", name:"Name", payment:"Payment",
     total:"Total", confirmedSub:"We'll see you on", at:"at",
     confirmationSent:"Confirmation sent to", noAppts:"No appointments yet",
@@ -1469,7 +1582,7 @@ const _T_RAW = {
     pushTest:"Send test notification", pushTestSent:"Test notification sent — check your lock screen or notification tray.",
     pushDenied:"Notifications are blocked in your browser. Allow them in your browser's site settings and try again.",
     pushUnsupported:"This browser doesn't support notifications.",
-    pushIosHint:"On iPhone this only works from the home-screen app: in Safari tap Share → 'Add to Home Screen', open Vellu from your home screen and enable notifications here.",
+    pushIosHint:"On iPhone this only works from the home-screen app: in Safari tap Share and choose 'Add to Home Screen', open Vellu from your home screen and enable notifications here.",
     pushDevices:"Active on {n} device(s)", pushBusy:"Working…",
     // New customization translations
     bookingPolicy:"Booking Policy", bookingPolicyDesc:"Terms clients must agree to before booking",
@@ -1563,8 +1676,8 @@ const _T_RAW = {
     onboardingStep2:"First treatment", onboardingStep2Sub:"Add your first treatment",
     onboardingStep3:"Opening hours", onboardingStep3Sub:"When are you open?",
     onboardingDone:"Your salon is ready!", onboardingDoneSub:"You can now share your link and receive bookings.",
-    onboardingNext:"Next step →", onboardingSkip:"Set up later", onboardingFinish:"Go to dashboard →",
-    onboardingServiceName:"Treatment name", onboardingServicePrice:"Price (€)", onboardingServiceDuration:"Duration (min)",
+    onboardingNext:"Next step", onboardingSkip:"Set up later", onboardingFinish:"Go to dashboard",
+    onboardingServiceName:"Treatment name", onboardingServicePrice:"Price", onboardingServiceDuration:"Duration (min)",
     // Google Calendar
     googleCalendarDesc:"Automatically sync appointments to your Google Calendar",
     googleCalendarConnect:"Connect Google Calendar", googleCalendarConnected:"Google Calendar connected",
@@ -1622,15 +1735,15 @@ const _T_RAW = {
     poweredBy:"Powered by", noCommission:"0% commission booking platform",
     writeAReview:"Write a review", sortBy:"Sort by", highestRated:"Highest rated",
     mostRecent:"Most recent", openingHours:"Opening hours",
-    backToProfile:"← Back to profile",
+    backToProfile:"Back to profile",
     nDaysAgo:"days ago", nWeeksAgo:"weeks ago", nMonthsAgo:"months ago",
     gallery:"Gallery", noGallery:"No photos in gallery yet",
     // Landing page
     heroTag:"For nail techs, lash artists, hairdressers & more",
     heroTitle:"Your salon.", heroTitle2:"Your rules.", heroBrand:"Your revenue.",
     heroSub:"Your own booking page with your name, your colors and your services. Fixed price, 0% commission. Ready in 2 minutes.",
-    startFree:"Start 14-day free trial →", howItWork:"How does it work?",
-    findSalonNav:"Customer? Find a salon →",
+    startFree:"Start 14-day free trial", howItWork:"How does it work?",
+    findSalonNav:"Customer? Find a salon",
     createPageNav:"Create your page",
     findSalonTitle:"Find a salon or studio",
     findSalonSub:"From nail studio to hairdresser — search by name, city or treatment and book online.",
@@ -1649,7 +1762,7 @@ const _T_RAW = {
     calcTreatwellCost:"Other platforms (~8% commission)",
     calcVelluCost:"Vellu (flat fee)",
     calcSavingsYear:"You keep extra per year",
-    calcFootnote:"Commission rate is a market indication (5–10%) of comparable booking platforms. Vellu = €19/month or €15.80/month billed yearly. No hidden fees.",
+    calcFootnote:"Commission rate is a market indication (5–10%) of comparable booking platforms. Vellu = €19/month or €15,83/month billed yearly. No hidden fees.",
     yearlyEquivalent:"= €{m}/month",
     trustOrigin:"Made in The Hague",
     backToTop:"Back to top",
@@ -1687,7 +1800,7 @@ const _T_RAW = {
     contactOwnerServices:"Contact the salon owner to add or remove services.",
     add:"Add", preview:"Preview", owner:"owner", ownerDashboard:"OWNER DASHBOARD",
     salonInsight:"Insight into your salon", vsLastWeek:"vs last week", previewPage:"Preview page",
-    exportCalendar:"Export calendar", viewMore:"View more →", everyone:"Everyone",
+    exportCalendar:"Export calendar", viewMore:"View more", everyone:"Everyone",
     confirmed:"Confirmed", cancelled:"Cancelled", completed:"Completed",
     apptCompleted:"Appointment completed", errorCompleting:"Error completing",
     client:"Client",
@@ -1698,6 +1811,7 @@ const _T_RAW = {
     bookingLegalNotice:"By confirming you confirm you are 16 or older (or have parental consent), and you agree to our",
     bookingLegalNoticeAnd:"and",
     bookingLegalNoticeRefund:"Completed treatments are non-refundable; you may cancel up until your appointment via the link in your confirmation email.",
+    bookingLegalNoticeRefundHours:"Completed treatments are non-refundable; you may cancel up to {n} hours before your appointment via the link in your confirmation email.",
     noTreatmentsCatYet:"No treatments available yet",
   },
   es: {
@@ -1710,7 +1824,7 @@ const _T_RAW = {
     firstName:"Nombre", lastName:"Apellido", email:"Correo electrónico",
     phone:"Número de teléfono", optional:"opcional",
     payMethod:"Método de pago", payOnline:"Solicitud de pago después", payArrival:"Pagar en la cita", payPrepay:"Pagar por adelantado",
-    next:"Siguiente →", confirm:"Confirmar", newBooking:"Nueva reserva",
+    next:"Siguiente", confirm:"Confirmar", newBooking:"Nueva reserva",
     treatment:"Tratamiento", date:"Fecha", time:"Hora", name:"Nombre", payment:"Pago",
     total:"Total", confirmedSub:"Te esperamos el", at:"a las",
     confirmationSent:"Confirmación enviada a", noAppts:"Aún no hay citas",
@@ -1762,7 +1876,7 @@ const _T_RAW = {
     pushTest:"Enviar notificación de prueba", pushTestSent:"Prueba enviada: mira la pantalla de bloqueo o el centro de notificaciones.",
     pushDenied:"Las notificaciones están bloqueadas en tu navegador. Actívalas en los ajustes del sitio e inténtalo de nuevo.",
     pushUnsupported:"Este navegador no admite notificaciones.",
-    pushIosHint:"En iPhone solo funciona desde la app de la pantalla de inicio: en Safari toca Compartir → 'Añadir a pantalla de inicio', abre Vellu desde ahí y activa las notificaciones aquí.",
+    pushIosHint:"En iPhone solo funciona desde la app de la pantalla de inicio: en Safari toca Compartir y elige 'Añadir a pantalla de inicio', abre Vellu desde ahí y activa las notificaciones aquí.",
     pushDevices:"Activo en {n} dispositivo(s)", pushBusy:"Un momento…",
     // New customization translations
     bookingPolicy:"Política de reservas", bookingPolicyDesc:"Condiciones que los clientes deben aceptar antes de reservar",
@@ -1856,8 +1970,8 @@ const _T_RAW = {
     onboardingStep2:"Primer tratamiento", onboardingStep2Sub:"Agrega tu primer tratamiento",
     onboardingStep3:"Horario de apertura", onboardingStep3Sub:"¿Cuándo abres?",
     onboardingDone:"¡Tu salón está listo!", onboardingDoneSub:"Ya puedes compartir tu enlace y recibir reservas.",
-    onboardingNext:"Siguiente paso →", onboardingSkip:"Configurar más tarde", onboardingFinish:"Ir al panel →",
-    onboardingServiceName:"Nombre del tratamiento", onboardingServicePrice:"Precio (€)", onboardingServiceDuration:"Duración (min)",
+    onboardingNext:"Siguiente paso", onboardingSkip:"Configurar más tarde", onboardingFinish:"Ir al panel",
+    onboardingServiceName:"Nombre del tratamiento", onboardingServicePrice:"Precio", onboardingServiceDuration:"Duración (min)",
     // Google Calendar
     googleCalendarDesc:"Sincroniza automáticamente las citas con tu Google Calendar",
     googleCalendarConnect:"Conectar Google Calendar", googleCalendarConnected:"Google Calendar conectado",
@@ -1915,15 +2029,15 @@ const _T_RAW = {
     poweredBy:"Con tecnología de", noCommission:"Plataforma de reservas con 0% de comisión",
     writeAReview:"Escribir una reseña", sortBy:"Ordenar por", highestRated:"Mejor calificadas",
     mostRecent:"Más recientes", openingHours:"Horario de apertura",
-    backToProfile:"← Volver al perfil",
+    backToProfile:"Volver al perfil",
     nDaysAgo:"días atrás", nWeeksAgo:"semanas atrás", nMonthsAgo:"meses atrás",
     gallery:"Galería", noGallery:"Aún no hay fotos en la galería",
     // Landing page
     heroTag:"Para manicuristas, lashistas, peluqueros y más",
     heroTitle:"Tu salón.", heroTitle2:"Tus reglas.", heroBrand:"Tus ingresos.",
     heroSub:"Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión. Lista en 2 minutos.",
-    startFree:"Comienza tu prueba gratis de 14 días →", howItWork:"¿Cómo funciona?",
-    findSalonNav:"¿Eres cliente? Encuentra un salón →",
+    startFree:"Comienza tu prueba gratis de 14 días", howItWork:"¿Cómo funciona?",
+    findSalonNav:"¿Eres cliente? Encuentra un salón",
     createPageNav:"Crea tu página",
     findSalonTitle:"Encuentra un salón o estudio",
     findSalonSub:"De estudio de uñas a peluquería — busca por nombre, ciudad o tratamiento y reserva online.",
@@ -1942,7 +2056,7 @@ const _T_RAW = {
     calcTreatwellCost:"Otras plataformas (~8% de comisión)",
     calcVelluCost:"Vellu (tarifa fija)",
     calcSavingsYear:"Ahorras de más al año",
-    calcFootnote:"La tasa de comisión es una referencia de mercado (5–10%) de plataformas de reservas comparables. Vellu = €19/mes o €15.80/mes con facturación anual. Sin costos ocultos.",
+    calcFootnote:"La tasa de comisión es una referencia de mercado (5–10%) de plataformas de reservas comparables. Vellu = €19/mes o €15,83/mes con facturación anual. Sin costos ocultos.",
     yearlyEquivalent:"= €{m}/mes",
     trustOrigin:"Hecho en La Haya",
     backToTop:"Volver arriba",
@@ -1980,7 +2094,7 @@ const _T_RAW = {
     contactOwnerServices:"Contacta al dueño del salón para agregar o quitar servicios.",
     add:"Agregar", preview:"Vista previa", owner:"dueño", ownerDashboard:"PANEL DEL DUEÑO",
     salonInsight:"Información sobre tu salón", vsLastWeek:"vs semana pasada", previewPage:"Vista previa de la página",
-    exportCalendar:"Exportar calendario", viewMore:"Ver más →", everyone:"Todos",
+    exportCalendar:"Exportar calendario", viewMore:"Ver más", everyone:"Todos",
     confirmed:"Confirmada", cancelled:"Cancelada", completed:"Completada",
     apptCompleted:"Cita completada", errorCompleting:"Error al completar",
     client:"Cliente",
@@ -1991,6 +2105,7 @@ const _T_RAW = {
     bookingLegalNotice:"Al confirmar, declaras que tienes 16 años o más (o cuentas con consentimiento parental) y aceptas nuestros",
     bookingLegalNoticeAnd:"y",
     bookingLegalNoticeRefund:"Los tratamientos completados no son reembolsables; puedes cancelar hasta el momento de tu cita mediante el enlace en tu correo de confirmación.",
+    bookingLegalNoticeRefundHours:"Los tratamientos completados no son reembolsables; puedes cancelar hasta {n} horas antes de tu cita mediante el enlace en tu correo de confirmación.",
     noTreatmentsCatYet:"Aún no hay tratamientos disponibles",
   },
 };
@@ -2131,6 +2246,19 @@ export function PullToRefresh() {
       }
       return false;
     };
+    // Een open venster (afspraak toevoegen, betalen, kassa…) is een fixed
+    // overlay over de pagina. Omlaag vegen op zo'n kaart herlaadde de pagina en
+    // gooide het half ingevulde formulier weg (SH-03). Binnen een dialoog of een
+    // position:fixed-laag wordt het gebaar daarom nooit gewapend.
+    const insideOverlay = (el) => {
+      let n = el && el.nodeType === 1 ? el : el?.parentElement;
+      while (n && n !== document.body && n !== document.documentElement) {
+        if (n.getAttribute("role") === "dialog" || n.getAttribute("aria-modal") === "true") return true;
+        if (getComputedStyle(n).position === "fixed") return true;
+        n = n.parentElement;
+      }
+      return false;
+    };
     const draw = (p) => {
       box.style.opacity = p <= 0 ? "0" : String(Math.min(1, p / 26));
       box.style.transform = `translate(-50%, ${Math.min(p, 64) - 8}px)`;
@@ -2139,7 +2267,7 @@ export function PullToRefresh() {
     const reset = () => { st.armed = false; st.pull = 0; draw(0); };
     const onStart = (e) => {
       if (st.busy) return;
-      if (window.scrollY > 0 || scrolledAncestor(e.target)) { st.armed = false; return; }
+      if (window.scrollY > 0 || insideOverlay(e.target) || scrolledAncestor(e.target)) { st.armed = false; return; }
       const t = e.touches[0];
       st.startY = t.clientY; st.startX = t.clientX; st.armed = true; st.pull = 0;
     };
@@ -2318,6 +2446,13 @@ export const staffScopedRow = (a, staffId, staffName, services, staff) => {
   const row = { ...a, service_price: staffShareOf(a, staffId, services, staff) };
   const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
   if (new Set(bd.map(p => p.staff_id).filter(Boolean)).size < 2) return row;
+  // Haar aandeel komt uit partPricesOf, en dat haalt de producten er juist af.
+  // Bleven de producten van de hele boeking op de rij staan, dan boekte
+  // linesFromSale ze als háár productverkoop en zette ze alleen "aandeel min
+  // producten" als behandeling (verkeerde btw per tarief, soms negatief, en
+  // hetzelfde product bij elke stylist). Valt staffShareOf terug op het
+  // totaal (onbekend deel), dan horen de producten er wél bij en blijven ze.
+  if (staffId && partPricesOf(a, services, staff)) row.products = [];
   const mine = bd.map((p, i) => ({ p, i })).filter(({ p }) => p.staff_id === staffId);
   if (mine.length === 0) return row;
   const label = mine.map(({ i }) => partLabelOf(a, i, [...(staff || []), staffName])).filter(Boolean).join(" · ");
@@ -2616,7 +2751,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .flow-next-slot-icon { width: 40px; height: 40px; border-radius: 10px; background: ${accent}18; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .flow-next-slot-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, ${accent} 45%, ${c.text}); }
   .flow-next-slot-when { font-size: 14px; font-weight: 500; color: ${c.text}; margin-top: 2px; line-height: 1.3; }
-  .flow-next-slot-when b { font-weight: 500; text-transform: capitalize; }
+  .flow-next-slot-when b { font-weight: 500; }
   .flow-next-slot-btn {
     flex-shrink: 0; background: ${surface}; color: ${surfaceInk}; border: 1px solid ${surfaceBorder}; border-radius: 8px;
     padding: 10px 16px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600;
@@ -3302,12 +3437,14 @@ function SL({ children }) {
   return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.textMuted, marginBottom: 12 }}>{children}</div>;
 }
 
+// Elke knop zet zijn EIGEN modus: het actieve zonnetje nog eens aantikken liet
+// het thema juist omslaan naar donker. toggle() bewaart de keuze (localStorage).
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
     <div className="lang-toggle">
       {[["light","sun"], ["dark","moon"]].map(([m, icon]) => (
-        <button key={m} aria-label={m === "light" ? "Light mode" : "Dark mode"} aria-pressed={theme === m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={toggle} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
+        <button key={m} aria-label={m === "light" ? "Light mode" : "Dark mode"} aria-pressed={theme === m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={() => { if (theme !== m) toggle(); }} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
       ))}
     </div>
   );
@@ -3319,60 +3456,61 @@ function ThemeToggle() {
 // picker. Keep in sync with the real gating in OwnerApp (isStarter).
 // Cell values: true = included, false = not included, string = shown as-is.
 const planMatrix = (lang) => {
-  const nl = lang === "nl";
+  // nl / en / es; elke andere taal krijgt Engels.
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   return [
-    { group: nl ? "Boekingen & agenda" : "Bookings & calendar", rows: [
-      [nl ? "Eigen boekingspagina (vellu.cc/jouw-naam)" : "Your own booking page (vellu.cc/your-name)", true, true],
-      [nl ? "Onbeperkte boekingen, 0% commissie" : "Unlimited bookings, 0% commission", true, true],
-      [nl ? "Agenda (dag / week / maand)" : "Calendar (day / week / month)", true, true],
-      [nl ? "Wachtlijst" : "Waitlist", true, true],
-      [nl ? "Instelbaar tijdslot-interval" : "Custom time slot interval", true, true],
-      [nl ? "Blokkeer- & uitzonderingsdagen" : "Blocked & exception days", true, true],
-      [nl ? "Middagpauze & pauze tussen afspraken" : "Lunch break & buffer between appointments", true, true],
-      [nl ? "Instelbare annuleringstermijn" : "Custom cancellation deadline", true, true],
-      [nl ? "No-show-blokkade" : "No-show blocking", true, true],
-      [nl ? "Google Agenda-koppeling & agenda-feed (iCal)" : "Google Calendar sync & calendar feed (iCal)", true, true],
+    { group: L("Boekingen & agenda", "Bookings & calendar", "Reservas y agenda"), rows: [
+      [L("Eigen boekingspagina (vellu.cc/jouw-naam)", "Your own booking page (vellu.cc/your-name)", "Tu propia página de reservas (vellu.cc/tu-nombre)"), true, true],
+      [L("Onbeperkte boekingen, 0% commissie", "Unlimited bookings, 0% commission", "Reservas ilimitadas, 0% de comisión"), true, true],
+      [L("Agenda (dag / week / maand)", "Calendar (day / week / month)", "Agenda (día / semana / mes)"), true, true],
+      [L("Wachtlijst", "Waitlist", "Lista de espera"), true, true],
+      [L("Instelbaar tijdslot-interval", "Custom time slot interval", "Intervalo de horarios a tu medida"), true, true],
+      [L("Blokkeer- & uitzonderingsdagen", "Blocked & exception days", "Días bloqueados y excepciones"), true, true],
+      [L("Middagpauze & pauze tussen afspraken", "Lunch break & buffer between appointments", "Pausa de mediodía y margen entre citas"), true, true],
+      [L("Instelbare annuleringstermijn", "Custom cancellation deadline", "Plazo de cancelación a tu medida"), true, true],
+      [L("No-show-blokkade", "No-show blocking", "Bloqueo por inasistencia"), true, true],
+      [L("Google Agenda-koppeling & agenda-feed (iCal)", "Google Calendar sync & calendar feed (iCal)", "Sincronización con Google Calendar y feed de calendario (iCal)"), true, true],
     ]},
-    { group: nl ? "Communicatie" : "Communication", rows: [
-      [nl ? "Bevestigings- & herinneringsmails" : "Confirmation & reminder emails", true, true],
-      [nl ? "Review-verzoek na bezoek" : "Post-visit review request", true, true],
-      [nl ? "Verjaardagsmail met kortingscode" : "Birthday email with discount code", true, true],
-      [nl ? "Herboek-herinnering na een tijdje weg" : "Rebook reminder after a while away", true, true],
-      [nl ? "Nieuwsbrief naar al je klanten" : "Newsletter to all your clients", false, true],
-      [nl ? "Klantenlijst exporteren (CSV)" : "Client export (CSV)", false, true],
+    { group: L("Communicatie", "Communication", "Comunicación"), rows: [
+      [L("Bevestigings- & herinneringsmails", "Confirmation & reminder emails", "Correos de confirmación y recordatorio"), true, true],
+      [L("Review-verzoek na bezoek", "Post-visit review request", "Solicitud de reseña tras la visita"), true, true],
+      [L("Verjaardagsmail met kortingscode", "Birthday email with discount code", "Correo de cumpleaños con código de descuento"), true, true],
+      [L("Herboek-herinnering na een tijdje weg", "Rebook reminder after a while away", "Recordatorio para volver a reservar tras un tiempo"), true, true],
+      [L("Nieuwsbrief naar al je klanten", "Newsletter to all your clients", "Boletín para todos tus clientes"), false, true],
+      [L("Klantenlijst exporteren (CSV)", "Client export (CSV)", "Exportar clientes (CSV)"), false, true],
     ]},
-    { group: "Team", rows: [
-      [nl ? "Medewerkers" : "Staff members", nl ? "Max 3" : "Up to 3", nl ? "Onbeperkt" : "Unlimited"],
-      [nl ? "Werktijden & diensten per medewerker" : "Per-staff schedules & services", true, true],
-      [nl ? "Eigen login per medewerker" : "Own login per staff member", false, true],
+    { group: L("Team", "Team", "Equipo"), rows: [
+      [L("Medewerkers", "Staff members", "Empleados"), L("Max 3", "Up to 3", "Máx. 3"), L("Onbeperkt", "Unlimited", "Ilimitados")],
+      [L("Werktijden & diensten per medewerker", "Per-staff schedules & services", "Horarios y servicios por empleado"), true, true],
+      [L("Eigen login per medewerker", "Own login per staff member", "Inicio de sesión propio por empleado"), false, true],
     ]},
-    { group: nl ? "Salon & branding" : "Salon & branding", rows: [
-      [nl ? "Eigen logo & kleuren" : "Your logo & colors", true, true],
-      [nl ? "Categorieën, varianten & extra's" : "Categories, variants & extras", true, true],
-      [nl ? "Portfolio foto's per behandeling" : "Portfolio photos per treatment", true, true],
-      [nl ? "Vindbaar in de Vellu salon-zoeker" : "Listed in the Vellu salon finder", true, true],
-      [nl ? "Meerdere locaties" : "Multiple locations", false, true],
+    { group: L("Salon & branding", "Salon & branding", "Salón y marca"), rows: [
+      [L("Eigen logo & kleuren", "Your logo & colors", "Tu logo y tus colores"), true, true],
+      [L("Categorieën, varianten & extra's", "Categories, variants & extras", "Categorías, variantes y extras"), true, true],
+      [L("Portfolio foto's per behandeling", "Portfolio photos per treatment", "Fotos de portfolio por tratamiento"), true, true],
+      [L("Vindbaar in de Vellu salon-zoeker", "Listed in the Vellu salon finder", "Visible en el buscador de salones de Vellu"), true, true],
+      [L("Meerdere locaties", "Multiple locations", "Varias ubicaciones"), false, true],
     ]},
-    { group: nl ? "Kassa & verkoop" : "Till & sales", rows: [
-      [nl ? "Producten verkopen (online + aan de balie)" : "Sell products (online + at the counter)", false, true],
-      [nl ? "Kassa: afrekenen met pin, contant of betaalverzoek" : "Till: check out by card, cash or payment request", false, true],
-      [nl ? "Kassabon printen of als PDF (auto-print mogelijk)" : "Print receipts or save as PDF (auto-print available)", false, true],
-      [nl ? "Kadobonnen verkopen & inwisselen" : "Sell & redeem gift cards", false, true],
-      [nl ? "Voorraadbeheer met barcode-scanner" : "Inventory with barcode scanner", false, true],
-      [nl ? "Verkoophistorie per dag, corrigeren & verwijderen" : "Daily sales history with corrections", false, true],
-      [nl ? "Dag-, maand- & jaarrapporten (PDF)" : "Daily, monthly & yearly sales reports (PDF)", false, true],
+    { group: L("Kassa & verkoop", "Till & sales", "Caja y ventas"), rows: [
+      [L("Producten verkopen (online + aan de balie)", "Sell products (online + at the counter)", "Vender productos (online y en el mostrador)"), false, true],
+      [L("Kassa: afrekenen met pin, contant of betaalverzoek", "Till: check out by card, cash or payment request", "Caja: cobrar con tarjeta, efectivo o solicitud de pago"), false, true],
+      [L("Kassabon printen of als PDF (auto-print mogelijk)", "Print receipts or save as PDF (auto-print available)", "Imprimir tickets o guardarlos en PDF (impresión automática disponible)"), false, true],
+      [L("Kadobonnen verkopen & inwisselen", "Sell & redeem gift cards", "Vender y canjear tarjetas regalo"), false, true],
+      [L("Voorraadbeheer met barcode-scanner", "Inventory with barcode scanner", "Gestión de inventario con escáner de códigos de barras"), false, true],
+      [L("Verkoophistorie per dag, corrigeren & verwijderen", "Daily sales history with corrections", "Historial de ventas diario con correcciones"), false, true],
+      [L("Dag-, maand- & jaarrapporten (PDF)", "Daily, monthly & yearly sales reports (PDF)", "Informes de ventas diarios, mensuales y anuales (PDF)"), false, true],
     ]},
-    { group: nl ? "Klanten & inzicht" : "Clients & insights", rows: [
-      [nl ? "Klantenbeheer met historie" : "Client management with history", true, true],
-      [nl ? "Klanten importeren (CSV, incl. verjaardagen)" : "Import clients (CSV, incl. birthdays)", true, true],
-      [nl ? "Facturen met BTW" : "VAT invoices", true, true],
-      [nl ? "Kortingscodes" : "Discount codes", false, true],
-      ["Analytics dashboard", false, true],
+    { group: L("Klanten & inzicht", "Clients & insights", "Clientes y estadísticas"), rows: [
+      [L("Klantenbeheer met historie", "Client management with history", "Gestión de clientes con historial"), true, true],
+      [L("Klanten importeren (CSV, incl. verjaardagen)", "Import clients (CSV, incl. birthdays)", "Importar clientes (CSV, incl. cumpleaños)"), true, true],
+      [L("Facturen met BTW", "VAT invoices", "Facturas con IVA"), true, true],
+      [L("Kortingscodes", "Discount codes", "Códigos de descuento"), false, true],
+      [L("Analytics dashboard", "Analytics dashboard", "Panel de estadísticas"), false, true],
     ]},
-    { group: "Support", rows: [
-      [nl ? "AI-assistent in de app (direct antwoord)" : "In-app AI assistant (instant answers)", true, true],
-      [nl ? "Email support" : "Email support", true, true],
-      [nl ? "Prioriteit support" : "Priority support", false, true],
+    { group: L("Support", "Support", "Soporte"), rows: [
+      [L("AI-assistent in de app (direct antwoord)", "In-app AI assistant (instant answers)", "Asistente de IA en la app (respuestas al instante)"), true, true],
+      [L("Email support", "Email support", "Soporte por correo electrónico"), true, true],
+      [L("Prioriteit support", "Priority support", "Soporte prioritario"), false, true],
     ]},
   ];
 };
@@ -3381,6 +3519,8 @@ function PlanCompareTable({ lang, accent = ACCENT, defaultOpen = false }) {
   const { colors: c } = useTheme();
   const [open, setOpen] = useState(defaultOpen);
   const nl = lang === "nl";
+  const es = lang === "es";
+  const perMonth = nl ? "/mnd" : es ? "/mes" : "/mo";
   const cell = (v) => {
     if (v === true) return <NavIcon name="check" size={14} color={accent} />;
     if (v === false) return <span style={{ color: c.textMuted, opacity: 0.6 }}>—</span>;
@@ -3394,16 +3534,16 @@ function PlanCompareTable({ lang, accent = ACCENT, defaultOpen = false }) {
         className="btn-ghost"
         style={{ width: "100%", padding: "12px 18px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
       >
-        {nl ? "Vergelijk alle features" : "Compare all features"}
+        {nl ? "Vergelijk alle features" : es ? "Comparar todas las funciones" : "Compare all features"}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
       </button>
       {open && (
         <div style={{ marginTop: 14, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 20, overflow: "hidden" }}>
           {/* Header */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.border}`, position: "sticky", top: 0, background: c.bgCard, zIndex: 1 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{nl ? "Feature" : "Feature"}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: c.text }}>Starter<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€19{nl ? "/mnd" : "/mo"}</div></div>
-            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: accent }}>Professional<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€35{nl ? "/mnd" : "/mo"}</div></div>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{es ? "Función" : "Feature"}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: c.text }}>Starter<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€19{perMonth}</div></div>
+            <div style={{ fontSize: 11, fontWeight: 600, textAlign: "center", color: accent }}>Professional<div style={{ fontSize: 9, fontWeight: 400, color: c.textMuted }}>€35{perMonth}</div></div>
           </div>
           {planMatrix(lang).map((g, gi) => (
             <div key={gi}>
@@ -3435,12 +3575,22 @@ function LangToggle({ lang, setLang }) {
   );
 }
 
-function Header({ title, subtitle, right, onBack, accent }) {
+// Terugknop: een SVG-pijl in plaats van het teken "←" (huisregel: geen
+// glyphs) en een echte naam voor schermlezers. `lang` is optioneel; zonder
+// valt hij terug op de taal die App.jsx op <html lang> zet.
+function Header({ title, subtitle, right, onBack, accent, lang }) {
   const { colors: c } = useTheme();
+  let L = lang;
+  if (!L) { try { L = document.documentElement.lang; } catch { L = ""; } }
+  const backLabel = L === "nl" ? "Terug" : L === "es" ? "Volver" : "Back";
   return (
     <div style={{ padding: "20px 22px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {onBack && <button className="btn-ghost" style={{ padding: "7px 12px", fontSize: 13 }} onClick={onBack}>←</button>}
+        {onBack && (
+          <button className="btn-ghost" aria-label={backLabel} title={backLabel} style={{ padding: "7px 12px", fontSize: 13, display: "inline-flex", alignItems: "center" }} onClick={onBack}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+          </button>
+        )}
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, fontWeight: 400, letterSpacing: "0.06em" }}>{title}</div>
           {subtitle && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, letterSpacing: "0.08em" }}>{subtitle}</div>}
@@ -3462,7 +3612,16 @@ function Header({ title, subtitle, right, onBack, accent }) {
 // Bewust GEEN dangerouslySetInnerHTML: we splitsen de tekst op de match en maken
 // alleen dat stukje een <a>, de rest blijft gewone tekst. Salon-invoer kan dus
 // nooit HTML injecteren.
+//
+// E-mailadressen eerst: anders werd van "info@mijnsalon.nl" alleen het domein
+// een link naar https://mijnsalon.nl (de \b matcht tussen @ en het domein) en
+// kwam de klant op een website die misschien niet eens bestaat. Een adres wordt
+// nu een mailto:-link als geheel.
+const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i;
 const LINK_RE = new RegExp(
+  // 0. e-mailadressen: naam@domein.tld
+  "[a-z0-9._%+-]+@[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.[a-z]{2,}" +
+  "|" +
   // 1. expliciete links: https://… of www.…
   "(?:https?:\\/\\/|www\\.)[^\\s<>]+" +
   "|" +
@@ -3495,9 +3654,10 @@ function Linkify({ text, color }) {
     const url = trimUrlTail(m[0]);
     if (!url) { re.lastIndex = m.index + m[0].length; continue; }
     if (m.index > cursor) out.push(str.slice(cursor, m.index));
+    const isMail = EMAIL_RE.test(url);
     out.push(
-      <a key={`l${i++}`} href={/^https?:\/\//i.test(url) ? url : `https://${url}`}
-        target="_blank" rel="noopener noreferrer"
+      <a key={`l${i++}`} href={isMail ? `mailto:${url}` : /^https?:\/\//i.test(url) ? url : `https://${url}`}
+        {...(isMail ? {} : { target: "_blank", rel: "noopener noreferrer" })}
         onClick={e => e.stopPropagation()}
         style={{ color: color || "inherit", textDecoration: "underline", textUnderlineOffset: 2, wordBreak: "break-word" }}>
         {url}
@@ -3509,6 +3669,20 @@ function Linkify({ text, color }) {
   if (cursor < str.length) out.push(str.slice(cursor));
   return <>{out}</>;
 }
+
+// ─── GERESERVEERDE SLUGS ─────────────────────────────────────
+// Paden die nooit een salon-slug mogen worden: ze zouden echte routes van de
+// app (App.jsx <Routes>) of statische bestanden overschaduwen, en de salon
+// kreeg dan een boekingslink die nooit haar pagina toont. Eén lijst voor de
+// slug-editor (OwnerApp) en het aanmelden (LandingScreen); de database weigert
+// dezelfde namen (profiles_guard_privileged). Altijd in kleine letters toetsen.
+const RESERVED_SLUGS = new Set([
+  "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
+  "voorwaarden", "contact", "api", "assets", "public", "static",
+  "auth", "login", "signup", "signin", "logout", "reset", "review",
+  "_", "app", "www",
+  "sitemap.xml", "robots.txt", "manifest.json",
+]);
 
 // ─── EXPORTS ─────────────────────────────────────────────────
 // ─── ATELIER-HUID (nieuwe merkwereld, 2026-08-27) ────────────────────────────
@@ -3626,5 +3800,6 @@ export {
   makeCSS,
   Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
   Linkify,
+  RESERVED_SLUGS,
   supabase,
 };
