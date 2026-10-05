@@ -129,6 +129,20 @@ serve(async (req) => {
   const sent: any[] = [];
   const salonCache = new Map<string, any>();
   for (const row of rows || []) {
+    // Eerst claimen, dan mailen (E2-15). De app roept deze functie bij elke
+    // "Voltooid" aan en send-followups veegt dagelijks: twee aanroepen die
+    // elkaar overlapten, mailden dezelfde code twee keer. Alleen de aanroep die
+    // notified_at zelf zet, mag versturen; mislukt de mail, dan gaat hij terug
+    // op null. Een "adres" dat geen adres is (Eydy's "." voor inloopklanten)
+    // weigert Resend altijd — die rij markeren we als afgehandeld, anders
+    // blokkeren 25 zulke rijen voorgoed elke nieuwere code van de salon.
+    const { data: claimed, error: claimErr } = await supabase.from("birthday_discount_codes")
+      .update({ notified_at: new Date().toISOString() })
+      .eq("id", row.id).is("notified_at", null)
+      .select("id");
+    if (claimErr) { console.error("loyalty claim:", claimErr.message); continue; }
+    if (!claimed || claimed.length === 0) continue; // een andere aanroep was eerder
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(row.client_email || "").trim())) continue;
     let salon = salonCache.get(row.owner_id);
     if (!salon) {
       const { data } = await supabase.from("profiles")
@@ -173,9 +187,11 @@ serve(async (req) => {
       if (res.ok) mailed = true;
       else console.error("Resend error:", res.status, await res.text().catch(() => ""));
     } catch (e) { console.error("Loyalty mail failed:", e); }
-    if (!mailed) continue; // volgende keer opnieuw (send-followups veegt dagelijks)
-
-    await supabase.from("birthday_discount_codes").update({ notified_at: new Date().toISOString() }).eq("id", row.id);
+    if (!mailed) {
+      // Claim teruggeven: volgende keer opnieuw (send-followups veegt dagelijks).
+      await supabase.from("birthday_discount_codes").update({ notified_at: null }).eq("id", row.id);
+      continue;
+    }
 
     // Eigenaar melden (push; geen abonnement = de functie doet niets).
     const nlOwner = DUTCH_COUNTRIES.has(String(salon.country_code || "NL").toUpperCase());

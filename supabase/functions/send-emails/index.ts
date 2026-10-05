@@ -19,6 +19,22 @@ function htmlToText(html){return String(html||"").replace(/<style[\s\S]*?<\/styl
 // `replyTo` routes replies to the salon so the mail looks legitimate.
 async function sendEmail(to,subject,html,from,replyTo){if(!R)throw new Error("RESEND_API_KEY not configured");const payload={from:from||F,to,subject,html,text:htmlToText(html)};if(replyTo)payload.reply_to=replyTo;const res=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":`Bearer ${R}`,"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok){console.error("Resend API error:",data);throw new Error(data?.message||`Email send failed (${res.status})`);}return data;}
 const txt=(l,nl,en,es)=>l==="es"?(es||en):(l==="en"?en:nl);
+// Leesvraag op de database met de service-sleutel. Gooit bij een fout: de
+// aanroeper krijgt dan een 500 en er gaat niets de deur uit (liever geen mail
+// dan een mail met gegevens die we niet konden controleren).
+async function rest(path){const r=await fetch(`${SU}/rest/v1/${path}`,{headers:{"apikey":SK,"Authorization":`Bearer ${SK}`}});if(!r.ok)throw new Error(`db ${r.status}: ${(await r.text().catch(()=>"")).slice(0,200)}`);return await r.json();}
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Valutasymbool per land, gelijk aan CURRENCIES/COUNTRIES in src/shared.jsx
+// (CW/SX "XCG ", AW "Afl. ", BQ "$"). Onbekend land = €.
+const CUR_BY_COUNTRY={BQ:"$",AW:"Afl. ",CW:"XCG ",SX:"XCG ",GB:"£"};
+// Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en de andere
+// edge-functies. Onbekend land = Amsterdam.
+const TZ_BY_COUNTRY={NL:"Europe/Amsterdam",BE:"Europe/Brussels",GB:"Europe/London",AW:"America/Curacao",CW:"America/Curacao",BQ:"America/Curacao",SX:"America/Curacao"};
+const tzFor=(cc)=>TZ_BY_COUNTRY[String(cc||"").toUpperCase()]||"Europe/Amsterdam";
+// Kalenderdatum (YYYY-MM-DD) van een tijdstempel op de klok van de salon. Een
+// kale datum blijft zoals hij is. String(ts).slice(0,10) gaf de UTC-datum: een
+// proef die op Curaçao om 21:30 begon, "eindigde" in de mail een dag later.
+function localYmd(ts,cc){const s=String(ts||"");if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const d=new Date(s);if(isNaN(d.getTime()))return s.slice(0,10);try{return new Intl.DateTimeFormat("en-CA",{timeZone:tzFor(cc),year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}catch{return d.toISOString().slice(0,10);}}
 serve(async(req)=>{
 const origin=req.headers.get("origin");const headers=cors(origin);
 if(req.method==="OPTIONS")return new Response("ok",{headers});
@@ -85,12 +101,121 @@ const{type,booking:b}=await req.json();
 // vooruitbetalingsmails (booking_pending_payment, prepay_reminder,
 // prepay_expired). waitlist_spot_open en de salonfactuur (invoice) blijven vanuit
 // de app. Tot 05-10-2026 kon elk account met een login ook de server-types sturen.
-// LET OP, nog open (audit E2-02): voor deze zeven types komen afzendernaam,
-// ontvanger, logo en betaalgegevens nog uit de aanvraag. De salon hoort hier
-// server-side te worden bepaald (eigenaar of medewerker van de aanroeper) en de
-// ontvanger aan een afspraak van die salon te worden gekoppeld.
+// staff_invite (uitnodiging voor een teamlid) is ook alleen van de server
+// (create-staff-account).
 const BROWSER_TYPES=["booking_confirmation","booking_notification","refund_sent","appointment_updated","invoice","booking_cancelled","waitlist_spot_open"];
 if(callerId&&!BROWSER_TYPES.includes(type))return new Response(JSON.stringify({error:"type_not_allowed"}),{status:403,headers:{...headers,"Content-Type":"application/json"}});
+// AANROEPER MET EEN LOGIN: DE SERVER BEPAALT SALON, ONTVANGER EN BETAALGEGEVENS
+// (audit E2-02 / R-01, 05-10-2026). Tot die dag kwamen afzendernaam, logo,
+// ontvanger en IBAN/betaallink gewoon uit de aanvraag: elk account (aanmelden
+// is open) kon een "factuur" van een echte salon met het IBAN van een
+// oplichter naar willekeurige adressen sturen. Nu:
+//  - de salon van de aanroeper komt uit de database: een actieve
+//    staff_members-rij van een ANDERE eigenaar = medewerker van die salon,
+//    anders haar eigen profiel = eigenaar, anders 403 no_salon;
+//  - naam, logo, accent, slug, salonadres, valuta en de zichtbaarheids-
+//    schakelaars voor personeel komen uit dat profiel;
+//  - elk type over een afspraak EIST appointment_id: de klant (adres, naam,
+//    telefoon) komt uit die afspraak van deze salon, en een medewerker moet
+//    zelf op die afspraak staan (tenzij de salon "alles zien" aan heeft);
+//    waitlist_spot_open EIST waitlist_id van een wachtlijstrij die de app in
+//    het afgelopen kwartier op 'notified' zette;
+//  - booking_notification gaat alleen naar de eigenaar (adres uit de database)
+//    en naar teamleden van deze salon, hooguit 10 adressen;
+//  - IBAN, betaallink, adres, KVK en btw-nummer komen uit het extra
+//    factuurprofiel (invoice_profile_id / _index), de regel van
+//    book-appointment 12a (één stylist met eigen gegevens) of het salon-
+//    profiel; voor een medewerker uit haar eigen rij met het profiel als terugval;
+//  - een annuleerlink alleen als hij naar vellu.cc/cancel/<token> van deze
+//    afspraak wijst; "vellu" in de afzendernaam wordt "Salon".
+// Inhoud (regels, bedragen, belasting, datum/tijd, taal) blijft uit de
+// aanvraag komen. Aanroepen met x-internal-secret veranderen niet.
+if(callerId){
+const deny=(code,status=403)=>new Response(JSON.stringify({error:code}),{status,headers:{...headers,"Content-Type":"application/json"}});
+const enc=encodeURIComponent;
+const me=(await rest(`staff_members?user_id=eq.${enc(callerId)}&owner_id=neq.${enc(callerId)}&active=eq.true&select=id,owner_id,name,email,address,kvk_number,btw_id,iban,iban_holder,payment_link&limit=1`))?.[0]||null;
+const salonId=me?me.owner_id:callerId;
+const pr=(await rest(`profiles?id=eq.${enc(salonId)}&select=business_name,salon_email,email,logo_url,accent_color,slug,country_code,iban,iban_holder,payment_link,address,kvk_number,btw_id,invoice_profiles,show_logo_on_invoice,staff_view_client_contact,staff_view_revenue,staff_see_all`))?.[0];
+if(!pr)return deny("no_salon");
+const salonName=String(pr.business_name||"");
+// Vroeg de app om een mail aan de eigenaar (booking_notification)? Vastleggen
+// vóór owner_email hieronder door het adres uit de database wordt vervangen.
+const ownerAsked=!!b.owner_email;
+b.salon_name=salonName;
+b.salon_logo=pr.logo_url||"";
+b.salon_accent=pr.accent_color||"";
+b.salon_slug=pr.slug||"";
+b.salon_email=pr.salon_email||"";
+b.owner_email=pr.salon_email||pr.email||null;
+b.country_code=pr.country_code||"NL";
+b.currency=CUR_BY_COUNTRY[String(pr.country_code||"").toUpperCase()]||"€";
+b.staff_view_client_contact=pr.staff_view_client_contact;
+b.staff_view_revenue=pr.staff_view_revenue;
+// Annuleerlink: alleen naar onze eigen annuleerpagina, en alleen met een token
+// van deze afspraak (hieronder gecontroleerd). www. wordt de kale domeinnaam.
+const cm=/^https:\/\/(?:www\.)?vellu\.cc\/cancel\/([0-9a-f]{64})$/.exec(String(b.cancel_url||""));
+b.cancel_url=null;
+const APPT_TYPES=["booking_confirmation","booking_notification","refund_sent","appointment_updated","invoice","booking_cancelled"];
+if(APPT_TYPES.includes(type)){
+if(!UUID_RE.test(String(b.appointment_id||"")))return deny("appointment_id_required",400);
+const ap=(await rest(`appointments?id=eq.${enc(b.appointment_id)}&owner_id=eq.${enc(salonId)}&select=id,client_email,client_name,client_phone,staff_id,staff_assignments,service_breakdown&limit=1`))?.[0];
+if(!ap)return deny("appointment_not_found");
+const apStaff=[...new Set([ap.staff_id,...Object.values(ap.staff_assignments||{}),...(Array.isArray(ap.service_breakdown)?ap.service_breakdown.map((p:any)=>p?.staff_id):[])].filter((x:any)=>typeof x==="string"&&x))];
+if(me&&pr.staff_see_all!==true&&!apStaff.includes(me.id))return deny("appointment_not_found");
+b.client_email=ap.client_email||"";
+b.client_name=ap.client_name||"";
+b.client_phone=ap.client_phone||null;
+if(cm){const tk=await rest(`cancellation_tokens?token=eq.${cm[1]}&appointment_id=eq.${enc(ap.id)}&select=id&limit=1`);if(tk?.length)b.cancel_url=`https://vellu.cc/cancel/${cm[1]}`;}
+// Bedrijfs- en betaalgegevens. Eerst de terugval (het salonprofiel), daarna
+// overschrijven met het extra factuurprofiel, de stylist (regel 12a) of de
+// medewerker zelf.
+let pay={iban:pr.iban||"",iban_holder:pr.iban_holder||salonName,payment_link:pr.payment_link||"",address:pr.address||"",kvk:pr.kvk_number||"",btw:pr.btw_id||""};
+if(me){
+pay={iban:me.iban||pay.iban,iban_holder:me.iban_holder||(me.iban?me.name:pay.iban_holder),payment_link:me.payment_link||pay.payment_link,address:me.address||pay.address,kvk:me.kvk_number||pay.kvk,btw:me.btw_id||pay.btw};
+if(type==="invoice")b.salon_name=`${salonName} — ${me.name||""}`.replace(/ — $/,"");
+}else{
+const extras=Array.isArray(pr.invoice_profiles)?pr.invoice_profiles:[];
+const idx=Number.isInteger(b.invoice_profile_index)?b.invoice_profile_index:null;
+const ext=(b.invoice_profile_id?extras.find((x:any)=>x&&x.id&&x.id===b.invoice_profile_id):null)||(idx!==null&&idx>=0&&idx<extras.length?extras[idx]:null);
+if(ext){
+// Extra factuurprofiel: zijn EIGEN gegevens, zonder terugval op de salon —
+// zo deed de app het ook (een tweede persoon factureert met haar eigen rekening).
+pay={iban:ext.iban||"",iban_holder:ext.iban_holder||ext.label||"",payment_link:ext.payment_link||"",address:ext.address||"",kvk:ext.kvk_number||"",btw:ext.btw_id||""};
+if(type==="invoice"&&ext.label)b.salon_name=`${salonName} — ${ext.label}`;
+}else if(apStaff.length===1){
+// Regel 12a van book-appointment: precies één stylist op de afspraak met
+// eigen IBAN of betaallink → haar rekening (vooruitbetaling ging daar ook heen).
+const s=(await rest(`staff_members?id=eq.${enc(apStaff[0])}&owner_id=eq.${enc(salonId)}&select=name,iban,iban_holder,payment_link&limit=1`))?.[0];
+if(s&&(String(s.iban||"").trim()||String(s.payment_link||"").trim()))pay={...pay,iban:String(s.iban||""),iban_holder:String(s.iban_holder||s.name||""),payment_link:String(s.payment_link||"")};
+}
+}
+b.salon_iban=pay.iban;b.iban_holder=pay.iban_holder;b.payment_link=pay.payment_link;
+b.salon_address=pay.address;b.salon_kvk=pay.kvk;b.salon_btw=pay.btw;
+if(type==="invoice"&&pr.show_logo_on_invoice===false)b.salon_logo="";
+if(type==="booking_notification"){
+// Ontvangers: de eigenaar (adres uit de database) als een MEDEWERKER de
+// afspraak maakte of als de app er zelf om vraagt (de eigenaar die zelf een
+// afspraak intikt krijgt er geen mail over, zoals voorheen), plus teamleden
+// van DEZE salon. Samen hooguit 10 adressen.
+const team=await rest(`staff_members?owner_id=eq.${enc(salonId)}&active=not.is.false&email=not.is.null&select=email`);
+const teamSet=new Set((team||[]).map((r:any)=>String(r.email||"").trim().toLowerCase()).filter(Boolean));
+const wantOwner=(!!me||ownerAsked)&&!!b.owner_email;
+const ownerLc=wantOwner?String(b.owner_email).trim().toLowerCase():"";
+const staffOut:string[]=[];
+for(const em of (Array.isArray(b.staff_emails)?b.staff_emails:[])){const e=String(em||"").trim();const lc=e.toLowerCase();if(e&&teamSet.has(lc)&&lc!==ownerLc&&!staffOut.some(x=>x.toLowerCase()===lc))staffOut.push(e);}
+b.owner_email=wantOwner?b.owner_email:null;
+b.staff_emails=staffOut.slice(0,wantOwner?9:10);
+}
+}else if(type==="waitlist_spot_open"){
+if(!UUID_RE.test(String(b.waitlist_id||"")))return deny("waitlist_id_required",400);
+const since=new Date(Date.now()-15*60*1000).toISOString();
+const w=(await rest(`waitlist?id=eq.${enc(b.waitlist_id)}&owner_id=eq.${enc(salonId)}&status=eq.notified&notified_at=gte.${enc(since)}&select=*&limit=1`))?.[0];
+if(!w)return deny("waitlist_entry_not_found");
+b.client_email=w.client_email||"";
+b.client_name=w.client_name||"";
+if(["nl","en","es"].includes(w.lang))b.lang=w.lang;
+}
+}
 const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.replace(/^\s+/,""):"€";
 // Owner-facing emails (booking_notification, owner_cancellation,
 // waitlist_joined) render in the SALON's language, not the client's booking
@@ -111,7 +236,10 @@ const oLang=["nl","en","es"].includes(b.owner_lang)?b.owner_lang:"nl";
 const PLATFORM_TYPES=["renewal_reminder","trial_ending","trial_expired","payment_failed","subscription_invoice"];
 const VELLU_REPLY_TO="mirahventures@vellu.cc";
 const isPlatform=PLATFORM_TYPES.includes(type);
-const fromName=isPlatform?"Vellu":(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
+let fromName=isPlatform?"Vellu":(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
+// Een salon mag niet als "Vellu" (of "Vellu Support") mailen: met een login
+// wordt zo'n afzendernaam "Salon". Platformmails en interne aanroepen blijven.
+if(callerId&&/vellu/i.test(fromName))fromName="Salon";
 const fromLine=`${fromName} <${F}>`;
 const replyTo=isPlatform?VELLU_REPLY_TO:((String(b.salon_email||b.owner_email||"").trim())||null);
 // rt = afwijkend Reply-To voor één mail (zie ownerReplyFor); weggelaten = replyTo.
@@ -337,15 +465,28 @@ const totLabel=vatRows?`${txt(lang,"Totaal","Total","Total")} (${txt(lang,"incl.
 // "geen belasting in rekening gebracht" zou daar pertinent onwaar zijn.
 const taxCharged=(taxLines&&taxLines.length>0)||(!!b.salon_btw&&rate>0);
 const noVatNote=taxCharged?"":`<p style="color:#aaa;font-size:11px;text-align:center;margin:0 0 8px;">${txt(lang,"Geen belasting in rekening gebracht.","No tax charged.","No se aplican impuestos.")}</p>`;
-const invDate=fmtD(new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Amsterdam"}),lang);
+// Factuurdatum op de klok van de SALON. Hier stond vast Europe/Amsterdam: een
+// factuur die een salon op Bonaire om 18:30 verstuurde, droeg de datum van
+// morgen (Amsterdam loopt zes uur voor).
+const invDate=fmtD(localYmd(new Date().toISOString(),b.country_code),lang);
 // Al (vooruit)betaald bedrag: aftrekken en alleen het restant vragen. Eén
 // factuur voor de hele behandeling, met de vooruitbetaling erop verrekend.
 const paidAmt=Math.max(0,parseFloat(b.amount_paid||0)||0);const openAmt=Math.round((gross-paidAmt)*100)/100;
-const paidRows=paidAmt>0?`${row(txt(lang,"Vooruitbetaald","Paid in advance","Pagado por adelantado"),`-${fP(paidAmt)}`)}${openAmt<-0.005?row(txt(lang,"Te veel betaald, wordt terugbetaald","Overpaid, will be refunded","Pagado de más, se devolverá"),fP(-openAmt)):totRow(openAmt>0.005?txt(lang,"Te betalen","Amount due","Importe a pagar"):txt(lang,"Voldaan","Paid in full","Pagado"),fP(Math.max(0,openAmt)))}`:"";
+// paid_in_full: ter plekke helemaal betaald (pin, contant, overschrijving).
+// Dan is er niets vooruitbetaald en niets open: één regel "Betaald" in plaats
+// van "Vooruitbetaald -€X / Voldaan €0,00", wat elke kassabon ten onrechte een
+// vooruitbetaling noemde. Was er wél een vooruitbetaling, dan staat het ter
+// plekke betaalde restant er als eigen regel onder.
+const paidInFull=b.paid_in_full===true;
+const restPaid=paidInFull&&paidAmt>0&&openAmt>0.005?openAmt:0;
+const paidRows=paidInFull&&paidAmt<=0.005
+?row(txt(lang,"Betaald","Paid","Pagado"),fP(gross))
+:paidAmt>0?`${row(txt(lang,"Vooruitbetaald","Paid in advance","Pagado por adelantado"),`-${fP(paidAmt)}`)}${restPaid>0?row(txt(lang,"Betaald","Paid","Pagado"),`-${fP(restPaid)}`):""}${openAmt<-0.005?row(txt(lang,"Te veel betaald, wordt terugbetaald","Overpaid, will be refunded","Pagado de más, se devolverá"),fP(-openAmt)):totRow(openAmt>0.005&&!paidInFull?txt(lang,"Te betalen","Amount due","Importe a pagar"):txt(lang,"Voldaan","Paid in full","Pagado"),fP(paidInFull?0:Math.max(0,openAmt)))}`:"";
 // Betaalblok bij "Betaalverzoek na afloop" (payment_request) óf zodra er na
 // een vooruitbetaling nog iets openstaat; altijd voor het OPEN bedrag. De
-// opbouw zelf staat in payBlockHtml, gedeeld met Vooruitbetalen.
-const payBlock=(b.payment_request||paidAmt>0)&&openAmt>0.005?payBlockHtml(openAmt,String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100)):"";
+// opbouw zelf staat in payBlockHtml, gedeeld met Vooruitbetalen. Nooit als
+// alles al betaald is (paid_in_full).
+const payBlock=!paidInFull&&(b.payment_request||paidAmt>0)&&openAmt>0.005?payBlockHtml(openAmt,String(b.invoice_number||`${b.salon_name||"Vellu"} ${b.date||""}`).slice(0,100)):"";
 await send(plainText(b.client_email),plainText(`${txt(lang,"Factuur","Invoice","Factura")} ${b.invoice_number||""} - ${b.salon_name}`),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin:0 0 4px;">${txt(lang,"Factuur","Invoice","Factura")}</h2><p style="color:#888;font-size:13px;margin:0 0 24px;">${eS}</p>${b.invoice_number?`<div style="background:${AC}1a;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;color:${AC};display:inline-block;margin-bottom:16px;">${eIN}</div>`:""}${bSec}<div ${bS}><table ${tS}>${row(txt(lang,"Klant","Client","Cliente"),eC)}${itemRows}${row(txt(lang,"Factuurdatum","Invoice date","Fecha de factura"),invDate)}${row(txt(lang,"Datum afspraak","Appointment date","Fecha de la cita"),eD)}${vatRows}${totRow(totLabel,fP(gross))}${paidRows}</table></div>${noVatNote}${payBlock}<p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Bedankt voor je bezoek!","Thank you for your visit!","¡Gracias por tu visita!")}</p></div>`);}
 if(type==="appointment_reminder"){
 // Deze mail zei altijd "morgen", maar de salon kiest zelf hoeveel uur van
@@ -390,6 +531,17 @@ const eNo=b.notes?esc(String(b.notes).slice(0,300)):"";
 const eEm=esc(b.client_email);
 const subj=txt(oLang,`Nieuwe wachtlijst-aanmelding: ${b.client_name}`,`New waitlist request: ${b.client_name}`,`Nueva solicitud de lista de espera: ${b.client_name}`);
 for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Nieuwe wachtlijst-aanmelding","New waitlist request","Nueva solicitud de lista de espera")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`,`<strong>${eC}</strong> quiere unirse a la lista de espera de <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${_hideContact(em)?"":row(txt(oLang,"E-mail","Email","Correo"),eEm)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${b.service_name?row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv):""}${b.staff_name?row(txt(oLang,"Medewerker","Staff","Personal"),esc(b.staff_name)):""}${row(txt(oLang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days",ds.length===1?"Día preferido":"Días preferidos"),daysStr)}${eNo?`<tr><td ${cL}>${txt(oLang,"Notitie","Note","Nota")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div>${replyHint(em)}</div>`,ownerReplyFor(em));}}
+// Uitnodiging voor een teamlid (R-02, 05-10-2026). Alleen van de server:
+// create-staff-account maakt een eenmalig token en vraagt deze mail aan. De
+// link is het bewijs dat de stylist dit postvak bezit; zonder link geen
+// koppeling aan de salon (het oude koppelen op alleen het e-mailadres kon door
+// iedereen die het adres kende). Alleen een link naar vellu.cc/owner?invite=
+// met een hex-token wordt geaccepteerd.
+if(type==="staff_invite"){
+const inv=String(b.invite_url||"");
+if(!/^https:\/\/vellu\.cc\/owner\?invite=[0-9a-f]{64}$/.test(inv))return new Response(JSON.stringify({error:"invalid_invite_url"}),{status:400,headers:{...headers,"Content-Type":"application/json"}});
+const eN=esc(b.staff_name||"");
+await send(plainText(b.client_email),plainText(b.salon_name?txt(lang,`${b.salon_name} nodigt je uit in Vellu`,`${b.salon_name} invited you to Vellu`,`${b.salon_name} te ha invitado a Vellu`):txt(lang,"Uitnodiging voor Vellu","Invitation to Vellu","Invitación a Vellu")),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Je bent uitgenodigd","You're invited","Te han invitado")}</h2>${eN?`<p style="color:#666;margin:0 0 12px;">${txt(lang,`Hoi ${eN},`,`Hi ${eN},`,`Hola ${eN}:`)}</p>`:""}<p style="color:#666;margin-bottom:28px;">${txt(lang,`<strong>${eS}</strong> heeft je uitgenodigd als teamlid in Vellu. Maak met dit e-mailadres een account aan, of log in als je er al een hebt. De uitnodiging is 7 dagen geldig.`,`<strong>${eS}</strong> has invited you to join their team in Vellu. Create an account with this email address, or log in if you already have one. The invitation is valid for 7 days.`,`<strong>${eS}</strong> te ha invitado a su equipo en Vellu. Crea una cuenta con esta dirección de correo, o inicia sesión si ya tienes una. La invitación es válida durante 7 días.`)}</p><p style="text-align:center;margin:20px 0 28px;"><a href="${esc(inv)}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Uitnodiging accepteren","Accept invitation","Aceptar invitación")}</a></p><p style="color:#888;font-size:12px;text-align:center;">${txt(lang,"Verwachtte je deze uitnodiging niet? Dan kun je deze mail gewoon negeren.","Not expecting this invitation? You can simply ignore this email.","¿No esperabas esta invitación? Puedes ignorar este correo.")}</p></div>`);}
 // Betaling voor het Vellu-abonnement niet gelukt. Ging hier eerder NIETS uit:
 // mollie-webhook logde alleen een regel naar de console, dus de salon zag een
 // laadscherm en hoorde daarna nooit meer iets. Dat kostte een klant op Bonaire
@@ -403,23 +555,31 @@ for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 s
 // machtiging), dus zonder deze mail valt de salon er stilzwijgend uit.
 if(type==="renewal_reminder"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
-const verlooptOp=b.plan_expires_at?fmtD(String(b.plan_expires_at).slice(0,10),oLang):"";
+// Datum op de klok van de salon (country_code), niet de UTC-datum.
+const verlooptOp=b.plan_expires_at?fmtD(localYmd(b.plan_expires_at,b.country_code),oLang):"";
 await send(plainText(b.owner_email),
 plainText(txt(oLang,`Je Vellu-abonnement loopt bijna af`,`Your Vellu subscription is about to expire`,`Tu suscripción de Vellu está por vencer`)),
 `${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je abonnement loopt bijna af","Your subscription is about to expire","Tu suscripción está por vencer")}</h2>
 <p style="color:#666;margin-bottom:8px;">${txt(oLang,`Je jaarabonnement <strong>${esc(planName)}</strong> loopt af op <strong>${esc(verlooptOp)}</strong>.`,`Your yearly <strong>${esc(planName)}</strong> subscription expires on <strong>${esc(verlooptOp)}</strong>.`,`Tu suscripción anual <strong>${esc(planName)}</strong> vence el <strong>${esc(verlooptOp)}</strong>.`)}</p>
-<p style="color:#666;margin-bottom:28px;">${txt(oLang,"Een jaarabonnement wordt niet automatisch verlengd — dat is bewust, zo heb je er zelf grip op. Verleng het met één klik, dan blijft alles gewoon doorlopen.","A yearly subscription does not renew automatically — that is by design, so you stay in control. Renew it in one click and everything keeps running.","Una suscripción anual no se renueva automáticamente — es a propósito, así mantienes el control. Renuévala con un clic y todo sigue funcionando.")}</p>
-<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Nu verlengen","Renew now","Renovar ahora")}</a></p>
+<p style="color:#666;margin-bottom:28px;">${txt(oLang,"Een jaarabonnement wordt niet automatisch verlengd — dat is bewust, zo heb je er zelf grip op. Verleng het in je dashboard, dan blijft alles gewoon doorlopen.","A yearly subscription does not renew automatically — that is by design, so you stay in control. Renew it in your dashboard and everything keeps running.","Una suscripción anual no se renueva automáticamente — es a propósito, así mantienes el control. Renuévala en tu panel y todo sigue funcionando.")}</p>
+<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=billing" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Verlengen in je dashboard","Renew in your dashboard","Renovar en tu panel")}</a></p>
 <p style="color:#888;font-size:13px;">${txt(oLang,"Liever maandelijks betalen, of vragen? Antwoord gewoon op deze mail.","Prefer to pay monthly, or have a question? Just reply to this email.","¿Prefieres pagar mensualmente o tienes una pregunta? Responde a este correo.")}</p></div>`);}
 // Proefperiode: 3 dagen vóór het einde en op de dag dat hij afloopt. Tot
 // 11-09-2026 ging hier NIETS uit — twee salons liepen zonder waarschuwing uit
 // hun proef. Verstuurd door send-renewal-reminder (dagelijks, met dedupe).
 if(type==="trial_ending"||type==="trial_expired"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
-const eindigtOp=b.trial_ends_at?fmtD(String(b.trial_ends_at).slice(0,10),oLang):"";
+const eindigtOp=b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code),oLang):"";
 const dagen=parseInt(String(b.days_left??""))||0;
 const knop=`<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Plan kiezen","Choose a plan","Elegir un plan")}</a></p>`;
-const prijzen=txt(oLang,"Starter €19 of Professional €35 per maand (incl. btw); jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month (incl. VAT); pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes (IVA incl.); pagando anual, 2 meses gratis.");
+// "(incl. btw)" alleen waar Vellu ook echt btw rekent. Bonaire, Aruba, Curaçao
+// en Sint Maarten vallen buiten het EU-btw-gebied: hun abonnementsfactuur heeft
+// geen btw-regel (OUTSIDE_EU_VAT in mollie-webhook), dus de proefmail mag dat
+// daar ook niet beloven. Zelfde lijst, zelfde terugval (geen land = NL).
+const exVat=["BQ","AW","CW","SX"].includes(String(b.country_code||"NL").toUpperCase());
+const prijzen=exVat
+?txt(oLang,"Starter €19 of Professional €35 per maand; jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month; pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes; pagando anual, 2 meses gratis.")
+:txt(oLang,"Starter €19 of Professional €35 per maand (incl. btw); jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month (incl. VAT); pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes (IVA incl.); pagando anual, 2 meses gratis.");
 if(type==="trial_ending"){
 await send(plainText(b.owner_email),plainText(txt(oLang,`Je proefperiode van Vellu eindigt ${dagen<=1?"morgen":`over ${dagen} dagen`}`,`Your Vellu trial ends ${dagen<=1?"tomorrow":`in ${dagen} days`}`,`Tu prueba de Vellu termina ${dagen<=1?"mañana":`en ${dagen} días`}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je proefperiode eindigt bijna","Your trial is almost over","Tu prueba está por terminar")}</h2><p style="color:#666;margin-bottom:8px;">${txt(oLang,`Op <strong>${esc(eindigtOp)}</strong> eindigt je gratis proefperiode van <strong>${esc(planName)}</strong>. Kies vóór die tijd een plan, dan loopt alles gewoon door: je agenda, je klanten en je boekingspagina.`,`Your free trial of <strong>${esc(planName)}</strong> ends on <strong>${esc(eindigtOp)}</strong>. Choose a plan before then and everything simply continues: your agenda, your clients and your booking page.`,`Tu prueba gratuita de <strong>${esc(planName)}</strong> termina el <strong>${esc(eindigtOp)}</strong>. Elige un plan antes y todo sigue igual: tu agenda, tus clientes y tu página de reservas.`)}</p><p style="color:#666;margin-bottom:28px;">${prijzen}</p>${knop}<p style="color:#888;font-size:13px;">${txt(oLang,"Twijfel je nog, of lukt betalen niet? Antwoord gewoon op deze mail.","Still deciding, or having trouble paying? Just reply to this email.","¿Aún lo dudas o no consigues pagar? Responde a este correo.")}</p></div>`);}
 else{
@@ -446,6 +606,12 @@ const paar=redenen[rc]||[txt(oLang,"De betaling is niet gelukt.","The payment di
                  txt(oLang,"Je kunt het opnieuw proberen. Lukt het weer niet, laat het ons weten — dan kijken we mee.","You can try again. If it fails again, let us know and we will look into it.","Puedes intentarlo de nuevo. Si vuelve a fallar, avísanos y lo revisamos.")];
 const [watErIs,watTeDoen]=paar;
 const eB=esc(b.business_name||"");
+// Proefzin alleen zolang de proef ECHT nog loopt. trial_ends_at is een volledig
+// tijdstempel; fmtD kreeg dat zonder .slice en schreef "undefined NaN undefined
+// NaN", en de zin stond er ook bij proeven die al lang voorbij waren ("je kunt
+// Vellu gewoon blijven gebruiken" terwijl het dashboard al op slot zat).
+const tEnd=b.trial_ends_at?new Date(String(b.trial_ends_at)).getTime():NaN;
+const trialDate=Number.isFinite(tEnd)&&tEnd>Date.now()?esc(fmtD(localYmd(b.trial_ends_at,b.country_code),oLang)):"";
 await send(plainText(b.owner_email),
 plainText(txt(oLang,"Je betaling is niet gelukt — er is niets afgeschreven","Your payment did not go through — nothing was charged","Tu pago no se completó — no se cobró nada")),
 `${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"De betaling is niet gelukt","The payment did not go through","El pago no se completó")}</h2>
@@ -457,7 +623,7 @@ plainText(txt(oLang,"Je betaling is niet gelukt — er is niets afgeschreven","Y
 ${bedrag?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Bedrag","Amount","Importe")}</td><td style="padding:6px 0;text-align:right;">${esc(bedrag)}</td></tr>`:""}
 ${eB?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Salon","Salon","Salón")}</td><td style="padding:6px 0;text-align:right;">${eB}</td></tr>`:""}
 </table></div>
-${b.trial_ends_at?`<p style="color:#666;margin-bottom:28px;">${txt(oLang,`Je proefperiode loopt nog tot <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, dus je kunt Vellu gewoon blijven gebruiken terwijl je dit regelt.`,`Your trial still runs until <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, so you can keep using Vellu while you sort this out.`,`Tu periodo de prueba dura hasta el <strong>${esc(fmtD(b.trial_ends_at,oLang))}</strong>, así que puedes seguir usando Vellu mientras lo resuelves.`)}</p>`:""}
+${trialDate?`<p style="color:#666;margin-bottom:28px;">${txt(oLang,`Je proefperiode loopt nog tot <strong>${trialDate}</strong>, dus je kunt Vellu gewoon blijven gebruiken terwijl je dit regelt.`,`Your trial still runs until <strong>${trialDate}</strong>, so you can keep using Vellu while you sort this out.`,`Tu periodo de prueba dura hasta el <strong>${trialDate}</strong>, así que puedes seguir usando Vellu mientras lo resuelves.`)}</p>`:""}
 <p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Opnieuw proberen","Try again","Intentar de nuevo")}</a></p>
 <p style="color:#888;font-size:13px;">${txt(oLang,"Kom je er niet uit? Antwoord gewoon op deze mail, dan kijken we mee.","Stuck? Just reply to this email and we will help.","¿No lo consigues? Responde a este correo y te ayudamos.")}</p></div>`);}
 if(type==="subscription_invoice"){

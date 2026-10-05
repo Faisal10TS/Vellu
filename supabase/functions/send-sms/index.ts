@@ -9,7 +9,7 @@
 // Gate rules:
 //   1. Salon must be on the Professional plan (SMS is a Pro-tier feature).
 //   2. Client must have a phone number on file, and we must be able to
-//      normalise it into E.164 (assumes NL as default country).
+//      normalise it into E.164 (local numbers get the SALON's country code).
 //   3. Message type must be one of the allow-listed events — invoices are
 //      deliberately excluded (too long for a single SMS, and the client
 //      already gets a proper PDF-style email).
@@ -17,15 +17,16 @@
 // Provider abstraction:
 //   - SMS_PROVIDER env var picks the backend. Currently supported values:
 //     "messagebird", "twilio", or unset/"none". Unset falls back to a
-//     dry-run that logs the message and returns success so the upstream
-//     flow keeps working before real credentials are in place.
+//     dry-run that logs the message and answers success:true, sent:false,
+//     reason 'dry_run' (nothing reached the client).
 //   - When a real provider is picked, credentials come from provider-
 //     specific env vars (e.g. MESSAGEBIRD_ACCESS_KEY, TWILIO_ACCOUNT_SID +
 //     TWILIO_AUTH_TOKEN + TWILIO_FROM_NUMBER).
 //
 // Auth: valid Supabase JWT OR the internal service-role secret (same
 // pattern as send-emails so server-side crons and edge functions can call
-// this too).
+// this too). A JWT caller must be the salon owner (owner_id = her user id)
+// and pass appointment_id; phone and name then come from that appointment.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -85,44 +86,45 @@ function err(status: number, code: string, origin: string | null) {
   });
 }
 
-async function verifyUserToken(tok: string) {
-  if (!tok) return false;
+// Geeft het user-id van een geldig Supabase-JWT terug, of null. Het id is nodig
+// om de aanroeper aan haar EIGEN salon te binden (zie de auth-stap in serve).
+async function verifyUserToken(tok: string): Promise<string | null> {
+  if (!tok) return null;
   try {
     const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { "Authorization": `Bearer ${tok}`, "apikey": SUPABASE_SERVICE_KEY },
     });
-    return r.ok;
+    if (!r.ok) return null;
+    const u = await r.json().catch(() => null);
+    return typeof u?.id === "string" ? u.id : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-// Best-effort E.164 normalisation biased toward NL. Accepts inputs like
-// "+31612345678", "0612345678", "06 12 34 56 78", "06-12345678" and returns
-// "+31612345678". Returns null when the digits don't look like a mobile
-// number we can send to.
-function normalisePhone(raw: string | null | undefined, defaultCountry = "NL"): string | null {
+// Telefoonnummer → E.164 op basis van het land van de SALON. Port van waDigits
+// in src/shared.jsx (dezelfde regels als de WhatsApp-knoppen): "+…" en "00…"
+// hebben al een landcode, "0…" krijgt de landcode van de salon, op Curaçao
+// hoort er een 9 achter de 599 (7 lokale cijfers of "9xxxxxxx"), en korte
+// lokale nummers (Caribisch: 7 cijfers) krijgen de landcode ervoor. Tot
+// 05-10-2026 was dit NL-only: een 7-cijferig Bonaire-nummer werd overgeslagen
+// en "0…" van een Bonaire- of Belgische salon werd +31… — een vreemde.
+const WA_COUNTRY_PREFIX: Record<string, string> = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
+function normalisePhone(raw: string | null | undefined, countryCode = "NL"): string | null {
   if (!raw) return null;
-  const trimmed = String(raw).replace(/[\s\-()]/g, "");
-  if (!trimmed) return null;
-  if (trimmed.startsWith("+")) {
-    // Already E.164-ish; just strip anything non-digit after the leading +.
-    const cleaned = "+" + trimmed.slice(1).replace(/\D/g, "");
-    return cleaned.length >= 8 ? cleaned : null;
-  }
-  const digitsOnly = trimmed.replace(/\D/g, "");
-  if (!digitsOnly) return null;
-  if (defaultCountry === "NL") {
-    // 0031... → +31...
-    if (digitsOnly.startsWith("0031")) return "+" + digitsOnly.slice(2);
-    // 06... → +316...
-    if (digitsOnly.startsWith("0") && digitsOnly.length === 10) return "+31" + digitsOnly.slice(1);
-    // 31612345678 → +31612345678
-    if (digitsOnly.startsWith("31") && digitsOnly.length >= 11) return "+" + digitsOnly;
-  }
-  // Fallback: assume the caller passed a country-code-prefixed number without +
-  if (digitsOnly.length >= 10) return "+" + digitsOnly;
-  return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  let d = s.replace(/[^0-9]/g, "");
+  if (!d) return null;
+  if (s.startsWith("+")) return d.length >= 8 ? "+" + d : null;
+  const country = String(countryCode || "NL").toUpperCase();
+  const cc = WA_COUNTRY_PREFIX[country] || "31";
+  if (d.startsWith("00")) d = d.slice(2);
+  else if (d.startsWith("0")) d = cc + d.slice(1);
+  else if (country === "CW" && d.length === 7) d = "5999" + d;
+  else if (country === "CW" && d.length === 8 && d.startsWith("9")) d = "599" + d;
+  else if (d.length <= 8 && !d.startsWith(cc)) d = cc + d;
+  return d.length >= 8 ? "+" + d : null;
 }
 
 // Taalkeuze voor één zin. Zelfde vorm als txt() in send-emails, zodat de SMS en
@@ -308,13 +310,14 @@ async function sendViaTwilio(to: string, body: string): Promise<{ ok: boolean; i
   }
 }
 
-async function dispatch(to: string, body: string) {
+async function dispatch(to: string, body: string): Promise<{ ok: boolean; id?: string; error?: string; dryRun?: boolean }> {
   if (SMS_PROVIDER === "messagebird") return sendViaMessagebird(to, body);
   if (SMS_PROVIDER === "twilio") return sendViaTwilio(to, body);
-  // Dry-run: log and pretend success. Lets upstream flows exercise the code
-  // path before real credentials are wired up.
+  // Dry-run: alleen loggen. Het antwoord zegt eerlijk dat er niets verstuurd is
+  // (sent:false, reason 'dry_run'); tot 05-10-2026 stond hier sent:true en
+  // dacht elke aanroeper dat de klant een SMS had gekregen.
   console.log(`[SMS DRY-RUN provider=${SMS_PROVIDER}] to=${to} body=${JSON.stringify(body)}`);
-  return { ok: true, id: `dryrun-${Date.now()}` };
+  return { ok: true, dryRun: true };
 }
 
 serve(async (req) => {
@@ -325,27 +328,33 @@ serve(async (req) => {
   // Auth: allow either an internal secret (server-to-server callers like the
   // reminder cron) or a valid Supabase JWT (owner-facing flows).
   let authed = false;
+  let callerId: string | null = null;
   const sec = req.headers.get("x-internal-secret");
   if (sec && sec === SUPABASE_SERVICE_KEY) authed = true;
   if (!authed) {
     const a = req.headers.get("authorization") || "";
     const tok = a.startsWith("Bearer ") ? a.slice(7) : "";
-    if (tok) authed = await verifyUserToken(tok);
+    if (tok) { callerId = await verifyUserToken(tok); authed = !!callerId; }
   }
   if (!authed) return err(401, "unauthorized", origin);
 
-  let body: { type?: string; booking?: Booking };
+  let body: { type?: string; booking?: Booking & { appointment_id?: string } };
   try { body = await req.json(); } catch { return err(400, "invalid_json", origin); }
   const type = String(body.type || "");
   const b = body.booking || {};
 
   if (!ALLOWED_TYPES.has(type)) return err(400, "type_not_allowed", origin);
   if (!b.owner_id) return err(400, "missing_owner_id", origin);
+  // Met een login (de eigenaar in de app) alleen voor je EIGEN salon. Tot
+  // 05-10-2026 accepteerde dit elk JWT met elk owner_id en elk telefoonnummer
+  // uit de aanvraag (R-05) — onschuldig zolang SMS droog draaide, maar niet
+  // zodra er een provider aan staat.
+  if (callerId && b.owner_id !== callerId) return err(403, "forbidden", origin);
 
   // Plan gate: only Professional-tier salons send SMS.
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("plan, subscription_status")
+    .select("plan, subscription_status, business_name, country_code")
     .eq("id", b.owner_id)
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
@@ -359,7 +368,27 @@ serve(async (req) => {
     return ok({ success: true, sent: false, skipped_reason: "subscription_not_active" }, origin);
   }
 
-  const to = normalisePhone(b.client_phone);
+  // Met een login: het nummer (en de naam) komen uit een afspraak van deze
+  // salon, de salonnaam uit het profiel. De aanvraag bepaalt alleen nog de
+  // inhoud (dienst, datum, tijd, prijs, taal).
+  if (callerId) {
+    const apptId = String(b.appointment_id || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apptId)) return err(400, "appointment_id_required", origin);
+    const { data: ap, error: apErr } = await supabase
+      .from("appointments")
+      .select("client_phone, client_name, lang")
+      .eq("id", apptId)
+      .eq("owner_id", callerId)
+      .maybeSingle();
+    if (apErr) return err(500, "db_error", origin);
+    if (!ap) return err(403, "appointment_not_found", origin);
+    b.client_phone = ap.client_phone || "";
+    b.client_name = ap.client_name || "";
+    if (!b.lang && ap.lang) b.lang = ap.lang;
+    b.salon_name = profile.business_name || "";
+  }
+
+  const to = normalisePhone(b.client_phone, profile.country_code || "NL");
   if (!to) return ok({ success: true, sent: false, skipped_reason: "no_valid_phone" }, origin);
 
   const message = buildMessage(type, b);
@@ -372,6 +401,8 @@ serve(async (req) => {
     console.error("SMS dispatch failed:", result.error);
     return ok({ success: false, sent: false, error: result.error }, origin);
   }
+  // Geen provider ingesteld: niets verstuurd, en dat zeggen we ook.
+  if (result.dryRun) return ok({ success: true, sent: false, reason: "dry_run" }, origin);
   return ok({
     success: true,
     sent: true,

@@ -158,9 +158,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // hier niet apart in de lijst: voor de planning is hij gewoon "een run van
 // 09:00 die iets te laat is". nextRun() kijkt vanuit dat moment vooruit naar
 // 10:00, dus hij beslist over precies dezelfde afspraken als een punctuele
-// 09:xx-run. Dubbel versturen kan niet — de query pakt alleen
-// reminder_sent=false en de vlag gaat direct na een geslaagde verzending om,
-// dus wat de Vercel-run verstuurt ziet de 10:00-run niet meer (en andersom).
+// 09:xx-run. Dubbel versturen kan niet — elke run claimt een afspraak eerst
+// (reminder_sent op true, alleen als hij nog niet true was) en mailt pas
+// daarna, dus wat de Vercel-run verstuurt ziet de 10:00-run niet meer (en andersom).
 // En er valt ook niets tussen wal en schip: alles wat de Vercel-run
 // doorschuift, voldoet aan next.by < start en wordt dus gegarandeerd nog vóór
 // de starttijd door de punctuele run van 10:00 opgepakt.
@@ -224,6 +224,34 @@ const INTERNAL_HEADERS = {
   "Content-Type": "application/json",
   "x-internal-secret": SUPABASE_SERVICE_KEY!,
 };
+
+// Alleen de planner mag deze functie starten (audit E2-04, 05-10-2026). Tot dan
+// draaide hij voor elke anonieme aanroeper, en tien gelijktijdige aanroepen
+// stuurden dezelfde klant tien herinneringen. Toegestaan:
+//   - x-internal-secret = de service-role-sleutel (handmatig/server);
+//   - x-cron-secret = de CRON_SECRET-env (Vercel, api/send-reminders.js);
+//   - x-cron-secret dat de database bevestigt via cron_secret_ok() (pg_cron
+//     leest het uit de vault).
+// Anders 401 zonder iets te doen. LET OP bij een deploy: eerst de migratie
+// (vault + cron-jobs met de header), dan pas deze functie, en daarna de
+// eerstvolgende uurrun controleren (net._http_response 200, cron_health).
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+async function cronAuthorized(req: Request): Promise<boolean> {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && SUPABASE_SERVICE_KEY && internal === SUPABASE_SERVICE_KEY) return true;
+  const cs = req.headers.get("x-cron-secret") || "";
+  if (!cs) return false;
+  if (CRON_SECRET && cs === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cs });
+    return !error && data === true;
+  } catch { return false; }
+}
+
+// Zelfde adresvorm-check als send-followups: "." of een half adres (Eydy tikt
+// "." voor inloopklanten) zou bij Resend sowieso weigeren en elk uur opnieuw
+// als mislukte herinnering tellen.
+const VALID_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 async function recordHealth(status: string, ms: number, processed: number, err: unknown) {
   try {
@@ -302,11 +330,14 @@ type DigestRow = {
 
 // Salon-facing digest: tomorrow's agenda in one email. Sent directly via
 // Resend (it's Vellu → salon, not salon → client, so no send-emails template).
-// `reminded` = kregen de klanten van deze salon in déze run een herinnering? Zo
-// niet (reminder_hours=0, of ze gingen al eerder de deur uit bij 48 uur), dan
-// laten we de slotzin weg in plaats van iets te beloven wat niet gebeurd is.
+// `reminderHours` = profiles.reminder_hours. De slotzin zei "Alle klanten hebben
+// zojuist automatisch een herinnering ontvangen", terwijl de uurlijkse cron in
+// déze run alleen de afspraken van het eerstvolgende uur herinnert (de middag
+// komt uren later aan de beurt, klanten zonder e-mail nooit) — en de eigenaar
+// liet daarop haar eigen belrondje vallen (E2-17). Nu staat er wat er werkelijk
+// gebeurt: "{n} uur van tevoren". Bij 0 (geen herinneringen) geen zin.
 async function sendOwnerDigest(owner: {
-  email: string; salon_name: string; lang: string; date: string; reminded: boolean;
+  email: string; salon_name: string; lang: string; date: string; reminderHours: number;
   appts: { time: string; client_name: string; service_name: string; staff_name?: string | null }[];
 }) {
   if (!RESEND_API_KEY || !owner.email || owner.appts.length === 0) return false;
@@ -329,7 +360,11 @@ async function sendOwnerDigest(owner: {
       ? `${dateLabel} — ${owner.appts.length} ${owner.appts.length === 1 ? "afspraak" : "afspraken"} bij <strong>${esc(owner.salon_name)}</strong>.`
       : `${dateLabel} — ${owner.appts.length} appointment${owner.appts.length === 1 ? "" : "s"} at <strong>${esc(owner.salon_name)}</strong>.`}</p>
     <div style="background:#f9f7f4;border-radius:12px;padding:16px 24px;margin-bottom:28px;"><table style="width:100%;border-collapse:collapse;">${rows}</table></div>
-    ${owner.reminded ? `<p style="color:#888;font-size:12px;text-align:center;">${nl ? "Alle klanten hebben zojuist automatisch een herinnering ontvangen." : "All clients have just received an automatic reminder."}</p>` : ""}
+    ${owner.reminderHours > 0 ? `<p style="color:#888;font-size:12px;text-align:center;">${owner.lang === "es"
+      ? `Tus clientes reciben automáticamente un recordatorio ${owner.reminderHours} ${owner.reminderHours === 1 ? "hora" : "horas"} antes.`
+      : nl
+      ? `Je klanten krijgen automatisch een herinnering ${owner.reminderHours} uur van tevoren.`
+      : `Your clients automatically get a reminder ${owner.reminderHours} ${owner.reminderHours === 1 ? "hour" : "hours"} in advance.`}</p>` : ""}
   </div>`;
   const text = owner.appts.map((a) => `${(a.time || "").slice(0, 5)} — ${a.client_name} — ${a.service_name}${a.staff_name ? " (" + a.staff_name + ")" : ""}`).join("\n");
   try {
@@ -352,6 +387,9 @@ async function sendOwnerDigest(owner: {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (!(await cronAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
   const t0 = Date.now();
   try {
     const now = new Date();
@@ -380,19 +418,25 @@ serve(async (req) => {
       .gte("date", todayStr)
       .lte("date", horizonStr)
       .eq("status", "confirmed")
-      .eq("reminder_sent", false)
+      // IS NOT TRUE: de kolom mag NULL zijn (default false); een NULL-rij is
+      // ook nog niet herinnerd.
+      .not("reminder_sent", "is", true)
       .is("cancelled_at", null);
 
     if (error) throw error;
 
     let sentCount = 0;
+    // Verzendpogingen per e-mail en hoeveel daarvan mislukten. Alles mislukt =
+    // status 'error' in cron_health (cron-watchdog mailt), een deel = 'degraded'.
+    // Tot 05-10-2026 stond hier altijd 'success', ook toen send-emails elke
+    // aanroep weigerde — precies de stille storing van de zomer (E2-09).
+    let emailAttempts = 0;
+    let emailFailures = 0;
     // Afspraken die we overslaan omdat de salon "geen herinnering" heeft gekozen —
     // puur voor de logging/health, zodat zichtbaar is dát er bewust niets ging.
     let skippedOff = 0;
     // Eén keer bepalen, niet per afspraak: de planning hangt alleen van `now` af.
     const next = nextRun(now);
-    // Owners whose clients we newly reminded in THIS run → digest candidates.
-    const remindedOwners = new Set<string>();
     for (const apt of appointments || []) {
       const p = apt.profiles || {};
 
@@ -465,33 +509,66 @@ serve(async (req) => {
         owner_id: apt.owner_id,
         lang,
       };
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
-        method: "POST",
-        headers: INTERNAL_HEADERS,
-        body: JSON.stringify({ type: "appointment_reminder", booking }),
-      });
-      if (res.ok) {
-        // Dubbele herinneringen zijn uitgesloten doordat de vlag meteen na een
-        // geslaagde verzending gezet wordt en de query hierboven alleen
-        // reminder_sent=false pakt: elke latere run — de uurlijkse pg_cron én
-        // de Vercel-run die er om ±09:07-09:47 tussendoor valt — ziet deze
-        // afspraak niet meer, ook al valt hij door het brede venster op
-        // meerdere momenten binnen bereik.
-        await supabase.from("appointments").update({ reminder_sent: true }).eq("id", apt.id);
-        sentCount++;
-        if (apt.owner_id) remindedOwners.add(apt.owner_id);
-        // SMS reminder — send-sms no-ops for non-Professional salons or
-        // missing phone, so it's safe to fire for every reminder.
-        if (apt.client_phone) {
-          fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+      // EERST CLAIMEN, DAN VERSTUREN (E2-04). De vlag ging pas na een geslaagde
+      // verzending om; twee runs die elkaar overlapten (of tien aanroepen
+      // tegelijk) lazen dezelfde rij en stuurden allebei. Nu zet deze run de
+      // vlag zelf en alleen wie hem omzette mag mailen — dat is het slot tegen
+      // dubbele herinneringen, ook tussen de uurlijkse pg_cron en de Vercel-run
+      // van ±09:07-09:47. Mislukt de mail, dan gaat de vlag terug (zie onder).
+      const { data: claimed, error: claimErr } = await supabase
+        .from("appointments")
+        .update({ reminder_sent: true })
+        .eq("id", apt.id)
+        .not("reminder_sent", "is", true)
+        .select("id");
+      if (claimErr) { console.error("reminder claim failed:", apt.id, claimErr.message); continue; }
+      if (!claimed || claimed.length === 0) continue; // een andere run was eerder
+
+      const emailValid = VALID_EMAIL.test(String(apt.client_email || "").trim());
+      let emailOk = false;
+      if (emailValid) {
+        emailAttempts++;
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+            method: "POST",
+            headers: INTERNAL_HEADERS,
+            body: JSON.stringify({ type: "appointment_reminder", booking }),
+          });
+          emailOk = res.ok;
+          if (!res.ok) console.error("reminder email failed:", apt.id, res.status, await res.text().catch(() => ""));
+        } catch (e) {
+          console.error("reminder email failed:", apt.id, e);
+        }
+        if (!emailOk) emailFailures++;
+      }
+      // SMS los van de e-mail (E2-13): ook als de mail mislukt of de klant geen
+      // bruikbaar e-mailadres heeft. send-sms slaat zichzelf over bij een salon
+      // zonder Professional of zonder geldig nummer, en zegt sent:false zolang
+      // er geen SMS-provider is ingesteld. Een SMS-fout telt nooit als
+      // mislukte e-mailherinnering.
+      let smsSent = false;
+      if (apt.client_phone) {
+        try {
+          const r = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
             method: "POST",
             headers: INTERNAL_HEADERS,
             body: JSON.stringify({ type: "appointment_reminder", booking: { ...booking, client_phone: apt.client_phone } }),
-          }).catch((e) => console.error("reminder SMS failed:", apt.id, e));
+          });
+          const j = await r.json().catch(() => null);
+          smsSent = r.ok && j?.sent === true;
+        } catch (e) {
+          console.error("reminder SMS failed:", apt.id, e);
         }
-      } else {
-        console.error("reminder email failed:", apt.id, await res.text().catch(() => ""));
       }
+      if (emailOk || smsSent) {
+        sentCount++;
+      } else if (emailValid) {
+        // Niets aangekomen: claim teruggeven, dan probeert de volgende uurrun
+        // het opnieuw (zolang de afspraak nog niet begonnen is).
+        await supabase.from("appointments").update({ reminder_sent: false }).eq("id", apt.id);
+      }
+      // Geen bruikbaar adres en geen SMS: de vlag blijft staan. Opnieuw proberen
+      // levert elk uur dezelfde weigering op en verder niets.
     }
 
     // Salon digests — het VOLLEDIGE dagoverzicht van morgen, per eigenaar één
@@ -518,7 +595,7 @@ serve(async (req) => {
       const todayUtcStr = now.toISOString().split("T")[0];
       const { data: dayAppts } = await supabase
         .from("appointments")
-        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code)")
+        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, reminder_hours)")
         .eq("date", tomorrowStr)
         .eq("status", "confirmed")
         .is("cancelled_at", null);
@@ -552,7 +629,7 @@ serve(async (req) => {
           salon_name: p.business_name || "je salon",
           lang: langFor(p.country_code),
           date: tomorrowStr,
-          reminded: remindedOwners.has(ownerId),
+          reminderHours: Number(p.reminder_hours) || 0,
           appts,
         });
         if (ok) digests++;
@@ -569,11 +646,20 @@ serve(async (req) => {
       await recordDigestSent(digests);
     }
 
-    await recordHealth("success", Date.now() - t0, sentCount, null);
+    const healthStatus = emailAttempts > 0 && emailFailures === emailAttempts
+      ? "error"
+      : emailFailures > 0 ? "degraded" : "success";
+    await recordHealth(
+      healthStatus,
+      Date.now() - t0,
+      sentCount,
+      emailFailures > 0 ? `${emailFailures} van ${emailAttempts} herinneringsmails mislukt` : null,
+    );
     return new Response(
       JSON.stringify({
         success: true,
         reminders_sent: sentCount,
+        reminder_emails_failed: emailFailures,
         reminders_off: skippedOff,
         owner_digests: digests,
         // Zichtbaar in de logs waaróm er nul digests waren: buiten het
