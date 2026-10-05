@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // Vervolg op "b" (vierde blok van die dag, daarom "d"): Curaçao is +599 9 en dan 7
+    // cijfers. Een lokaal 7-cijferig nummer kreeg alleen 599 ervoor en miste
+    // dus de 9. Raakt alleen salons op Curaçao (Mebeauty, Aura Glow).
+    id: "2026-10-05d",
+    date: "2026-10-05",
+    title: { nl: "WhatsApp-nummers op Curaçao", en: "WhatsApp numbers on Curaçao", es: "Números de WhatsApp en Curazao" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Curaçao: een nummer dat met alleen de 7 lokale cijfers is opgeslagen (510 1234) opent in WhatsApp nu het juiste nummer, +599 9 510 1234. Eerst viel de 9 weg en kwam je uit bij een nummer dat niet bestaat. Geldt voor de nummers van je klanten en voor het WhatsApp-nummer van je salon op de boekingspagina. De melding over mogelijke duplicates in de klantenlijst herkent 510 1234 en 9 510 1234 nu als hetzelfde nummer. Voor salons in andere landen verandert er niets.",
+          en: "Curaçao: a number saved with only the 7 local digits (510 1234) now opens the right number in WhatsApp, +599 9 510 1234. The 9 used to be dropped, which led to a number that does not exist. Applies to your clients' numbers and to your salon's WhatsApp number on the booking page. The possible duplicates hint in the client list now sees 510 1234 and 9 510 1234 as the same number. For salons in other countries nothing changes.",
+          es: "Curazao: un número guardado solo con las 7 cifras locales (510 1234) abre ahora en WhatsApp el número correcto, +599 9 510 1234. Antes se perdía el 9 y se abría un número que no existe. Vale para los números de tus clientas y para el número de WhatsApp de tu salón en la página de reservas. El aviso de posibles duplicados en la lista de clientes reconoce ahora 510 1234 y 9 510 1234 como el mismo número. Para los salones de otros países no cambia nada.",
+        },
+      },
+      {
+        kind: "fix", audience: ["staff"],
+        text: {
+          nl: "Curaçao: een klantnummer dat met alleen de 7 lokale cijfers is opgeslagen (510 1234) opent in WhatsApp nu het juiste nummer, +599 9 510 1234. Eerst viel de 9 weg. Voor salons in andere landen verandert er niets.",
+          en: "Curaçao: a client number saved with only the 7 local digits (510 1234) now opens the right number in WhatsApp, +599 9 510 1234. The 9 used to be dropped. For salons in other countries nothing changes.",
+          es: "Curazao: un número de clienta guardado solo con las 7 cifras locales (510 1234) abre ahora en WhatsApp el número correcto, +599 9 510 1234. Antes se perdía el 9. Para los salones de otros países no cambia nada.",
+        },
+      },
+    ],
+  },
+  {
     // Review 05-10-2026 (derde blok van die dag, daarom "c"), twee mailfouten.
     // (1) Mails van Vellu over het abonnement gingen uit onder de salonnaam met
     // het adres van de eigenaar als antwoordadres: "antwoord gewoon op deze

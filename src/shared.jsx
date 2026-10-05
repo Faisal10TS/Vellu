@@ -563,13 +563,22 @@ export async function fetchAllRows(build, pageSize = 1000) {
 // Zonder landcode is het land van de salon leidend: "06 12345678" bij een
 // Nederlandse salon wordt 31612345678, "7951501" bij een Bonairiaanse
 // 5997951501. Onbekend land: NL-aanname, zoals dit altijd al deed.
+// Curaçao deelt +599 met Bonaire, maar daar hoort een vaste 9 achter: +599 9
+// en dan 7 cijfers. Lokaal schrijft men alleen die 7 ("510 1234"), soms met de
+// 9 ervoor ("9 510 1234"); allebei worden ze 59995101234. Zonder die 9 kwam
+// het 7-cijferige nummer uit op 5995101234, en dat bestaat niet op WhatsApp.
 const WA_COUNTRY_PREFIX = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
 export function waDigits(phone, countryCode) {
   let d = String(phone || "").replace(/[^0-9]/g, "");
   if (!d) return "";
-  const cc = WA_COUNTRY_PREFIX[String(countryCode || "NL").toUpperCase()] || "31";
+  const country = String(countryCode || "NL").toUpperCase();
+  const cc = WA_COUNTRY_PREFIX[country] || "31";
   if (d.startsWith("00")) return d.slice(2);
   if (d.startsWith("0")) return cc + d.slice(1);
+  if (country === "CW") {
+    if (d.length === 7) return "5999" + d;
+    if (d.length === 8 && d.startsWith("9")) return "599" + d;
+  }
   // Korte lokale nummers (Caribisch: 7 cijfers) hebben nog geen landcode.
   if (d.length <= 8 && !d.startsWith(cc)) return cc + d;
   return d;
