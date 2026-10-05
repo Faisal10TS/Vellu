@@ -1,5 +1,14 @@
 // supabase/functions/google-calendar/index.ts
 // Post-booking / post-cancel Google Calendar sync. Never 500s.
+//
+// TOEGANG (sinds 05-10-2026): alleen interne aanroepen met de header
+// x-internal-secret = de service-role-sleutel (reschedule-appointment). Hiervoor
+// nam hij owner_id gewoon uit de body, zonder enige controle: iedereen kon
+// voor elke salon events aanmaken, verwijderen of opruimen (purge_events).
+// Er is geen browser-aanroeper meer (boekingspagina en annuleerpagina riepen
+// hem aan; die aanroepen zijn weg), dus ook geen CORS-"*" meer. Google Agenda
+// koppelen staat uit; wie het weer aanzet, laat book-/cancel-appointment hem
+// server-side aanroepen.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -9,10 +18,10 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
+// Geen Access-Control-Allow-Origin: een browser mag deze functie niet meer
+// aanroepen.
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST",
 };
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
@@ -61,8 +70,14 @@ function localIso(date: string, time: string, addMinutes = 0) {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return fail("method_not_allowed", null, 405);
+
+  // Alleen interne aanroepers, vóór we ook maar iets uit de body lezen.
+  const secret = req.headers.get("x-internal-secret");
+  if (!SUPABASE_SERVICE_ROLE_KEY || !secret || secret !== SUPABASE_SERVICE_ROLE_KEY) {
+    return fail("unauthorized", null, 401);
+  }
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return fail("server_misconfigured");

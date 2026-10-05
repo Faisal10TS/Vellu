@@ -130,13 +130,51 @@ function rateLimit(ip: string): boolean {
   return true;
 }
 
+// IP van de bezoeker voor de rate limit. Eerst de headers die de gateway zelf
+// zet (cf-connecting-ip, x-real-ip); pas daarna het eerste x-forwarded-for-veld,
+// dat een bezoeker zelf kan meesturen. Bewust geen "meest rechtse hop"-gok: die
+// kan alle bezoekers in één emmer stoppen. Zelfde helper in de andere publieke
+// functies (cancel-, reschedule-appointment, waitlist-notify, request-review-link).
+function clientIp(req: Request): string {
+  const h = req.headers;
+  const ip = h.get("cf-connecting-ip") || h.get("x-real-ip") || (h.get("x-forwarded-for") || "").split(",")[0];
+  return String(ip || "").trim() || "unknown";
+}
+
+// Vensters die een BESTAANDE afspraak in de agenda bezet. Een teamboeking
+// (service_breakdown met stylisten) bezet per stylist alleen haar eigen deel:
+// starttijd + offset_min, de duur van dat deel plus de pauze. Werd hiervoor de
+// hele afspraak op de eerste stylist gelegd, dan was het deel van de tweede
+// stylist onzichtbaar en kon zij dubbel geboekt worden (en was de eerste te
+// lang bezet). Zonder stylisten in de breakdown: de hele afspraak op staff_id,
+// het oude gedrag. Zelfde regel als get_booked_slots(_range) in de database.
+function vensterVanBestaande(e: any, breakMin: number): { staffId: string | null; start: number; end: number }[] {
+  const start = toMinutes(String(e.time || "00:00"));
+  const parts = Array.isArray(e.service_breakdown) ? e.service_breakdown.filter((p: any) => p && typeof p === "object") : [];
+  if (parts.some((p: any) => p.staff_id)) {
+    return parts.map((p: any) => {
+      const s = start + (parseInt(p.offset_min) || 0);
+      const raw = parseInt(p.duration);
+      const dur = Number.isFinite(raw) ? raw : parseInt(e.service_duration);
+      return { staffId: p.staff_id || null, start: s, end: s + (dur || 60) + breakMin };
+    });
+  }
+  return [{ staffId: e.staff_id || null, start, end: start + (parseInt(e.service_duration || 60) || 60) + breakMin }];
+}
+
+// Kassaverkoop (geen afspraak): bezet nooit een tijdslot. Oude rijen missen de
+// is_sale-vlag, vandaar ook de structurele herkenning.
+const isVerkoopRij = (e: any) =>
+  e?.is_sale === true ||
+  (!e?.service_id && (parseInt(e?.service_duration) || 0) === 0 && Array.isArray(e?.products) && e.products.length > 0);
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
   if (req.method !== "POST") return err(405, "method_not_allowed", origin);
 
   // Rate limit per IP
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req);
   if (!rateLimit(ip)) return err(429, "rate_limited", origin);
 
   let payload: any;
@@ -176,6 +214,10 @@ serve(async (req) => {
   const firstName = String(client.firstName || "").trim().slice(0, 80);
   const lastName = String(client.lastName || "").trim().slice(0, 80);
   const phone = String(client.phone || "").trim().slice(0, 40) || null;
+  // Een ingevuld nummer heeft minstens 6 cijfers (zelfde regel als de
+  // boekingspagina); "x" of "-" is geen telefoonnummer. Leeg blijft toegestaan
+  // zolang de salon het niet verplicht (phone_required, verderop).
+  if (phone && (phone.match(/[0-9]/g) || []).length < 6) return err(400, "invalid_phone", origin);
   const allergies = String(client.allergies || "").trim().slice(0, 500) || null;
   // Verjaardag (optioneel veld op de boekingspagina, alleen als de salon het
   // aanzet). Strikt jjjj-mm-dd en een plausibel jaar; anders stil negeren —
@@ -283,6 +325,24 @@ serve(async (req) => {
       if (!service_ids.includes(v.service_id)) return err(400, "variant_service_mismatch", origin);
       variantsById[v.id] = v;
     }
+    // ...en precies bij de dienst waaronder hij gekozen is: anders rekent een
+    // geknutseld verzoek de goedkope variant van dienst B af onder dienst A.
+    for (const [sid, vid] of Object.entries(variant_ids || {})) {
+      if (vid && variantsById[vid as string]?.service_id !== sid) return err(400, "variant_service_mismatch", origin);
+    }
+  }
+  // Heeft een dienst varianten, dan is er één nodig (de boekingspagina dwingt
+  // dat al af in stap 1); zonder variant zou de basisprijs van de dienst gelden.
+  {
+    const { data: svcVariants, error: svErr } = await supabase
+      .from("service_variants")
+      .select("service_id")
+      .in("service_id", service_ids);
+    if (svErr) return err(500, "db_error_variants", origin);
+    const metVarianten = new Set((svcVariants || []).map((r: any) => r.service_id));
+    for (const sid of service_ids) {
+      if (metVarianten.has(sid) && !variant_ids?.[sid]) return err(400, "variant_required", origin);
+    }
   }
 
   // ---------- 4. Validate extras ----------
@@ -298,6 +358,12 @@ serve(async (req) => {
     for (const e of extras) {
       if (!service_ids.includes(e.service_id)) return err(400, "extra_service_mismatch", origin);
       extrasById[e.id] = e;
+    }
+    // Ook een extra hoort bij de dienst waaronder hij is meegestuurd.
+    for (const [sid, eids] of Object.entries(extra_ids || {})) {
+      for (const eid of (Array.isArray(eids) ? eids : [])) {
+        if (eid && extrasById[eid as string]?.service_id !== sid) return err(400, "extra_service_mismatch", origin);
+      }
     }
   }
 
@@ -438,7 +504,14 @@ serve(async (req) => {
   const variantQty = (v: any) => v && v.per_unit ? Math.max(1, Math.min(parseInt(variant_qtys?.[v.id]) || 1, v.max_quantity || 10)) : 1;
   // Language-aware name pick for agenda/email labels: Spanish → name_es
   // (fall back to EN then NL); English → name_en (fall back NL); else NL.
-  const nmOf = (o: any) => lang === "es" ? (o.name_es || o.name_en || o.name_nl) : (lang === "nl" ? o.name_nl : (o.name_en || o.name_nl));
+  const nmIn = (o: any, l: unknown) => l === "es" ? (o.name_es || o.name_en || o.name_nl) : (l === "nl" ? o.name_nl : (o.name_en || o.name_nl));
+  const nmOf = (o: any) => nmIn(o, lang);
+  // De eigenaar leest haar melding (mail + push) in de taal van de SALON, niet
+  // in die van de klant (zelfde regel als owner_lang verderop). De opgeslagen
+  // service_name en alle klantmails blijven in de klanttaal.
+  const ownerLang = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en";
+  const nmSalon = (o: any) => nmIn(o, ownerLang);
+  const ownerNameParts: string[] = [];
 
   for (const svc of servicesOrdered) {
     const variantId = variant_ids?.[svc.id];
@@ -475,6 +548,15 @@ serve(async (req) => {
       }).join(", ");
     }
     serviceNameParts.push(label);
+    {
+      let ol = nmSalon(svc);
+      if (variant) ol += " — " + nmSalon(variant) + (variant.per_unit && variantQty(variant) > 1 ? ` ×${variantQty(variant)}` : "");
+      if (staffId && staffById[staffId]) ol += ` (${staffById[staffId].name})`;
+      if (svcExtras.length > 0) {
+        ol += " + " + svcExtras.map((e: any) => { const q = extraQty(e); return q > 1 ? `${nmSalon(e)} ×${q}` : nmSalon(e); }).join(", ");
+      }
+      ownerNameParts.push(ol);
+    }
 
     // Compact label for the agenda card: service name + variant + extras,
     // without the parenthetical staff name — the agenda already renders
@@ -510,6 +592,10 @@ serve(async (req) => {
   if (orderedProducts.length > 0) {
     totalPrice += orderedProducts.reduce((s, it) => s + it.price * it.qty, 0);
     serviceNameParts.push(...orderedProducts.map((it) => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name));
+    ownerNameParts.push(...orderedProducts.map((it) => {
+      const nm = nmSalon(productsById[it.id]);
+      return it.qty > 1 ? `${nm} ×${it.qty}` : nm;
+    }));
   }
 
   // ---------- 7. Apply discount (if any) ----------
@@ -854,12 +940,16 @@ serve(async (req) => {
 
   // ---------- 10. Slot conflict check ----------
   const breakMin = parseInt(salon.break_minutes || 0);
-  const { data: existingAppts, error: exErr } = await supabase
+  // Kassaverkopen (is_sale) zijn geen afspraken en bezetten geen slot; oude
+  // verkooprijen zonder vlag vallen er in JS uit (isVerkoopRij).
+  const haalBestaande = () => supabase
     .from("appointments")
-    .select("id, time, service_duration, staff_id, status")
+    .select("id, time, service_duration, staff_id, status, service_breakdown, is_sale, service_id, products, created_at")
     .eq("owner_id", salon.id)
     .eq("date", date)
-    .not("status", "in", '("cancelled","no_show")');
+    .not("status", "in", '("cancelled","no_show")')
+    .or("is_sale.is.null,is_sale.eq.false");
+  const { data: existingAppts, error: exErr } = await haalBestaande();
   if (exErr) return err(500, "db_error_conflict_check", origin);
 
   // Per dienst toetsen, niet één keer voor de hele boeking. Een teamboeking
@@ -872,43 +962,46 @@ serve(async (req) => {
   // die van dezelfde stylist plus die zonder stylist (die bezetten de hele
   // salon — één behandelstoel, "geen voorkeur", of een oude rij van vóór het
   // teamtijdperk). Heeft de nieuwe dienst zelf geen stylist, dan botst hij met
-  // álles, precies zoals een solo-salon dat altijd al deed.
-  const bestaandeVensters = (existingAppts || []).map((e: any) => {
-    const start = toMinutes(e.time);
-    return {
-      staffId: e.staff_id || null,
-      start,
-      end: start + (parseInt(e.service_duration || 60) || 60) + breakMin,
-    };
-  });
-  for (const deel of serviceBreakdown) {
-    const deelStart = apptStartMin + deel.offset_min;
-    const deelEnd = deelStart + deel.duration + breakMin;
-    for (const bestaand of bestaandeVensters) {
-      // Alleen overslaan als BEIDE kanten een (verschillende) stylist hebben.
-      if (deel.staff_id && bestaand.staffId && bestaand.staffId !== deel.staff_id) continue;
-      if (deelStart < bestaand.end && deelEnd > bestaand.start) return err(409, "slot_conflict", origin);
+  // álles, precies zoals een solo-salon dat altijd al deed. Een bestaande
+  // teamboeking telt per deel mee (vensterVanBestaande), zodat ook het deel van
+  // haar tweede stylist bezet is.
+  const botstMet = (rows: any[]) => {
+    const bestaandeVensters = rows.filter((e: any) => !isVerkoopRij(e)).flatMap((e: any) => vensterVanBestaande(e, breakMin));
+    for (const deel of serviceBreakdown) {
+      const deelStart = apptStartMin + deel.offset_min;
+      const deelEnd = deelStart + deel.duration + breakMin;
+      for (const bestaand of bestaandeVensters) {
+        // Alleen overslaan als BEIDE kanten een (verschillende) stylist hebben.
+        if (deel.staff_id && bestaand.staffId && bestaand.staffId !== deel.staff_id) continue;
+        if (deelStart < bestaand.end && deelEnd > bestaand.start) return true;
+      }
     }
-  }
+    return false;
+  };
+  if (botstMet(existingAppts || [])) return err(409, "slot_conflict", origin);
 
   // ---------- 11. Upsert client ----------
   let clientId: string | null = null;
   const { data: existingClient } = await supabase
     .from("clients")
-    .select("id")
+    .select("id, first_name, last_name, phone, allergies, birthday")
     .eq("email", email)
     .maybeSingle();
   if (existingClient) {
     clientId = existingClient.id;
-    await supabase.from("clients").update({
-      first_name: firstName,
-      last_name: lastName,
-      phone: phone,
-      allergies: allergies,
-      // Alleen zetten als de klant 'm nu invulde; nooit een bekende verjaardag wissen.
-      ...(birthday ? { birthday } : {}),
-      last_visit: new Date().toISOString(),
-    }).eq("id", clientId);
+    // De clients-rij is ÉÉN rij per e-mailadres, gedeeld door alle salons, en
+    // deze boeking is anoniem: niets bewijst dat de boeker dat adres bezit. Dus
+    // alleen LEGE velden aanvullen, nooit een bekende naam, telefoon, allergie of
+    // verjaardag overschrijven (of wissen met een leeg veld). Wat de klant nu
+    // invulde staat gewoon op de afspraak zelf (client_phone, client_allergies).
+    const leeg = (v: unknown) => v == null || String(v).trim() === "";
+    const aanvulling: Record<string, unknown> = { last_visit: new Date().toISOString() };
+    if (leeg(existingClient.first_name) && firstName) aanvulling.first_name = firstName;
+    if (leeg(existingClient.last_name) && lastName) aanvulling.last_name = lastName;
+    if (leeg(existingClient.phone) && phone) aanvulling.phone = phone;
+    if (leeg(existingClient.allergies) && allergies) aanvulling.allergies = allergies;
+    if (leeg(existingClient.birthday) && birthday) aanvulling.birthday = birthday;
+    await supabase.from("clients").update(aanvulling).eq("id", clientId);
   } else {
     const { data: newClient, error: nErr } = await supabase.from("clients").insert({
       email: email,
@@ -925,15 +1018,19 @@ serve(async (req) => {
 
   // ---------- 12. Build combined service name ----------
   const combinedName = serviceNameParts.join(" · ") + (appliedDiscount ? ` [${appliedDiscount.code}]` : "");
+  // Dezelfde naam in de salontaal, alleen voor de melding aan de eigenaar/stylist.
+  const combinedNameOwner = ownerNameParts.join(" · ") + (appliedDiscount ? ` [${appliedDiscount.code}]` : "");
 
   // Primary staff id for the staff_id column (first service's staff)
   const primaryStaffIdCol = staff_ids_per_service?.[servicesOrdered[0].id] || null;
-  const allStaffNames = servicesOrdered
+  // Elke stylist één keer: doet Lady zowel nagels als tenen, dan staat er
+  // "Lady" en niet "Lady, Lady".
+  const allStaffNames = [...new Set(servicesOrdered
     .map((s: any) => {
       const stid = staff_ids_per_service?.[s.id];
       return stid ? staffById[stid]?.name : null;
     })
-    .filter(Boolean);
+    .filter(Boolean))];
 
   // ---------- 12a. Betaalgegevens voor deze boeking ----------
   // Esther/TTNB 25-09-2026: "als het Lady's klant is die vooruitbetaalt, moet
@@ -959,6 +1056,11 @@ serve(async (req) => {
   const prepayReady = !!salon.prepay_enabled && !!(salon.payment_link || salon.iban || staffHasPay);
   if (payment_method === "prepay" && !prepayReady) return err(400, "prepay_not_available", origin);
   const prepay = payment_method === "prepay" && prepayReady && Number(totalPrice) > 0;
+  // Begint de afspraak binnen 4 uur, dan past er geen termijn meer tussen "nu
+  // + 2 uur" en "start - 2 uur": de klant kan dan niet meer op tijd betalen en
+  // de salon de betaling niet meer zien. De boekingspagina biedt Vooruitbetalen
+  // dan ook niet aan; dit is de grens voor een verzoek dat het toch probeert.
+  if (prepay && apptStart.getTime() - Date.now() < 4 * 3600000) return err(400, "prepay_too_late", origin);
   let dueAt: Date | null = null;
   if (prepay) {
     const nowMs = Date.now();
@@ -1011,9 +1113,59 @@ serve(async (req) => {
     // Client's chosen UI language — lets send-reminders localize the reminder
     // (nl/en/es); null falls back to the salon's country language.
     lang: ["nl", "en", "es"].includes(lang) ? lang : null,
-  }).select("id").single();
+  }).select("id, created_at").single();
 
   if (aErr || !appt) return err(500, "appointment_create_failed", origin);
+
+  // ---------- 13a. Race-check na de insert ----------
+  // Stap 10 en de insert zijn twee losse stappen: twee klanten die tegelijk
+  // hetzelfde slot boeken, komen allebei door stap 10. Daarom hier dezelfde
+  // toets nog eens, nu met onze eigen rij in de database, maar alleen tegen
+  // afspraken die EERDER zijn aangemaakt dan de onze (created_at, bij gelijke
+  // tijd het id). Van twee gelijktijdige boekingen ziet de latere de eerdere en
+  // trekt zich terug; de eerdere ziet de latere niet en blijft staan — precies
+  // één overleeft. Vóór codes, voorraad, token en mails, dus er valt niets terug
+  // te draaien behalve de rij zelf. Lukt dat verwijderen niet, dan laten we de
+  // boeking staan (het oude gedrag) in plaats van een spookafspraak te maken.
+  {
+    const { data: naInsert, error: naErr } = await haalBestaande();
+    if (naErr) {
+      console.error("post-insert conflict check failed:", naErr);
+    } else {
+      const eigenT = new Date(appt.created_at).getTime();
+      const eerder = (naInsert || []).filter((e: any) => {
+        if (e.id === appt.id) return false;
+        const t = new Date(e.created_at).getTime();
+        return t < eigenT || (t === eigenT && String(e.id) < String(appt.id));
+      });
+      if (botstMet(eerder)) {
+        const { error: delErr } = await supabase.from("appointments").delete().eq("id", appt.id);
+        if (!delErr) return err(409, "slot_conflict", origin);
+        console.error("post-insert conflict: delete failed, booking kept:", appt.id, delErr);
+      }
+    }
+  }
+
+  // Verjaardag ook op de eigen klantrij van de salon (manual_clients), als die
+  // er is en nog geen verjaardag heeft: die rij is de waarde van de salon en
+  // wint in de app en bij de verjaardagsmail. Nooit een rij aanmaken, nooit een
+  // bekende verjaardag overschrijven. Best-effort.
+  if (birthday) {
+    try {
+      const { data: mRows } = await supabase
+        .from("manual_clients")
+        .select("id, email")
+        .eq("owner_id", salon.id)
+        .is("birthday", null)
+        .ilike("email", email.replace(/[\\%_]/g, (m) => `\\${m}`));
+      const ids = (mRows || [])
+        .filter((r: any) => String(r.email || "").trim().toLowerCase() === email)
+        .map((r: any) => r.id);
+      if (ids.length > 0) {
+        await supabase.from("manual_clients").update({ birthday }).in("id", ids).is("birthday", null);
+      }
+    } catch (e) { console.error("manual_clients birthday sync failed:", e); }
+  }
 
   // Verjaardagscode stempelen — pas NA de geslaagde insert hierboven. Mislukt
   // de boeking om een andere reden, dan is de code nooit aangeraakt en kan de
@@ -1041,12 +1193,14 @@ serve(async (req) => {
   // Best-effort stock decrement — only for products that track stock
   // (stock != null). Never blocks the booking; floor at 0 (overselling a
   // retail product is a shop-counter problem, not a booking blocker).
+  // Atomisch via adjust_product_stock (stock = stock - qty in de database):
+  // een absolute waarde uit onze eerdere lezing overschreef een gelijktijdige
+  // kassaverkoop of tweede bestelling.
   for (const it of orderedProducts) {
     const p = productsById[it.id];
     if (!p || p.stock == null) continue;
-    await supabase.from("products")
-      .update({ stock: Math.max(0, p.stock - it.qty) })
-      .eq("id", it.id);
+    const { error: stockErr } = await supabase.rpc("adjust_product_stock", { p_product_id: it.id, p_delta: -it.qty });
+    if (stockErr) console.error("stock decrement failed:", it.id, stockErr);
   }
 
   // ---------- 14. Create cancellation token ----------
@@ -1100,7 +1254,7 @@ serve(async (req) => {
     currency: ({ BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
     lang: emailLang,
   };
-  const ownerLang = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en";
+  // ownerLang (salontaal voor de eigenaarsmail) staat al bij stap 6.
   // Vooruitbetalen: de betaalgegevens gaan naar de mail (send-emails bouwt er
   // hetzelfde betaalblok van als op de factuur) én terug naar de boekingspagina,
   // zodat de klant meteen kan betalen zonder eerst haar mail te openen. De
@@ -1186,6 +1340,8 @@ serve(async (req) => {
         owner_email: ownerEmail,
         staff_emails: staffEmails,
         owner_lang: ownerLang,
+        // Behandelnamen in de salontaal, net als de rest van deze melding.
+        service_name: combinedNameOwner,
         staff_view_revenue: salon.staff_view_revenue,
         staff_view_client_contact: salon.staff_view_client_contact,
         pending_payment: !!prepayInfo,
@@ -1241,7 +1397,7 @@ serve(async (req) => {
           title: prepayInfo
             ? (ownerNl ? "Nieuwe reservering, wacht op betaling" : "New reservation, awaiting payment")
             : (ownerNl ? "Nieuwe boeking" : "New booking"),
-          body: `${firstName} ${lastName} · ${date} ${time} · ${combinedName} · ${priceStr}`,
+          body: `${firstName} ${lastName} · ${date} ${time} · ${combinedNameOwner} · ${priceStr}`,
           url: "/owner",
           tag: `booking-${appt.id}`,
         }),
@@ -1262,9 +1418,11 @@ serve(async (req) => {
     service_name: combinedName,
     service_price: totalPrice,
     service_duration: totalDuration,
-    owner_email: ownerEmail,
+    // Geen owner_email/staff_emails meer in dit (anonieme) antwoord: de pagina
+    // gebruikte ze niet, en zo kreeg elke boeker het privé-adres van de stylist
+    // en soms het loginadres van de eigenaar. De mails gaan hierboven al
+    // server-side.
     salon_name: salon.business_name,
-    staff_emails: staffEmails,
     emails_sent: emailsSent,
     // Vooruitbetalen: null bij een gewone boeking; anders bedrag, termijn en
     // betaalgegevens voor het scherm na het boeken (zie ClientApp).

@@ -89,11 +89,18 @@ serve(async () => {
 
     // Welke daarvan hebben al een uitkomst? Alles wat met "first." of "oneoff."
     // begint is een eindstand; "first_payment.created" niet (underscore).
+    // v3 (05-10-2026): een uitkomst telt pas als hij ook VERWERKT is
+    // (processed_at gezet door mollie-webhook ná alle bijwerkingen: profiel,
+    // abonnement, factuur). Viel de webhook halverwege om, dan stond first.paid
+    // er wel maar was de salon nooit geactiveerd — en dit vangnet keek er nooit
+    // meer naar. Nu trapt het zo'n betaling opnieuw aan; de webhook slaat alleen
+    // verwerkte gebeurtenissen over als duplicaat.
     const { data: afgerond, error: e2 } = await supabase
       .from("payment_events")
       .select("mollie_payment_id, event_type")
       .in("mollie_payment_id", ids)
-      .or("event_type.like.first.%,event_type.like.oneoff.%");
+      .or("event_type.like.first.%,event_type.like.oneoff.%")
+      .not("processed_at", "is", null);
     if (e2) throw e2;
 
     const klaar = new Set((afgerond || []).map(r => r.mollie_payment_id));
