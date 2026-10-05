@@ -3290,7 +3290,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             <span className="profile-service-duration-pill more" title={memberServices.slice(3).map(svcLabel).join(" · ")}>+{rest}</span>
                           )}
                         </div>
-                        <button type="button" className="profile-service-book-btn" onClick={() => enterBooking()}>{t.book}</button>
+                        {/* Boeken vanaf haar kaart: met haar als stylist (enterBooking(service, staff)). */}
+                        <button type="button" className="profile-service-book-btn" onClick={() => enterBooking(null, member)}>{t.book}</button>
                       </div>
                     </div>
                   );
@@ -3366,7 +3367,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               <section ref={el => profileSectionRefs.current.reviews = el} className="profile-section">
                 <h2 className="profile-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   {t.profileReviews}
-                  <select value={reviewSort} onChange={e => setReviewSort(e.target.value)}
+                  <select aria-label={t.sortBy} value={reviewSort} onChange={e => setReviewSort(e.target.value)}
                     style={{ background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 8, padding: "6px 10px", color: c.textSub, fontSize: 12, fontFamily: "var(--body-font, 'Jost', sans-serif)", cursor: "pointer", fontWeight: 400 }}>
                     <option value="recent">{t.sortBy}: {t.mostRecent}</option>
                     <option value="rating">{t.sortBy}: {t.highestRated}</option>
@@ -3394,7 +3395,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   </div>
                   <div className="profile-review-cards">
                     {(reviewsExpanded ? sortedReviews : sortedReviews.slice(0, isMobile ? 4 : 6)).map(review => {
-                      const naam = review.anonymous ? t.anonymousClient : (review.client_name?.split(" ")[0] || "Klant");
+                      const naam = review.anonymous ? t.anonymousClient : (review.client_name?.split(" ")[0] || t.client);
                       return (
                         <div key={review.id} className="profile-review-card" data-review-card>
                           <div className="profile-review-head">
@@ -3470,7 +3471,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {effectivePolicy && (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${c.border}` }}>
                     <h3 style={{ fontSize: 13, fontWeight: 600, color: c.text, margin: "0 0 4px" }}>{t.goodToKnow}</h3>
-                    <div className="profile-contact-row" style={{ cursor: "pointer" }} onClick={() => setExpandedPolicy(!expandedPolicy)}>
+                    <div className="profile-contact-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} aria-expanded={expandedPolicy}
+                      onClick={() => setExpandedPolicy(!expandedPolicy)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedPolicy(!expandedPolicy); } }}>
                       <NavIcon name="clipboard" size={14} color={c.textSub} />
                       <span style={{ flex: 1 }}>{t.bookingPolicy}</span>
                       <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke={c.textMuted} strokeWidth="2" strokeLinecap="round"
@@ -3525,7 +3528,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   border: `1px solid ${c.border}`,
                                   boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
                                 }}>
-                                Maps ↗
+                                Maps <FlowGlyph name="external" size={10} />
                               </a>
                             )}
                           </div>
@@ -3575,7 +3578,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 border: `1px solid ${c.border}`,
                                 boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
                               }}>
-                              {lang === "nl" ? "Open in Maps ↗" : lang === "es" ? "Abrir en Maps ↗" : "Open in Maps ↗"}
+                              {lang === "nl" ? "Open in Maps" : lang === "es" ? "Abrir en Maps" : "Open in Maps"} <FlowGlyph name="external" size={11} />
                             </a>
                           )}
                         </div>
@@ -3605,7 +3608,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {" · "}{t.noCommission}
                     <div style={{ marginTop: 8 }}>
                       <a href={vlHref} target="_blank" rel="noopener" data-get-page style={{ color: c.text, fontWeight: 500, textDecoration: "none", borderBottom: `1px solid ${c.textMuted}`, paddingBottom: 1 }}>
-                        {lang === "nl" ? "Maak je eigen boekingspagina" : lang === "es" ? "Crea tu propia página de reservas" : "Get your own booking page"} →
+                        {lang === "nl" ? "Maak je eigen boekingspagina" : lang === "es" ? "Crea tu propia página de reservas" : "Get your own booking page"} <FlowGlyph name="right" size={11} />
                       </a>
                     </div>
                   </>
@@ -3690,8 +3693,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {/* Contact us */}
               {((initialSalon.salon_email) || initialSalon.salon_phone || initialSalon.whatsapp_number || initialSalon.salon_instagram) && (
                 <div style={{ marginTop: 4 }}>
-                  <div className="profile-sidebar-contact-toggle" onClick={() => scrollToProfileSection("contact")}>
-                    {t.contactUs} ↓
+                  <div className="profile-sidebar-contact-toggle" role="button" tabIndex={0} onClick={() => scrollToProfileSection("contact")} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); scrollToProfileSection("contact"); } }}>
+                    {t.contactUs} <FlowGlyph name="down" size={11} />
                   </div>
                   <div style={{ padding: "0 0 4px", fontSize: 12 }}>
                     <PhoneContact salon={initialSalon} lang={lang} c={c} compact />
@@ -3736,7 +3739,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           return (
             <div className="profile-team-modal-backdrop" data-team-modal role="dialog" aria-modal="true" aria-label={m.name} onClick={() => setTeamDetail(null)}>
               <div className="profile-team-modal" onClick={e => e.stopPropagation()}>
-                <button type="button" className="profile-team-modal-close" aria-label={t.close} onClick={() => setTeamDetail(null)}>&times;</button>
+                <button type="button" className="profile-team-modal-close" aria-label={t.close} onClick={() => setTeamDetail(null)}><NavIcon name="xmark" size={16} color="currentColor" /></button>
                 <div className="profile-team-card-top" style={{ paddingRight: 40 }}>
                   <TeamPhoto src={m.avatar_url} name={m.name} accent={accent} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -3750,63 +3753,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {mServices.map(s => <span key={s.id} className="profile-service-duration-pill">{lbl(s)}</span>)}
                   </div>
                 )}
-                <button type="button" className="btn-primary" style={{ marginTop: 18 }} onClick={() => { setTeamDetail(null); enterBooking(); }}>{t.book}</button>
+                <button type="button" className="btn-primary" style={{ marginTop: 18 }} onClick={() => { setTeamDetail(null); enterBooking(null, m); }}>{t.book}</button>
               </div>
             </div>
           );
         })()}
 
-        {/* Gallery overlay */}
-        {gallery && (() => {
-          // Bladeren met wrap-around — gedeeld door de pijlknoppen en de
-          // pijltjestoetsen. De overlay krijgt focus bij openen (tabIndex +
-          // ref-focus), anders komt er nooit een keydown aan.
-          const stap = (richting) => setGallery(g => {
-            if (!g || g.photos.length < 2) return g;
-            return { ...g, idx: (g.idx + richting + g.photos.length) % g.photos.length };
-          });
-          const pijlStijl = (kant) => ({
-            position: "absolute", [kant]: 14, top: "50%", transform: "translateY(-50%)",
-            background: "rgba(0,0,0,0.5)", border: "none", color: "#fff",
-            width: 44, height: 44, borderRadius: "50%", fontSize: 26, lineHeight: 1,
-            cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center",
-          });
-          return (
-          <div className="gallery-overlay" tabIndex={-1} style={{ outline: "none" }}
-            ref={el => { if (el && !el.contains(document.activeElement)) el.focus(); }}
-            onClick={() => setGallery(null)}
-            onKeyDown={e => {
-              if (e.key === "Escape") setGallery(null);
-              else if (e.key === "ArrowLeft") { e.preventDefault(); stap(-1); }
-              else if (e.key === "ArrowRight") { e.preventDefault(); stap(1); }
-            }}>
-            {/* Onder de iOS-statusbalk uit blijven: tikken in die zone gaan
-                naar het systeem (scroll-naar-boven), niet naar de pagina —
-                daarom safe-area-inset erbij op de sluitknop. */}
-            <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 18px)", right: 18, background: "rgba(0,0,0,0.55)", border: "none", color: "#fff", width: 44, height: 44, borderRadius: "50%", fontSize: 22, cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>&times;</button>
-            {gallery.photos.length > 1 && (
-              <>
-                <button onClick={e => { e.stopPropagation(); stap(-1); }} aria-label={lang === "nl" ? "Vorige foto" : lang === "es" ? "Foto anterior" : "Previous photo"} style={pijlStijl("left")}>&#8249;</button>
-                <button onClick={e => { e.stopPropagation(); stap(1); }} aria-label={lang === "nl" ? "Volgende foto" : lang === "es" ? "Foto siguiente" : "Next photo"} style={pijlStijl("right")}>&#8250;</button>
-              </>
-            )}
-            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={t.galleryPhoto} />
-            {gallery.photos.length > 1 && (
-              <div style={{ color: "#fff", opacity: 0.75, fontSize: 11, marginTop: 10, letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums" }} onClick={e => e.stopPropagation()}>
-                {gallery.idx + 1} / {gallery.photos.length}
-              </div>
-            )}
-            {/* Wrap i.p.v. één oneindige rij: bij 15+ foto's liep de strip op
-                telefoons de viewport uit zonder scroll. */}
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 12, maxWidth: "min(92vw, 700px)", maxHeight: 128, overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-              {gallery.photos.map((p, i) => (
-                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
-                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5 }} loading="lazy" alt="" />
-              ))}
-            </div>
-          </div>
-          );
-        })()}
+        {/* Gallery overlay — zelfde lightbox als in de boekingsflow (GalleryLightbox onderaan) */}
+        {gallery && <GalleryLightbox gallery={gallery} setGallery={setGallery} accent={accent} lang={lang} t={t} />}
 
         {/* Review overlay */}
         {showReviewForm && (
@@ -3835,6 +3789,65 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     ? [t.selectLocation, t.selectService, t.selectDate, t.yourDetails, t.confirmBooking]
     : [t.selectService, t.selectDate, t.yourDetails, t.confirmBooking];
 
+  // Gekozen tijd nog in de getoonde lijst? (05-10-2026) Wie terugging naar stap 1
+  // en een langere behandeling of een drukke stylist koos, hield de oude tijd:
+  // de knop Volgende bleef aan en de server weigerde pas bij Bevestigen. Tot en
+  // met stap 2 telt de tijd alleen als hij in de slotlijst staat en niet bezet
+  // is (precies wat stap 2 toont); na stap 2 is hij daar al getoetst.
+  const chosenTimeOk = !!time && (step > 2 || (!!date && !slotsLoading && getAvailableTimes(date).includes(time) && !isTimeSlotBooked(time)));
+
+  // Vooruitbetalen alleen aanbieden als book-appointment het ook aanneemt
+  // (12a/12b daar): de salon heeft eigen betaalgegevens, of er staat precies één
+  // stylist op de boeking en zij heeft eigen gegevens (public_staff.has_pay) —
+  // "geen voorkeur" of twee stylistes zonder salon-IBAN gaf eerst pas bij
+  // Bevestigen prepay_not_available. En de afspraak moet minstens 4 uur weg
+  // zijn, anders valt de betaaltermijn binnen de laatste 2 uur (server:
+  // prepay_too_late); 2 minuten marge voor de tijd tussen tonen en versturen.
+  // Als functie, zodat de bevestigknop het op het moment van klikken toetst.
+  const prepayAllowedNow = () => {
+    if (!initialSalon.prepay_enabled || !date || !time) return false;
+    const ids = Array.from(new Set(selectedServices.map(i => i.staff?.id).filter(Boolean)));
+    const onlyStaff = ids.length === 1 ? selectedServices.find(i => i.staff?.id === ids[0]).staff : null;
+    if (!initialSalon.payment_configured && onlyStaff?.has_pay !== true) return false;
+    const start = localToUtc(date, time, tzFor(initialSalon.country_code));
+    return !!start && start.getTime() - Date.now() >= 4 * 3600000 + 120000;
+  };
+  const prepayOffered = prepayAllowedNow();
+  // Stond Vooruitbetalen aan en valt de optie weg (andere tijd of stylist), dan
+  // telt "bij de afspraak" — zo toont de keuzelijst nooit een verdwenen optie.
+  const payChoice = form.payment === "prepay" && !prepayOffered ? "on-arrival" : form.payment;
+  const toConfirmStep = () => {
+    if (form.payment === "prepay" && !prepayOffered) setForm(f => ({ ...f, payment: "on-arrival" }));
+    goToStep(4);
+  };
+  // Bevestigen: is de 4-uursgrens intussen gepasseerd (pagina bleef open op
+  // stap 4), dan terug naar stap 3 met uitleg in plaats van een serverfout.
+  const confirmWithPayCheck = () => {
+    if (form.payment === "prepay" && !prepayAllowedNow()) {
+      setForm(f => ({ ...f, payment: "on-arrival" }));
+      setStep(3);
+      setErrorToast(lang === "nl" ? "Vooruitbetalen kan niet meer voor dit tijdstip. Kies een andere betaalwijze." : lang === "es" ? "Ya no es posible pagar por adelantado para esta hora. Elige otra forma de pago." : "Paying in advance is no longer possible for this time. Please choose another payment method.");
+      setTimeout(() => setErrorToast(""), 6000);
+      return;
+    }
+    confirmBooking();
+  };
+
+  // Annuleringszin boven Bevestigen: met de echte termijn van de salon als die
+  // er is (cancel-appointment weigert binnen cancel_deadline_hours), anders de
+  // bestaande zin zonder termijn.
+  const cancelHours = Number(initialSalon.cancel_deadline_hours) || 0;
+  const legalRefundText = cancelHours > 0 && t.bookingLegalNoticeRefundHours
+    ? t.bookingLegalNoticeRefundHours.replace(/\{n\}/g, String(cancelHours))
+    : t.bookingLegalNoticeRefund;
+
+  // Toetsenbord voor de keuze-chips (div met role): Enter/spatie kiest, maar
+  // alleen op de chip zelf — niet als de focus op een +/−-knop erin staat.
+  const chipKeys = (fn) => (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); }
+  };
+
   // Summary component
   const Summary = () => (
     <div className="flow-card" data-flow-summary style={{ padding: 20, marginTop: isMobile ? 0 : 20 }}>
@@ -3858,7 +3871,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               </div>
               <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
-                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
+                {/* Alleen de behandeling zelf: de extra's staan hieronder elk
+                    apart, anders telde de lezer ze twee keer. */}
+                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{fmtAmt(cur, itemBasePrice(item))}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
@@ -3870,7 +3885,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           ))}
         </div>
       )}
-      {date && time && (
+      {date && chosenTimeOk && (
         <div style={{ marginBottom: 16, paddingTop: selectedServices.length > 0 ? 16 : 0, borderTop: selectedServices.length > 0 ? "1px solid " + c.border : "none" }}>
           <div style={{ fontSize: 12, color: c.textSub }}>
             {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
@@ -3920,25 +3935,74 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const city = ((where && where.city) || initialSalon.city || "").trim();
     const mapsQuery = addr ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr) : city;
     const mapsHref = mapsQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}` : null;
-    const calStart = new Date(date + "T" + time + ":00");
-    const calEnd = new Date(calStart.getTime() + getDuration() * 60000);
+    // Agenda-export op de klok van de SALON (05-10-2026): new Date(date+"T"+time)
+    // las de tijd in de zone van het toestel, dus een NL-telefoon die een
+    // Bonaire-salon boekte kreeg de afspraak 6 uur verschoven. Nu het echte
+    // UTC-moment via localToUtc + tzFor, zoals book-appointment rekent.
+    const calTz = tzFor(initialSalon.country_code);
+    const calStart = localToUtc(date, time, calTz);
+    const calEnd = calStart ? new Date(calStart.getTime() + getDuration() * 60000) : null;
     const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-    const calTitle = `${getServiceLabel()} @ ${initialSalon.name}`;
-    const calDetails = `${t.treatment}: ${getServiceLabel()}\n${t.total}: ${fmtAmt(cur, getPrice())}\n\nvellu.cc/${initialSalon.id}`;
+    // Behandeling mét extra's (getServiceLabel noemt die niet).
+    const calLabel = selectedServices.map(item => {
+      let label = svcName(item.service);
+      if (item.variant) label += ` — ${vName(item.variant)}${item.variant.per_unit && (item.variantQty || 1) > 1 ? ` ×${item.variantQty}` : ""}`;
+      if (item.extras.length > 0) label += ` + ${item.extras.map(e => `${vName(e)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(" + ")}`;
+      if (item.staff) label += ` (${item.staff.name})`;
+      return label;
+    }).join(" + ");
+    const calTitle = `${calLabel} @ ${initialSalon.name}`;
+    const calDetails = `${t.treatment}: ${calLabel}\n${t.total}: ${fmtAmt(cur, getPrice())}\n\nvellu.cc/${initialSalon.id}`;
     const calLocation = [initialSalon.name, addr, city].filter(Boolean).join(", ");
-    const openGoogleCal = () => window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(calTitle)}&dates=${stamp(calStart)}/${stamp(calEnd)}&details=${encodeURIComponent(calDetails)}&location=${encodeURIComponent(calLocation)}`, "_blank");
+    const openGoogleCal = () => window.open(getGoogleCalUrl({ title: calTitle, date, time, duration: getDuration(), description: calDetails, location: calLocation, tz: calTz }), "_blank");
+    // RFC 5545: tekst escapen (\ ; , en regeleinden) en regels langer dan 75
+    // octets vouwen (vervolgregel begint met een spatie). UID is vast per
+    // boeking: <afspraak-id>@vellu.cc (bookedAppointmentId, zoals de owner- en
+    // staff-export), zodat een tweede download dezelfde afspraak bijwerkt in
+    // plaats van hem dubbel te zetten. Zonder id (oude server-respons) een hash
+    // van salon + moment + klant + behandelingen.
+    const icsText = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const icsFold = (line) => {
+      const enc = new TextEncoder();
+      if (enc.encode(line).length <= 75) return line;
+      const parts = [];
+      let chunk = "", bytes = 0, limit = 75;
+      for (const ch of line) {
+        const b = enc.encode(ch).length;
+        if (bytes + b > limit) { parts.push(chunk); chunk = ""; bytes = 0; limit = 74; }
+        chunk += ch; bytes += b;
+      }
+      parts.push(chunk);
+      return parts.join("\r\n ");
+    };
+    const icsUid = () => {
+      if (bookedAppointmentId) return `${bookedAppointmentId}@vellu.cc`;
+      const key = `${String(form.email || "").trim().toLowerCase()}|${selectedServices.map(i => `${i.service.id}:${i.variant?.id || ""}:${i.staff?.id || ""}`).join(",")}`;
+      let h = 0x811c9dc5; // FNV-1a, 32 bit
+      for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+      return `${initialSalon.id}-${date.replace(/-/g, "")}T${String(time).replace(":", "")}-${h.toString(16)}@vellu.cc`;
+    };
     const downloadIcs = () => {
+      if (!calStart || !calEnd) return;
       const ics = [
-        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vellu//Beauty Booking//EN", "BEGIN:VEVENT",
-        `DTSTART:${stamp(calStart)}`, `DTEND:${stamp(calEnd)}`, `SUMMARY:${calTitle}`,
-        `DESCRIPTION:${calDetails.replace(/\n/g, "\\n")}`, `LOCATION:${calLocation}`,
-        "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR",
-      ].join("\r\n");
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vellu//Beauty Booking//EN", "CALSCALE:GREGORIAN", "BEGIN:VEVENT",
+        `UID:${icsUid()}`, `DTSTAMP:${stamp(new Date())}`,
+        `DTSTART:${stamp(calStart)}`, `DTEND:${stamp(calEnd)}`, `SUMMARY:${icsText(calTitle)}`,
+        `DESCRIPTION:${icsText(calDetails)}`, `LOCATION:${icsText(calLocation)}`,
+        // Een vooruitbetaal-reservering kan nog vervallen: voorlopig.
+        prepayInfo ? "STATUS:TENTATIVE" : "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR",
+      ].map(icsFold).join("\r\n");
       const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
       const url = URL.createObjectURL(blob);
+      // Anker in het document en de blob-URL pas later vrijgeven: iOS Safari en
+      // in-app-browsers openen het bestand asynchroon.
       const a = document.createElement("a");
       a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
-      a.click(); URL.revokeObjectURL(url);
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     };
     // De chat gaat NAAR de salon, dus de tekst is van de klant aan de salon
     // (getWhatsAppClientBookedMsg) — niet de salontekst "Hoi <klant>! Je
@@ -3967,7 +4031,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             <div className="flow-done-row-icon"><NavIcon name="calendar" size={14} color={accent} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flow-done-row-label">{lang === "nl" ? "Wanneer" : lang === "es" ? "Cuándo" : "When"}</div>
-              <div className="flow-done-row-value" style={{ textTransform: "capitalize" }}>{dateLabel}</div>
+              <div className="flow-done-row-value">{capFirst(dateLabel)}</div>
               <div className="flow-done-row-sub">{time} · {getDuration()} {t.min}</div>
             </div>
           </div>
@@ -3991,7 +4055,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="flow-done-row-label">{(where && where.name) || initialSalon.name}</div>
                 <div className="flow-done-row-value">{addr}{addr && city ? ", " : ""}{city}</div>
-                {mapsHref && <a href={mapsHref} target="_blank" rel="noopener" className="flow-done-link">{lang === "nl" ? "Route" : lang === "es" ? "Cómo llegar" : "Directions"} →</a>}
+                {mapsHref && <a href={mapsHref} target="_blank" rel="noopener" className="flow-done-link">{lang === "nl" ? "Route" : lang === "es" ? "Cómo llegar" : "Directions"} <FlowGlyph name="right" /></a>}
               </div>
             </div>
           )}
@@ -4015,7 +4079,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             <button type="button" className="btn-ghost" style={{ color: "#25d366", borderColor: "rgba(37,211,102,0.35)" }} onClick={openWhatsApp}><NavIcon name="chat" size={13} color="currentColor" /> {t.whatsappBookingConfirm}</button>
           </div>
         )}
-        <button className="btn-primary" style={{ maxWidth: 240, margin: "0 auto 22px" }} onClick={reset}>{t.newBooking}</button>
+        {/* "Nieuwe afspraak" start meteen een nieuwe boeking (reset() alleen
+            ging terug naar het salonprofiel). */}
+        <button className="btn-primary" style={{ maxWidth: 240, margin: "0 auto 22px" }} onClick={() => { reset(); enterBooking(); }}>{t.newBooking}</button>
 
         {/* Geen reviewformulier direct na het boeken: het bezoek moet nog
             plaatsvinden en de token die de opslag toestaat bestaat pas bij
@@ -4206,7 +4272,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {selectedServices.length > 0 && (
                   <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
-                      <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                      <NavIcon name="check" size={11} color={accent} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                     </span>
                     <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{fmtAmt(cur, getOriginalPrice())}</span>
                   </div>
@@ -4296,12 +4362,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         {s.variants?.length > 0 && (
                           <div style={{ marginBottom: s.extras?.length > 0 || staffForService.length > 0 ? 14 : 0 }}>
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>{t.selectVariant}</div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div role="radiogroup" aria-label={t.selectVariant} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               {s.variants.map(v => {
                                 const vSel = item?.variant?.id === v.id;
                                 const vQty = item?.variantQty || 1;
+                                const pickVariant = () => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); };
                                 return (
-                                <div key={v.id} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}
+                                <div key={v.id} role="radio" tabIndex={0} aria-checked={vSel} onClick={pickVariant} onKeyDown={chipKeys(pickVariant)}
                                   style={{
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
                                     padding: "10px 14px", borderRadius: 8, cursor: "pointer",
@@ -4348,9 +4415,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 const qty = extraSel?.qty || 1;
                                 const showStep = extraSel && e.per_unit;
                                 return (
-                                  <div key={e.id} onClick={() => toggleExtraForService(s.id, e)}
+                                  <div key={e.id} role="checkbox" tabIndex={0} aria-checked={!!extraSel} onClick={() => toggleExtraForService(s.id, e)} onKeyDown={chipKeys(() => toggleExtraForService(s.id, e))}
                                     style={{
-                                      padding: "8px 14px", borderRadius: 8, cursor: "pointer",
+                                      padding: "8px 14px", borderRadius: 8, cursor: "pointer", minHeight: 40,
                                       background: extraSel ? `${accent}14` : "transparent",
                                       border: `1px solid ${extraSel ? accent : c.border}`,
                                       fontSize: 12, fontWeight: 500, color: extraSel ? accent : c.textSub,
@@ -4379,14 +4446,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8, fontWeight: 600 }}>
                               {t.selectStaff}{requireStaffPick && <span style={{ color: c.danger, marginLeft: 4 }}>*</span>}
                             </div>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <div role="radiogroup" aria-label={t.selectStaff} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               {/* "Geen voorkeur" is hidden for team accounts with
                                   2+ staff — the booking has to be attributable
                                   to a specific stylist for their own agenda. */}
                               {!requireStaffPick && (
-                                <div onClick={() => updateServiceItem(s.id, { staff: null })}
+                                <div role="radio" tabIndex={0} aria-checked={!item?.staff} onClick={() => updateServiceItem(s.id, { staff: null })} onKeyDown={chipKeys(() => updateServiceItem(s.id, { staff: null }))}
                                   style={{
-                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer",
+                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer", minHeight: 40, display: "flex", alignItems: "center",
                                     background: !item?.staff ? `${accent}14` : "transparent",
                                     border: `1px solid ${!item?.staff ? accent : c.border}`,
                                     fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
@@ -4403,9 +4470,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                      ?? (item?.variant ? parseFloat(item.variant.price) : (s.variants?.length > 0 ? null : parseFloat(s.price))))
                                   : null;
                                 return (
-                                <div key={m.id} onClick={() => updateServiceItem(s.id, { staff: m })}
+                                <div key={m.id} role="radio" tabIndex={0} aria-checked={item?.staff?.id === m.id} onClick={() => updateServiceItem(s.id, { staff: m })} onKeyDown={chipKeys(() => updateServiceItem(s.id, { staff: m }))}
                                   style={{
-                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer",
+                                    padding: "8px 16px", borderRadius: 8, cursor: "pointer", minHeight: 40,
+                                    display: "flex", flexDirection: "column", justifyContent: "center",
                                     background: item?.staff?.id === m.id ? `${accent}14` : "transparent",
                                     border: `1px solid ${item?.staff?.id === m.id ? accent : c.border}`,
                                     transition: "all 0.15s", textAlign: "center"
@@ -4472,12 +4540,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {/* Reviews */}
                 {initialSalon.reviews?.length > 0 && (
                   <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accent }}><FlowGlyph name="star" size={11} /></span></SL>
                     {initialSalon.reviews.slice(0, 3).map(r => (
                       <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                           <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
-                          <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                          <StarRow rating={r.rating} size={12} />
                         </div>
                         {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
                       </div>
@@ -4524,7 +4592,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           const isSel = date === ds;
                           const dayHours = getEffectiveHours(ds);
                           const staffWindow = getStaffTimeWindow(ds);
-                          const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                          // Ook een dag zonder één boekbaar slot (blokkade over het
+                          // hele venster, aanlooptijd) telt als dicht — dayAvailability
+                          // zegt dan 'closed'; eerst zag die dag eruit als open.
+                          const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds) || dayAvailability[ds] === "closed";
                           // Fully booked: salon is open but no free slot. Greyed like a
                           // closed day, but still tappable so the customer can select it
                           // and join the waitlist for that specific day.
@@ -4600,7 +4671,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <div style={{ fontSize: 12, color: c.textLabel, lineHeight: 1.5, marginBottom: 16 }}>
                         {lang === "nl"
                           ? `Alle ${totalSlots} tijdslots op deze dag zijn geboekt.`
-                          : `All ${totalSlots} time slots on this day are booked.`}
+                          : lang === "es"
+                            ? `Todas las ${totalSlots} horas de este día están reservadas.`
+                            : `All ${totalSlots} time slots on this day are booked.`}
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                         <FirstAvailableHint />
@@ -4639,11 +4712,11 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               if (booked) return null; // Hide booked slots entirely
                               const isSel = time === tt;
                               return (
-                                <div key={tt} role="button" tabIndex={0}
+                                <div key={tt} role="button" tabIndex={0} aria-pressed={isSel}
                                   onClick={() => setTime(tt)}
                                   onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTime(tt); } }}
                                   style={{
-                                    padding: "10px 20px", borderRadius: 8, cursor: "pointer",
+                                    padding: "10px 20px", borderRadius: 8, cursor: "pointer", minHeight: 40, display: "inline-flex", alignItems: "center",
                                     background: isSel ? accent : c.bgCard,
                                     border: `1.5px solid ${isSel ? accent : c.border}`,
                                     color: isSel ? c.btnOnDark : c.text,
@@ -4681,8 +4754,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     silently killed autofill for returning clients). */}
                 <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                   {/* Email first for client lookup */}
-                  <input className="input-field" placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                  
+                  <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+
                   {/* Client found indicator */}
                   {clientFound && (
                     <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
@@ -4693,18 +4766,18 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       </div>
                     </div>
                   )}
-                  
+
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                    <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                    <input className="input-field" aria-label={t.firstName} type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                    <input className="input-field" aria-label={t.lastName} type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                   </div>
-                  <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
+                  <input id="vl-booking-phone" className="input-field" aria-label={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
                   {phoneError && (
                     <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
                       {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
                     </div>
                   )}
-                  <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                  <input className="input-field" aria-label={`${t.allergies} (${t.allergiesOptional})`} autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                   {/* Verjaardag — alleen als de salon het aanzet (Instellingen →
                       Verjaardagsmail). Date-inputs tonen geen placeholder, dus een
@@ -4749,10 +4822,11 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     25-09-2026 weggehaald (Faisal: "eigenlijk hetzelfde als pay
                     at appointment"); een betaalverzoek stuurt de salon zelf via
                     "Later / factuur" bij het afronden of vanuit de Kassa. */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {[["on-arrival","home",t.payArrival], ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
-                    <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
-                      <div className={`radio ${form.payment === v ? "on" : ""}`} />
+                {/* Vooruitbetalen alleen als de server het aanneemt (prepayOffered). */}
+                <div role="radiogroup" aria-label={t.payMethod} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                  {[["on-arrival","home",t.payArrival], ...(prepayOffered ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
+                    <div key={v} className={`pay-opt ${payChoice === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={payChoice === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
+                      <div className={`radio ${payChoice === v ? "on" : ""}`} />
                       <NavIcon name={icon} size={15} color={c.textSub} />
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
                     </div>
@@ -4786,12 +4860,17 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   <div style={{ marginBottom: 20, padding: "16px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
                     <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
                     <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14, whiteSpace: "pre-wrap" }}>{effectivePolicy}</div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                      <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                    {/* De hele regel is het vinkje (05-10-2026): eerst reageerde
+                        alleen het hokje en was het niet met het toetsenbord te
+                        bedienen — zonder akkoord kan er niet geboekt worden. */}
+                    <div role="checkbox" tabIndex={0} aria-checked={policyAgreed}
+                      onClick={() => setPolicyAgreed(v => !v)} onKeyDown={chipKeys(() => setPolicyAgreed(v => !v))}
+                      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minHeight: 40 }}>
+                      <div aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
                         {policyAgreed && <NavIcon name="check" size={14} color={c.btnOnDark} />}
                       </div>
                       <span style={{ fontSize: 13, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
-                    </label>
+                    </div>
                   </div>
                 )}
 
@@ -4819,7 +4898,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                         </div>
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{fmtAmt(cur, ((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
+                        {/* itemBasePrice: mét de eigen prijs van de gekozen stylist, net als Summary en het totaal. */}
+                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                       </div>
                     ))}
                   </div>
@@ -4839,7 +4919,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                     ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                     ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                    [t.payment, form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
+                    [t.payment, payChoice === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                     <div key={l} className="confirm-row">
                       <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                       <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -4897,8 +4977,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 </button>
               </>}
               {step === 2 && (
-                <button className="btn-primary" disabled={!time} onClick={() => setStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                  {time ? (
+                <button className="btn-primary" disabled={!chosenTimeOk} onClick={() => goToStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                  {chosenTimeOk ? (
                     <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {time}</>
                   ) : (
                     <>{lang === "nl" ? "Kies een tijdstip" : lang === "es" ? "Elige una hora" : "Pick a time"}</>
@@ -4908,7 +4988,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {step === 3 && (
                 <>
                 {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
-                <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                <button className="btn-primary" disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
                 </>
               )}
               {step === 4 && (
@@ -4918,9 +4998,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : lang === "es" ? "política de privacidad" : "privacy policy"}</a>
                     {" "}{t.bookingLegalNoticeAnd}{" "}
                     <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
-                    {" "}{t.bookingLegalNoticeRefund}
+                    {" "}{legalRefundText}
                   </div>
-                  <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
+                  <button className="btn-primary" onClick={confirmWithPayCheck} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                 </>
               )}
             </div>
@@ -4952,7 +5032,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     isn't tucked under the status bar/notch in the installed PWA
                     (where it became untappable). */}
                 <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : lang === "es" ? "Atrás" : "Back"} style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", left: 12, zIndex: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
-                    ←
+                    <FlowGlyph name="left" size={16} />
                   </button>
                 <div style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", right: 12, zIndex: 10, display: "flex", alignItems: "center", gap: 6 }}>
                   <ThemeToggle />
@@ -4966,7 +5046,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               <Header
                 title={initialSalon.name}
                 subtitle={initialSalon.city}
-                onBack={done ? reset : (step > (hasLocations ? 0 : 1) ? () => setStep(s => s-1) : () => setMode("profile"))}
+                onBack={done ? reset : goBack}
                 right={<div style={{ display: "flex", alignItems: "center", gap: 6 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>}
                 accent={accent}
               />
@@ -5053,7 +5133,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {selectedServices.length > 0 && (
                       <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 11, color: accent, fontWeight: 500 }}>
-                          <NavIcon name="check" size={11} color={c.btnOnDark} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                          <NavIcon name="check" size={11} color={accent} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                         </span>
                         <span style={{ fontSize: 11, color: c.textSub }}>{getDuration()} {t.min}</span>
                       </div>
@@ -5108,13 +5188,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
                         {/* Variants — per selected service */}
                         {isSel && s.variants?.length > 0 && (
-                          <div style={{ marginLeft: 30, marginBottom: 10 }}>
+                          <div role="radiogroup" aria-label={t.selectVariant} style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectVariant}</SL>
                             {s.variants.map(v => {
                               const vSel = item?.variant?.id === v.id;
                               const vQty = item?.variantQty || 1;
+                              const pickVariant = () => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); };
                               return (
-                              <div key={v.id} className={`service-card ${vSel ? "sel" : ""}`} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={() => { if (!vSel) updateServiceItem(s.id, { variant: v, variantQty: 1 }); }}>
+                              <div key={v.id} className={`service-card ${vSel ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={vSel} style={{ padding: "12px 14px", marginBottom: 6 }} onClick={pickVariant} onKeyDown={chipKeys(pickVariant)}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
@@ -5150,7 +5231,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               const extraSel = item?.extras?.find(x => x.id === e.id);
                               const qty = extraSel?.qty || 1;
                               return (
-                              <div key={e.id} className={`service-card ${extraSel ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)}>
+                              <div key={e.id} className={`service-card ${extraSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={!!extraSel} style={{ padding: "10px 14px", marginBottom: 4 }} onClick={() => toggleExtraForService(s.id, e)} onKeyDown={chipKeys(() => toggleExtraForService(s.id, e))}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div style={{ fontWeight: 500, fontSize: 12 }}>
                                     + {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}
@@ -5177,9 +5258,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         {isSel && staffForService.length > 0 && (
                           <div style={{ marginLeft: 30, marginBottom: 10 }}>
                             <SL>{t.selectStaff}{requireStaffPick && <span style={{ color: c.danger, marginLeft: 4 }}>*</span>}</SL>
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <div role="radiogroup" aria-label={t.selectStaff} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               {!requireStaffPick && (
-                                <div className={`service-card ${!item?.staff ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: null })}>
+                                <div className={`service-card ${!item?.staff ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={!item?.staff} style={{ padding: "10px 14px", flex: "0 0 auto", minHeight: 40, display: "flex", flexDirection: "column", justifyContent: "center" }} onClick={() => updateServiceItem(s.id, { staff: null })} onKeyDown={chipKeys(() => updateServiceItem(s.id, { staff: null }))}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{t.anyStaff}</div>
                                 </div>
                               )}
@@ -5190,7 +5271,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                      ?? (item?.variant ? parseFloat(item.variant.price) : (s.variants?.length > 0 ? null : parseFloat(s.price))))
                                   : null;
                                 return (
-                                <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} style={{ padding: "10px 14px", flex: "0 0 auto" }} onClick={() => updateServiceItem(s.id, { staff: m })}>
+                                <div key={m.id} className={`service-card ${item?.staff?.id === m.id ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={item?.staff?.id === m.id} style={{ padding: "10px 14px", flex: "0 0 auto", minHeight: 40, display: "flex", flexDirection: "column", justifyContent: "center" }} onClick={() => updateServiceItem(s.id, { staff: m })} onKeyDown={chipKeys(() => updateServiceItem(s.id, { staff: m }))}>
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                                   {chipPrice != null && Number.isFinite(chipPrice) && (
@@ -5275,12 +5356,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         const isSel = date === ds;
                         const dayHours = getEffectiveHours(ds);
                         const staffWindow = getStaffTimeWindow(ds);
-                        const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds);
+                        // Een dag zonder één boekbaar slot telt ook als dicht (zie desktop).
+                        const isClosed = dayHours.closed || staffWindow?.closed || !isDayInBookingWindow(ds) || dayAvailability[ds] === "closed";
                         // Fully booked → greyed like a closed day, but still tappable so
                         // the customer can select it and join that day's waitlist.
                         const isFull = !isClosed && dayAvailability[ds] === "full";
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} data-month={ds.slice(0, 7)} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} data-month={ds.slice(0, 7)} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isClosed ? (lang === "nl" ? " gesloten" : lang === "es" ? " cerrado" : " closed") : isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed") : isFull ? (lang === "nl" ? "vol" : lang === "es" ? "completo" : "full") : MON[d.getMonth()]}</span>
@@ -5307,8 +5389,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             const booked = isTimeSlotBooked(tt);
                             return (
                               <div key={tt} className={`time-chip ${time === tt ? "sel" : ""}`}
+                                role="button" tabIndex={booked ? -1 : 0} aria-pressed={time === tt} aria-disabled={booked}
                                 onClick={() => { if (!booked) setTime(tt); }}
-                                style={booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}}
+                                onKeyDown={chipKeys(() => { if (!booked) setTime(tt); })}
+                                style={{ minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", ...(booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}) }}
                               >{tt}</div>
                             );
                           })}
@@ -5332,7 +5416,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         </div>
                       );
                     })()}
-                    <button className="btn-primary" disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                    <button className="btn-primary" disabled={!chosenTimeOk} onClick={() => goToStep(3)}>{t.next}</button>
                   </>}
 
                   {/* Step 3 — Details (mobile) */}
@@ -5341,7 +5425,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* Real <form> + autofill attributes — see other branch. */}
                     <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                       {/* Email first for client lookup */}
-                      <input className="input-field" placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                      <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                       
                       {/* Client found indicator */}
                       {clientFound && (
@@ -5355,16 +5439,16 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       )}
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                        <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                        <input className="input-field" aria-label={t.firstName} type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                        <input className="input-field" aria-label={t.lastName} type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                       </div>
-                      <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
+                      <input id="vl-booking-phone" className="input-field" aria-label={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
                   {phoneError && (
                     <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
                       {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
                     </div>
                   )}
-                      <input className="input-field" autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+                      <input className="input-field" aria-label={`${t.allergies} (${t.allergiesOptional})`} autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
                       {initialSalon.ask_birthday_on_booking && (
                         <div>
@@ -5399,10 +5483,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
                     <SL>{t.payMethod}</SL>
                     {/* Zelfde twee keuzes als desktop; "Betaalverzoek na afloop" is weg (25-09-2026). */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                      {[["on-arrival","home",t.payArrival], ...(initialSalon.prepay_enabled ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
-                        <div key={v} className={`pay-opt ${form.payment === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={form.payment === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
-                          <div className={`radio ${form.payment === v ? "on" : ""}`} />
+                    <div role="radiogroup" aria-label={t.payMethod} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                      {[["on-arrival","home",t.payArrival], ...(prepayOffered ? [["prepay","check",t.payPrepay]] : [])].map(([v,icon,label]) => (
+                        <div key={v} className={`pay-opt ${payChoice === v ? "sel" : ""}`} role="radio" tabIndex={0} aria-checked={payChoice === v} onClick={() => setForm(f => ({...f, payment: v}))} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm(f => ({...f, payment: v})); } }}>
+                          <div className={`radio ${payChoice === v ? "on" : ""}`} />
                           <NavIcon name={icon} size={15} color={c.textSub} />
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
                         </div>
@@ -5434,17 +5518,20 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <div style={{ marginBottom: 20, padding: "14px", background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14 }}>
                         <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{effectivePolicy}</div>
-                        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                          <div onClick={() => setPolicyAgreed(!policyAgreed)} style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                        {/* Hele regel = het vinkje, ook met toetsenbord (zie desktop). */}
+                        <div role="checkbox" tabIndex={0} aria-checked={policyAgreed}
+                          onClick={() => setPolicyAgreed(v => !v)} onKeyDown={chipKeys(() => setPolicyAgreed(v => !v))}
+                          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minHeight: 40 }}>
+                          <div aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
                             {policyAgreed && <NavIcon name="check" size={12} color={c.btnOnDark} />}
                           </div>
                           <span style={{ fontSize: 12, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
-                        </label>
+                        </div>
                       </div>
                     )}
 
                     {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
-                    <button className="btn-primary" disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                    <button className="btn-primary" disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
                   </>}
 
                   {/* Step 4 — Confirm (mobile) */}
@@ -5461,7 +5548,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                             </div>
-                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{fmtAmt(cur, ((item.variant ? parseFloat(item.variant.price) * (item.variant.per_unit ? (item.variantQty || 1) : 1) : parseFloat(item.service.price || 0)) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
+                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                           </div>
                         ))}
                       </div>
@@ -5481,7 +5568,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       {[[t.date, parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })],[t.time, time],[t.totalDuration, getDuration() + " " + t.min],[t.name, `${form.firstName} ${form.lastName}`],
                         ...((form.phone || "").trim() ? [[t.phone, form.phone]] : []),
                         ...(form.allergies ? [[t.allergies, form.allergies]] : []),
-                        [t.payment, form.payment === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
+                        [t.payment, payChoice === "prepay" ? t.payPrepay : t.payArrival]].map(([l,v]) => (
                         <div key={l} className="confirm-row">
                           <span style={{ fontSize: 11, color: c.textLabel, letterSpacing: "0.04em" }}>{l}</span>
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{v}</span>
@@ -5512,20 +5599,20 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <a href="/privacy" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "privacybeleid" : lang === "es" ? "política de privacidad" : "privacy policy"}</a>
                       {" "}{t.bookingLegalNoticeAnd}{" "}
                       <a href="/terms" target="_blank" rel="noopener" style={{ color: c.textSub, textDecoration: "underline" }}>{lang === "nl" ? "voorwaarden" : lang === "es" ? "términos" : "terms"}</a>.
-                      {" "}{t.bookingLegalNoticeRefund}
+                      {" "}{legalRefundText}
                     </div>
-                    <button className="btn-primary" onClick={confirmBooking} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
+                    <button className="btn-primary" onClick={confirmWithPayCheck} disabled={submitting}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                   </>}
 
                   {/* Reviews on mobile step 1 */}
                   {step === 1 && initialSalon.reviews?.length > 0 && (
                     <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} ★</SL>
+                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accent }}><FlowGlyph name="star" size={11} /></span></SL>
                       {initialSalon.reviews.slice(0, 3).map(r => (
                         <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                             <span style={{ fontWeight: 500, fontSize: 12 }}>{r.client_name?.split(" ")[0] || (t.client)}</span>
-                            <span style={{ color: accent, fontSize: 12 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                            <StarRow rating={r.rating} size={12} />
                           </div>
                           {r.comment && <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.5 }}>{r.comment}</div>}
                         </div>
@@ -5552,28 +5639,29 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: c.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
-                    {time && ` · ${time}`}
+                    {/* Geen verouderde tijd tonen die stap 2 niet meer aanbiedt. */}
+                    {chosenTimeOk && ` · ${time}`}
                   </div>
                   <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}{fmtAmt(cur, getPrice())}</div>
                 </div>
                 {step === 1 && (
-                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
                     disabled={!canProceedStep1} onClick={() => goToStep(2)}>{t.next}</button>
                 )}
                 {step === 2 && (
-                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
-                    disabled={!time} onClick={() => setStep(3)}>{t.next}</button>
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
+                    disabled={!chosenTimeOk} onClick={() => goToStep(3)}>{t.next}</button>
                 )}
                 {step === 3 && (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                     {invalidReason && <div style={{ fontSize: 11, color: c.danger }}>{invalidReason}</div>}
                     <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
-                      disabled={!canConfirm} onClick={() => setStep(4)}>{t.next}</button>
+                      disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
                   </div>
                 )}
                 {step === 4 && (
-                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }} 
-                    disabled={submitting} onClick={confirmBooking}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
+                  <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
+                    disabled={submitting} onClick={confirmWithPayCheck}>{submitting ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />{lang === "nl" ? "Boeken…" : lang === "es" ? "Reservando…" : "Booking…"}</span>) : t.confirm}</button>
                 )}
               </div>
             )}
@@ -5600,18 +5688,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           </div>
         )}
 
-        {/* Gallery overlay */}
-        {gallery && (
-          <div className="gallery-overlay" onClick={() => setGallery(null)} onKeyDown={e => e.key === "Escape" && setGallery(null)}>
-            <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} />
-            <div style={{ display: "flex", gap: 8, marginTop: 16, overflowX: "auto", maxWidth: "100%", paddingBottom: 4 }}>
-              {gallery.photos.map((p, i) => (
-                <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
-                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5, transition: "all 0.2s", flexShrink: 0 }} />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Gallery overlay — dezelfde lightbox als op het profiel: sluitknop,
+            Escape en pijltjestoetsen (hier kreeg de overlay nooit focus, dus
+            deed Escape niets en was er geen zichtbare uitweg). */}
+        {gallery && <GalleryLightbox gallery={gallery} setGallery={setGallery} accent={accent} lang={lang} t={t} />}
 
         {/* Error toast */}
         {errorToast && (
@@ -5630,7 +5710,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             both profile and booking modes. Portalled to body to sit above the
             floating pill and any sticky headers. */}
         {waitlistOpen && createPortal(
-          <div onClick={() => !waitlistSubmitting && setWaitlistOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", zIndex: 340, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          // Via de portal hangt dit aan <body>, buiten de container met de
+          // paginafont: font en tekstkleur dus hier zelf zetten (anders Times).
+          <div onClick={() => !waitlistSubmitting && setWaitlistOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", zIndex: 340, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "var(--body-font, 'Jost', sans-serif)", color: c.text }}>
             <div onClick={e => e.stopPropagation()} style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 20, padding: 24, maxWidth: 400, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
               {waitlistDone ? (
                 <div style={{ textAlign: "center" }}>
@@ -5673,7 +5755,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   transition: "all 0.15s", fontFamily: "var(--body-font, 'Jost', sans-serif)",
                                 }}>
                                 {on && <NavIcon name="check" size={11} color={accent} />}
-                                <span style={{ textTransform: "capitalize" }}>{dd.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })}</span>
+                                <span>{capFirst(dd.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" }))}</span>
                               </button>
                             );
                           })}
@@ -5690,15 +5772,25 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   })()}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <input className="input-field" type="text" name="given-name" autoComplete="given-name" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                      <input className="input-field" type="text" name="family-name" autoComplete="family-name" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
+                      <input className="input-field" aria-label={T[lang].firstName} type="text" name="given-name" autoComplete="given-name" placeholder={T[lang].firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
+                      <input className="input-field" aria-label={T[lang].lastName} type="text" name="family-name" autoComplete="family-name" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                     </div>
-                    <input className="input-field" placeholder={T[lang].email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                    <input className="input-field" aria-label={T[lang].email} placeholder={T[lang].email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
                     {/* Phone follows the salon's phone_required setting, exactly
                         like the booking form — it made no sense for the same
-                        setting to be enforced at booking but ignored here. */}
-                    <input className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${T[lang].phone}${initialSalon.phone_required ? ` (${T[lang].required})` : ` (${T[lang].optional})`}`} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} style={initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {}} />
-                    <textarea className="input-field" placeholder={T[lang].waitlistNotesPh} value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} rows={2} style={{ resize: "none" }} />
+                        setting to be enforced at booking but ignored here.
+                        Te kort = minder dan 6 cijfers (zelfde regel als
+                        waitlist-notify): vooraf een zachte rode rand, na een
+                        mislukte poging (waitlistError gezet) een duidelijke. */}
+                    {(() => {
+                      const wlPhoneShort = !!initialSalon.phone_required && (form.phone || "").replace(/[^0-9]/g, "").length < 6;
+                      const wlPhoneLabel = `${T[lang].phone}${initialSalon.phone_required ? ` (${T[lang].required})` : ` (${T[lang].optional})`}`;
+                      return (
+                        <input className="input-field" aria-label={wlPhoneLabel} aria-invalid={wlPhoneShort && !!waitlistError} type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={wlPhoneLabel} value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
+                          style={wlPhoneShort ? { borderColor: waitlistError ? "rgba(248,113,113,0.9)" : "rgba(248,113,113,0.3)" } : {}} />
+                      );
+                    })()}
+                    <textarea className="input-field" aria-label={T[lang].waitlistNotesPh} placeholder={T[lang].waitlistNotesPh} value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} rows={2} style={{ resize: "none" }} />
                   </div>
                   {waitlistError && (
                     <div style={{ fontSize: 11, color: c.danger, marginTop: 8 }}>{waitlistError}</div>
@@ -5715,6 +5807,71 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         )}
       </div>
     </Layout>
+  );
+}
+
+// Pijlen, "extern"-icoon en ster als inline SVG (05-10-2026): de pijl- en
+// stertekens als tekst werden op iOS soms emoji of vielen uit de paginafont.
+// currentColor, dus de kleur komt van de omringende tekst.
+function FlowGlyph({ name, size = 12 }) {
+  const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", focusable: "false", style: { display: "inline-block", verticalAlign: "-0.12em", flexShrink: 0 } };
+  if (name === "external") return <svg {...p}><line x1="7" y1="17" x2="17" y2="7" /><polyline points="8 7 17 7 17 16" /></svg>;
+  if (name === "down") return <svg {...p}><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></svg>;
+  if (name === "left") return <svg {...p}><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>;
+  if (name === "star") return <svg {...p} fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>;
+  return <svg {...p}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>;
+}
+
+// Foto-overlay (lightbox) — één opbouw voor het salonprofiel én de
+// boekingsflow. Bladeren met wrap-around, gedeeld door de pijlknoppen en de
+// pijltjestoetsen. De overlay krijgt focus bij openen (tabIndex + ref-focus),
+// anders komt er nooit een keydown aan (Escape deed in de boekingsflow niets).
+function GalleryLightbox({ gallery, setGallery, accent, lang, t }) {
+  const stap = (richting) => setGallery(g => {
+    if (!g || g.photos.length < 2) return g;
+    return { ...g, idx: (g.idx + richting + g.photos.length) % g.photos.length };
+  });
+  const pijlStijl = (kant) => ({
+    position: "absolute", [kant]: 14, top: "50%", transform: "translateY(-50%)",
+    background: "rgba(0,0,0,0.5)", border: "none", color: "#fff",
+    width: 44, height: 44, borderRadius: "50%", fontSize: 26, lineHeight: 1,
+    cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center",
+  });
+  const chevron = (points) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><polyline points={points} /></svg>;
+  return (
+    <div className="gallery-overlay" tabIndex={-1} style={{ outline: "none" }}
+      ref={el => { if (el && !el.contains(document.activeElement)) el.focus(); }}
+      onClick={() => setGallery(null)}
+      onKeyDown={e => {
+        if (e.key === "Escape") setGallery(null);
+        else if (e.key === "ArrowLeft") { e.preventDefault(); stap(-1); }
+        else if (e.key === "ArrowRight") { e.preventDefault(); stap(1); }
+      }}>
+      {/* Onder de iOS-statusbalk uit blijven: tikken in die zone gaan
+          naar het systeem (scroll-naar-boven), niet naar de pagina —
+          daarom safe-area-inset erbij op de sluitknop. */}
+      <button onClick={() => setGallery(null)} aria-label={t.close} style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 18px)", right: 18, background: "rgba(0,0,0,0.55)", border: "none", color: "#fff", width: 44, height: 44, borderRadius: "50%", fontSize: 22, cursor: "pointer", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="xmark" size={20} color="currentColor" /></button>
+      {gallery.photos.length > 1 && (
+        <>
+          <button onClick={e => { e.stopPropagation(); stap(-1); }} aria-label={lang === "nl" ? "Vorige foto" : lang === "es" ? "Foto anterior" : "Previous photo"} style={pijlStijl("left")}>{chevron("15 18 9 12 15 6")}</button>
+          <button onClick={e => { e.stopPropagation(); stap(1); }} aria-label={lang === "nl" ? "Volgende foto" : lang === "es" ? "Foto siguiente" : "Next photo"} style={pijlStijl("right")}>{chevron("9 18 15 12 9 6")}</button>
+        </>
+      )}
+      <img src={gallery.photos[gallery.idx]?.url || gallery.photos[gallery.idx]} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16, objectFit: "contain" }} onClick={e => e.stopPropagation()} alt={t.galleryPhoto} />
+      {gallery.photos.length > 1 && (
+        <div style={{ color: "#fff", opacity: 0.75, fontSize: 11, marginTop: 10, letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums" }} onClick={e => e.stopPropagation()}>
+          {gallery.idx + 1} / {gallery.photos.length}
+        </div>
+      )}
+      {/* Wrap i.p.v. één oneindige rij: bij 15+ foto's liep de strip op
+          telefoons de viewport uit zonder scroll. */}
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 12, maxWidth: "min(92vw, 700px)", maxHeight: 128, overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+        {gallery.photos.map((p, i) => (
+          <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+            style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5 }} loading="lazy" alt="" />
+        ))}
+      </div>
+    </div>
   );
 }
 
