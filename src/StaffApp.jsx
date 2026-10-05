@@ -481,7 +481,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // sees the team's schedule, not the team's income.
   const activeAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   // Op tijd gesorteerd: de RPC levert op datum, de volgorde binnen een dag was willekeurig.
-  const todayAppts = activeAppts.filter(a => a.date === fmt(salonToday())).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  // Salondatum één keer per render: salonNow bouwt een Intl-formatter, dus niet per rij.
+  const todayStr = fmt(salonToday());
+  const todayAppts = activeAppts.filter(a => a.date === todayStr).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const completedAppts = myAppts.filter(a => a.status === "completed");
   // Eigen aandeel in een gecombineerde boeking (staffShareOf): doet een
   // collega een ander deel, dan telt alleen wat déze stylist deed. Zonder
@@ -588,13 +590,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // expliciet naar null, anders blijft de post onzichtbaar als open post en
       // krijgt de factuur geen betaalblok (zie OwnerApp.markComplete).
       let patch;
-      if (!showMoney) {
+      // Restbetaling van een deels vooruitbetaalde afspraak: ook met zichtbare
+      // omzet via de RPC. Die laat 'prepaid' staan en boekt alleen het restant
+      // als client_payments-rij in de gekozen wijze, zodat het kasboek niet de
+      // hele prijs als contant telt (zoals de eigenaars-app het restant boekt).
+      const prepaidRest = showMoney && !!method && apptRow?.payment_method === "prepaid" && isPartlyPaid(apptRow);
+      if (!showMoney || prepaidRest) {
         // Omzet verborgen: de prijs kent deze medewerker niet (de RPC stript
         // hem), dus "amount_paid = prijs" moet de database zelf zetten. Nooit
         // client-side een bedrag schrijven: dat werd 0 (audit S1-06).
         const { data: res, error } = await supabase.rpc("staff_complete_appointment", { p_id: id, p_method: method });
         if (error || !res) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
-        patch = { status: res.status || "completed", payment_method: res.payment_method ?? null, paid_at: res.paid_at ?? null, ...(method ? { pay_state: "paid" } : {}) };
+        patch = { status: res.status || "completed", payment_method: res.payment_method ?? null, paid_at: res.paid_at ?? null,
+          ...(method ? (showMoney ? { amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : { pay_state: "paid" }) : {}) };
       } else {
         patch = { status: "completed", ...(method
           ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
@@ -671,8 +679,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           appointment_id: a.id,
           client_name: a.client_name, client_email: a.client_email || "", client_phone: a.client_phone || null,
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
-          // Omzet verborgen: deze app kent de prijs dan niet (de RPC stript hem);
-          // send-emails hoort hem in dat geval uit de afspraakrij te halen.
+          // Omzet verborgen: deze app kent de prijs dan niet (de RPC stript hem)
+          // en stuurt geen price mee. send-emails vult hem (nog) NIET uit de
+          // afspraakrij, dus de mail toont dan Totaal 0; dat moet server-side
+          // (send-emails, user-JWT-tak: service_price uit de rij als b.price ontbreekt).
           payment: "prepaid", ...(showMoney ? { price: a.service_price } : {}),
           salon_name: salonProfile.business_name, owner_email: null, salon_email: salonProfile.salon_email || "",
           salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
@@ -1013,10 +1023,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       const paidAll = paidAmountOf(a);
       const myPaid = total > 0 ? Math.min(share, Math.round((paidAll * share / total) * 100) / 100) : 0;
       const pm = a.payment_method ?? null;
-      // "Vooruitbetaald" alleen bij een echte vooruitbetaling of deelbetalingen
-      // op een open post; pin/contant aan de balie = "Betaald" (paid_in_full),
-      // zelfde regel als de eigenaarsfactuur (audit O4-06).
-      const sendPaid = pm === "prepaid" || (OPEN_PAY_METHODS.has(pm) && paidAll > 0);
+      // "Vooruitbetaald" alleen bij een echte vooruitbetaling, deelbetalingen
+      // op een open post, of als er na een betaling nog iets open staat / te
+      // veel betaald is (prijs later gewijzigd); pin/contant aan de balie
+      // volledig betaald = "Betaald" (paid_in_full). Zelfde regel als de
+      // eigenaarsfactuur (audit O4-06); client_payments is voor medewerkers
+      // niet leesbaar, dus "open post met betaling" staat daarvoor in.
+      const openAll = outstandingOf(a);
+      const sendPaid = pm === "prepaid" || (paidAll > 0 && (OPEN_PAY_METHODS.has(pm) || Math.abs(openAll) > 0.005));
       const mail = await sendEmails("invoice", {
         appointment_id: a.id,
         client_name: a.client_name, client_email: a.client_email || "",
@@ -1037,7 +1051,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         payment_request: OPEN_PAY_METHODS.has(pm),
         // Al (vooruit)betaald: de factuur trekt het af en vraagt alleen het restant.
         amount_paid: sendPaid ? myPaid : 0,
-        paid_in_full: !OPEN_PAY_METHODS.has(pm) && outstandingOf(a) <= 0.005,
+        paid_in_full: !sendPaid && !OPEN_PAY_METHODS.has(pm) && openAll <= 0.005,
         iban_holder: invoiceForm.iban_holder || myStaff.name || "",
         // Exact OPEN amount (van háár deel) appended for bunq.me/PayPal.Me links.
         payment_link: getPaymentLinkWithAmount(invoiceForm.payment_link || "", Math.max(0, Math.round((share - myPaid) * 100) / 100)),
@@ -1148,7 +1162,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       `Cancel ${a.client_name}'s appointment? The client is notified and the time slot frees up again.`,
       `¿Cancelar la cita de ${a.client_name}? El cliente recibirá un aviso y el horario vuelve a quedar libre.`);
     // Knop met de echte handeling i.p.v. de standaard "Verwijderen" (S1-23).
-    if (!await showConfirm(msg, { tone: "danger", confirmText: L3("Afspraak annuleren", "Cancel appointment", "Cancelar cita") })) return;
+    // Terug-knop met eigen tekst: "Annuleren" naast "Afspraak annuleren" was
+    // dubbelzinnig (audit S1-04); zelfde teksten als de eigenaars-app.
+    if (!await showConfirm(msg, { tone: "danger", confirmText: L3("Afspraak annuleren", "Cancel appointment", "Cancelar cita"), cancelText: L3("Terug", "Back", "Volver") })) return;
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id).eq("owner_id", salonProfile.id);
@@ -2895,11 +2911,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     return r.error ? null : (r.data || []).filter(isMineAppt);
                   }}
                   companyOverride={{
+                    // Ruwe eigen waarden: RevenueReportBlock valt zelf per veld
+                    // terug op de salon. Vooraf invullen telde het salonadres als
+                    // "eigen adres" en liet dan postcode en plaats weg.
                     name: myStaff.name,
-                    address: invoiceForm.address || salonProfile.address || "",
-                    kvk_number: invoiceForm.kvk_number || salonProfile.kvk_number || "",
-                    btw_id: invoiceForm.btw_id || salonProfile.btw_id || "",
-                    iban: invoiceForm.iban || salonProfile.iban || "",
+                    address: invoiceForm.address || "",
+                    kvk_number: invoiceForm.kvk_number || "",
+                    btw_id: invoiceForm.btw_id || "",
+                    iban: invoiceForm.iban || "",
                   }}
                 />}
 
