@@ -62,12 +62,14 @@ begin
   select id::text into row1 from public.staff_members where owner_id = bloom::uuid and name = 'ZZ guard 1';
   select id::text into row2 from public.staff_members where owner_id = bloom::uuid and name = 'ZZ guard 2';
 
-  -- uitnodiging claimen
-  r := r || pg_temp.t('C01 invite claim (matching e-mail)', 'authenticated', cc1, format('update public.staff_members set user_id = %L where id = %L and user_id is null', cl1, row1), 'ok') || nl;
+  -- uitnodiging claimen: sinds fix-all deel B (20261005155531) kan de browser
+  -- niet meer op e-mailadres claimen (alleen claim_staff_invite met de gemailde
+  -- token, getest in DB.tests.sql). Elke poging raakt dus 0 rijen.
+  r := r || pg_temp.t('C01 e-mail claim no longer possible (matching e-mail)', 'authenticated', cc1, format('update public.staff_members set user_id = %L where id = %L and user_id is null', cl1, row1), 'zero') || nl;
   r := r || pg_temp.t('C02 claim with other e-mail', 'authenticated', cc1, format('update public.staff_members set user_id = %L where id = %L and user_id is null', cl1, row2), 'zero') || nl;
-  r := r || pg_temp.t('C03 claim binding someone else', 'authenticated', cc3, format('update public.staff_members set user_id = %L where id = %L and user_id is null', victim, row2), 'err') || nl;
-  r := r || pg_temp.t('C04 claim + rename in one go', 'authenticated', cc3, format($q$update public.staff_members set user_id = %L, name = 'ZZ x' where id = %L and user_id is null$q$, cl3, row2), 'err') || nl;
-  r := r || pg_temp.t('C05 claim row 2 properly', 'authenticated', cc3, format('update public.staff_members set user_id = %L where id = %L and user_id is null', cl3, row2), 'ok') || nl;
+  r := r || pg_temp.t('C03 claim binding someone else', 'authenticated', cc3, format('update public.staff_members set user_id = %L where id = %L and user_id is null', victim, row2), 'zero') || nl;
+  r := r || pg_temp.t('C04 claim + rename in one go', 'authenticated', cc3, format($q$update public.staff_members set user_id = %L, name = 'ZZ x' where id = %L and user_id is null$q$, cl3, row2), 'zero') || nl;
+  r := r || pg_temp.t('C05 server links row 2 (create-staff-account / claim_staff_invite)', 'service_role', cs, format('update public.staff_members set user_id = %L where id = %L and user_id is null', cl3, row2), 'ok') || nl;
   r := r || pg_temp.t('C06 claimed staff edits hours', 'authenticated', cc3, format($q$update public.staff_members set working_hours = '{"1":{"open":"09:00","close":"17:00","closed":false}}'::jsonb where id = %L$q$, row2), 'ok') || nl;
   r := r || pg_temp.t('C07 owner deletes a stylist', 'authenticated', cb, format('delete from public.staff_members where id = %L', row1), 'ok') || nl;
   r := r || pg_temp.t('C08 service_role sets user_id (create-staff-account)', 'service_role', cs, format('update public.staff_members set user_id = %L, email = %L where id = %L', cl1, 'zz3@example.test', row2), 'ok') || nl;
