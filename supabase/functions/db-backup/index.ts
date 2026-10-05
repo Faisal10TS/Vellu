@@ -48,7 +48,10 @@ const RETENTION_DAYS = 30;
 // back-up wijzigt, kan dubbel of helemaal niet in het bestand belanden. We
 // sorteren op de primaire sleutel; de meeste tabellen hebben "id", de
 // uitzonderingen staan hier (nagekeken in pg_index op 05-10-2026).
-// newsletter_opt_outs heeft geen id; token is daar uniek.
+// newsletter_opt_outs heeft geen id; token is daar uniek. support_chat_user_usage
+// en translate_usage (nieuw in dezelfde migratie, pakket E3) hebben als sleutel
+// (user_id, day). public_chat_usage (sleutel bucket) en cron_health slaat
+// backup_table_list() over.
 const ORDER_COLUMNS: Record<string, string[]> = {
   app_admins: ["user_id"],
   app_rating_invites: ["owner_id"],
@@ -62,6 +65,8 @@ const ORDER_COLUMNS: Record<string, string[]> = {
   renewal_reminder_log: ["owner_id", "plan_expires_at", "kind"],
   review_tokens: ["token"],
   salon_digest_log: ["owner_id", "sent_on"],
+  support_chat_user_usage: ["user_id", "day"],
+  translate_usage: ["user_id", "day"],
 };
 // Bovengrens per tabel. Een tabel die hem haalt is NIET volledig weggeschreven
 // en telt als mislukt, in plaats van stil als "gelukt" (E2-18).

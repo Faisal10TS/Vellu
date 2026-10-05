@@ -73,6 +73,11 @@ const acOf=(b)=>{const a=/^#[0-9a-fA-F]{6}$/.test(String(b.salon_accent||""))?b.
 // te laten werken; waar afgeronde hoeken niet gaan (Outlook desktop) blijft het
 // gewoon een net wit vlak met padding.
 const lH=(b)=>{const ac=acOf(b);const logo=safeImgSrc(b.salon_logo);const n=esc(b.salon_name);if(logo)return`<div style="text-align:center;margin-bottom:32px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;border-collapse:separate;"><tr><td style="background:#ffffff;border-radius:14px;padding:14px 18px;text-align:center;"><img src="${esc(logo)}" alt="${n}" style="width:auto;height:auto;max-width:180px;display:block;border:0;" /></td></tr></table><div style="width:40px;height:1px;background:${ac};margin:0 auto;"></div></div>`;return`<div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:${ac};margin:12px auto;"></div></div>`;};
+// CURSYM en fP staan BINNEN de serve-callback (die opent bij serve(async(req)=>{
+// hierboven en sluit pas helemaal onderaan): elke aanvraag krijgt haar eigen
+// symbool, ook als aanvragen elkaar tussen twee awaits afwisselen. Audit E2-14
+// las dit als een variabele op moduleniveau; nagelopen op 05-10-2026, dat is hij
+// niet.
 let CURSYM="€";
 // Bedrag achter het symbool zoals de app het toont (shared.jsx fmtAmt): altijd
 // met een komma ("€45,00", "$45,00", "XCG 45,00" — Faisal 24-09-2026). Symbolen
@@ -119,15 +124,18 @@ if(callerId&&!BROWSER_TYPES.includes(type))return new Response(JSON.stringify({e
 //    telefoon) komt uit die afspraak van deze salon, en een medewerker moet
 //    zelf op die afspraak staan (tenzij de salon "alles zien" aan heeft);
 //    waitlist_spot_open EIST waitlist_id van een wachtlijstrij die de app in
-//    het afgelopen kwartier op 'notified' zette;
+//    het afgelopen uur op 'notified' zette;
 //  - booking_notification gaat alleen naar de eigenaar (adres uit de database)
 //    en naar teamleden van deze salon, hooguit 10 adressen;
 //  - IBAN, betaallink, adres, KVK en btw-nummer komen uit het extra
 //    factuurprofiel (invoice_profile_id / _index), de regel van
 //    book-appointment 12a (één stylist met eigen gegevens) of het salon-
-//    profiel; voor een medewerker uit haar eigen rij met het profiel als terugval;
-//  - een annuleerlink alleen als hij naar vellu.cc/cancel/<token> van deze
-//    afspraak wijst; "vellu" in de afzendernaam wordt "Salon".
+//    profiel; voor een medewerker haar eigen rekening (IBAN en link samen) of
+//    anders die van de salon, en adres/KVK/btw uit haar rij met het profiel als
+//    terugval;
+//  - een annuleerlink alleen met een token van deze afspraak (de link wordt
+//    opnieuw opgebouwd als vellu.cc/cancel/<token>); "vellu" in de salonnaam
+//    wordt "Salon" (afzender, onderwerp en tekst).
 // Inhoud (regels, bedragen, belasting, datum/tijd, taal) blijft uit de
 // aanvraag komen. Aanroepen met x-internal-secret veranderen niet.
 if(callerId){
@@ -151,9 +159,11 @@ b.country_code=pr.country_code||"NL";
 b.currency=CUR_BY_COUNTRY[String(pr.country_code||"").toUpperCase()]||"€";
 b.staff_view_client_contact=pr.staff_view_client_contact;
 b.staff_view_revenue=pr.staff_view_revenue;
-// Annuleerlink: alleen naar onze eigen annuleerpagina, en alleen met een token
-// van deze afspraak (hieronder gecontroleerd). www. wordt de kale domeinnaam.
-const cm=/^https:\/\/(?:www\.)?vellu\.cc\/cancel\/([0-9a-f]{64})$/.exec(String(b.cancel_url||""));
+// Annuleerlink: alleen met een token van deze afspraak (hieronder gecontroleerd),
+// en altijd opnieuw opgebouwd als https://vellu.cc/cancel/<token>. De app bouwt
+// hem met window.location.origin, dus vanaf localhost, een preview of www. komt
+// er een andere host mee; die nemen we niet over, maar de link valt ook niet weg.
+const cm=/^https?:\/\/[^\/?#\s]+\/cancel\/([0-9a-f]{64})$/.exec(String(b.cancel_url||""));
 b.cancel_url=null;
 const APPT_TYPES=["booking_confirmation","booking_notification","refund_sent","appointment_updated","invoice","booking_cancelled"];
 if(APPT_TYPES.includes(type)){
@@ -171,7 +181,14 @@ if(cm){const tk=await rest(`cancellation_tokens?token=eq.${cm[1]}&appointment_id
 // medewerker zelf.
 let pay={iban:pr.iban||"",iban_holder:pr.iban_holder||salonName,payment_link:pr.payment_link||"",address:pr.address||"",kvk:pr.kvk_number||"",btw:pr.btw_id||""};
 if(me){
-pay={iban:me.iban||pay.iban,iban_holder:me.iban_holder||(me.iban?me.name:pay.iban_holder),payment_link:me.payment_link||pay.payment_link,address:me.address||pay.address,kvk:me.kvk_number||pay.kvk,btw:me.btw_id||pay.btw};
+// IBAN, tenaamstelling en betaallink horen bij één rekening, net als bij regel
+// 12a: heeft zij een eigen IBAN of betaallink, dan alleen de hare; anders die van
+// de salon. Per veld terugvallen gaf een factuur met HAAR IBAN en QR maar een
+// "Betaal online"-knop naar de SALON (of andersom). Adres, KVK en btw-nummer
+// vallen wel per veld terug op het profiel.
+const own=String(me.iban||"").trim()||String(me.payment_link||"").trim();
+const acct=own?{iban:me.iban||"",iban_holder:me.iban_holder||me.name||"",payment_link:me.payment_link||""}:{iban:pay.iban,iban_holder:pay.iban_holder,payment_link:pay.payment_link};
+pay={...acct,address:me.address||pay.address,kvk:me.kvk_number||pay.kvk,btw:me.btw_id||pay.btw};
 if(type==="invoice")b.salon_name=`${salonName} — ${me.name||""}`.replace(/ — $/,"");
 }else{
 const extras=Array.isArray(pr.invoice_profiles)?pr.invoice_profiles:[];
@@ -208,7 +225,10 @@ b.staff_emails=staffOut.slice(0,wantOwner?9:10);
 }
 }else if(type==="waitlist_spot_open"){
 if(!UUID_RE.test(String(b.waitlist_id||"")))return deny("waitlist_id_required",400);
-const since=new Date(Date.now()-15*60*1000).toISOString();
+// notified_at schrijft de app met de klok van het toestel. Een uur speling,
+// zodat een telefoon die achterloopt de klant niet stil overslaat (een klok die
+// voorloopt komt altijd door de gte).
+const since=new Date(Date.now()-60*60*1000).toISOString();
 const w=(await rest(`waitlist?id=eq.${enc(b.waitlist_id)}&owner_id=eq.${enc(salonId)}&status=eq.notified&notified_at=gte.${enc(since)}&select=*&limit=1`))?.[0];
 if(!w)return deny("waitlist_entry_not_found");
 b.client_email=w.client_email||"";
@@ -236,9 +256,12 @@ const oLang=["nl","en","es"].includes(b.owner_lang)?b.owner_lang:"nl";
 const PLATFORM_TYPES=["renewal_reminder","trial_ending","trial_expired","payment_failed","subscription_invoice"];
 const VELLU_REPLY_TO="mirahventures@vellu.cc";
 const isPlatform=PLATFORM_TYPES.includes(type);
-let fromName=isPlatform?"Vellu":(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
 // Een salon mag niet als "Vellu" (of "Vellu Support") mailen: met een login
-// wordt zo'n afzendernaam "Salon". Platformmails en interne aanroepen blijven.
+// wordt zo'n salonnaam "Salon", in de afzender én in onderwerp en tekst (die
+// lezen b.salon_name). Platformmails en interne aanroepen blijven. Op 05-10-2026
+// heeft geen enkele salon "vellu" in haar naam.
+if(callerId&&/vellu/i.test(String(b.salon_name||"")))b.salon_name="Salon";
+let fromName=isPlatform?"Vellu":(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
 if(callerId&&/vellu/i.test(fromName))fromName="Salon";
 const fromLine=`${fromName} <${F}>`;
 const replyTo=isPlatform?VELLU_REPLY_TO:((String(b.salon_email||b.owner_email||"").trim())||null);

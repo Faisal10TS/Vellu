@@ -126,13 +126,19 @@ function tzOffsetMs(at: Date, tz: string) {
 }
 
 // "2026-08-13" + "09:30" op de klok van de salon → het echte UTC-moment. We lezen
-// de stempel eerst als UTC en trekken er de offset van dát moment vanaf. Alleen
-// binnen het uur van een zomertijdovergang kan dat er een uur naast zitten; dat
-// is verwaarloosbaar naast de dagelijkse korrel van deze cron.
+// de stempel eerst als UTC, trekken er de offset van dát moment vanaf (eerste
+// schatting) en rekenen daarna opnieuw met de offset op die schatting. Met één
+// stap zat het uur 01:00-02:00 in de nacht dat de zomertijd eindigt (Amsterdam,
+// 25-10-2026) een uur te laat: de herinnering kwam een uur na het gewenste
+// moment, bij reminder_hours=1 pas op de starttijd zelf (R-09, nagerekend met
+// een simulatie van alle uurruns 24-27 okt en 28-30 mrt). Het dubbele uur
+// 02:00-03:00 kiest de tweede keer (wintertijd); een tijd die in het voorjaar
+// niet bestaat (02:30) wordt 03:30 zomertijd.
 function localToUtc(dateStr: string, timeStr: string, tz: string) {
   const naive = new Date(`${dateStr}T${timeStr}:00Z`);
   if (isNaN(naive.getTime())) return null;
-  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  const guess = new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  return new Date(naive.getTime() - tzOffsetMs(guess, tz));
 }
 
 // Vandaag volgens de klok van de salon (YYYY-MM-DD). Gaat mee in de payload naar
