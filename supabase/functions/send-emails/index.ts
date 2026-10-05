@@ -81,13 +81,36 @@ const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.d
 // language — callers pass owner_lang (derived from the salon's country).
 // Fallback nl = the historical behaviour, so old callers are unaffected.
 const oLang=["nl","en","es"].includes(b.owner_lang)?b.owner_lang:"nl";
-// Friendly sender: show the salon's name (falls back to Vellu for our own
-// subscription invoices) and route replies to the salon. A recognisable
-// From name + Reply-To improves trust and inbox placement vs bare noreply@.
-const fromName=(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
+// Friendly sender: show the salon's name and route replies to the salon. A
+// recognisable From name + Reply-To improves trust and inbox placement vs bare
+// noreply@. Dat geldt voor mails die NAMENS de salon naar haar klanten gaan.
+//
+// PLATFORMMAILS (Vellu → eigenaar, over haar eigen abonnement) zijn iets anders.
+// Tot 05-10-2026 liepen die door dezelfde regel: de aanroepers geven salon_name
+// = haar bedrijfsnaam en owner_email = haar adres mee, dus de mail kwam binnen
+// als "<salonnaam> <noreply@vellu.cc>" met haar EIGEN adres als Reply-To, terwijl
+// de tekst zegt "Antwoord gewoon op deze mail". Haar antwoord kwam in haar eigen
+// inbox terecht en nooit bij ons. Deze types gaan daarom altijd uit als Vellu,
+// met ons adres als Reply-To (zelfde als send-source-request).
+const PLATFORM_TYPES=["renewal_reminder","trial_ending","trial_expired","payment_failed","subscription_invoice"];
+const VELLU_REPLY_TO="mirahventures@vellu.cc";
+const isPlatform=PLATFORM_TYPES.includes(type);
+const fromName=isPlatform?"Vellu":(String(b.salon_name||"Vellu").replace(/[<>\r\n"]/g,"").trim()||"Vellu").slice(0,64);
 const fromLine=`${fromName} <${F}>`;
-const replyTo=(String(b.salon_email||b.owner_email||"").trim())||null;
-const send=(to,subject,html)=>sendEmail(to,subject,html,fromLine,replyTo);
+const replyTo=isPlatform?VELLU_REPLY_TO:((String(b.salon_email||b.owner_email||"").trim())||null);
+// rt = afwijkend Reply-To voor één mail (zie ownerReplyFor); weggelaten = replyTo.
+const send=(to,subject,html,rt)=>sendEmail(to,subject,html,fromLine,rt===undefined?replyTo:rt);
+// MELDINGEN AAN DE SALON over een klant (booking_notification,
+// owner_cancellation, waitlist_joined en de salonkopie van prepay_expired)
+// hadden het adres van de salon zelf als Reply-To: wie antwoordde, schreef
+// zichzelf. Een antwoord op zo'n melding is voor de KLANT bedoeld, dus gaat het
+// Reply-To naar het klantadres. Twee uitzonderingen, beide terug naar het
+// salonadres: er is geen bruikbaar klantadres (een afspraak die de salon zelf
+// intikte kan "." als adres hebben; Resend weigert de hele mail op een ongeldig
+// Reply-To), of de ontvanger is een medewerker voor wie klantgegevens uit staan
+// (staff_view_client_contact) — het Reply-To zou haar het adres alsnog geven.
+const clientReply=/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(String(b.client_email||"").trim())?String(b.client_email).trim():null;
+const ownerReplyFor=(em)=>(clientReply&&!(em!==b.owner_email&&b.staff_view_client_contact===false))?clientReply:replyTo;
 const eC=esc(b.client_name),eS=esc(b.salon_name),eSv=esc(b.service_name),eT=esc(b.time),eD=esc(nD),ePh=esc(b.client_phone),eIN=esc(b.invoice_number),eAd=esc(b.salon_address),eKv=esc(b.salon_kvk),eBt=esc(b.salon_btw),eIb=esc(b.salon_iban),eSl=esc(b.salon_slug);
 // Salon accent colour — every salon email is branded with it (falls back to
 // Vellu gold when not provided, e.g. Vellu's own subscription invoice).
@@ -95,6 +118,10 @@ const AC=acOf(b);
 const sCU=safeImgSrc(b.cancel_url);
 const row=(l,r)=>`<tr><td ${cL}>${l}</td><td ${cR}>${r}</td></tr>`;
 const totRow=(l,r)=>`<tr ${gL}><td style="padding:12px 0 4px;font-weight:600;color:${AC};">${l}</td><td style="padding:12px 0 4px;font-weight:600;color:${AC};text-align:right;">${r}</td></tr>`;
+// Regel onder een melding aan de salon: zegt erbij waar een antwoord heen gaat,
+// zodat niemand per ongeluk de klant schrijft. Alleen als het Reply-To voor
+// deze ontvanger ook echt het klantadres is (zie ownerReplyFor).
+const replyHint=(em)=>ownerReplyFor(em)===clientReply&&clientReply?`<p style="color:#888;font-size:12px;text-align:center;margin:16px 0 0;">${txt(oLang,`Antwoord je op deze mail, dan gaat je bericht rechtstreeks naar ${eC}.`,`If you reply to this email, your message goes straight to ${eC}.`,`Si respondes a este correo, tu mensaje llega directamente a ${eC}.`)}</p>`:"";
 // Betaalblok: betaallink (bunq.me/PayPal.Me met bedrag), SEPA-QR + IBAN.
 // Gedeeld door de factuur (type invoice) en Vooruitbetalen (booking_pending_
 // payment / prepay_reminder). Leeg als de salon geen link én geen IBAN heeft.
@@ -164,7 +191,7 @@ const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>
 const eDueO=esc(b.due_text_owner||b.due_text||"");
 // Zelfde zichtbaarheidsregel als _hideContact verderop (die const bestaat hier nog niet).
 const hideC=(em)=>em!==b.owner_email&&b.staff_view_client_contact===false;
-for(const em of rcp){await send(plainText(em),plainText(txt(oLang,`Reservering vervallen: ${b.client_name}`,`Reservation expired: ${b.client_name}`,`Reserva caducada: ${b.client_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Reservering vervallen","Reservation expired","Reserva caducada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> heeft niet vóór ${eDueO} vooruitbetaald. De reservering bij <strong>${eS}</strong> is vervallen en de tijd is weer vrij in je agenda.`,`<strong>${eC}</strong> did not pay in advance before ${eDueO}. The reservation at <strong>${eS}</strong> has expired and the slot is free again in your agenda.`,`<strong>${eC}</strong> no pagó por adelantado antes del ${eDueO}. La reserva en <strong>${eS}</strong> ha caducado y la hora vuelve a estar libre en tu agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!hideC(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}</table></div></div>`);}}
+for(const em of rcp){await send(plainText(em),plainText(txt(oLang,`Reservering vervallen: ${b.client_name}`,`Reservation expired: ${b.client_name}`,`Reserva caducada: ${b.client_name}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Reservering vervallen","Reservation expired","Reserva caducada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> heeft niet vóór ${eDueO} vooruitbetaald. De reservering bij <strong>${eS}</strong> is vervallen en de tijd is weer vrij in je agenda.`,`<strong>${eC}</strong> did not pay in advance before ${eDueO}. The reservation at <strong>${eS}</strong> has expired and the slot is free again in your agenda.`,`<strong>${eC}</strong> no pagó por adelantado antes del ${eDueO}. La reserva en <strong>${eS}</strong> ha caducado y la hora vuelve a estar libre en tu agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!hideC(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}</table></div>${replyHint(em)}</div>`,ownerReplyFor(em));}}
 if(type==="booking_confirmation"){
 // ANNULEERTERMIJN KOMT VAN DE SALON, niet uit een vaste tekst. Hier stond
 // "tot 24 uur van tevoren" hardgecodeerd terwijl cancel-appointment
@@ -193,7 +220,7 @@ const pend=!!b.pending_payment;const eDueO=esc(b.due_text||"");
 const subj=pend?txt(oLang,`Nieuwe reservering (wacht op betaling): ${b.client_name}`,`New reservation (awaiting payment): ${b.client_name}`,`Nueva reserva (pendiente de pago): ${b.client_name}`):txt(oLang,`Nieuwe boeking: ${b.client_name}`,`New booking: ${b.client_name}`,`Nueva reserva: ${b.client_name}`);
 const h2=pend?txt(oLang,"Nieuwe reservering: wacht op betaling","New reservation: awaiting payment","Nueva reserva: pendiente de pago"):txt(oLang,"Nieuwe boeking!","New booking!","¡Nueva reserva!");
 const intro=pend?txt(oLang,`<strong>${eC}</strong> heeft gereserveerd bij <strong>${eS}</strong> en betaalt vooruit, uiterlijk <strong>${eDueO}</strong>. Zet de afspraak in de app op "Betaling ontvangen" zodra het geld binnen is; dan krijgt de klant haar bevestiging. Blijft de betaling uit, dan vervalt de reservering vanzelf en komt de tijd weer vrij.`,`<strong>${eC}</strong> reserved at <strong>${eS}</strong> and pays in advance, by <strong>${eDueO}</strong> at the latest. Mark the appointment as "Payment received" in the app once the money is in; the client then gets her confirmation. If the payment does not arrive, the reservation expires automatically and the slot is released.`,`<strong>${eC}</strong> ha reservado en <strong>${eS}</strong> y paga por adelantado, como muy tarde el <strong>${eDueO}</strong>. Marca la cita como "Pago recibido" en la app en cuanto llegue el dinero; el cliente recibirá entonces su confirmación. Si el pago no llega, la reserva caduca automáticamente y la hora vuelve a quedar libre.`):txt(oLang,`Er is een nieuwe afspraak gemaakt bij <strong>${eS}</strong>`,`A new appointment was booked at <strong>${eS}</strong>`,`Se ha reservado una nueva cita en <strong>${eS}</strong>`);
-for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${h2}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${pend?row(txt(oLang,"Betaling","Payment","Pago"),txt(oLang,`Vooruitbetaling vóór ${eDueO}`,`Prepayment before ${eDueO}`,`Pago por adelantado antes del ${eDueO}`)):""}${_hidePrice(em)?"":totRow(txt(oLang,"Totaal","Total","Total"),fP(b.price))}</table></div></div>`);}}
+for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${h2}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${pend?row(txt(oLang,"Betaling","Payment","Pago"),txt(oLang,`Vooruitbetaling vóór ${eDueO}`,`Prepayment before ${eDueO}`,`Pago por adelantado antes del ${eDueO}`)):""}${_hidePrice(em)?"":totRow(txt(oLang,"Totaal","Total","Total"),fP(b.price))}</table></div>${replyHint(em)}</div>`,ownerReplyFor(em));}}
 // Owner/staff notification that a CLIENT cancelled their own appointment
 // (via the cancel link in their booking email). Fired server-side by the
 // cancel-appointment edge function so it lands even if the client closes
@@ -204,9 +231,27 @@ const rcp=[];if(b.owner_email)rcp.push(b.owner_email);if(b.staff_emails?.length>
 const eR=b.reason?esc(String(b.reason).slice(0,300)):"";
 const reasonRow=eR?`<tr><td ${cL}>${txt(oLang,"Reden","Reason","Motivo")}</td><td ${cR}>${eR}</td></tr>`:"";
 const subj=txt(oLang,`Afspraak geannuleerd: ${b.client_name}`,`Appointment cancelled: ${b.client_name}`,`Cita cancelada: ${b.client_name}`);
-for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;color:#dc2626;">${txt(oLang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> heeft de afspraak bij <strong>${eS}</strong> geannuleerd. Deze tijd is nu weer vrij in je agenda.`,`<strong>${eC}</strong> cancelled their appointment at <strong>${eS}</strong>. This slot is now free again in your agenda.`,`<strong>${eC}</strong> canceló su cita en <strong>${eS}</strong>. Este horario vuelve a estar libre en tu agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${reasonRow}</table></div></div>`);}}
+for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;color:#dc2626;">${txt(oLang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> heeft de afspraak bij <strong>${eS}</strong> geannuleerd. Deze tijd is nu weer vrij in je agenda.`,`<strong>${eC}</strong> cancelled their appointment at <strong>${eS}</strong>. This slot is now free again in your agenda.`,`<strong>${eC}</strong> canceló su cita en <strong>${eS}</strong>. Este horario vuelve a estar libre en tu agenda.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(oLang,"Datum","Date","Fecha"),esc(fmtD(b.date,oLang)))}${row(txt(oLang,"Tijd","Time","Hora"),eT)}${reasonRow}</table></div>${replyHint(em)}</div>`,ownerReplyFor(em));}}
+// Annulering, bericht aan de KLANT. Twee paden sturen dit type:
+//  - de klant zegt zelf af via haar annuleerlink (cancel-appointment, met het
+//    interne geheim): "succesvol geannuleerd", een bevestiging van wat ze deed;
+//  - de SALON annuleert in de agenda (OwnerApp.cancelAppt, ingelogde sessie).
+//    Tot 05-10-2026 kreeg de klant dan dezelfde tekst: iemand die niets had
+//    gedaan las een mail alsof ze zelf had afgezegd.
+// cancelled_by ("salon" / "client") beslist. Ontbreekt die (een browser met een
+// oudere bundel), dan zegt de aanroeper genoeg: alleen de eigenaar-app stuurt
+// dit type met een gebruikers-JWT (callerId); het klantpad kan dat niet, dat
+// komt altijd met het interne geheim.
+// De tekst zegt bewust alleen DAT de salon annuleerde en niet "helaas moeten":
+// eigenaren gebruiken dezelfde knop als een klant telefonisch afzegt.
 if(type==="booking_cancelled"){
-await send(plainText(b.client_email),plainText(txt(lang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")}</h2><p style="color:#666;margin-bottom:28px;">${txt(lang,"Je afspraak is succesvol geannuleerd.","Your appointment has been successfully cancelled.","Tu cita se ha cancelado correctamente.")}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Was gepland op","Was scheduled for","Estaba programada para"),`${esc(b.date)} ${txt(lang,"om","at","a las")} ${eT}`)}</table></div><p style="color:#888;font-size:13px;text-align:center;">${txt(lang,"Wil je opnieuw boeken? Ga naar vellu.cc","Want to rebook? Visit vellu.cc","¿Quieres reservar de nuevo? Visita vellu.cc")}</p></div>`);}
+const bySalon=b.cancelled_by==="salon"||(b.cancelled_by!=="client"&&!!callerId);
+const who=eS?`<strong>${eS}</strong>`:txt(lang,"De salon","The salon","El salón");
+const subj=bySalon&&b.salon_name?txt(lang,`Je afspraak bij ${b.salon_name} is geannuleerd`,`Your appointment at ${b.salon_name} has been cancelled`,`Tu cita en ${b.salon_name} ha sido cancelada`):txt(lang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada");
+const intro=bySalon?txt(lang,`${who} heeft je afspraak geannuleerd. De afspraak hieronder gaat dus niet door.`,`${who} has cancelled your appointment. The appointment below will not take place.`,`${who} ha cancelado tu cita. La cita de abajo no tendrá lugar.`):txt(lang,"Je afspraak is succesvol geannuleerd.","Your appointment has been successfully cancelled.","Tu cita se ha cancelado correctamente.");
+const rebook=b.salon_slug?`<a href="https://vellu.cc/${eSl}" style="display:inline-block;background:${AC};color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:500;">${txt(lang,"Opnieuw boeken","Book again","Reservar de nuevo")}</a>`:`<a href="https://vellu.cc" style="color:${AC};text-decoration:none;font-size:13px;">vellu.cc</a>`;
+const foot=bySalon?`<p style="color:#666;font-size:13px;text-align:center;margin:0 0 16px;">${txt(lang,"Heb je een vraag? Neem gerust contact op met de salon. Een nieuwe afspraak maak je zo weer online:","Any questions? Feel free to contact the salon. You can book a new appointment online any time:","¿Tienes alguna pregunta? Ponte en contacto con el salón. Puedes reservar una nueva cita en línea cuando quieras:")}</p><p style="text-align:center;margin:0;">${rebook}</p>`:`<p style="color:#888;font-size:13px;text-align:center;">${txt(lang,"Wil je opnieuw boeken? Ga naar vellu.cc","Want to rebook? Visit vellu.cc","¿Quieres reservar de nuevo? Visita vellu.cc")}</p>`;
+await send(plainText(b.client_email),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Was gepland op","Was scheduled for","Estaba programada para"),`${eD} ${txt(lang,"om","at","a las")} ${eT}`)}</table></div>${foot}</div>`);}
 if(type==="appointment_updated"){
 const oldDate=b.old_date?esc(fmtD(b.old_date,lang)):"";
 const oldTime=esc(b.old_time||"");
@@ -328,7 +373,7 @@ const daysStr=ds.map(d=>esc(fmtD(d,oLang))).join("<br/>");
 const eNo=b.notes?esc(String(b.notes).slice(0,300)):"";
 const eEm=esc(b.client_email);
 const subj=txt(oLang,`Nieuwe wachtlijst-aanmelding: ${b.client_name}`,`New waitlist request: ${b.client_name}`,`Nueva solicitud de lista de espera: ${b.client_name}`);
-for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Nieuwe wachtlijst-aanmelding","New waitlist request","Nueva solicitud de lista de espera")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`,`<strong>${eC}</strong> quiere unirse a la lista de espera de <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${_hideContact(em)?"":row(txt(oLang,"E-mail","Email","Correo"),eEm)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${b.service_name?row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv):""}${b.staff_name?row(txt(oLang,"Medewerker","Staff","Personal"),esc(b.staff_name)):""}${row(txt(oLang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days",ds.length===1?"Día preferido":"Días preferidos"),daysStr)}${eNo?`<tr><td ${cL}>${txt(oLang,"Notitie","Note","Nota")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div></div>`);}}
+for(const em of rcp){await send(plainText(em),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Nieuwe wachtlijst-aanmelding","New waitlist request","Nueva solicitud de lista de espera")}</h2><p style="color:#666;margin-bottom:28px;">${txt(oLang,`<strong>${eC}</strong> wil op de wachtlijst bij <strong>${eS}</strong>.`,`<strong>${eC}</strong> wants to join the waitlist at <strong>${eS}</strong>.`,`<strong>${eC}</strong> quiere unirse a la lista de espera de <strong>${eS}</strong>.`)}</p><div ${bS.replace('margin-bottom:28px;','')}><table ${tS}>${row(txt(oLang,"Klant","Client","Cliente"),eC)}${_hideContact(em)?"":row(txt(oLang,"E-mail","Email","Correo"),eEm)}${(b.client_phone&&!_hideContact(em))?row(txt(oLang,"Telefoon","Phone","Teléfono"),ePh):""}${b.service_name?row(txt(oLang,"Behandeling","Treatment","Servicio"),eSv):""}${b.staff_name?row(txt(oLang,"Medewerker","Staff","Personal"),esc(b.staff_name)):""}${row(txt(oLang,ds.length===1?"Gewenste dag":"Gewenste dagen",ds.length===1?"Preferred day":"Preferred days",ds.length===1?"Día preferido":"Días preferidos"),daysStr)}${eNo?`<tr><td ${cL}>${txt(oLang,"Notitie","Note","Nota")}</td><td ${cR}>${eNo}</td></tr>`:""}</table></div>${replyHint(em)}</div>`,ownerReplyFor(em));}}
 // Betaling voor het Vellu-abonnement niet gelukt. Ging hier eerder NIETS uit:
 // mollie-webhook logde alleen een regel naar de console, dus de salon zag een
 // laadscherm en hoorde daarna nooit meer iets. Dat kostte een klant op Bonaire

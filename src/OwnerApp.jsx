@@ -6220,10 +6220,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // enig bericht aan de klant, terwijl de instellingen letterlijk beloven dat
   // je altijd kunt annuleren. Annuleren zet de status op 'cancelled' (de rij
   // blijft dus bestaan voor je historie en blijft uitgegrijsd in de agenda
-  // staan) en stuurt dezelfde mail + SMS die de klant krijgt wanneer hij zelf
-  // via de annuleerlink afzegt. Verwijderen blijft bestaan voor FOUTIEVE
-  // invoer: een rij die er nooit had moeten staan, waar de klant niets van
-  // hoeft te weten.
+  // staan) en stuurt hetzelfde mailtype + dezelfde SMS als wanneer de klant
+  // zelf via de annuleerlink afzegt. De mailTEKST is wel anders: met
+  // cancelled_by "salon" leest de klant dat de salon heeft geannuleerd, niet
+  // "je afspraak is succesvol geannuleerd" alsof ze het zelf deed (05-10-2026).
+  // Verwijderen blijft bestaan voor FOUTIEVE invoer: een rij die er nooit had
+  // moeten staan, waar de klant niets van hoeft te weten.
   const cancelAppt = async (raw) => {
     if (processingApptId) return;
     const a = fullAppt(raw);
@@ -6257,6 +6259,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         salon_logo: salonData.logo_url || "",
         // Reply-To, zodat een reactie van de klant bij de salon terechtkomt.
         salon_email: salonData.salon_email || "",
+        // salonData.id is de slug; die maakt de knop "Opnieuw boeken" in de mail.
+        salon_slug: salonData.id || "",
+        // De salon zegt af, niet de klant: de mail zegt dat er dan ook bij.
+        cancelled_by: "salon",
         owner_id: salonData.owner_id,
         lang: clientLang,
       };

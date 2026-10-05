@@ -260,7 +260,10 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # E-mails
 - Automatisch: boekingsbevestiging (klant), melding nieuwe boeking of reservering (salon), herinnering 24 uur vooraf (klant + salon-dagoverzicht), "Afspraak gewijzigd", annuleringsmail, follow-up na het bezoek met reviewlink en stempelstand, vooruitbetaal-mails (betaalverzoek, herinnering, vervallen, bevestiging na ontvangst), terugbetaal-bevestiging, stempelkaart-code, verjaardagsmail, herboek-herinnering, wachtlijst-mails en de factuur (die stuur je zelf).
-- Krijgt niemand mails? Controleer of je salon-e-mailadres klopt in Instellingen. Mails komen van noreply@vellu.cc met jouw salonnaam als afzender en jouw adres als antwoordadres.
+- Krijgt niemand mails? Controleer of je salon-e-mailadres klopt in Instellingen. Mails aan je klanten komen van noreply@vellu.cc met jouw salonnaam als afzender en jouw adres als antwoordadres.
+- Meldingen aan jou over een klant (nieuwe boeking, annulering door de klant, wachtlijst-aanmelding, vervallen reservering), sinds 05-10-2026: antwoord je op zo'n mail, dan gaat je bericht rechtstreeks naar de klant; dat staat ook onderaan de mail. Heeft de klant geen geldig e-mailadres, of ben je medewerker en staan klantgegevens voor jou uit, dan gaat het antwoord naar het adres van de salon.
+- Mails van Vellu zelf over je abonnement of proefperiode (proef loopt af of is afgelopen, jaarabonnement verlengen, betaling mislukt, abonnementsfactuur) komen sinds 05-10-2026 van "Vellu" als afzender, niet meer onder je eigen salonnaam. Antwoord je erop, dan komt je bericht bij Team Vellu terecht (mirahventures@vellu.cc).
+- Annuleer jij als salon een afspraak in de agenda, dan leest de klant in de mail dat de salon de afspraak heeft geannuleerd, met een knop om opnieuw te boeken (sinds 05-10-2026; eerder stond er "je afspraak is succesvol geannuleerd", alsof de klant het zelf had gedaan). Zegt de klant zelf af via de annuleerlink, dan krijgt ze een bevestiging van haar eigen annulering.
 
 # Uiterlijk / stijl (Instellingen → Salon)
 - Merkkleur, logo en omslagfoto stel je in bij Salon. Daar kies je ook de STIJL (het lettertype van je boekingspagina): Klassiek, Modern, Elegant, Bold, Speels of Handgeschreven. Klassiek is de standaard.

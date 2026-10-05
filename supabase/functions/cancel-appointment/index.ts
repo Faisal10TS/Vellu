@@ -151,6 +151,7 @@ async function notifyOwnerCancellation(b: {
   owner_email?: string; staff_email?: string; salon_name?: string;
   salon_accent?: string; salon_logo?: string; lang?: string;
   client_name?: string; client_phone?: string | null; service_name?: string;
+  client_email?: string | null;
   date?: string; time?: string; reason?: string | null;
   staff_view_revenue?: boolean; staff_view_client_contact?: boolean;
   owner_id?: string;
@@ -189,6 +190,9 @@ async function notifyOwnerCancellation(b: {
           staff_view_revenue: b.staff_view_revenue,
           staff_view_client_contact: b.staff_view_client_contact,
           client_name: b.client_name,
+          // Reply-To van deze melding: een antwoord van de salon is voor de
+          // klant bedoeld (send-emails ownerReplyFor), niet voor haar eigen adres.
+          client_email: b.client_email || "",
           client_phone: b.client_phone || null,
           service_name: b.service_name,
           date: b.date,
@@ -229,6 +233,10 @@ async function notifyClientCancellation(b: {
     salon_logo: b.salon_logo || "",
     // Reply-To so the client's cancellation email routes to the salon.
     salon_email: b.salon_email || "",
+    // De klant zegt hier zelf af: de mail bevestigt dat. Annuleert de salon
+    // (OwnerApp.cancelAppt), dan stuurt die "salon" en krijgt de klant een
+    // andere tekst.
+    cancelled_by: "client",
     lang: b.lang || "nl",
   };
   try {
@@ -416,6 +424,7 @@ serve(async (req) => {
       salon_logo: notify.salon_logo,
       lang: notify.lang,
       client_name: appt.client_name,
+      client_email: appt.client_email || null,
       client_phone: appt.client_phone || null,
       service_name: appt.service_name,
       date: appt.date,

@@ -14,6 +14,42 @@
 
 export const RELEASES = [
   {
+    // Review 05-10-2026 (derde blok van die dag, daarom "c"), twee mailfouten.
+    // (1) Mails van Vellu over het abonnement gingen uit onder de salonnaam met
+    // het adres van de eigenaar als antwoordadres: "antwoord gewoon op deze
+    // mail" kwam in haar eigen inbox. (2) Annuleerde de salon, dan las de klant
+    // "je afspraak is succesvol geannuleerd", alsof ze het zelf had gedaan.
+    id: "2026-10-05c",
+    date: "2026-10-05",
+    title: { nl: "E-mails: afzender, antwoordadres en annuleren", en: "Emails: sender, reply address and cancelling", es: "Correos: remitente, dirección de respuesta y cancelaciones" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Annuleer jij een afspraak in de agenda, dan stond in de mail aan de klant dat de afspraak succesvol geannuleerd was, alsof ze dat zelf had gedaan. Er staat nu dat jouw salon de afspraak heeft geannuleerd, met een knop om opnieuw te boeken. Zegt de klant zelf af via haar annuleerlink, dan krijgt ze gewoon de bevestiging van haar eigen annulering.",
+          en: "When you cancel an appointment in the calendar, the email to the client said the appointment was successfully cancelled, as if she had done it herself. It now says your salon cancelled the appointment, with a button to book again. When the client cancels through her own cancel link, she still gets the confirmation of her own cancellation.",
+          es: "Cuando cancelas una cita en la agenda, el correo a la clienta decía que la cita se había cancelado correctamente, como si lo hubiera hecho ella. Ahora dice que tu salón ha cancelado la cita, con un botón para reservar de nuevo. Si la clienta cancela con su propio enlace, recibe como siempre la confirmación de su cancelación.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Meldingen over een klant (nieuwe boeking, annulering, wachtlijst-aanmelding, vervallen reservering): antwoord je op zo'n mail, dan gaat je bericht nu rechtstreeks naar de klant. Eerder kwam je antwoord bij de salon zelf uit. Gaat je antwoord naar de klant, dan staat dat onderaan de mail.",
+          en: "Notifications about a client (new booking, cancellation, waitlist request, expired reservation): when you reply to such an email, your message now goes straight to the client. Before, your reply ended up at the salon itself. When your reply goes to the client, the bottom of the email says so.",
+          es: "Avisos sobre una clienta (nueva reserva, cancelación, solicitud de lista de espera, reserva caducada): si respondes a ese correo, tu mensaje llega ahora directamente a la clienta. Antes la respuesta llegaba al propio salón. Si tu respuesta va a la clienta, lo verás indicado al pie del correo.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Mails van Vellu over je abonnement of proefperiode (proef loopt af, verlengen, betaling mislukt, factuur) kwamen binnen onder de naam van je eigen salon, en een antwoord erop kwam in je eigen inbox terecht. Ze komen nu van Vellu, en je antwoord komt bij ons aan.",
+          en: "Emails from Vellu about your subscription or trial (trial ending, renewal, failed payment, invoice) arrived under your own salon's name, and a reply landed in your own inbox. They now come from Vellu, and your reply reaches us.",
+          es: "Los correos de Vellu sobre tu suscripción o tu prueba (fin de la prueba, renovación, pago fallido, factura) llegaban con el nombre de tu propio salón, y la respuesta acababa en tu propia bandeja. Ahora llegan de Vellu y tu respuesta nos llega a nosotros.",
+        },
+      },
+    ],
+  },
+  {
     // Nazorg op de TTNB-melding van 05-10-2026 (zelfde dag, daarom "b"): alle
     // WhatsApp-knoppen van de SALON naar een klant nagelopen. Nummers zonder
     // landcode kregen altijd +31, het betaalverzoek zei bij een vooruitbetaling
