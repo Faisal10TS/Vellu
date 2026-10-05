@@ -167,14 +167,26 @@ const cm=/^https?:\/\/[^\/?#\s]+\/cancel\/([0-9a-f]{64})$/.exec(String(b.cancel_
 b.cancel_url=null;
 const APPT_TYPES=["booking_confirmation","booking_notification","refund_sent","appointment_updated","invoice","booking_cancelled"];
 if(APPT_TYPES.includes(type)){
+// OVERGANG (05-10-2026): tabbladen die nog de oude app draaien sturen geen
+// appointment_id mee. Dan de jongste afspraak van DEZE salon met precies dat
+// e-mailadres; zonder zo’n afspraak blijft het 400. Niet zwakker dan de nieuwe
+// regel (er moet een afspraak van de salon met dat adres bestaan). Weghalen
+// zodra alle tabbladen herladen zijn (na een paar dagen).
+if(!UUID_RE.test(String(b.appointment_id||""))&&typeof b.client_email==="string"&&b.client_email.includes("@")){
+const old=(await rest(`appointments?owner_id=eq.${enc(salonId)}&client_email=eq.${enc(b.client_email)}&select=id&order=created_at.desc&limit=1`))?.[0];
+if(old)b.appointment_id=old.id;
+}
 if(!UUID_RE.test(String(b.appointment_id||"")))return deny("appointment_id_required",400);
-const ap=(await rest(`appointments?id=eq.${enc(b.appointment_id)}&owner_id=eq.${enc(salonId)}&select=id,client_email,client_name,client_phone,staff_id,staff_assignments,service_breakdown&limit=1`))?.[0];
+const ap=(await rest(`appointments?id=eq.${enc(b.appointment_id)}&owner_id=eq.${enc(salonId)}&select=id,client_email,client_name,client_phone,staff_id,staff_assignments,service_breakdown,service_price&limit=1`))?.[0];
 if(!ap)return deny("appointment_not_found");
 const apStaff=[...new Set([ap.staff_id,...Object.values(ap.staff_assignments||{}),...(Array.isArray(ap.service_breakdown)?ap.service_breakdown.map((p:any)=>p?.staff_id):[])].filter((x:any)=>typeof x==="string"&&x))];
 if(me&&pr.staff_see_all!==true&&!apStaff.includes(me.id))return deny("appointment_not_found");
 b.client_email=ap.client_email||"";
 b.client_name=ap.client_name||"";
 b.client_phone=ap.client_phone||null;
+// Een medewerker zonder zicht op omzet stuurt geen prijs mee (StaffApp); dan het
+// bedrag van de afspraak zelf, anders stond er "Totaal 0,00" in de bevestiging.
+if(b.price===undefined||b.price===null||b.price==="")b.price=ap.service_price;
 if(cm){const tk=await rest(`cancellation_tokens?token=eq.${cm[1]}&appointment_id=eq.${enc(ap.id)}&select=id&limit=1`);if(tk?.length)b.cancel_url=`https://vellu.cc/cancel/${cm[1]}`;}
 // Bedrijfs- en betaalgegevens. Eerst de terugval (het salonprofiel), daarna
 // overschrijven met het extra factuurprofiel, de stylist (regel 12a) of de
@@ -224,6 +236,14 @@ b.owner_email=wantOwner?b.owner_email:null;
 b.staff_emails=staffOut.slice(0,wantOwner?9:10);
 }
 }else if(type==="waitlist_spot_open"){
+// OVERGANG (05-10-2026), zelfde reden als bij appointment_id: de oude app stuurt
+// geen waitlist_id. Dan de zojuist (laatste uur) op notified gezette rij van deze
+// salon met precies dat e-mailadres. Weghalen na een paar dagen.
+if(!UUID_RE.test(String(b.waitlist_id||""))&&typeof b.client_email==="string"&&b.client_email.includes("@")){
+const recent=new Date(Date.now()-60*60*1000).toISOString();
+const old=(await rest(`waitlist?owner_id=eq.${enc(salonId)}&client_email=eq.${enc(b.client_email)}&status=eq.notified&notified_at=gte.${enc(recent)}&select=id&order=notified_at.desc&limit=1`))?.[0];
+if(old)b.waitlist_id=old.id;
+}
 if(!UUID_RE.test(String(b.waitlist_id||"")))return deny("waitlist_id_required",400);
 // notified_at schrijft de app met de klok van het toestel. Een uur speling,
 // zodat een telefoon die achterloopt de klant niet stil overslaat (een klok die

@@ -3016,7 +3016,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             </div>
           )}
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <ThemeToggle />
+            <ThemeToggle lang={lang} />
             <LangToggle lang={lang} setLang={setLang} />
           </div>
         </div>
@@ -4204,7 +4204,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
               {/* Lang Toggle */}
               <div style={{ marginTop: "auto", paddingTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
-                <ThemeToggle />
+                <ThemeToggle lang={lang} />
                 <LangToggle lang={lang} setLang={setLang} />
               </div>
               </div>
@@ -5035,7 +5035,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <FlowGlyph name="left" size={16} />
                   </button>
                 <div style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", right: 12, zIndex: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                  <ThemeToggle />
+                  <ThemeToggle lang={lang} />
                   <LangToggle lang={lang} setLang={setLang} />
                 </div>
               </div>
@@ -5047,8 +5047,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 title={initialSalon.name}
                 subtitle={initialSalon.city}
                 onBack={done ? reset : goBack}
-                right={<div style={{ display: "flex", alignItems: "center", gap: 6 }}><ThemeToggle /><LangToggle lang={lang} setLang={setLang} /></div>}
+                right={<div style={{ display: "flex", alignItems: "center", gap: 6 }}><ThemeToggle lang={lang} /><LangToggle lang={lang} setLang={setLang} /></div>}
                 accent={accent}
+                lang={lang}
               />
             ) : (
               <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid " + c.border }}>

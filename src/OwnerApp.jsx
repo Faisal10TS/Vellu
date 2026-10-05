@@ -1474,7 +1474,20 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         : `${fromDate.toLocaleDateString("en-US")} — ${toDate.toLocaleDateString("en-US")}`;
       return { from: customFrom, to: customTo, label };
     }
-    return periodPreset(period, lang);
+    // "Deze maand", "Dit kwartaal" enz. volgen de klok van de salon: een
+    // salon op Bonaire die om 21:00 een rapport maakt, zat met de
+    // apparaatklok soms al in de volgende dag of maand (RP-19).
+    return periodPreset(period, lang, salonNow(salonData?.country_code));
+  };
+
+  // Telling in de "gedownload"-melding. Staan er kassaverkopen in het rapport,
+  // dan apart genoemd: "12 afspraken" klopte niet als 3 daarvan verkopen waren.
+  const reportCountText = (result) => {
+    const sales = result?.saleCount || 0;
+    const appts = sales > 0 ? (result?.apptCount ?? result?.count ?? 0) : (result?.count ?? 0);
+    if (lang === "nl") return sales > 0 ? `${appts} afspraken, ${sales} kassaverkopen` : `${appts} afspraken`;
+    if (lang === "es") return sales > 0 ? `${appts} citas, ${sales} ventas en caja` : `${appts} citas`;
+    return sales > 0 ? `${appts} appointments, ${sales} till sales` : `${appts} appointments`;
   };
 
   // "" | "pdf" | "xlsx": welk bestand er op dit moment gemaakt wordt.
@@ -1577,14 +1590,14 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         // eigen kleine schrijver — jsPDF komt er niet aan te pas.
         const mod = await import("./reportExcel.js");
         result = mod.downloadRevenueReportXlsx(params);
-        toast.show(lang === "nl" ? `Excel gedownload (${result.count} afspraken)` : lang === "es" ? `Excel descargado (${result.count} citas)` : `Excel downloaded (${result.count} appointments)`);
+        toast.show(lang === "nl" ? `Excel gedownload (${reportCountText(result)})` : lang === "es" ? `Excel descargado (${reportCountText(result)})` : `Excel downloaded (${reportCountText(result)})`);
       } else {
         // Lazy-load jsPDF on demand. First click may take ~1s while the ~400KB
         // chunk downloads; subsequent clicks are instant (browser-cached).
         const mod = await import("./revenueReport.js");
         const _logo = await loadLogoForPdf(salonData);
         result = mod.generateRevenueReportPDF({ ...params, logo: _logo });
-        toast.show(lang === "nl" ? `PDF gedownload (${result.count} afspraken)` : lang === "es" ? `PDF descargado (${result.count} citas)` : `PDF downloaded (${result.count} appointments)`);
+        toast.show(lang === "nl" ? `PDF gedownload (${reportCountText(result)})` : lang === "es" ? `PDF descargado (${reportCountText(result)})` : `PDF downloaded (${reportCountText(result)})`);
       }
     } catch (e) {
       console.error("report error:", e);
@@ -8724,7 +8737,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         return false;
       }
       const movements = mv.data || [];
-      const cashRows = [...(appts || []).filter(a => a.payment_method === "cash" && a.status === "completed"), ...paymentsAsCashRows(pays.data || [], lang)];
+      const cashRows = [...(appts || []).filter(a => a.payment_method === "cash" && a.status === "completed"), ...paymentsAsCashRows(pays.data || [], lang, tzFor(salonData.country_code))];
       if (!movements.length && !cashRows.length) {
         toast.show(lang === "nl" ? "Geen kasboekregels of contante betalingen in deze periode" : lang === "es" ? "Sin movimientos de caja ni pagos en efectivo en este período" : "No cash book lines or cash payments in this period", "error");
         return false;
@@ -10846,7 +10859,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {(salonData.staff || []).length > 0 && (
                   <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
                     <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
-                    {(salonData.staff || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {(salonData.staff || []).filter(s => s.active !== false || s.id === walkinStaff).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 )}
               </div>
@@ -11479,7 +11492,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           c={c}
           accent={accent}
           toast={toast}
-          staffList={salonData.staff || []}
+          staffList={(salonData.staff || []).filter(m => m.active !== false || m.id === rescheduling?.staff_id)}
         />
       )}
       <div style={{
@@ -12413,7 +12426,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         .filter(a => a.payment_method === "cash" && a.status === "completed"),
                       // Klantenrekening: contante (deel)betalingen op open posten
                       // tellen in de la op de dag van ontvangst.
-                      ...paymentsAsCashRows(clientPayments.filter(p => p.paid_on === day), lang),
+                      ...paymentsAsCashRows(clientPayments.filter(p => p.paid_on === day), lang, tzFor(salonData.country_code)),
                     ];
                     return (
                       <div data-kassa-sold style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
@@ -12717,7 +12730,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {(salonData.staff || []).length > 0 && (
                           <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
                             <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
-                            {(salonData.staff || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {(salonData.staff || []).filter(s => s.active !== false || s.id === walkinStaff).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           </select>
                         )}
                         <div style={{ display: "flex", gap: 6 }}>
@@ -18874,9 +18887,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       .eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", fmt(salonNow(salonData.country_code)))
                       .in("status", ["confirmed", "pending_payment"]).or("is_sale.is.null,is_sale.eq.false");
                     const k = komend || 0;
-                    // Een gekoppelde login houdt (nog) toegang: dat moet de eigenaar
-                    // als eerste lezen, niet achteraan de zin.
-                    const msg = (m.user_id ? (lang === "nl" ? "Let op: haar eigen login houdt toegang tot je agenda en klantgegevens tot je haar definitief verwijdert. " : lang === "es" ? "Atención: su propio acceso sigue dando entrada a tu agenda y a los datos de tus clientes hasta que la elimines definitivamente. " : "Note: her own login keeps access to your agenda and client details until you delete her permanently. ") : "")
+                    // Sinds 05-10-2026 sluit inactief ook haar login af (de
+                    // medewerker-policies eisen een actieve rij); bij heractiveren
+                    // werkt dezelfde login weer.
+                    const msg = (m.user_id ? (lang === "nl" ? "Haar eigen login geeft dan geen toegang meer tot je agenda en klantgegevens; na heractiveren werkt die weer. " : lang === "es" ? "Su propio acceso ya no dará entrada a tu agenda ni a los datos de tus clientes; al reactivarla vuelve a funcionar. " : "Her own login will no longer give access to your agenda and client details; it works again once you reactivate her. ") : "")
                       + (lang === "nl"
                       ? `${m.name} deactiveren? Klanten kunnen haar dan niet meer kiezen. Haar afspraken en omzet blijven bewaard en je kunt haar later weer activeren.`
                       : lang === "es"
@@ -21859,7 +21873,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const { data: updatedRows, error } = await supabase.from("profiles").update(updateData).eq("id", salonData.owner_id).select();
                 if (error) {
                   console.error("Save error:", error);
-                  toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+                  // De database weigert twee factuurprofielen met hetzelfde
+                  // voorvoegsel (trigger profiles_invoice_prefix_unique): dan
+                  // zeggen wat er mis is en naar de plek waar het op te lossen is.
+                  if (String(error.message || "").includes("duplicate_invoice_prefix")) {
+                    setSettingsTab("salon");
+                    toast.show(lang === "nl" ? "Twee factuurprofielen hebben hetzelfde voorvoegsel. Geef elk profiel een eigen voorvoegsel (Instellingen, Salon)." : lang === "es" ? "Dos perfiles de factura tienen el mismo prefijo. Da a cada perfil su propio prefijo (Ajustes, Salón)." : "Two invoice profiles share the same prefix. Give each profile its own prefix (Settings, Salon).", "error");
+                  } else {
+                    toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+                  }
                 } else if (!updatedRows || updatedRows.length === 0) {
                   console.error("Save: no rows updated");
                   toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
@@ -22008,7 +22030,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, staff_id: e.target.value } : r) }))}
                             style={{ fontSize: 12 }}>
                             <option value="" style={{ background: c.selectBg }}>{t.anyStaff}</option>
-                            {(salonData.staff || []).map(m => <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>)}
+                            {(salonData.staff || []).filter(m => m.active !== false || m.id === row.staff_id).map(m => <option key={m.id} value={m.id} style={{ background: c.selectBg }}>{m.name}</option>)}
                           </select>
                         )}
                       </div>

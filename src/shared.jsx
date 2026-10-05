@@ -3475,7 +3475,9 @@ const planMatrix = (lang) => {
       [L("Middagpauze & pauze tussen afspraken", "Lunch break & buffer between appointments", "Pausa de mediodía y margen entre citas"), true, true],
       [L("Instelbare annuleringstermijn", "Custom cancellation deadline", "Plazo de cancelación a tu medida"), true, true],
       [L("No-show-blokkade", "No-show blocking", "Bloqueo por inasistencia"), true, true],
-      [L("Google Agenda-koppeling & agenda-feed (iCal)", "Google Calendar sync & calendar feed (iCal)", "Sincronización con Google Calendar y feed de calendario (iCal)"), true, true],
+      // De Google Agenda-koppeling staat sinds 05-10-2026 uit; de agenda-feed
+      // werkt ook in Google Agenda (abonneren via URL).
+      [L("Agenda in je telefoon (iCal, ook Google Agenda)", "Calendar on your phone (iCal, also Google Calendar)", "Calendario en tu teléfono (iCal, también Google Calendar)"), true, true],
     ]},
     { group: L("Communicatie", "Communication", "Comunicación"), rows: [
       [L("Bevestigings- & herinneringsmails", "Confirmation & reminder emails", "Correos de confirmación y recordatorio"), true, true],

@@ -55,7 +55,10 @@ function tzOffsetMs(at: Date, tz: string) {
 function localToUtc(dateStr: string, timeStr: string, tz: string) {
   const naive = new Date(`${dateStr}T${timeStr}:00Z`);
   if (isNaN(naive.getTime())) return null;
-  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  // Twee rondes, gelijk aan src/shared.jsx en send-reminders: met één ronde lag
+  // 01:00-02:00 op de wisselnacht van de zomertijd een uur verkeerd.
+  const guess = new Date(naive.getTime() - tzOffsetMs(naive, tz));
+  return new Date(naive.getTime() - tzOffsetMs(guess, tz));
 }
 // Spiegelt shared.jsx CURRENCIES. CW/SX = Caribische gulden; Vellu toont de
 // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026).

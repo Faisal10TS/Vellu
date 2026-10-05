@@ -461,7 +461,7 @@ as $$
          coalesce(p.staff_view_revenue, true),
          coalesce(p.staff_view_client_contact, true)
     from public.profiles p
-   where p.id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid())
+   where p.id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false)
      and (p_owner is null or p.id = p_owner)
 $$;
 
@@ -474,19 +474,19 @@ drop policy if exists staff_read_appointments_when_allowed on public.appointment
 create policy staff_read_appointments_when_allowed on public.appointments
   for select to authenticated
   using (
-    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid()))
+    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
     and (
       (owner_id in (select f.owner_id from public.staff_salon_flags() f where f.view_revenue and f.view_contact))
-      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid()))
+      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
     )
     and (
       (owner_id in (select f.owner_id from public.staff_salon_flags() f where f.see_all))
-      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid()))
+      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
       or (exists (select 1 from jsonb_each_text(coalesce(appointments.staff_assignments, '{}'::jsonb)) v(key, value)
-                   where v.value in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid())))
+                   where v.value in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false)))
       or (exists (select 1 from jsonb_array_elements(
                     case when jsonb_typeof(appointments.service_breakdown) = 'array' then appointments.service_breakdown else '[]'::jsonb end) e(value)
-                   where (e.value ->> 'staff_id') in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid())))
+                   where (e.value ->> 'staff_id') in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false)))
       or ((staff_id is null)
           and (coalesce(staff_assignments, '{}'::jsonb) = '{}'::jsonb)
           and (not exists (select 1 from jsonb_array_elements(
@@ -499,15 +499,15 @@ drop policy if exists "Staff can update their salon appointments" on public.appo
 create policy "Staff can update their salon appointments" on public.appointments
   for update to authenticated
   using (
-    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid()))
+    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
     and (
       (owner_id in (select f.owner_id from public.staff_salon_flags() f where f.see_all))
-      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid()))
+      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
       or (exists (select 1 from jsonb_each_text(coalesce(appointments.staff_assignments, '{}'::jsonb)) v(key, value)
-                   where v.value in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid())))
+                   where v.value in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false)))
       or (exists (select 1 from jsonb_array_elements(
                     case when jsonb_typeof(appointments.service_breakdown) = 'array' then appointments.service_breakdown else '[]'::jsonb end) e(value)
-                   where (e.value ->> 'staff_id') in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid())))
+                   where (e.value ->> 'staff_id') in (select sm.id::text from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false)))
       or ((staff_id is null)
           and (coalesce(staff_assignments, '{}'::jsonb) = '{}'::jsonb)
           and (not exists (select 1 from jsonb_array_elements(
@@ -520,11 +520,11 @@ drop policy if exists "Staff can insert salon appointments" on public.appointmen
 create policy "Staff can insert salon appointments" on public.appointments
   for insert to authenticated
   with check (
-    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid()))
+    (owner_id in (select sm.owner_id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
     and (
       (owner_id in (select f.owner_id from public.staff_salon_flags() f where f.see_all))
       or (staff_id is null)
-      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid()))
+      or (staff_id in (select sm.id from public.staff_members sm where sm.user_id = auth.uid() and sm.active is not false))
     )
   );
 
@@ -533,7 +533,7 @@ create policy staff_read_manual_clients_when_allowed on public.manual_clients
   for select to authenticated
   using (
     (exists (select 1 from public.staff_members sm
-              where sm.user_id = auth.uid() and sm.owner_id = manual_clients.owner_id))
+              where sm.user_id = auth.uid() and sm.active is not false and sm.owner_id = manual_clients.owner_id))
     and (owner_id in (select f.owner_id from public.staff_salon_flags() f where f.view_contact))
     and (exists (select 1 from public.appointments a
                   where a.owner_id = manual_clients.owner_id
@@ -909,14 +909,14 @@ create policy staff_read_own_day_overrides on public.staff_day_overrides
   for select to authenticated
   using (exists (select 1 from public.staff_members sm
                   where sm.id = staff_day_overrides.staff_id
-                    and sm.user_id = auth.uid()));
+                    and sm.user_id = auth.uid() and sm.active is not false));
 
 drop policy if exists "Staff update own blocks" on public.staff_day_overrides;
 create policy "Staff update own blocks" on public.staff_day_overrides
   for update to authenticated
   using (exists (select 1 from public.staff_members sm
                   where sm.id = staff_day_overrides.staff_id
-                    and sm.user_id = auth.uid()
+                    and sm.user_id = auth.uid() and sm.active is not false
                     and sm.owner_id = staff_day_overrides.owner_id))
   with check (exists (select 1 from public.staff_members sm
                        where sm.id = staff_day_overrides.staff_id
@@ -970,7 +970,7 @@ create or replace view public.public_salons as
     subscription_status,
     created_at,
         CASE WHEN COALESCE(is_demo, false) THEN NULL::text ELSE referral_code END AS referral_code,
-    payment_link IS NOT NULL OR iban IS NOT NULL AS payment_configured,
+    NULLIF(btrim(payment_link), '') IS NOT NULL OR NULLIF(btrim(iban), '') IS NOT NULL AS payment_configured,
     ( SELECT COALESCE(jsonb_agg(c.value), '[]'::jsonb) AS "coalesce"
            FROM jsonb_array_elements(COALESCE(profiles.discount_codes, '[]'::jsonb)) c(value)
           WHERE ((c.value ->> 'active'::text)::boolean) IS TRUE AND (c.value ->> 'source'::text) IS DISTINCT FROM 'birthday'::text) AS discount_codes,
@@ -1513,6 +1513,13 @@ begin
      or new.invite_expires_at is distinct from old.invite_expires_at then
     raise exception 'staff_members: uitnodigingen maakt alleen Vellu aan'
       using errcode = '42501';
+  end if;
+
+  -- Een uitnodiging hoort bij één adres en een actief teamlid: verandert het
+  -- e-mailadres of zet de eigenaar haar op inactief, dan vervalt de link (O7-07).
+  if new.email is distinct from old.email or new.active is false then
+    new.invite_token_hash := null;
+    new.invite_expires_at := null;
   end if;
 
   -- De eigenaar (ook op haar eigen medewerker-rij, user_id = owner_id).

@@ -99,7 +99,13 @@ serve(async () => {
       .from("payment_events")
       .select("mollie_payment_id, event_type")
       .in("mollie_payment_id", ids)
-      .or("event_type.like.first.%,event_type.like.oneoff.%")
+      // Alleen echte eindstanden. Een "first.chargeback"/"oneoff.refund"-rij is
+      // al verwerkt zodra hij er staat en mag een nog onverwerkte first.paid niet
+      // als "klaar" laten gelden.
+      .in("event_type", [
+        "first.paid", "first.failed", "first.expired", "first.canceled",
+        "oneoff.paid", "oneoff.failed", "oneoff.expired", "oneoff.canceled",
+      ])
       .not("processed_at", "is", null);
     if (e2) throw e2;
 

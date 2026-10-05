@@ -123,13 +123,14 @@ serve(async (req) => {
       const lang = ["nl", "en", "es"].includes(body.lang) ? body.lang : "nl";
       if (!staffId) return reply(400, { error: "missing_fields" });
       const { data: row, error: rowErr } = await supabase.from("staff_members")
-        .select("id, owner_id, name, email, user_id")
+        .select("id, owner_id, name, email, user_id, active")
         .eq("id", staffId)
         .maybeSingle();
       if (rowErr) return reply(500, { error: "lookup_failed" });
       if (!row || row.owner_id !== callerId) return reply(403, { error: "forbidden" });
       const inviteEmail = String(row.email || "").trim().toLowerCase();
-      if (!inviteEmail || row.user_id) return reply(400, { error: "not_invitable" });
+      // Een inactief teamlid krijgt geen uitnodiging: inactief = geen toegang.
+      if (!inviteEmail || row.user_id || row.active === false) return reply(400, { error: "not_invitable" });
 
       // Daglimiet per salon: elke uitnodiging is een Vellu-mail met de salonnaam
       // erin, naar een adres dat de eigenaar zelf invult.
@@ -196,13 +197,15 @@ serve(async (req) => {
     // account komt. Tot 05-10-2026 werd het account eerst aangemaakt en bleef
     // het bij een verkeerde staff_id als wees achter (e-mailadres "bezet").
     const { data: staffRow, error: staffErr } = await supabase.from("staff_members")
-      .select("id, user_id")
+      .select("id, user_id, active")
       .eq("id", staff_id)
       .eq("owner_id", owner_id)
       .maybeSingle();
     if (staffErr) return reply(500, { error: "lookup_failed" });
     if (!staffRow) return reply(403, { error: "forbidden" });
     if (staffRow.user_id) return reply(409, { error: "already_linked" });
+    // Geen login voor een inactief teamlid (zelfde regel als de uitnodiging).
+    if (staffRow.active === false) return reply(400, { error: "not_invitable" });
     // Professional-functie; de app toont dit blok niet aan Starter-salons.
     const { data: ownerProfile } = await supabase.from("profiles").select("plan").eq("id", owner_id).maybeSingle();
     if (ownerProfile?.plan === "starter") return reply(403, { error: "plan_required" });

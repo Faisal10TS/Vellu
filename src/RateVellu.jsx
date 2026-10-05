@@ -91,7 +91,9 @@ export default function RateVelluPage() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
   const T = TXT[lang || "en"];
-  useSEO({ title: lang === "en" ? "Rate Vellu" : "Beoordeel Vellu", description: T.sub, url: "https://vellu.cc/beoordeel" });
+  // Geen url: /beoordeel bestaat alleen met een persoonlijk token; een
+  // canonieke link naar de kale /beoordeel wees naar een pagina die niet bestaat.
+  useSEO({ title: lang === "en" ? "Rate Vellu" : "Beoordeel Vellu", description: T.sub });
 
   useEffect(() => {
     let off = false;

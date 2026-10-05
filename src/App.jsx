@@ -915,7 +915,9 @@ function SalonRoute({ lang, setLang }) {
     title: salon ? `${salon.name} | Vellu` : undefined,
     description: salon ? `${lang === "nl" ? "Boek een afspraak bij" : lang === "es" ? "Reserva una cita en" : "Book an appointment at"} ${salon.name}${salon.city ? ` in ${salon.city}` : ""}. ${lang === "nl" ? "Online boeken, geen commissie." : lang === "es" ? "Reserva online, sin comisión." : "Book online, no commission."}` : undefined,
     ogImage: salon?.cover_image_url || salon?.logo_url || undefined,
-    url: `https://vellu.cc/${slug}`
+    // De canonieke link is altijd de echte slug, ook als de pagina via een
+    // oude of anders geschreven link werd geopend.
+    url: `https://vellu.cc/${salon?.slug || slug}`
   });
 
   if (loading) return (
