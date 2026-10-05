@@ -6,12 +6,12 @@ import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
-  compressImage, sendEmails, sendSMS, ACCENT,
+  compressImage, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppClientBookedMsg, getWhatsAppReminderMsg,
-  getToday as deviceNow, fmt, parseDate, getDays, salonNow,
+  getToday as deviceNow, fmt, parseDate, getDays, salonNow, tzFor, localToUtc, fetchAllRows,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, ownerLangFor, Linkify, readableAccent, onAccentInk, blockAppliesOn
+  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, Linkify, readableAccent, onAccentInk, blockAppliesOn
 } from "./shared.jsx";
 
 // Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
@@ -165,6 +165,8 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
   const [reviewError, setReviewError] = useState("");
   const [reqEmail, setReqEmail] = useState("");
   const [reqState, setReqState] = useState("idle"); // idle | sending | sent | error
+  // Sterren als radiogroep: pijltjestoetsen verplaatsen de focus mee.
+  const starRefs = useRef([]);
 
   const requestLink = async () => {
     const email = reqEmail.trim();
@@ -281,10 +283,33 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
   return (
     <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 20, padding: 16, textAlign: "left" }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>{t.writeReview}</div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        {[1,2,3,4,5].map(s => (
-          <span key={s} onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} style={{ fontSize: 26, cursor: "pointer", color: s <= (hoverRating || rating) ? accent : c.textMuted, transition: "all 0.15s", transform: s <= (hoverRating || rating) ? "scale(1.1)" : "none" }}>★</span>
-        ))}
+      {/* Sterren als echte radiogroep (toetsenbord + schermlezer): pijltjes
+          verschuiven de keuze, Home/End springen naar 1/5, Spatie/Enter kiest.
+          Inline SVG i.p.v. het sterteken, dat iOS als emoji kan tekenen. */}
+      <div role="radiogroup" aria-label={lang === "nl" ? "Beoordeling" : lang === "es" ? "Valoración" : "Rating"} style={{ display: "flex", gap: 2, marginBottom: 12 }}>
+        {[1,2,3,4,5].map(s => {
+          const on = s <= (hoverRating || rating);
+          const pick = (n) => { setRating(n); starRefs.current[n - 1]?.focus(); };
+          return (
+            <button key={s} type="button" role="radio" aria-checked={rating === s}
+              aria-label={lang === "nl" ? `${s} ${s === 1 ? "ster" : "sterren"}` : lang === "es" ? `${s} ${s === 1 ? "estrella" : "estrellas"}` : `${s} ${s === 1 ? "star" : "stars"}`}
+              tabIndex={(rating || 1) === s ? 0 : -1}
+              ref={el => { starRefs.current[s - 1] = el; }}
+              onClick={() => setRating(s)}
+              onKeyDown={e => {
+                if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); pick(Math.min(5, s + 1)); }
+                else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); pick(Math.max(1, s - 1)); }
+                else if (e.key === "Home") { e.preventDefault(); pick(1); }
+                else if (e.key === "End") { e.preventDefault(); pick(5); }
+              }}
+              onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)}
+              style={{ background: "none", border: "none", padding: 4, margin: 0, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 36, minHeight: 36, transition: "transform 0.15s", transform: on ? "scale(1.1)" : "none" }}>
+              <svg width={26} height={26} viewBox="0 0 20 20" fill={on ? accent : c.textMuted} aria-hidden="true">
+                <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+              </svg>
+            </button>
+          );
+        })}
       </div>
       <textarea className="input-field" placeholder={t.reviewComment} value={comment} maxLength={1000} onChange={e => setComment(e.target.value.slice(0, 1000))}
         style={{ minHeight: 70, resize: "vertical", marginBottom: 10, fontSize: 12 }} />
@@ -418,10 +443,18 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
     : `https://vellu.cc/${salon.id}`;
   const shareText = lang === "nl"
     ? `Boek bij ${salon.name} via Vellu:`
-    : `Book at ${salon.name} via Vellu:`;
+    : lang === "es"
+      ? `Reserva en ${salon.name} con Vellu:`
+      : `Book at ${salon.name} via Vellu:`;
+  // Het popover hangt via een portal aan <body> met position:fixed: binnen de
+  // hero (overflow:hidden) werd het op mobiel afgesneden en viel WhatsApp weg.
+  // De plek rekenen we uit de knop bij het openen.
+  const popRef = useRef(null);
+  const [popPos, setPopPos] = useState(null);
 
   const openNativeOrPopover = async (e) => {
     e.stopPropagation();
+    const btn = e.currentTarget;
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
         await navigator.share({ title: salon.name, text: shareText, url });
@@ -431,6 +464,12 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
         // they still have a way to share.
       }
     }
+    try {
+      const r = btn.getBoundingClientRect();
+      const w = 240;
+      const vw = window.innerWidth || 360;
+      setPopPos({ top: r.bottom + 8, left: Math.max(8, Math.min(r.left + r.width / 2 - w / 2, vw - w - 8)) });
+    } catch { setPopPos(null); }
     setOpen(o => !o);
   };
 
@@ -456,14 +495,21 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
     setOpen(false);
   };
 
-  // Close the popover when the user clicks elsewhere.
+  // Close the popover when the user clicks elsewhere. Het popover staat vast
+  // (position:fixed) op de plek van de knop, dus bij scrollen of draaien van
+  // het scherm sluiten we het ook — anders zweeft het los van de knop.
   useEffect(() => {
     if (!open) return;
-    const onDoc = () => setOpen(false);
+    const onDoc = (e) => { if (popRef.current && popRef.current.contains(e.target)) return; setOpen(false); };
+    const onMove = () => setOpen(false);
     // setTimeout so the click that opened it doesn't immediately close it.
     const t = setTimeout(() => document.addEventListener("click", onDoc), 0);
-    return () => { clearTimeout(t); document.removeEventListener("click", onDoc); };
+    // capture: ook een scrollende binnenkolom (desktop) telt mee.
+    document.addEventListener("scroll", onMove, { capture: true, passive: true });
+    window.addEventListener("resize", onMove);
+    return () => { clearTimeout(t); document.removeEventListener("click", onDoc); document.removeEventListener("scroll", onMove, { capture: true }); window.removeEventListener("resize", onMove); };
   }, [open, setOpen]);
+  const portalIfPlaced = (node) => (popPos && typeof document !== "undefined" ? createPortal(node, document.body) : node);
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -489,16 +535,20 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
           ? (lang === "nl" ? "Deel" : lang === "es" ? "Compartir" : "Share")
           : (lang === "nl" ? "Deel deze salon" : lang === "es" ? "Compartir este salón" : "Share this salon")}
       </button>
-      {open && (
+      {open && portalIfPlaced(
         <div
+          ref={popRef}
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: "absolute", top: 52, left: "50%", transform: "translateX(-50%)", minWidth: 240,
+            ...(popPos
+              ? { position: "fixed", top: popPos.top, left: popPos.left, zIndex: 1000 }
+              : { position: "absolute", top: 52, left: "50%", transform: "translateX(-50%)", zIndex: 6 }),
+            minWidth: 240,
             background: "#fff", color: "#1a1a1a",
             border: "1px solid rgba(0,0,0,0.08)",
             borderRadius: 14, padding: 6,
             boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-            fontFamily: "var(--body-font, 'Jost', sans-serif)", zIndex: 6,
+            fontFamily: "var(--body-font, 'Jost', sans-serif)",
           }}
         >
           <button
@@ -512,8 +562,8 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
-            <NavIcon name="copy" size={14} color="currentColor" />
-            <span style={{ flex: 1 }}>{copied ? (lang === "nl" ? "✓ Gekopieerd" : lang === "es" ? "✓ Copiado" : "✓ Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}</span>
+            <NavIcon name={copied ? "check" : "copy"} size={14} color="currentColor" />
+            <span style={{ flex: 1 }}>{copied ? (lang === "nl" ? "Gekopieerd" : lang === "es" ? "Copiado" : "Copied") : (lang === "nl" ? "Kopieer link" : lang === "es" ? "Copiar enlace" : "Copy link")}</span>
           </button>
           <button
             onClick={openWhatsApp}
@@ -538,7 +588,20 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
 }
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
-function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = false }) {
+function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false }) {
+  // Teamsalon met 2+ medewerkers: book-appointment eist per dienst een
+  // medewerker (staff_required). Een dienst die niemand in het team uitvoert,
+  // kan dus nooit geboekt worden — die laten we op de hele pagina weg, in
+  // plaats van de klant alles te laten invullen en pas bij Bevestigen te laten
+  // stranden. Zelfde regel als staffEligibleForService hieronder (geen
+  // dienstenlijst = doet alles). Verder blijft het salonobject ongewijzigd.
+  const initialSalon = useMemo(() => {
+    const staff = salonProp.staff || [];
+    if (salonProp.account_type !== "team" || staff.length <= 1) return salonProp;
+    const all = salonProp.services || [];
+    const services = all.filter(s => staff.some(m => !m.service_ids || m.service_ids.length === 0 || m.service_ids.includes(s.id)));
+    return services.length === all.length ? salonProp : { ...salonProp, services };
+  }, [salonProp]);
   const { colors: themeC, theme, set: setThemeMode } = useTheme();
   // Thema bij het openen = keuze van de salon (Instellingen → Salon → Stijl):
   // "light"/"dark" vast, "auto" volgt het apparaat. Een Bonaire-salon vroeg
@@ -712,6 +775,14 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const hasAnyLocation = (initialSalon.locations || []).length > 0;
   const goToStep = (s) => {
     if (s === 2) setSlotsRefreshKey(k => k + 1);
+    // Een gekozen tijd die intussen niet meer kan (andere dienst, stylist of
+    // extra's sinds de keuze) gaat niet mee naar de gegevens-/bevestigstap:
+    // wissen en terug naar de tijdkeuze, anders weigert de server pas bij
+    // Bevestigen (outside_hours / slot_conflict).
+    if (s >= 2 && time && !isChosenTimeValid(time)) {
+      setTime(null);
+      if (s > 2) { setSlotsRefreshKey(k => k + 1); setStep(2); return; }
+    }
     setStep(s);
   };
   const goBack = () => {
@@ -722,6 +793,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   };
   // Multi-service state: array of { service, variant, extras: [], staff: null }
   const [selectedServices, setSelectedServices] = useState([]);
+  // Stylist van wie de klant op "Boek" tikte (teamkaart): diensten die zij doet
+  // krijgen haar meteen als medewerker. null = geen voorkeur meegegeven.
+  const [preferredStaff, setPreferredStaff] = useState(null);
   const [activeCategory, setActiveCategory] = useState("all");
   
   // Business hours: ALWAYS the salon's own (profile) hours. Locations are
@@ -731,7 +805,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // and book-appointment validates against profile hours, so client and
   // server disagreed. Re-introduce the preference only WITH an editor.
   const activeHours = initialSalon.business_hours || DEFAULT_HOURS;
-  const activeBreakMinutes = selectedLocation?.break_minutes ?? initialSalon.break_minutes ?? 0;
+  // Pauze tussen afspraken: ook ALTIJD die van de salon zelf. Een vestiging
+  // wordt aangemaakt met break_minutes 0 en heeft geen editor; met één vestiging
+  // (automatisch gekozen) won die 0 het van de salonpauze (My Whims 10,
+  // Honeysets 30), terwijl book-appointment salon.break_minutes toetst — de
+  // pagina bood dan het slot direct na een afspraak aan en de server weigerde.
+  const activeBreakMinutes = parseInt(initialSalon.break_minutes || 0) || 0;
   
   // Day override helpers (blocked/exception days)
   const dayOverrides = initialSalon.day_overrides || {};
@@ -752,27 +831,35 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (override.staff_id) return false;
     return true;
   };
-  const isTimeBlockedByOverride = (dateStr, timeStr) => {
-    // Legacy salon-wide time block stored on profiles.day_overrides.
+  // Salonbrede tijdblokkades van één dag als minutenvensters [start, end).
+  // getAvailableTimes legt de HELE boeking [start, start + duur) ertegen, net
+  // als book-appointment (stap 9 en 9b): eerst toetsten we alleen de begintijd,
+  // waardoor een behandeling van 90 min om 11:00 tegen een blokkade van
+  // 11:30-13:30 werd aangeboden en pas bij Bevestigen als slot_blocked strandde.
+  // Twee bronnen:
+  //  - rijen in staff_day_overrides zonder medewerker en zonder dienst (ook
+  //    meerdere per dag, bv. 10-11 én 14-15);
+  //  - de oude JSON-blokkade op profiles.day_overrides — zonder medewerker, óf
+  //    met een medewerker die in déze boeking gekozen is (bookingStaffIds): de
+  //    server legt zo'n blokkade dan ook over de hele boeking.
+  // Dienst-specifieke blokkades gelden niet salon-breed — die worden per
+  // dienst-deelvenster getoetst (svcBlockHits in getAvailableTimes).
+  const salonTimeBlocksOn = (dateStr, bookingStaffIds = []) => {
+    const toM = (hm) => { const [h, m] = String(hm || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+    const out = [];
     const override = dayOverrides[dateStr];
-    if (override && override.type === "blocked" && !override.staff_id
+    if (override && override.type === "blocked"
         && override.block_time_start && override.block_time_end
-        && timeStr >= override.block_time_start && timeStr < override.block_time_end) {
-      return true;
+        && (!override.staff_id || bookingStaffIds.includes(override.staff_id))) {
+      out.push({ start: toM(override.block_time_start), end: toM(override.block_time_end) });
     }
-    // New multi-block model: rows in staff_day_overrides with staff_id=null
-    // are salon-wide time blocks. Iterate through every match on this date
-    // so multiple windows (e.g. 10-11 AND 14-15) all take effect.
     for (const b of initialSalon.staff_blocks || []) {
       if (!blockAppliesOn(b, dateStr)) continue;
-      if (b.staff_id) continue;
-      // Dienst-specifieke blokkades gelden niet salon-breed — die worden per
-      // dienst in de slot-berekening getoetst (getAvailableTimes).
-      if (b.service_id) continue;
+      if (b.staff_id || b.service_id) continue;
       if (!b.block_time_start || !b.block_time_end) continue;
-      if (timeStr >= b.block_time_start && timeStr < b.block_time_end) return true;
+      out.push({ start: toM(b.block_time_start), end: toM(b.block_time_end) });
     }
-    return false;
+    return out;
   };
   // ── Exceptions (extra open days) ──
   // Two sources, merged: the legacy profiles.day_overrides JSON (at most ONE
@@ -1027,6 +1114,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // Vooruitbetalen: book-appointment geeft bedrag, termijn en betaalgegevens
   // terug (result.payment); het scherm na het boeken toont ze dan meteen.
   const [prepayInfo, setPrepayInfo] = useState(null);
+  // Id van de zojuist geboekte afspraak (result.appointment_id), voor het
+  // scherm na het boeken — o.a. als vaste UID in het .ics-agendabestand.
+  const [bookedAppointmentId, setBookedAppointmentId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorToast, setErrorToast] = useState("");
   const [gallery, setGallery] = useState(null);
@@ -1115,12 +1205,38 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // over zodra het eerstvolgende slot niet vandaag was (TTNB, 25-09-2026; op
   // Bloom viel het nooit op omdat daar altijd vandaag nog plek is). De knop
   // parkeert de keuze daarom hier; dit effect staat NÁ het wis-effect en zet de
-  // tijd in dezelfde render-ronde terug zodra de dag is overgenomen.
+  // tijd terug zodra de dag is overgenomen.
+  // De kaart rekent op de vensterbrede boekingen (get_booked_slots_range);
+  // vóór we de tijd overnemen toetsen we hem nog één keer tegen de verse
+  // boekingen van díe dag (get_booked_slots, dezelfde bron als de tijdlijst).
+  // Intussen bezet? Dan geen tijd zetten en het venster opnieuw laden, zodat
+  // de kaart het volgende echt vrije slot toont.
   const [pendingPick, setPendingPick] = useState(null);
   useEffect(() => {
     if (!pendingPick || pendingPick.date !== date) return;
-    setTime(pendingPick.time);
-    setPendingPick(null);
+    const pick = pendingPick;
+    let cancelled = false;
+    (async () => {
+      let booked = null;
+      try {
+        const { data, error } = await supabase.rpc("get_booked_slots", {
+          p_slug: initialSalon.id,
+          p_date: pick.date,
+          p_location_id: selectedLocation?.id || null,
+        });
+        if (!error) booked = data || [];
+      } catch { /* netwerkfout: val terug op de vensterdata */ }
+      if (cancelled) return;
+      if (!booked) booked = rangeBooked[pick.date] || [];
+      const ok = getAvailableTimes(pick.date).includes(pick.time) && !isTimeSlotBooked(pick.time, booked);
+      if (ok) setTime(pick.time);
+      else setSlotsRefreshKey(k => k + 1);
+      setPendingPick(null);
+    })();
+    return () => { cancelled = true; };
+    // De hulpfuncties ontstaan elke render opnieuw; de trigger is de keuze
+    // zelf plus de dag die daarbij hoort.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPick, date]);
   const isScrollingToTab = useRef(false);
   const emailLookupRef = useRef(0);
@@ -1197,13 +1313,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const scrollLeft = activeBtn.offsetLeft - bar.offsetWidth / 2 + activeBtn.offsetWidth / 2;
     bar.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
   }, [profileTab]);
-  const days = getDays(windowDays);
+  // Datumstrip op de klok van de SALON (getToday = salonNow): met de
+  // apparaatklok begon de strip voor een NL-bezoeker van een Bonaire-salon na
+  // middernacht al bij "morgen" en viel de laatste vensterdag weg.
+  const days = getDays(windowDays, getToday());
   // De maanden die in het venster vallen, voor de sprongbalk. Het jaartal komt
   // er alleen bij als het venster over de jaargrens loopt — anders is
   // "januari" dubbelzinnig.
   const monthsInWindow = useMemo(() => {
     const out = [];
-    for (const d of getDays(windowDays)) {
+    for (const d of getDays(windowDays, getToday())) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!out.some(m => m.key === key)) out.push({ key, month: d.getMonth(), year: d.getFullYear() });
     }
@@ -1215,7 +1334,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // de labels vertaalden altijd al mee), maar we zetten in de array wat de
     // berekening écht leest. MON is een verwijzing naar één van drie constanten
     // uit shared.jsx — geen object dat elke render opnieuw ontstaat — dus dit
-    // hertriggert niet vaker dan bij een taalwissel.
+    // hertriggert niet vaker dan bij een taalwissel. getToday (salonklok)
+    // ontstaat elke render opnieuw en hoort er daarom niet in; de maandlijst
+    // verandert pas bij een nieuwe dag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowDays, MON]);
   // Welke maand de balk oplicht: wat de klant zelf aanklikte, anders de maand
   // van de gekozen datum, anders de eerste maand van het venster.
@@ -1275,7 +1397,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     : (initialSalon.booking_policy_en || initialSalon.booking_policy || "");
 
   // Check if form is complete
-  const phoneValid = !initialSalon.phone_required || form.phone.length >= 6;
+  // Zelfde regel als book-appointment: een ingevuld nummer telt minstens 6
+  // cijfers (spaties, + en streepjes tellen niet mee; "abc" of zes spaties is
+  // geen nummer). Verplicht bij de salon → leeg mag niet.
+  const phoneDigitCount = (form.phone || "").replace(/[^0-9]/g, "").length;
+  const phoneValid = initialSalon.phone_required
+    ? phoneDigitCount >= 6
+    : (!(form.phone || "").trim() || phoneDigitCount >= 6);
   const policyValid = !effectivePolicy || policyAgreed;
   // Basic email validation — lets the UI block submit with an invalid address instead of
   // sending to the server and silently failing the confirmation email.
@@ -1303,12 +1431,22 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   
   const getServiceItem = (serviceId) => selectedServices.find(item => item.service.id === serviceId);
 
+  // De via de teamkaart gekozen stylist, maar alleen voor een dienst die zij
+  // doet (zelfde regel als staffEligibleForService) en als ze die dag werkt.
+  const preferredStaffFor = (s) => {
+    const m = preferredStaff;
+    if (!m || !s) return null;
+    if (m.service_ids && m.service_ids.length > 0 && !m.service_ids.includes(s.id)) return null;
+    if (step > 1 && !isStaffAvailable(m, date)) return null;
+    return m;
+  };
+
   const toggleServiceSelection = (s) => {
     setSelectedServices(prev => {
       if (prev.find(item => item.service.id === s.id)) {
         return prev.filter(item => item.service.id !== s.id);
       }
-      return [...prev, { service: s, variant: null, extras: [], staff: null }];
+      return [...prev, { service: s, variant: null, extras: [], staff: preferredStaffFor(s) }];
     });
   };
 
@@ -1358,9 +1496,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const missingStaff = requireStaffPick
     ? selectedServices.filter(item => !item.staff && staffEligibleForItem(item).length > 0)
     : [];
+  // Een dienst waarvoor met deze extra's géén enkele stylist overblijft, kan de
+  // server nooit accepteren (staff_required / staff_extra_excluded). Dan mag
+  // Volgende niet; de hint bij de extra's legt uit wat er aan de hand is.
+  const unstaffableItems = requireStaffPick
+    ? selectedServices.filter(item => !item.staff && staffEligibleForItem(item).length === 0)
+    : [];
   const canProceedStep1 = selectedServices.length > 0
     && selectedServices.every(item => !item.service.variants?.length || item.variant)
-    && missingStaff.length === 0;
+    && missingStaff.length === 0
+    && unstaffableItems.length === 0;
   const missingVariants = selectedServices.filter(item => item.service.variants?.length > 0 && !item.variant);
 
   // Category filtering
@@ -1583,6 +1728,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // +30 min); per-unit extras count × quantity. Quick add-ons without a
   // duration contribute 0 — exactly the old behaviour.
   const itemExtrasDuration = (item) => (item.extras || []).reduce((s, e) => s + (parseInt(e.duration) || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
+  // Duur van één dienst in de slotberekening — exact zoals book-appointment
+  // hem optelt (stap 6): variant- of dienstduur + extra's, 0 mag. Hier stond
+  // `|| 30`: een dienst van 0 minuten telde dan als 30 en verborg geldige
+  // sloten vlak voor sluitingstijd (en verschoof de deelvensters).
+  const itemSlotDuration = (item) => (parseInt(item.variant ? item.variant.duration : item.service.duration) || 0) + itemExtrasDuration(item);
   const hasUnchosenVariant = selectedServices.some(it => (it.service.variants || []).length > 0 && !it.variant);
   // "Vanaf €30.00" prefix for totals while any variant is still unchosen.
   const fromPrefix = hasUnchosenVariant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : "";
@@ -1649,7 +1799,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
   // Seed the day multi-select when the waitlist modal opens (with the day the
   // customer was looking at), and clear it when it closes.
@@ -1669,11 +1819,16 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     setWaitlistDates(prev => prev.includes(ds) ? prev.filter(x => x !== ds) : [...prev, ds].sort());
 
   // Submit a waitlist entry — ONE row per chosen day, so the customer can ask
-  // to be told about several specific days at once. No server-side dedup:
-  // someone joining twice for the same date is fine, the owner sees both rows
-  // and can dismiss. If the client hasn't filled in their name yet (they
-  // haven't been through step 3), we require it in the modal; otherwise we
-  // prefill from `form`.
+  // to be told about several specific days at once. If the client hasn't
+  // filled in their name yet (they haven't been through step 3), we require it
+  // in the modal; otherwise we prefill from `form`.
+  //
+  // Sinds 05-10-2026 maakt de edge function waitlist-notify de rijen zelf aan
+  // (service role): anoniem rechtstreeks in `waitlist` schrijven kan niet meer,
+  // en de functie mailt alleen voor rijen die ze echt aanmaakte (geen open
+  // mailrelais). Ze slaat een dag over waarvoor dit adres al wacht. Pas bij
+  // {success:true} tonen we de bevestiging.
+  const waitlistPhoneMsg = lang === "nl" ? "Vul je telefoonnummer in" : lang === "es" ? "Introduce tu número de teléfono" : "Please enter your phone number";
   const submitWaitlist = async () => {
     if (waitlistSubmitting) return;
     const dates = (waitlistDates.length ? waitlistDates : (date ? [date] : []));
@@ -1685,10 +1840,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       setWaitlistError(T[lang].waitlistSubmitError);
       return;
     }
-    // Honour the salon's "phone required" setting here too (same rule the
-    // booking form enforces via phoneValid).
-    if (initialSalon.phone_required && (form.phone || "").trim().length < 6) {
-      setWaitlistError(T[lang].phone_required);
+    // Honour the salon's "phone required" setting here too — zelfde regel als
+    // waitlist-notify en het boekingsformulier: minstens 6 cijfers.
+    if (initialSalon.phone_required && (form.phone || "").replace(/[^0-9]/g, "").length < 6) {
+      setWaitlistError(waitlistPhoneMsg);
       return;
     }
     setWaitlistSubmitting(true);
@@ -1698,29 +1853,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // context for the owner.
     const staffId = selectedServices.find(s => s.staff)?.staff?.id || null;
     const serviceIds = selectedServices.map(s => s.service?.id).filter(Boolean);
-    const rows = dates.map(d => ({
-      owner_id: initialSalon.owner_id,
-      staff_id: staffId,
-      date: d,
-      client_name: `${first} ${last}`,
-      client_email: email,
-      client_phone: form.phone?.trim() || null,
-      service_ids: serviceIds.length ? serviceIds : null,
-      notes: waitlistNotes.trim() || null,
-    }));
-    const { error } = await supabase.from("waitlist").insert(rows);
-    setWaitlistSubmitting(false);
-    if (error) { setWaitlistError(T[lang].waitlistSubmitError); return; }
-    setWaitlistDone(true);
-    // Fire the confirmation (to the client) + notification (to the salon)
-    // emails SERVER-SIDE. The recipient addresses — the salon's contact email
-    // and the stylist's email — are deliberately NOT in the public salon
-    // payload, so an anonymous visitor can't send these directly; the
-    // waitlist-notify edge function resolves them from the IDs. Best-effort:
-    // the entry is already saved, so a mail hiccup must not surface as an
-    // error to the client.
+    let ok = false;
+    let code = "";
     try {
-      await supabase.functions.invoke("waitlist-notify", {
+      const { data, error } = await supabase.functions.invoke("waitlist-notify", {
         body: {
           owner_id: initialSalon.owner_id,
           client_name: `${first} ${last}`,
@@ -1733,17 +1869,45 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           lang,
         },
       });
+      if (error) {
+        // Niet-2xx: de foutcode zit in de body (zelfde patroon als bij boeken).
+        try {
+          if (error.context && typeof error.context.json === "function") {
+            const body = await error.context.json();
+            code = String(body?.error || "");
+          }
+        } catch { /* geen leesbare body — algemene melding */ }
+      } else {
+        ok = !!data?.success;
+      }
     } catch (e) { console.error("waitlist-notify failed:", e); }
+    setWaitlistSubmitting(false);
+    if (!ok) {
+      setWaitlistError(code.includes("phone")
+        ? waitlistPhoneMsg
+        : code === "waitlist_disabled"
+          ? (lang === "nl" ? "De wachtlijst is bij deze salon niet beschikbaar." : lang === "es" ? "La lista de espera no está disponible en este salón." : "The waitlist isn't available at this salon.")
+          : code === "rate_limited"
+            ? (lang === "nl" ? "Te veel pogingen, probeer het zo opnieuw." : lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : "Too many attempts, try again in a moment.")
+            : T[lang].waitlistSubmitError);
+      return;
+    }
+    setWaitlistDone(true);
   };
 
-  // Enter booking mode (optionally pre-select a service)
-  const enterBooking = (service = null) => {
+  // Enter booking mode (optionally pre-select a service). `staff`: de stylist
+  // van wie de klant op "Boek" tikte (teamkaart/-venster) — elke dienst die zij
+  // doet krijgt haar meteen als medewerker (zie preferredStaffFor).
+  const enterBooking = (service = null, staff = null) => {
     // Reset booking state
     setStep(hasLocations ? 0 : 1);
-    setSelectedServices(service ? [{ service, variant: null, extras: [], staff: null }] : []);
+    setPreferredStaff(staff);
+    const canDo = staff && service && (!staff.service_ids || staff.service_ids.length === 0 || staff.service_ids.includes(service.id));
+    setSelectedServices(service ? [{ service, variant: null, extras: [], staff: canDo ? staff : null }] : []);
     setTime(null);
     setDone(false);
     setPrepayInfo(null);
+    setBookedAppointmentId(null);
     setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     setClientNoShows(0);
@@ -1766,6 +1930,27 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Profiel -> boeken, elke stap en het scherm na het boeken openen bovenaan.
+  // De wissel is interne state (geen route), dus App.jsx' ScrollToTop vuurt
+  // hier niet: op mobiel bleef de oude scrollpositie staan en landde de klant
+  // halverwege de dienstenlijst, zonder titel en terugknop in beeld. Op desktop
+  // scrollt de flow in een eigen kolom: die zetten we ook terug (elke
+  // scrollende voorouder van de stapinhoud). Niet bij het eerste renderen —
+  // dan regelt App.jsx de positie.
+  const scrollTopInit = useRef(true);
+  useEffect(() => {
+    if (scrollTopInit.current) { scrollTopInit.current = false; return; }
+    try { window.scrollTo(0, 0); } catch { /* oude browser: niets aan te doen */ }
+    if (mode !== "booking") return;
+    try {
+      let el = document.querySelector(".fade-up");
+      while (el && el !== document.body) {
+        if (el.scrollTop > 0) el.scrollTop = 0;
+        el = el.parentElement;
+      }
+    } catch { /* best-effort */ }
+  }, [mode, step, done]);
 
   // Client email autofill has been REMOVED for privacy/security reasons.
   // Previously we did an unauthenticated SELECT on the `clients` table keyed
@@ -1806,15 +1991,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       const from = fmt(getToday());
       const toD = new Date(getToday());
       toD.setDate(toD.getDate() + windowDays);
-      const { data, error } = await supabase.rpc("get_booked_slots_range", {
+      // PostgREST geeft ook bij een RPC hooguit 1000 rijen terug; een drukke
+      // salon over een venster van 60-180 dagen zit daar boven en verloor dan
+      // willekeurige boekingen (volle dagen leken vrij). Daarom in pagina's,
+      // met een vaste volgorde zodat er niets tussen twee pagina's wegvalt.
+      const { data } = await fetchAllRows(() => supabase.rpc("get_booked_slots_range", {
         p_slug: initialSalon.id,
         p_from: from,
         p_to: fmt(toD),
         p_location_id: selectedLocation?.id || null,
-      });
+      }).order("date").order("time").order("staff_id").order("service_duration"));
       if (cancelled) return;
       const map = {};
-      if (!error && Array.isArray(data)) {
+      // Bij een fout halverwege houden we de pagina's die wél binnenkwamen.
+      if (Array.isArray(data)) {
         for (const r of data) {
           const key = String(r.date);
           (map[key] = map[key] || []).push({ time: r.time, service_duration: r.service_duration, staff_id: r.staff_id });
@@ -1855,7 +2045,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // slot_conflict, vlak voor de neus van de klant.
     const rows = selectedServices.length > 0
       ? selectedServices.map(item => ({
-          duration: ((item.variant ? item.variant.duration : item.service.duration) || 30) + itemExtrasDuration(item),
+          duration: itemSlotDuration(item),
           eligible: item.staff
             ? [item.staff]
             : allStaff.filter(s => (!s.service_ids || s.service_ids.length === 0 || s.service_ids.includes(item.service.id))
@@ -1871,7 +2061,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         if (!b.time) continue;
         if (b.staff_id && staffId && b.staff_id !== staffId) continue;
         const bStart = toMin(b.time);
-        const bEnd = bStart + Math.max(b.service_duration || 30, 30);
+        // Exact de rekenregel van book-appointment (stap 10): 0 of leeg telt
+        // als 60 minuten, een korte afspraak (15/25 min) telt zijn echte duur.
+        // Eerst rondden we af naar minimaal 30: dat verborg vrije sloten na
+        // korte afspraken en bood er na een 0-minutenrij een paar te veel aan.
+        const bEnd = bStart + (parseInt(b.service_duration || 60) || 60);
         // Symmetric break buffer on BOTH sides so the pause applies whether
         // the new slot precedes or follows the existing booking.
         if (startMin - breakBuffer < bEnd && endMin + breakBuffer > bStart) return true;
@@ -1927,7 +2121,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // Precompute per-service: duration + eligible-staff list.
     const allStaff = initialSalon.staff || [];
     const serviceSlots = selectedServices.map(item => {
-      const duration = ((item.variant ? item.variant.duration : item.service.duration) || 30) + itemExtrasDuration(item);
+      const duration = itemSlotDuration(item);
       const eligible = item.staff
         ? [item.staff]
         : allStaff.filter(s =>
@@ -1953,7 +2147,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const gatFbClose = gatFallback.close || "17:30";
     // Per-staff block for the current date, if any. Only relevant to slots
     // that involve THIS specific staff — other staff can still work through
-    // it, which is why isTimeBlockedByOverride skips this case (see above).
+    // it. (Is zij in deze boeking expliciet gekozen, dan legt
+    // salonTimeBlocksOn de blokkade bovendien over de hele boeking, zoals de
+    // server doet.)
     // Two flavours: time-window (has start/end) and whole-day (no bounds).
     const dayOverride = dayOverrides[forDate];
     const staffBlock = (dayOverride && dayOverride.type === "blocked" && dayOverride.staff_id)
@@ -2000,23 +2196,33 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // fit entirely inside one of the windows. Several stylists can each
     // bring their own exception on the same day.
     const dayExceptions = getExceptionsFor(forDate);
+    // Alleen bij een TEAM-account vervangt een uitzondering het weekrooster van
+    // de stylist (book-appointment toetst per-stylisttijden ook alleen voor
+    // teams). Bij solo/joint verbreedt hij het: de slot mag in de uitzondering
+    // óf in haar gewone uren vallen — net als getEffectiveHours en de server,
+    // die daar alleen de (verbrede) salonuren toetst. Anders verdwenen bij een
+    // avond-uitzondering ineens alle gewone dagsloten.
+    const isTeamAccount = initialSalon.account_type === "team";
     const staffCoversWindow = (staff, startMin, endMin) => {
       const exc = dayExceptions.filter(e => !e.staff_id || e.staff_id === staff?.id);
-      if (exc.length > 0) {
-        const fits = exc.some(e => {
-          const excOpen = toMin(e.open || gatFbOpen);
-          const excClose = toMin(e.close || gatFbClose);
-          return startMin >= excOpen && endMin <= excClose;
-        });
-        if (!fits) return false;
-      } else {
+      const weeklyCovers = () => {
         if (!staff?.working_hours) return true;
         const day = staff.working_hours[dayOfWeek];
         if (!day) return true;
         if (day.closed) return false;
         const staffOpen = toMin(day.open || gatFbOpen);
         const staffClose = toMin(day.close || gatFbClose);
-        if (startMin < staffOpen || endMin > staffClose) return false;
+        return !(startMin < staffOpen || endMin > staffClose);
+      };
+      if (exc.length > 0) {
+        const fits = exc.some(e => {
+          const excOpen = toMin(e.open || gatFbOpen);
+          const excClose = toMin(e.close || gatFbClose);
+          return startMin >= excOpen && endMin <= excClose;
+        });
+        if (!fits && (isTeamAccount || !weeklyCovers())) return false;
+      } else {
+        if (!weeklyCovers()) return false;
       }
       // Per-staff block: this staff can't cover a window that overlaps with
       // their personal block (or any window if the block is whole-day).
@@ -2037,11 +2243,32 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
     const salonOpen = toMin(dayHours.open);
     const salonClose = toMin(dayHours.close);
-    const totalDuration = serviceSlots.reduce((sum, s) => sum + s.duration, 0) || 30;
+    // Precies de serverduur (0 mag); alleen zonder gekozen dienst (profiel:
+    // "eerstvolgend vrij") rekenen we met een half uur.
+    const totalDuration = selectedServices.length > 0 ? serviceSlots.reduce((sum, s) => sum + s.duration, 0) : 30;
+    // Salonbrede tijdblokkades voor deze dag; de expliciet gekozen stylisten
+    // tellen mee voor de oude JSON-blokkade (zie salonTimeBlocksOn).
+    const salonBlocks = salonTimeBlocksOn(forDate, selectedServices.map(i => i.staff?.id).filter(Boolean));
+    // Bovengrens van het boekingsvenster: book-appointment weigert (too_far)
+    // alles wat later begint dan nu + max_advance_days × 24 uur — een exact
+    // moment, geen hele kalenderdag. Zelfde omrekening als de server (tzFor +
+    // localToUtc), dus ook rond de zomertijdwissel gelijk. Alleen de laatste
+    // twee dagen van het venster kunnen tegen die grens lopen; daar rekenen we
+    // het UTC-moment van 12:00 salontijd één keer uit en
+    // tellen per slot de minuten erbij (het raster begint na 05:00, dus de
+    // zomertijdwissel van 02:00/03:00 valt er nooit tussen). Zo kost dit geen
+    // Intl-berekening per kandidaat-tijd over het hele venster.
+    const latestStartMs = Date.now() + maxAdvanceDays * 24 * 60 * 60 * 1000;
+    const limitDay = new Date(getToday());
+    limitDay.setDate(limitDay.getDate() + maxAdvanceDays - 1);
+    const noonUtc = forDate >= fmt(limitDay) ? localToUtc(forDate, "12:00", tzFor(initialSalon.country_code)) : null;
 
     // Candidate start times follow the salon's own slot grid (owner setting,
-    // default 30 min) instead of a hardcoded half-hour raster.
-    return genTimes(initialSalon.slot_interval_minutes || 30).filter(tt => {
+    // default 30 min) instead of a hardcoded half-hour raster. Het raster
+    // begint op de openingstijd van die dag (anker): bij 45 of 60 minuten en
+    // een opening om 10:00 of 09:30 viel anders het eerste slot weg. De server
+    // toetst geen rasteruitlijning, dus die tijden worden gewoon geaccepteerd.
+    return genTimes(initialSalon.slot_interval_minutes || 30, 5, 23, dayHours.open).filter(tt => {
       const startMin = toMin(tt);
 
       // Salon-wide bounds: start within open hours, end before close.
@@ -2073,7 +2300,9 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         cur = end;
       }
 
-      if (isTimeBlockedByOverride(forDate, tt)) return false;
+      // Salonbrede tijdblokkade: de hele boeking mag er niet mee overlappen
+      // (server: apptStart < blockEnd && apptEnd > blockStart -> slot_blocked).
+      if (salonBlocks.some(b => startMin < b.end && startMin + totalDuration > b.start)) return false;
       if (forDate === fmt(getToday())) {
         const now = getToday();
         const [h, m] = tt.split(":").map(Number);
@@ -2091,18 +2320,36 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         const slotStart = new Date(forDate + "T" + tt + ":00");
         if (slotStart.getTime() < earliestStart.getTime()) return false;
       }
+      if (noonUtc && noonUtc.getTime() + (startMin - 12 * 60) * 60 * 1000 > latestStartMs) return false;
       return true;
     });
   };
+
+  // Is de gekozen tijd nog echt boekbaar met de huidige keuze (diensten,
+  // varianten, extra's, stylist)? Zelfde toets als de tijdlijst zelf.
+  const isChosenTimeValid = (tt) => getAvailableTimes(date).includes(tt) && !isTimeSlotBooked(tt);
 
   // Availability per day for the whole strip: 'closed' | 'full' | 'open'.
   // 'full' = the salon is open but every bookable slot is already taken. Built
   // off the range-loaded bookings so we can grey full days like closed ones and
   // point the customer at the first free day. Memoised on the inputs that move
   // availability — the per-slot maths is too heavy to re-run every render.
+  // Aantallen (per-stuk-variant en -extra's) horen erin: die veranderen de duur.
   const servicesSig = selectedServices.map(i =>
-    `${i.service.id}:${i.variant?.id || ""}:${i.staff?.id || ""}:${(i.extras || []).map(e => e.id).join("+")}`
+    `${i.service.id}:${i.variant?.id || ""}x${i.variantQty || 1}:${i.staff?.id || ""}:${(i.extras || []).map(e => `${e.id}x${e.qty || 1}`).join("+")}`
   ).join("|");
+  // Diensten, variant, extra's of stylist gewijzigd na het kiezen van een
+  // tijd (bv. terug naar stap 1 en een langere behandeling erbij)? Dan wissen
+  // we de tijd als die niet meer in de lijst staat of intussen bezet is —
+  // anders bleef Volgende aan en weigerde de server pas bij Bevestigen.
+  useEffect(() => {
+    if (!time) return;
+    if (!isChosenTimeValid(time)) setTime(null);
+    // Alleen de dienstkeuze is de trigger; `time` zelf hoort er bewust niet in
+    // (een net gekozen tijd komt uit de lijst en is dus geldig), en de
+    // hulpfuncties ontstaan elke render opnieuw (zie dayAvailability).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicesSig]);
   const dayAvailability = useMemo(() => {
     const map = {};
     for (const d of days) {
@@ -2155,15 +2402,20 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayAvailability, firstOpenDate, rangeBooked]);
 
+  // Alleen de eerste letter een hoofdletter (in JS): CSS "capitalize" maakte
+  // er "5 Oktober" en "9 De Octubre" van.
+  const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
   // A tappable "first available: <date>" hint. Jumps the picker to that day.
   const FirstAvailableHint = () => {
     if (!firstOpenDate || firstOpenDate === date) return null;
-    const label = parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+    const label = capFirst(parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }));
     return (
       <button type="button" onClick={() => { setDate(firstOpenDate); setTime(null); }}
         style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accent, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
         <NavIcon name="calendar" size={14} color={accent} />
-        <span>{lang === "nl" ? "Eerste beschikbare dag: " : lang === "es" ? "Primera disponibilidad: " : "First available: "}<b style={{ textTransform: "capitalize" }}>{label}</b> →</span>
+        <span>{lang === "nl" ? "Eerste beschikbare dag: " : lang === "es" ? "Primera disponibilidad: " : "First available: "}<b>{label}</b></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6" /></svg>
       </button>
     );
   };
@@ -2184,7 +2436,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     // Rode pop-up MET duidelijke uitleg (geen vage "er ging iets mis") én de
     // klant wordt teruggebracht naar het telefoonveld, dat rood oplicht met
     // dezelfde uitleg eronder.
-    if (initialSalon.phone_required && (form.phone || "").trim().length < 6) {
+    if (initialSalon.phone_required && (form.phone || "").replace(/[^0-9]/g, "").length < 6) {
       setErrorToast(lang === "nl"
         ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak."
         : lang === "es"
@@ -2278,12 +2530,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       }
       if (!result?.success) throw new Error(result?.error || "booking_failed");
 
-      const appointmentId = result.appointment_id;
-      const cancelToken = result.cancel_token;
-      const combinedServiceName = result.service_name;
-      const serverPrice = result.service_price;
-      const serverDuration = result.service_duration;
-
+      setBookedAppointmentId(result.appointment_id || null);
       setPrepayInfo(result.payment && result.payment.method === "prepay" ? result.payment : null);
       setDone(true);
       setSubmitting(false);
@@ -2305,80 +2552,12 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         localStorage.setItem(key, JSON.stringify(store));
       } catch { /* private mode / quota — skip silently */ }
 
-      const clientFullName = `${form.firstName} ${form.lastName}`;
-      const allStaffNames = selectedServices.filter(item => item.staff).map(item => item.staff.name);
-
-      // book-appointment now fires confirmation + notification emails server-side
-      // (send-emails has verify_jwt=true, so an anonymous customer can't call it directly).
-      // Only fall back to client-side sends on older server versions that didn't signal emails_sent.
-      if (!result.emails_sent) {
-        sendEmails("booking_confirmation", {
-          client_name: clientFullName,
-          client_email: clientEmail,
-          service_name: combinedServiceName,
-          date, time,
-          payment: form.payment,
-          price: serverPrice,
-          salon_name: result.salon_name || initialSalon.name,
-          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
-          owner_email: result.owner_email || "info@vellu.cc",
-          cancel_url: cancelToken ? `https://vellu.cc/cancel/${cancelToken}` : null,
-          // Zelfde termijn als cancel-appointment straks handhaaft; zonder dit
-          // noemt de mail geen getal in plaats van een verkeerd getal.
-          cancel_deadline_hours: initialSalon.cancel_deadline_hours ?? 0,
-        }).catch(e => console.error("confirmation email failed:", e));
-
-        sendEmails("booking_notification", {
-          owner_email: result.owner_email || null,
-          staff_emails: result.staff_emails || [],
-          client_name: clientFullName,
-          client_phone: form.phone || null,
-          service_name: combinedServiceName,
-          date, time,
-          price: serverPrice,
-          salon_name: result.salon_name || initialSalon.name,
-          salon_accent: initialSalon.accent || "", salon_logo: initialSalon.logo_url || "", lang,
-          // The owner reads this email in the SALON's language, not the
-          // client's browsing language.
-          owner_lang: ownerLangFor(initialSalon.country_code),
-        }).catch(e => console.error("notification email failed:", e));
-      }
-
-      // SMS to the client — only as a fallback for older server versions.
-      // book-appointment now dispatches the confirmation SMS server-side (and
-      // signals emails_sent), so on current servers we skip this to avoid a
-      // double SMS. send-sms silently no-ops for Starter-plan salons / clients
-      // without a phone either way.
-      if (!result.emails_sent && form.phone) {
-        sendSMS("booking_confirmation", {
-          client_name: clientFullName,
-          client_phone: form.phone,
-          service_name: combinedServiceName,
-          date, time,
-          price: serverPrice,
-          salon_name: result.salon_name || initialSalon.name,
-          owner_id: initialSalon.owner_id,
-          lang,
-        }).catch(e => console.error("confirmation SMS failed:", e));
-      }
-
-      supabase.functions.invoke("google-calendar", {
-        body: {
-          action: "create",
-          owner_id: initialSalon.owner_id,
-          booking: {
-            appointment_id: appointmentId,
-            service_name: combinedServiceName,
-            client_name: clientFullName,
-            client_email: clientEmail,
-            client_phone: form.phone || null,
-            staff_name: allStaffNames.length > 0 ? allStaffNames.join(", ") : null,
-            date, time,
-            duration: serverDuration,
-            price: serverPrice,
-          },
-        },
-      }).catch(e => console.error("Google Calendar error:", e));
+      // Bevestiging, melding aan de salon en sms gaan volledig server-side via
+      // book-appointment. De oude terugvalroute hier (sendEmails/sendSMS vanuit
+      // de browser als emails_sent ontbrak) is weg: een anonieme bezoeker mag
+      // send-emails niet aanroepen en de server stuurt altijd zelf. Ook de
+      // google-calendar-aanroep is weg: die functie accepteert sinds 05-10-2026
+      // alleen nog interne aanroepen (en Google Agenda koppelen staat uit).
 
       // No invoice at booking time anymore: "online" now means "payment
       // request afterwards" — the owner sends the invoice (with the pay
@@ -2434,6 +2613,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
         invalid_email: lang === "es" ? "Dirección de correo no válida." : isNl ? "Ongeldig e-mailadres." : "Invalid email address.",
         missing_name: lang === "es" ? "Introduce tu nombre y tus apellidos." : isNl ? "Vul je voor- en achternaam in." : "Please enter your first and last name.",
         phone_required: lang === "es" ? "También tienes que introducir tu número de teléfono — el salón lo necesita para tu cita." : isNl ? "Je moet ook je telefoonnummer invullen — deze salon heeft het nodig voor je afspraak." : "You also need to fill in your phone number — this salon needs it for your appointment.",
+        // book-appointment: een ingevuld nummer met minder dan 6 cijfers.
+        invalid_phone: lang === "es" ? "Introduce un número de teléfono válido (al menos 6 dígitos)." : isNl ? "Vul een geldig telefoonnummer in (minstens 6 cijfers)." : "Please enter a valid phone number (at least 6 digits).",
         policy_not_agreed: lang === "es" ? "Tienes que aceptar las condiciones de reserva." : isNl ? "Je moet akkoord gaan met de voorwaarden." : "You must agree to the booking terms.",
         // De no-show-blokkade in book-appointment geeft 403 client_blocked. Zonder
         // regel hier viel dat terug op de generieke "er ging iets mis", waarna de
@@ -2489,8 +2670,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       }
       // Niet alleen vertellen wat er mis is, maar de klant er ook heenbrengen:
       // terug naar de gegevens-stap met het telefoonveld gemarkeerd en gefocust.
-      if (code === "phone_required") {
-        setPhoneError(true);
+      if (code === "phone_required" || code === "invalid_phone") {
+        // De rode uitleg onder het veld zegt "vul je nummer in"; bij een
+        // ongeldig nummer volstaan de melding hierboven en de focus op het veld.
+        if (code === "phone_required") setPhoneError(true);
         goToStep(3);
         setTimeout(() => {
           try {
@@ -2509,13 +2692,45 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
 
 
   // ─── SALON PROFILE VIEW ─────────────────────────────────────
-  const FULL_DAYS = lang === "nl" 
-    ? ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"]
-    : ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  
+  const FULL_DAYS = lang === "nl" ? DAY_FULL_NL : lang === "es" ? DAY_FULL_ES : DAY_FULL_EN;
+
   // Salon-klok, niet de apparaatklok — zie de getToday-shadow hierboven.
   const _nowDate = getToday();
   const todayDayIndex = _nowDate.getDay();
+  const todayStr = fmt(_nowDate);
+  // Dichte stukken van een open dag (middagpauze + salonbrede tijdblokkades),
+  // samengevoegd en geknipt op de openingstijden, in minuten.
+  const toMinHM = (s) => { const [h, m] = String(s || "").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const closedStretches = (hrs, dateStr) => {
+    const openMins = toMinHM(hrs.open), closeMins = toMinHM(hrs.close);
+    const raw = [];
+    if (hrs.break_start && hrs.break_end) raw.push({ start: toMinHM(hrs.break_start), end: toMinHM(hrs.break_end) });
+    raw.push(...salonTimeBlocksOn(dateStr));
+    const merged = [];
+    for (const iv of raw.map(b => ({ start: Math.max(b.start, openMins), end: Math.min(b.end, closeMins) })).filter(b => b.end > b.start).sort((a, b) => a.start - b.start)) {
+      const last = merged[merged.length - 1];
+      if (last && iv.start <= last.end) last.end = Math.max(last.end, iv.end);
+      else merged.push({ ...iv });
+    }
+    // Eerste open minuut vanaf m, of null als de rest van de dag dicht is.
+    const openFrom = (m) => {
+      let x = Math.max(m, openMins);
+      for (const iv of merged) if (x >= iv.start && x < iv.end) x = iv.end;
+      return x < closeMins ? x : null;
+    };
+    return { openMins, closeMins, merged, openFrom };
+  };
+  // Vandaag: wat er vandaag écht geldt — blokkades, vakantie en uitzonderingen
+  // meegerekend (getEffectiveHours, dezelfde bron als de datumstrip). Een dag
+  // die door salonbrede tijdblokkades helemaal dichtzit, telt als gesloten.
+  // Eerst las de status alleen het weekrooster: "Open" op een vakantiedag
+  // terwijl de boekingsstap de dag dicht toonde.
+  const todayEffective = (() => {
+    const h = getEffectiveHours(todayStr) || { closed: true };
+    if (h.closed || !h.open || !h.close) return h;
+    const cs = closedStretches(h, todayStr);
+    return cs.openFrom(cs.openMins) === null ? { closed: true } : h;
+  })();
   // Recurring weekly hours per day index. For team accounts the source of
   // truth is the staff schedule — owners often leave the salon/location
   // business_hours at their default values (Mon–Fri 09:00–17:30 open),
@@ -2524,7 +2739,11 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   // from the union of those who aren't closed. If everybody with hours
   // is closed → really closed. Only when no staff has hours at all do
   // we fall back to the salon/location business_hours.
+  // De weekdag van VANDAAG geeft de echte uren van vandaag (todayEffective):
+  // de rij "vandaag" in beide urenkaarten en de open/dicht-status kloppen zo
+  // ook op een blokkade- of vakantiedag. Andere dagen blijven het weekrooster.
   const getWeeklyHours = (dayIdx) => {
+    if (dayIdx === todayDayIndex) return todayEffective;
     if (initialSalon.account_type === "team") {
       const staffDays = (initialSalon.staff || [])
         .filter(s => s.active !== false)
@@ -2562,33 +2781,25 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (!todayHoursObj.open || !todayHoursObj.close) {
       return { salonIsOpen: false, salonStatusLabel: t.closedNow };
     }
-    const [openH, openM] = String(todayHoursObj.open).split(":").map(Number);
-    const [closeH, closeM] = String(todayHoursObj.close).split(":").map(Number);
+    const [openH] = String(todayHoursObj.open).split(":").map(Number);
+    const [closeH] = String(todayHoursObj.close).split(":").map(Number);
     if (Number.isNaN(openH) || Number.isNaN(closeH)) {
       return { salonIsOpen: false, salonStatusLabel: t.closedNow };
     }
     const mins = _nowDate.getHours() * 60 + _nowDate.getMinutes();
-    const openMins = openH * 60 + (openM || 0);
-    const closeMins = closeH * 60 + (closeM || 0);
-    if (mins < openMins) {
-      return { salonIsOpen: false, salonStatusLabel: `${t.closedNow} · ${t.opensAt} ${todayHoursObj.open}` };
-    }
+    const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    // Middagpauze én salonbrede tijdblokkades van vandaag tellen als dicht:
+    // erin = "Gesloten · opent om <einde>", ervoor = "Open · sluit om <begin>".
+    const { closeMins, merged, openFrom } = closedStretches(todayHoursObj, todayStr);
     if (mins >= closeMins) {
       return { salonIsOpen: false, salonStatusLabel: t.closedNow };
     }
-    // Middagpauze: tijdens de pauze is de salon dicht (heropent om break_end);
-    // vóór de pauze sluit hij eerst om break_start.
-    if (todayHoursObj.break_start && todayHoursObj.break_end) {
-      const toM = (s) => { const [h, m] = String(s).split(":").map(Number); return h * 60 + (m || 0); };
-      const bs = toM(todayHoursObj.break_start), be = toM(todayHoursObj.break_end);
-      if (mins >= bs && mins < be) {
-        return { salonIsOpen: false, salonStatusLabel: `${t.closedNow} · ${t.opensAt} ${todayHoursObj.break_end}` };
-      }
-      if (mins < bs) {
-        return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${todayHoursObj.break_start}` };
-      }
+    const nu = openFrom(mins);
+    if (nu !== mins) {
+      return { salonIsOpen: false, salonStatusLabel: nu === null ? t.closedNow : `${t.closedNow} · ${t.opensAt} ${hhmm(nu)}` };
     }
-    return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${todayHoursObj.close}` };
+    const nextShut = merged.find(iv => iv.start > mins);
+    return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${nextShut ? hhmm(nextShut.start) : todayHoursObj.close}` };
   })();
 
   // "09:00 – 12:00 & 13:00 – 17:00" wanneer een dag een middagpauze heeft;
@@ -2614,9 +2825,13 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const diff = Date.now() - new Date(dateStr).getTime();
     const dys = Math.floor(diff / 86400000);
     if (dys < 1) return lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today";
-    if (dys < 7) return `${dys} ${t.nDaysAgo}`;
-    if (dys < 30) return `${Math.floor(dys / 7)} ${t.nWeeksAgo}`;
-    return `${Math.floor(dys / 30)} ${t.nMonthsAgo}`;
+    // Enkelvoud bij 1 ("1 maand geleden", niet "1 maanden geleden").
+    const one = (nl, en, es) => `1 ${lang === "nl" ? nl : lang === "es" ? es : en}`;
+    if (dys < 7) return dys === 1 ? one("dag geleden", "day ago", "día atrás") : `${dys} ${t.nDaysAgo}`;
+    const wk = Math.floor(dys / 7);
+    if (dys < 30) return wk === 1 ? one("week geleden", "week ago", "semana atrás") : `${wk} ${t.nWeeksAgo}`;
+    const mo = Math.floor(dys / 30);
+    return mo === 1 ? one("maand geleden", "month ago", "mes atrás") : `${mo} ${t.nMonthsAgo}`;
   };
 
   const allPhotos = initialSalon.services.flatMap(s => (s.photos || []).map(p => {
@@ -2653,32 +2868,53 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     ...(initialSalon.reviews?.length > 0 ? [{ id: "reviews", label: t.profileReviews }] : []),
     { id: "contact", label: t.profileContact },
   ];
+  // Mobiel past de tabstrook (Diensten/Team/Reviews/Contact) niet naast logo
+  // en schakelaars: hij was ~80 px breed en toonde alleen "Diensten", zonder
+  // enige hint dat er meer was. Een vervagende rand aan de kant waar nog tabs
+  // staan maakt duidelijk dat je kunt vegen; we meten of hij overloopt.
+  const [tabsEdge, setTabsEdge] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = profileTabsBarRef.current;
+    if (!el || mode !== "profile") return;
+    const meet = () => {
+      const left = el.scrollLeft > 2;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      setTabsEdge(s => (s.left === left && s.right === right ? s : { left, right }));
+    };
+    meet();
+    el.addEventListener("scroll", meet, { passive: true });
+    window.addEventListener("resize", meet);
+    return () => { el.removeEventListener("scroll", meet); window.removeEventListener("resize", meet); };
+  }, [mode, profileTabs.length, lang]);
+  const tabsMask = (tabsEdge.left || tabsEdge.right)
+    ? `linear-gradient(to right, ${tabsEdge.left ? "transparent 0, #000 18px" : "#000 0"}, ${tabsEdge.right ? "#000 calc(100% - 26px), transparent 100%" : "#000 100%"})`
+    : undefined;
 
-  // Eerstvolgende dag met openingstijden (vandaag of later, max 14 dagen),
-  // rekening houdend met blokkades, uitzonderingen en de minimale aanlooptijd.
-  // Eén berekening voor hero, zijkolom-kaart en de mobiele onderbalk.
+  // "Eerstvolgend" in hero en zijkolom = het eerste écht boekbare slot: exact
+  // firstOpenSlot, dezelfde berekening als de kaart in stap 2 (salonklok,
+  // bestaande boekingen, blokkades, vakanties, voorlooptijd). Eerst toonden we
+  // hier de openingstijd van de eerste open dag op de apparaatklok — "Vandaag
+  // 09:00" om 10:51, of op een dag die helemaal geblokkeerd was.
+  // De vorm blijft { dayLabel, hrs }: de hero toont `${dayLabel} ${hrs.open}`
+  // en de zijkolom `${dayLabel} beschikbaar · fmtDayHours(hrs)`. hrs.open is
+  // daarom de eerste vrije tijd en hrs.close de sluitingstijd van die dag.
   const nextOpen = (() => {
-    const now = new Date();
-    for (let offset = 0; offset < 14; offset++) {
-      const checkDate = new Date(now);
-      checkDate.setDate(now.getDate() + offset);
-      const dayIdx = checkDate.getDay();
-      const dayHrs = getWeeklyHours(dayIdx) || { closed: true };
-      const override = initialSalon.day_overrides?.[fmt(checkDate)];
-      if (override?.type === "blocked") continue;
-      const hrs = override?.type === "exception" ? { open: override.open, close: override.close, closed: false } : dayHrs;
-      if (hrs.closed) continue;
-      if (minAdvanceHours > 0) {
-        const [ch, cm] = String(hrs.close || "0:0").split(":").map(Number);
-        const dayClose = new Date(checkDate);
-        dayClose.setHours(ch || 0, cm || 0, 0, 0);
-        if (new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000) >= dayClose) continue;
-      }
-      const isToday = offset === 0, isTomorrow = offset === 1;
-      const dayLabel = isToday ? (lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today") : isTomorrow ? (lang === "nl" ? "Morgen" : lang === "es" ? "Mañana" : "Tomorrow") : checkDate.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" });
-      return { dayLabel, hrs };
+    if (!firstOpenSlot) return null;
+    const ds = firstOpenSlot.date;
+    const hrs = { ...(getEffectiveHours(ds) || {}), closed: false, open: firstOpenSlot.time };
+    // Eerste slot ná de middagpauze: dan hoort die pauze niet meer in de reeks.
+    if (hrs.break_start && hrs.break_end && firstOpenSlot.time >= hrs.break_start) {
+      delete hrs.break_start;
+      delete hrs.break_end;
     }
-    return null;
+    const tomorrow = new Date(getToday());
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayLabel = ds === fmt(getToday())
+      ? (lang === "nl" ? "Vandaag" : lang === "es" ? "Hoy" : "Today")
+      : ds === fmt(tomorrow)
+        ? (lang === "nl" ? "Morgen" : lang === "es" ? "Mañana" : "Tomorrow")
+        : capFirst(parseDate(ds).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "short" }));
+    return { dayLabel, hrs };
   })();
   const nextAvailableLabel = lang === "nl" ? "Eerstvolgend" : lang === "es" ? "Próxima disponibilidad" : "Next available";
 
@@ -2688,7 +2924,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const NextSlotCard = () => {
     if (!firstOpenSlot) return null;
     const chosen = date === firstOpenSlot.date && time === firstOpenSlot.time;
-    const label = parseDate(firstOpenSlot.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+    const label = capFirst(parseDate(firstOpenSlot.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }));
     return (
       <div className={`flow-next-slot${chosen ? " chosen" : ""}`} data-next-slot={chosen ? "chosen" : "open"}>
         <div className="flow-next-slot-icon"><NavIcon name="calendar" size={18} color={accent} /></div>
@@ -2731,7 +2967,8 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           ) : (
             <div className="profile-header-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
           )}
-          <div className="profile-tabs" ref={profileTabsBarRef}>
+          <div className="profile-tabs" ref={profileTabsBarRef} data-tabs-edge={tabsEdge.right ? "more" : tabsEdge.left ? "start" : "fits"}
+            style={tabsMask ? { WebkitMaskImage: tabsMask, maskImage: tabsMask } : undefined}>
             {profileTabs.map(tab => (
               <button key={tab.id} data-tab-id={tab.id} className={`profile-tab ${profileTab === tab.id ? "active" : ""}`}
                 onClick={() => scrollToProfileSection(tab.id)}>
