@@ -75,7 +75,23 @@ const gL=`style="border-top:1px solid #e8e0d5;"`;
 const gA=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;"`;
 const gR=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;text-align:right;"`;
 try{
-const{type,booking:b}=await req.json();const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.replace(/^\s+/,""):"€";
+const{type,booking:b}=await req.json();
+// Een ingelogde gebruiker (eigenaar of medewerker in de app) mag alleen de mails
+// versturen die de app zelf verstuurt (src/shared.jsx sendEmails). Alleen van de
+// server, met x-internal-secret: de platformmails die als "Vellu" uitgaan
+// (payment_failed, trial_ending, trial_expired, renewal_reminder,
+// subscription_invoice), appointment_reminder, owner_cancellation, de
+// aanmeldmails van de wachtlijst (waitlist_confirmation, waitlist_joined) en de
+// vooruitbetalingsmails (booking_pending_payment, prepay_reminder,
+// prepay_expired). waitlist_spot_open en de salonfactuur (invoice) blijven vanuit
+// de app. Tot 05-10-2026 kon elk account met een login ook de server-types sturen.
+// LET OP, nog open (audit E2-02): voor deze zeven types komen afzendernaam,
+// ontvanger, logo en betaalgegevens nog uit de aanvraag. De salon hoort hier
+// server-side te worden bepaald (eigenaar of medewerker van de aanroeper) en de
+// ontvanger aan een afspraak van die salon te worden gekoppeld.
+const BROWSER_TYPES=["booking_confirmation","booking_notification","refund_sent","appointment_updated","invoice","booking_cancelled","waitlist_spot_open"];
+if(callerId&&!BROWSER_TYPES.includes(type))return new Response(JSON.stringify({error:"type_not_allowed"}),{status:403,headers:{...headers,"Content-Type":"application/json"}});
+const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.replace(/^\s+/,""):"€";
 // Owner-facing emails (booking_notification, owner_cancellation,
 // waitlist_joined) render in the SALON's language, not the client's booking
 // language — callers pass owner_lang (derived from the salon's country).

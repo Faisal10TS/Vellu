@@ -1,15 +1,4 @@
 
-[functions.send-invoice]
-enabled = true
-verify_jwt = true
-import_map = "./functions/send-invoice/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/send-invoice/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/send-invoice/*.html" ]
-
 [functions.send-sms]
 enabled = true
 # Same reason as send-emails: send-sms does its own auth, and book-appointment
@@ -235,3 +224,19 @@ enabled = true
 # net als check-pending-payments bewust zonder geheim (idempotente veegronde).
 verify_jwt = false
 entrypoint = "./functions/prepay-watch/index.ts"
+
+[functions.google-auth]
+enabled = true
+# Uitgezet op 05-10-2026: beantwoordt alles met 410 (zie index.ts waarom en wat
+# er nodig is om weer aan te zetten). verify_jwt=false zodat ook een terugkeer
+# van Google (GET zonder sessie) netjes naar de app terugstuurt.
+verify_jwt = false
+entrypoint = "./functions/google-auth/index.ts"
+
+[functions.google-calendar]
+enabled = true
+# Live v16, op 05-10-2026 ongewijzigd in de repo gezet. Vertrouwt owner_id uit de
+# body zonder controle; doet niets zolang geen salon een Google-token heeft
+# (google-auth staat uit). Niet opnieuw deployen voordat dat is herzien.
+verify_jwt = false
+entrypoint = "./functions/google-calendar/index.ts"

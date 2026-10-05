@@ -1,111 +1,41 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// google-auth: UITGEZET op 05-10-2026 (audit 05-10-2026).
+//
+// De vorige versie (v14, zie de vorige commit van dit bestand) koppelde een
+// Google-account aan een salon zonder te controleren wie dat vroeg. POST
+// {action:"get_url", owner_id} zette het owner_id uit de body rechtstreeks in de
+// OAuth-state, en de callback schreef het refresh-token op het profiel met dat
+// id. Wie het (openbare) id van een salon kende, kon zo zijn EIGEN Google-account
+// aan die salon hangen, en google-calendar zette daarna elke nieuwe boeking van
+// die salon, met naam, e-mail en telefoon van de klant, in zijn agenda.
+// "disconnect" had evenmin een controle. Op 05-10-2026 had geen enkele salon de
+// koppeling aan (0 tokens), dus uitzetten kost niemand iets; de app wijst nu
+// naar "Agenda in je telefoon" (calendar-feed).
+//
+// Weer aanzetten kan pas met:
+// 1. een gebruikers-JWT verplicht voor get_url en disconnect, en owner_id = het
+//    uid uit dat token (nooit uit de body);
+// 2. een ondertekende, kortlevende state (HMAC over uid + nonce + verloop) die
+//    de callback controleert vóór hij iets schrijft;
+// 3. google-calendar alleen nog server-side aanroepen (x-internal-secret), of
+//    met een JWT die bij het owner_id hoort.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
- 
-const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
-const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-auth`;
- 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+
+const HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "https://vellu.cc",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Vary": "Origin",
 };
- 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
- 
+
+serve((req) => {
   const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
- 
-  // ─── CALLBACK: Google redirects here with code ───
-  if (code && state) {
-    try {
-      const ownerId = state;
- 
-      // Exchange code for tokens
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          code,
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          redirect_uri: REDIRECT_URI,
-          grant_type: "authorization_code",
-        }),
-      });
- 
-      const tokens = await tokenRes.json();
- 
-      if (tokens.error) {
-        console.error("Token error:", tokens);
-        return Response.redirect("https://vellu.cc/owner?google=error", 302);
-      }
- 
-      // Store refresh token in profiles
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      await supabase.from("profiles").update({
-        google_refresh_token: tokens.refresh_token,
-        google_calendar_connected: true,
-      }).eq("id", ownerId);
- 
-      return Response.redirect("https://vellu.cc/owner?google=connected", 302);
-    } catch (e) {
-      console.error("Callback error:", e);
-      return Response.redirect("https://vellu.cc/owner?google=error", 302);
-    }
+  // Een terugkeer van Google uit een koppeling die vóór het uitzetten begon (ook
+  // als de eigenaar daar op Annuleren drukte: dan komt er ?error= terug):
+  // netjes terug naar de app, zonder iets op te slaan.
+  const q = url.searchParams;
+  if (req.method === "GET" && (q.has("code") || q.has("error") || q.has("state"))) {
+    return Response.redirect("https://vellu.cc/owner", 302);
   }
- 
-  // ─── POST: Generate auth URL or disconnect ───
-  if (req.method === "POST") {
-    try {
-      const { action, owner_id } = await req.json();
- 
-      if (action === "get_url") {
-        const scopes = "https://www.googleapis.com/auth/calendar.events";
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-          `client_id=${GOOGLE_CLIENT_ID}` +
-          `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-          `&response_type=code` +
-          `&scope=${encodeURIComponent(scopes)}` +
-          `&access_type=offline` +
-          `&prompt=consent` +
-          `&state=${owner_id}`;
- 
-        return new Response(JSON.stringify({ url: authUrl }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
- 
-      if (action === "disconnect") {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        await supabase.from("profiles").update({
-          google_refresh_token: null,
-          google_calendar_connected: false,
-        }).eq("id", owner_id);
- 
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
- 
-      return new Response(JSON.stringify({ error: "Unknown action" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (e) {
-      console.error("POST error:", e);
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  }
- 
-  return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: HEADERS });
+  return new Response(JSON.stringify({ error: "google_calendar_disabled" }), { status: 410, headers: HEADERS });
 });
