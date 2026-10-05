@@ -20,12 +20,13 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { revenueReportData, revenueReportFilename } from "./reportData.js";
+import { revenueReportData, revenueReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel } from "./reportData.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
-// Safe string — avoids undefined/null blowing up pdf output.
-const s = (v) => (v === null || v === undefined ? "" : String(v));
+// Safe string — avoids undefined/null blowing up pdf output. Door pdfSafe:
+// een minteken (U+2212) of een naam met Ş maakt anders de hele regel onleesbaar.
+const s = (v) => (v === null || v === undefined ? "" : pdfSafe(String(v)));
 
 // Local date formatter in the report's language. Originally NL-only ("report
 // goes to a Dutch accountant") — no longer true now salons exist outside NL,
@@ -106,7 +107,7 @@ export function generateRevenueReportPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(120, 120, 120);
-  doc.text(range.label || `${fmtDateNL(range.from, lang)} — ${fmtDateNL(range.to, lang)}`, margin, 78);
+  doc.text(s(range.label || `${fmtDateNL(range.from, lang)} — ${fmtDateNL(range.to, lang)}`), margin, 78);
   if (staffName) {
     doc.setFontSize(10);
     doc.setTextColor(...ACCENT);
@@ -157,7 +158,7 @@ export function generateRevenueReportPDF({
   const companyLines = [
     s(salon.address),
     [s(salon.postcode), s(salon.city)].filter(Boolean).join(" "),
-    salon.kvk_number ? `KVK: ${s(salon.kvk_number)}` : "",
+    salon.kvk_number ? `${companyNumberLabel(salon, lang)}: ${s(salon.kvk_number)}` : "",
     salon.btw_id ? `${idLabel}: ${s(salon.btw_id)}` : "",
     salon.iban ? `IBAN: ${s(salon.iban)}` : "",
     s(salon.salon_email),
@@ -195,14 +196,18 @@ export function generateRevenueReportPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
-  doc.text(T("Aantal afspraken", "Appointments", "Citas"), col1X, summaryY);
+  // Kassaverkopen zijn geen afspraken: zitten ze in de periode, dan heet het
+  // totaal "Transacties" (met de splitsing eronder) en het gemiddelde "per
+  // transactie" — anders telden losse productverkopen mee als afspraak.
+  const withSales = R.saleCount > 0;
+  doc.text(withSales ? T("Transacties", "Transactions", "Transacciones") : T("Aantal afspraken", "Appointments", "Citas"), col1X, summaryY);
   doc.text(
     showTaxRows
       ? T(`Omzet incl. ${label}`, `Revenue incl. ${label}`, `Ingresos incl. ${label}`)
       : T("Omzet", "Revenue", "Ingresos"),
     col2X, summaryY
   );
-  doc.text(T("Gem. per afspraak", "Avg per appt.", "Prom. por cita."), col3X, summaryY);
+  doc.text(withSales ? T("Gem. per transactie", "Avg per transaction", "Prom. por transacción") : T("Gem. per afspraak", "Avg per appt.", "Prom. por cita."), col3X, summaryY);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -210,6 +215,17 @@ export function generateRevenueReportPDF({
   doc.text(String(appointments.length), col1X, summaryY + 18);
   doc.text(eur(totalGross), col2X, summaryY + 18);
   doc.text(eur(avg), col3X, summaryY + 18);
+  if (withSales) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    const a1 = R.apptCount === 1, s1 = R.saleCount === 1;
+    doc.text(T(
+      `${R.apptCount} ${a1 ? "afspraak" : "afspraken"}, ${R.saleCount} ${s1 ? "kassaverkoop" : "kassaverkopen"}`,
+      `${R.apptCount} ${a1 ? "appointment" : "appointments"}, ${R.saleCount} ${s1 ? "till sale" : "till sales"}`,
+      `${R.apptCount} ${a1 ? "cita" : "citas"}, ${R.saleCount} ${s1 ? "venta en caja" : "ventas en caja"}`
+    ), col1X, summaryY + 30);
+  }
 
   // ── TAX BREAKDOWN ────────────────────────────────────────
   // Bij één tarief blijven het twee tegels — dat is het beeld dat de NL-salons
@@ -261,6 +277,7 @@ export function generateRevenueReportPDF({
       columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
       margin: { left: margin, right: margin },
       tableWidth: Math.min(320, pageW - margin * 2),
+      didParseCell: pdfSafeCells,
     });
     breakdownBottom = doc.lastAutoTable.finalY + 4;
     doc.setFont("helvetica", "normal");
@@ -288,7 +305,7 @@ export function generateRevenueReportPDF({
   const disclaimer = T(
     "Belastingbedragen zijn berekend op basis van de instellingen van deze salon. Vellu geeft geen fiscaal advies.",
     "Tax amounts are calculated from this salon's settings. Vellu does not provide tax advice.",
-    "Los importes de impuestos se calculan segun la configuracion de este salon. Vellu no ofrece asesoramiento fiscal."
+    "Los importes de impuestos se calculan según la configuración de este salón. Vellu no ofrece asesoramiento fiscal."
   );
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -340,37 +357,43 @@ export function generateRevenueReportPDF({
       5: { halign: "right", fontStyle: "bold" },
     },
     margin: { left: margin, right: margin, bottom: 46 + 12 * disclaimerLines.length },
-    didDrawPage: () => {
-      // Footer: page number + generated date
-      const pageStr = `${doc.internal.getCurrentPageInfo().pageNumber} / ${doc.internal.getNumberOfPages()}`;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(160, 160, 160);
-      let noteY = pageH - 32 - 12 * disclaimerLines.length;
-      for (const line of disclaimerLines) {
-        doc.text(line, margin, noteY);
-        noteY += 12;
-      }
-      // Currency/tax basis note: amounts reflect the salon's CURRENT region.
-      // Values are never converted, so a report spanning a region change shows
-      // pre-switch earnings in the new symbol/rate — flag that here.
-      doc.text(
-        T(
-          `Bedragen in ${currencySymbol}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
-          `Amounts in ${currencySymbol}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
-          `Importes en ${currencySymbol}${ratesNote}, impuestos incluidos. Tras un cambio de region, los importes anteriores no se convierten.`
-        ),
-        margin,
-        pageH - 32
-      );
-      doc.text(
-        `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
-        margin,
-        pageH - 20
-      );
-      doc.text(pageStr, pageW - margin, pageH - 20, { align: "right" });
-    },
+    didParseCell: pdfSafeCells,
   });
+
+  // Footer op ELKE pagina, pas nadat alle pagina's bestaan: in didDrawPage is
+  // het totaal nog niet bekend (pagina 1 las "1 / 1", pagina 2 "2 / 2").
+  // Zelfde aanpak als cashbookReport.js.
+  const pages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(160, 160, 160);
+    let noteY = pageH - 32 - 12 * disclaimerLines.length;
+    for (const line of disclaimerLines) {
+      doc.text(line, margin, noteY);
+      noteY += 12;
+    }
+    // Currency/tax basis note: amounts reflect the salon's CURRENT region.
+    // Values are never converted, so a report spanning a region change shows
+    // pre-switch earnings in the new symbol/rate — flag that here.
+    const cur = s(currencySymbol).trim();
+    doc.text(
+      T(
+        `Bedragen in ${cur}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
+        `Amounts in ${cur}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
+        `Importes en ${cur}${ratesNote}, impuestos incluidos. Tras un cambio de región, los importes anteriores no se convierten.`
+      ),
+      margin,
+      pageH - 32
+    );
+    doc.text(
+      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
+      margin,
+      pageH - 20
+    );
+    doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
+  }
 
   // ── FILENAME ─────────────────────────────────────────────
   // Zelfde naam als de Excel-export; alleen de extensie verschilt.
@@ -385,6 +408,10 @@ export function generateRevenueReportPDF({
     totalNet,
     totalBtw,
     count: appointments.length,
+    // Afspraken en kassaverkopen apart, voor de melding na het downloaden
+    // ("N afspraken, M kassaverkopen" i.p.v. alles "afspraken").
+    apptCount: R.apptCount,
+    saleCount: R.saleCount,
     // Per tarief, zodat een aanroeper (of een test) kan controleren waar de
     // belasting vandaan komt in plaats van één samengeklapt bedrag te zien.
     byRate: computed.byRate,

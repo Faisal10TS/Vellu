@@ -162,7 +162,8 @@ export function buildSnapshot(computed, cfg = {}, meta = {}) {
     label: computed.label,
     show_tax: !!computed.showTax,
     registered: !!cfg.registered,
-    lines: computed.lines.map((l) => ({ kind: l.kind, name: l.name, gross: l.gross, rate: l.rate, taxable: l.taxable })),
+    // qty mee, anders toont de bon "Nagelriemolie" i.p.v. "2 x Nagelriemolie".
+    lines: computed.lines.map((l) => ({ kind: l.kind, name: l.name, qty: parseInt(l.qty) || 1, gross: l.gross, rate: l.rate, taxable: l.taxable })),
     by_rate: computed.byRate,
     tax_total: computed.taxTotal,
     net_total: computed.netTotal,
@@ -180,8 +181,21 @@ export function buildSnapshot(computed, cfg = {}, meta = {}) {
 export function taxForSale(sale, cfg) {
   const snap = sale?.tax_snapshot;
   if (snap && snap.v === 1 && Array.isArray(snap.by_rate)) {
+    // Snapshots van vóór 05-10-2026 hebben geen qty per regel: haal die dan uit
+    // de products-array van de rij (zelfde volgorde als linesFromSale: een
+    // eventuele behandelingsregel staat vóór de producten), anders op naam.
+    const snapLines = Array.isArray(snap.lines) ? snap.lines : [];
+    const items = Array.isArray(sale?.products) ? sale.products : [];
+    const offset = snapLines.length - items.length;
+    const qtyOf = (l, i) => {
+      if (l.qty) return l.qty;
+      const byIdx = offset >= 0 ? items[i - offset] : null;
+      const it = byIdx && String(byIdx.name || "") === String(l.name || "") ? byIdx
+        : items.find((x) => String(x.name || "") === String(l.name || ""));
+      return (it && parseInt(it.qty)) || 1;
+    };
     return {
-      lines: (snap.lines || []).map((l) => ({ ...l, qty: l.qty || 1 })),
+      lines: snapLines.map((l, i) => ({ ...l, qty: qtyOf(l, i) })),
       byRate: snap.by_rate,
       taxableGross: snap.by_rate.reduce((s, r) => s + (Number(r.gross) || 0), 0),
       netTotal: Number(snap.net_total) || 0,
@@ -195,4 +209,33 @@ export function taxForSale(sale, cfg) {
     };
   }
   return { ...computeTax(linesFromSale(sale), cfg), fromSnapshot: false };
+}
+
+/**
+ * Rapporten (omzet, productverkoop) rekenen per rij met de instellingen zoals
+ * ze golden toen de rij bevroren werd (tax_snapshot), niet met die van
+ * vandaag: wie op 1 september van de KOR af gaat, mag niet met terugwerkende
+ * kracht BTW zien in januari t/m augustus. Per rij opnieuw rekenen in plaats
+ * van de bevroren bedragen over te nemen, omdat een rapportrij kan afwijken van
+ * de bevroren rij (het aandeel van één stylist, of een product dat er na het
+ * afrekenen nog bij kwam); bij een ongewijzigde rij is de uitkomst gelijk aan
+ * de snapshot. Tarieven van regelsoorten die niet in de snapshot staan komen
+ * uit cfg. Zonder (geldige) snapshot: cfg zelf.
+ */
+export function cfgFromSnapshot(sale, cfg = {}) {
+  const snap = sale?.tax_snapshot;
+  if (!(snap && snap.v === 1 && Array.isArray(snap.by_rate))) return cfg || {};
+  const lines = Array.isArray(snap.lines) ? snap.lines : [];
+  const svc = lines.find((l) => SERVICE_KINDS.includes(l.kind));
+  const prod = lines.find((l) => l.kind === "product");
+  const registered = !!snap.registered;
+  const serviceRate = svc ? Number(svc.rate) || 0 : Number(cfg?.serviceRate) || 0;
+  const productRate = prod ? Number(prod.rate) || 0 : Number(cfg?.productRate) || 0;
+  return {
+    ...(cfg || {}),
+    registered,
+    serviceRate,
+    productRate,
+    showTaxInternal: registered && (serviceRate > 0 || productRate > 0),
+  };
 }

@@ -21,7 +21,7 @@
 
 import { useState, useEffect } from "react";
 import { NavIcon, onAccentInk, fmtAmt } from "./shared.jsx";
-import { cashFlowOf } from "./reportData.js";
+import { cashFlowOf, hasCashFlow } from "./reportData.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (v) => (v === null || v === undefined ? "" : String(v));
@@ -65,7 +65,10 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
   // Contante verkopen als echte geldstroom (Faisal 22-09-2026: "waarom staat
   // er niet automatisch dat er 4 kassa uit is"): wat de klant gaf is kas in,
   // het wisselgeld is kas uit. Netto blijft het verkoopbedrag in de la.
-  const flows = cashRows.map(cashFlowOf);
+  // Een contante rij die weer op open is gezet bracht niets in de la: geen
+  // regel "Contant ontvangen 0,00" en niet meetellen als betaling.
+  const paidCashRows = cashRows.filter(hasCashFlow);
+  const flows = paidCashRows.map(cashFlowOf);
   const cashReceived = round2(flows.reduce((n, f) => n + f.received, 0));
   const cashChange = round2(flows.reduce((n, f) => n + f.change, 0));
   const cashSales = round2(cashReceived - cashChange);
@@ -135,7 +138,7 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
       <div data-kasboek-tiles style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 6 }}>
         {tile(KIND.open, opening ? money(opening.amount) : "—")}
         {tile(KIND.in, cashReceived + sumIn > 0 ? `+${money(cashReceived + sumIn)}` : money(0),
-          [cashRows.length ? `${money(cashReceived)} ${T("ontvangen", "received", "recibido")} (${cashRows.length} ${cashRows.length === 1 ? T("betaling", "payment", "pago") : T("betalingen", "payments", "pagos")})` : null, sumIn > 0 ? `${money(sumIn)} ${T("gestort", "deposited", "depositado")}` : null].filter(Boolean).join(" · ") || null)}
+          [paidCashRows.length ? `${money(cashReceived)} ${T("ontvangen", "received", "recibido")} (${paidCashRows.length} ${paidCashRows.length === 1 ? T("betaling", "payment", "pago") : T("betalingen", "payments", "pagos")})` : null, sumIn > 0 ? `${money(sumIn)} ${T("gestort", "deposited", "depositado")}` : null].filter(Boolean).join(" · ") || null)}
         {tile(KIND.out, cashChange + sumOut > 0 ? `−${money(cashChange + sumOut)}` : money(0),
           [cashChange > 0 ? `${money(cashChange)} ${T("wisselgeld", "change", "cambio")}` : null, sumOut > 0 ? `${money(sumOut)} ${T("opgenomen", "withdrawn", "retirado")}` : null].filter(Boolean).join(" · ") || null)}
         {tile(T("Contant verkocht", "Cash sales", "Ventas en efectivo"), money(cashSales), cashChange > 0 ? T(`netto, na ${money(cashChange)} wisselgeld`, `net, after ${money(cashChange)} change`, `neto, tras ${money(cashChange)} de cambio`) : null)}
@@ -219,7 +222,7 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8 }}>…</div>
       ) : (() => {
         const ledger = [];
-        for (const a of cashRows) {
+        for (const a of paidCashRows) {
           const f = cashFlowOf(a);
           const wat = `${str(a.service_name)}${a.client_name && !a.is_sale ? ` (${str(a.client_name)})` : ""}`;
           ledger.push({ key: `sale-${a.id}`, kind: "sale", auto: true, time: str(a.time).slice(0, 5), label: T("Contant ontvangen", "Cash received", "Efectivo recibido"), sub: wat, amount: f.received, sign: "+", color: c.success });

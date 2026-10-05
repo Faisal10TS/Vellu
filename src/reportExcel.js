@@ -25,7 +25,8 @@
 // meteen mee kan rekenen, sorteren en filteren.
 
 import { buildXlsx, saveXlsx } from "./xlsx.js";
-import { revenueReportData, productReportData, cashbookData, cashFlowOf, payLabel, revenueReportFilename, productReportFilename, cashbookFilename } from "./reportData.js";
+import { revenueReportData, productReportData, cashbookData, cashFlowOf, payLabel, revenueReportFilename, productReportFilename, cashbookFilename, companyNumberLabel, untaxedNote } from "./reportData.js";
+import { resolveTax } from "./shared.jsx";
 
 const s = (v) => (v === null || v === undefined ? "" : String(v));
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -38,12 +39,13 @@ const pctLabel = (rate, locale) => `${(Math.round((Number(rate) || 0) * 100) / 1
 const genLocale = (lang) => (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
 
 // Bedrijfsblok + noten die onder elke samenvatting horen.
-function companyRows(salon, idLabel, T) {
+function companyRows(salon, idLabel, T, lang = "nl") {
   const rows = [
     [T("Bedrijf", "Business", "Empresa"), s(salon.business_name || salon.name)],
     salon.address ? [T("Adres", "Address", "Dirección"), s(salon.address)] : null,
     (salon.postcode || salon.city) ? [T("Plaats", "City", "Ciudad"), [s(salon.postcode), s(salon.city)].filter(Boolean).join(" ")] : null,
-    salon.kvk_number ? ["KVK", s(salon.kvk_number)] : null,
+    // België: ondernemingsnummer, geen KVK (companyNumberLabel).
+    salon.kvk_number ? [companyNumberLabel(salon, lang), s(salon.kvk_number)] : null,
     salon.btw_id ? [idLabel, s(salon.btw_id)] : null,
     salon.iban ? ["IBAN", s(salon.iban)] : null,
     salon.salon_email ? [T("E-mail", "Email", "Correo"), s(salon.salon_email)] : null,
@@ -99,6 +101,9 @@ export function buildRevenueReportXlsx({
   const kBtw = money(R.totalBtw);
   const kNet = money(R.totalNet);
   const kAvg = money(R.avg);
+  // Kassaverkopen zijn geen afspraken: zitten ze erin, dan heet het totaal
+  // "Transacties" met de splitsing eronder (zelfde regel als de PDF).
+  const withSales = R.saleCount > 0;
   const sum1 = [
     [{ v: T("Omzetrapport", "Revenue report", "Informe de ingresos"), s: "title" }],
     [{ v: s(salon.business_name || salon.name), s: "bold" }],
@@ -108,11 +113,13 @@ export function buildRevenueReportXlsx({
     staffName ? [T("Medewerker", "Team member", "Miembro del equipo"), null, s(staffName)] : null,
     [],
     [{ v: T("Kerncijfers", "Key figures", "Cifras clave"), s: "bold" }],
-    [T("Aantal afspraken", "Appointments", "Citas"), null, kCount],
+    [withSales ? T("Transacties", "Transactions", "Transacciones") : T("Aantal afspraken", "Appointments", "Citas"), null, kCount],
+    withSales ? [T("Waarvan afspraken", "Of which appointments", "De ellas, citas"), null, int(R.apptCount)] : null,
+    withSales ? [T("Waarvan kassaverkopen", "Of which till sales", "De ellas, ventas en caja"), null, int(R.saleCount)] : null,
     [showTaxRows ? T(`Omzet incl. ${label}`, `Revenue incl. ${label}`, `Ingresos incl. ${label}`) : T("Omzet", "Revenue", "Ingresos"), null, kGross],
     showTaxRows ? [label, null, kBtw] : null,
     showTaxRows ? [T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`), null, kNet] : null,
-    [T("Gemiddeld per afspraak", "Average per appointment", "Promedio por cita"), null, kAvg],
+    [withSales ? T("Gemiddeld per transactie", "Average per transaction", "Promedio por transacción") : T("Gemiddeld per afspraak", "Average per appointment", "Promedio por cita"), null, kAvg],
     [],
   ].filter(Boolean);
   // Belastingtabel: bij één tarief zonder onbelaste omzet of kadobonnen zijn
@@ -148,14 +155,17 @@ export function buildRevenueReportXlsx({
     const plain = mainRate > 0 && Math.abs((r.gross - r.gross / (1 + mainRate / 100)) - r.tax) < 0.000001;
     const taxCell = plain ? { f: `H${rowNum}-H${rowNum}/(1+${mainRate / 100})`, v: r.tax, s: "money" } : { v: r.tax, s: "money" };
     const netCell = plain ? { f: `H${rowNum}-J${rowNum}`, v: r.net, s: "money" } : { v: r.net, s: "money" };
-    return [date(a.date), s(a.time), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), a.payment_method ? payLabel(a.payment_method, lang) : "", s(a.invoice_number), money(r.gross),
+    // Geen betaalwijze = "Later / factuur" (payLabel), niet leeg en niet "in de salon".
+    return [date(a.date), s(a.time), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), payLabel(a.payment_method, lang), s(a.invoice_number), money(r.gross),
       ...(showTaxRows ? [netCell, taxCell] : [])];
   };
   // Zonder regels geen SOM-formule (SUM(H3:H2) zou de totaalregel zelf raken).
   const sumOrValue = (col, first, last, v) => (last >= first ? sum(col, first, last)(v) : money(v, true));
   const totalRow = (first, last) => [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sumOrValue("H", first, last, R.totalGross),
     ...(showTaxRows ? [sumOrValue("I", first, last, R.totalNet), sumOrValue("J", first, last, R.totalBtw)] : [])];
-  sum1.push([{ v: T("Afspraken", "Appointments", "Citas"), s: "bold" }], head);
+  // Met kassaverkopen erbij is het geen lijst van alleen afspraken meer.
+  const rowsTitle = withSales ? T("Transacties", "Transactions", "Transacciones") : T("Afspraken", "Appointments", "Citas");
+  sum1.push([{ v: rowsTitle, s: "bold" }], head);
   const headRowS = sum1.length;
   const firstS = sum1.length + 1;
   for (const r of R.rows) sum1.push(rowOf(r, sum1.length + 1));
@@ -177,18 +187,24 @@ export function buildRevenueReportXlsx({
     }
   }
 
-  sum1.push(...companyRows(salon, idLabel, T).map(([k, v]) => [k, null, v]), []);
+  sum1.push(...companyRows(salon, idLabel, T, lang).map(([k, v]) => [k, null, v]), []);
   const ratesNote = showTaxRows ? ` · ${label} ${R.byRate.map((r) => pctLabel(r.rate, moneyLocale)).join(" / ")}` : "";
+  // In zinnen het symbool zonder spatie erachter ("XCG ," → "XCG,").
+  const curText = s(currencySymbol).trim();
   sum1.push(...noteRows([
     T("Belastingbedragen zijn berekend op basis van de instellingen van deze salon. Vellu geeft geen fiscaal advies.",
       "Tax amounts are calculated from this salon's settings. Vellu does not provide tax advice.",
       "Los importes de impuestos se calculan según la configuración de este salón. Vellu no ofrece asesoramiento fiscal."),
-    T(`Bedragen in ${currencySymbol}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
-      `Amounts in ${currencySymbol}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
-      `Importes en ${currencySymbol}${ratesNote}, impuestos incluidos. Tras un cambio de región, los importes anteriores no se convierten.`),
-    showTaxRows ? T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
-      `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
-      `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`) : null,
+    T(`Bedragen in ${curText}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
+      `Amounts in ${curText}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
+      `Importes en ${curText}${ratesNote}, impuestos incluidos. Tras un cambio de región, los importes anteriores no se convierten.`),
+    showTaxRows ? (withSales
+      ? T(`Netto en ${label} per transactie zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
+        `Net and ${label} per transaction are not rounded, so their sums match the key figures exactly.`,
+        `El neto y el ${label} por transacción no están redondeados; sumados coinciden exactamente con las cifras clave.`)
+      : T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
+        `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
+        `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`)) : null,
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 
@@ -202,11 +218,13 @@ export function buildRevenueReportXlsx({
   const printFooter = `${T("Pagina", "Page", "Página")} &P / &N`;
   const sheets = [
     { name: T("Samenvatting", "Summary", "Resumen"), cols, rows: sum1, printTitleRow: headRowS, header: printHeader, footer: printFooter },
-    { name: T("Afspraken", "Appointments", "Citas"), cols, rows: [head, ...body, totalRow(2, lastRow)], freeze: true, filter: Math.max(1, lastRow), printTitleRow: 1, header: printHeader, footer: printFooter },
+    { name: rowsTitle, cols, rows: [head, ...body, totalRow(2, lastRow)], freeze: true, filter: Math.max(1, lastRow), printTitleRow: 1, header: printHeader, footer: printFooter },
   ];
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = revenueReportFilename({ salon, staffName, range, lang, ext: "xlsx" });
-  return { filename, bytes, count: R.count, totalGross: R.totalGross, totalNet: R.totalNet, totalBtw: R.totalBtw, byRate: R.byRate, untaxedGross: R.untaxedGross, paidByVoucher: R.voucherPaid, taxLabel: label };
+  // apptCount/saleCount: zodat de melding na het downloaden "N afspraken,
+  // M kassaverkopen" kan zeggen in plaats van alles "afspraken" te noemen.
+  return { filename, bytes, count: R.count, apptCount: R.apptCount, saleCount: R.saleCount, totalGross: R.totalGross, totalNet: R.totalNet, totalBtw: R.totalBtw, byRate: R.byRate, untaxedGross: R.untaxedGross, paidByVoucher: R.voucherPaid, taxLabel: label };
 }
 
 export function downloadRevenueReportXlsx(opts) {
@@ -278,16 +296,19 @@ export function buildProductReportXlsx({
     if (Math.abs(P.untaxed) >= 0.01) sum1.push([T("Onbelast", "Untaxed", "Sin impuesto"), money(P.untaxed), money(P.untaxed), money(0)]);
     if (P.voucherPaid >= 0.01) sum1.push([T("Ingewisselde kadobonnen", "Gift cards redeemed", "Tarjetas regalo canjeadas"), money(-P.voucherPaid), money(-P.voucherPaid), money(0)]);
     sum1.push([{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, money(P.totalRevenue, true), money(P.totalNet, true), money(P.totalTax, true)]);
-    if (P.untaxed >= 0.01) sum1.push(...noteRows([T(`De regel "Onbelast" is doorverkoop van producten; die is hier niet ${taxLabel}-plichtig.`, `The "Untaxed" row is resale of products, which is not subject to ${taxLabel} here.`, `La fila "Sin impuesto" es reventa de productos, que no está sujeta a ${taxLabel} aquí.`)]));
+    // Waarom er onbelaste omzet is (kadobonverkoop, doorverkoop op de BES-
+    // eilanden, periode zonder belastingplicht) — zelfde tekst als de PDF.
+    if (P.untaxed >= 0.01) sum1.push(...noteRows([untaxedNote(P, lang)]));
     sum1.push([]);
   }
   if (P.days.length > 1) addTable(sum1, T("Per dag", "By day", "Por día"), dayHead, dayBody, dayTotal);
   addTable(sum1, T("Transacties", "Transactions", "Transacciones"), trHead, trBody, trTotal);
-  sum1.push(...companyRows(salon, cfg.idLabel || taxIdLabel, T), []);
+  sum1.push(...companyRows(salon, cfg.idLabel || taxIdLabel, T, lang), []);
+  const curText = s(currencySymbol).trim();
   sum1.push(...noteRows([
-    T(`Bedragen in ${currencySymbol}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
-      `Amounts in ${currencySymbol}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon's settings; Vellu does not provide tax advice.`,
-      `Importes en ${currencySymbol}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuración de este salón; Vellu no ofrece asesoramiento fiscal.`),
+    T(`Bedragen in ${curText}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
+      `Amounts in ${curText}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon's settings; Vellu does not provide tax advice.`,
+      `Importes en ${curText}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuración de este salón; Vellu no ofrece asesoramiento fiscal.`),
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 
@@ -313,8 +334,12 @@ export function downloadProductReportXlsx(opts) {
 // ── Kasboek ──────────────────────────────────────────────────────────────
 // Samenvatting + Per dag + Mutaties + Contante betalingen. Zelfde rekenlaag
 // als het scherm en de PDF (cashbookData).
-export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "nl", currencySymbol = "€" }) {
+export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "nl", currencySymbol = "€", taxIdLabel = null }) {
   const T = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
+  // Label van het fiscaal nummer volgt het land van de salon (CRIB op de
+  // BES-eilanden, "Fiscaal nr." op Aruba/Curaçao). salonData draagt geen
+  // tax_id_label, dus stond hier altijd "BTW-id".
+  const idLabel = taxIdLabel || salon.tax_id_label || resolveTax(salon).idLabel || "BTW-id";
   const D = cashbookData({ movements, cashRows, from: range.from, to: range.to });
   const KIND = { open: T("Beginsaldo", "Opening float", "Saldo inicial"), in: T("Kas in", "Cash in", "Entrada"), out: T("Kas uit", "Cash out", "Salida"), count: T("Telling", "Count", "Recuento") };
   const tijd = (iso) => { try { return new Date(iso).toLocaleTimeString(genLocale(lang), { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
@@ -360,12 +385,13 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
   addTable(sum1, T("Per dag", "By day", "Por día"), dayHead, dayBody, dayTotal);
   addTable(sum1, T("Mutaties", "Movements", "Movimientos"), mvHead, mvBody, null);
   addTable(sum1, T("Contante betalingen", "Cash payments", "Pagos en efectivo"), csHead, csBody, csTotal);
-  sum1.push(...companyRows(salon, salon.tax_id_label || "BTW-id", T), []);
+  sum1.push(...companyRows(salon, idLabel, T, lang), []);
+  const curText = s(currencySymbol).trim();
   sum1.push(...noteRows([
     T("Verwacht in kas = beginsaldo + contant ontvangen − wisselgeld + stortingen − opnames. Kasverschil = geteld − verwacht op het moment van tellen.",
       "Expected in drawer = opening float + cash received − change + deposits − withdrawals. Difference = counted − expected at the time of counting.",
       "Esperado en caja = saldo inicial + efectivo recibido − cambio + depósitos − retiradas. Diferencia = contado − esperado en el momento del recuento."),
-    T(`Bedragen in ${currencySymbol}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${currencySymbol}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${currencySymbol}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
+    T(`Bedragen in ${curText}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${curText}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${curText}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 

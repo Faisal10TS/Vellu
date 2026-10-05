@@ -15,10 +15,12 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { taxForSale } from "./taxEngine.js";
-import { productReportData, productReportFilename } from "./reportData.js";
+import { productReportData, productReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel, untaxedNote } from "./reportData.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e
 const s = (v) => (v === null || v === undefined ? "" : String(v));
+// Tekst voor jsPDF (alleen de PDF's; de HTML-bon kan gewoon Unicode aan).
+const ps = (v) => pdfSafe(s(v));
 // 6 in plaats van 6.0, maar 8.5 blijft 8.5 \u2014 tarieven zijn niet altijd rond.
 const fmtPct = (r) => String(Math.round((Number(r) || 0) * 100) / 100);
 
@@ -67,10 +69,6 @@ export function generateProductReportPDF({
   const money = (n) => currencySymbol + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(moneyLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cfg = taxCfg || {};
   const taxLabel = cfg.label || "BTW";
-  // Dit is een INTERN stuk voor de eigenaar en zijn boekhouder. Op Aruba mag
-  // het belastingbedrag niet op een klantfactuur, maar hier hoort het juist
-  // wel te staan \u2014 vandaar showTaxInternal en niet showTax.
-  const showTax = !!cfg.showTaxInternal;
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -84,6 +82,23 @@ export function generateProductReportPDF({
   const P = productReportData({ appointments, cfg, lang });
   const { lines, rateRows, totalRevenue, totalQty, totalTax, totalNet, voucherPaid, untaxed } = P;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  // Dit is een INTERN stuk voor de eigenaar en zijn boekhouder. Op Aruba mag
+  // het belastingbedrag niet op een klantfactuur, maar hier hoort het juist
+  // wel te staan — vandaar showTaxInternal en niet showTax. P.showTax is
+  // ook waar als een rij uit de periode met belasting bevroren is.
+  const showTax = P.showTax;
+
+  // Voettekst: eerst opmeten, zodat elke tabel er onderaan ruimte voor laat
+  // (de zin liep eerst over de paginarand: NL 686pt op 515pt breed).
+  const curSym = s(currencySymbol).trim();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const footerLines = doc.splitTextToSize(T(
+    `Bedragen in ${curSym}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
+    `Amounts in ${curSym}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon’s settings; Vellu does not provide tax advice.`,
+    `Importes en ${curSym}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuración de este salón; Vellu no ofrece asesoramiento fiscal.`
+  ), pageW - margin * 2);
+  const bottomMargin = 34 + 12 * footerLines.length;
 
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -94,7 +109,7 @@ export function generateProductReportPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(120, 120, 120);
-  doc.text(range.label || `${fmtDate(range.from, lang)} — ${fmtDate(range.to, lang)}`, margin, 78);
+  doc.text(ps(range.label || `${fmtDate(range.from, lang)} — ${fmtDate(range.to, lang)}`), margin, 78);
 
   // Eigen logo rechtsboven als het meekomt, anders het Vellu-merk. Het
   // bedrijfsblok hieronder begint op y=110, dus een logo tot y=80 overlapt niet.
@@ -125,18 +140,18 @@ export function generateProductReportPDF({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(26, 23, 20);
-  doc.text(s(salon.business_name || salon.name), pageW - margin, y, { align: "right" });
+  doc.text(ps(salon.business_name || salon.name), pageW - margin, y, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 100, 100);
   doc.setFontSize(9);
   for (const line of [
     s(salon.address),
-    salon.kvk_number ? `KVK: ${s(salon.kvk_number)}` : "",
+    salon.kvk_number ? `${companyNumberLabel(salon, lang)}: ${s(salon.kvk_number)}` : "",
     salon.btw_id ? `${taxIdLabel}: ${s(salon.btw_id)}` : "",
     s(salon.salon_email),
   ].filter(Boolean)) {
     y += 12;
-    doc.text(line, pageW - margin, y, { align: "right" });
+    doc.text(ps(line), pageW - margin, y, { align: "right" });
   }
 
   // ── Summary ──────────────────────────────────────────────────────────
@@ -175,7 +190,10 @@ export function generateProductReportPDF({
     headStyles: { fillColor: [250, 248, 245], textColor: [120, 110, 100], fontStyle: "bold", fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: [60, 60, 60] },
     footStyles: { fillColor: [245, 243, 239], textColor: [26, 23, 20], fontStyle: "bold", fontSize: 10 },
-    margin: { left: margin, right: margin },
+    // Onderrand voor de voettekst op ELKE pagina, ook die een eerdere tabel
+    // (per product, betaalwijze, belasting, per dag) vult.
+    margin: { left: margin, right: margin, bottom: bottomMargin },
+    didParseCell: pdfSafeCells,
   };
 
   // ── Per product ──────────────────────────────────────────────────────
@@ -234,18 +252,20 @@ export function generateProductReportPDF({
         : undefined,
     });
     // Waarom die onbelaste regel er staat, anders lijkt het rapport een fout te
-    // maken: de omzet is hoger dan de grondslag.
-    if (untaxed >= 0.01) {
+    // maken: de omzet is hoger dan de grondslag. De reden volgt uit de regels
+    // zelf (kadobonverkoop, doorverkoop op de BES-eilanden, of een periode
+    // zonder belastingplicht), zie untaxedNote in reportData.js.
+    const note = untaxed >= 0.01 ? untaxedNote(P, lang) : "";
+    if (note) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
-      doc.text(
-        T(`De regel "Onbelast" is doorverkoop van producten; die is hier niet ${taxLabel}-plichtig.`,
-          `The "Untaxed" row is resale of products, which is not subject to ${taxLabel} here.`,
-          `La fila "Sin impuesto" es reventa de productos, que no est\u00e1 sujeta a ${taxLabel} aqu\u00ed.`),
-        margin, doc.lastAutoTable.finalY + 13,
-      );
-      doc.lastAutoTable.finalY += 13;
+      const noteLines = doc.splitTextToSize(ps(note), pageW - margin * 2);
+      let noteY = doc.lastAutoTable.finalY + 13;
+      // Past de toelichting niet meer boven de voettekst, dan op een nieuwe pagina.
+      if (noteY + 10 * (noteLines.length - 1) > pageH - bottomMargin) { doc.addPage(); noteY = 50; }
+      for (const l of noteLines) { doc.text(l, margin, noteY); noteY += 10; }
+      doc.lastAutoTable.finalY = noteY - 10;
     }
   }
 
@@ -278,28 +298,25 @@ export function generateProductReportPDF({
       : [["", "", T("Geen verkopen in deze periode", "No sales in this period", "Sin ventas en este período"), "", "", ""]],
     foot: lines.length ? [["", "", "", "", T("Totaal", "Total", "Total"), money(totalRevenue)]] : undefined,
     columnStyles: { 5: { halign: "right", fontStyle: "bold" }, 2: { cellWidth: 150 } },
-    didDrawPage: () => {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(160, 160, 160);
-      doc.text(
-        T(
-          `Bedragen in ${currencySymbol}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
-          `Amounts in ${currencySymbol}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon\u2019s settings; Vellu does not provide tax advice.`,
-          `Importes en ${currencySymbol}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuraci\u00f3n de este sal\u00f3n; Vellu no ofrece asesoramiento fiscal.`
-        ),
-        margin, pageH - 32
-      );
-      doc.text(
-        `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")}`,
-        margin, pageH - 20
-      );
-      doc.text(
-        `${doc.internal.getCurrentPageInfo().pageNumber} / ${doc.internal.getNumberOfPages()}`,
-        pageW - margin, pageH - 20, { align: "right" }
-      );
-    },
   });
+
+  // Voettekst op ELKE pagina, pas als alle pagina's bestaan (in didDrawPage
+  // las pagina 1 "1 / 1", en pagina's die een eerdere tabel vulde kregen geen
+  // voet en geen disclaimer). Zelfde aanpak als cashbookReport.js.
+  const pages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(160, 160, 160);
+    let fy = pageH - 32 - 12 * (footerLines.length - 1);
+    for (const l of footerLines) { doc.text(l, margin, fy); fy += 12; }
+    doc.text(
+      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")}`,
+      margin, pageH - 20
+    );
+    doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
+  }
 
   // Zelfde naam als de Excel-export; alleen de extensie verschilt.
   const filename = productReportFilename({ salon, range, lang, ext: "pdf" });
@@ -341,11 +358,15 @@ export function generateReceiptPDF({
   const taxLabel = tax.label || "BTW";
   const items = tax.lines.map((l) => ({
     qty: parseInt(l.qty) || 1,
-    name: s(l.name) || T("Behandeling", "Treatment", "Tratamiento"),
+    name: ps(l.name) || T("Behandeling", "Treatment", "Tratamiento"),
     amount: Number(l.gross) || 0,
+    kind: l.kind,
   }));
-  const gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
-  const redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  // Alleen een ingewisselde kadobon is een "Kadobon"-betaling. Een korting
+  // is ook een negatieve regel, maar die verlaagt de prijs zelf en hoort dus
+  // in het subtotaal \u2014 anders stond er een kadobon op de bon die er nooit was.
+  const gross = items.filter((i) => i.kind !== "voucher").reduce((n, i) => n + i.amount, 0);
+  const redeemed = items.filter((i) => i.kind === "voucher").reduce((n, i) => n + Math.abs(i.amount), 0);
   const grandTotal = tax.grandTotal;
   // Blijft leeg op Aruba: daar mag het belastingBEDRAG sinds 1-1-2019 niet
   // apart op een document voor de klant staan.
@@ -359,10 +380,10 @@ export function generateReceiptPDF({
   const wrapped = items.map((it) => probe.splitTextToSize(`${it.qty > 1 ? it.qty + " x " : ""}${it.name}`, nameW));
   const itemLines = wrapped.reduce((n, l) => n + l.length, 0);
 
-  const head = [s(salon.address), s(salon.city), s(salon.phone)].filter(Boolean);
+  const head = [ps(salon.address), ps(salon.city), ps(salon.phone)].filter(Boolean);
   const ids = [];
-  if (salon.kvk_number) ids.push(`KVK ${s(salon.kvk_number)}`);
-  if (tax.showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
+  if (salon.kvk_number) ids.push(`${companyNumberLabel(salon, lang)} ${ps(salon.kvk_number)}`);
+  if (tax.showTax && salon.btw_id) ids.push(`${taxIdLabel} ${ps(salon.btw_id)}`);
 
   // \u00c9\u00e9n tarief past op \u00e9\u00e9n regel; bij meerdere tarieven komt er een kopregel
   // boven, want "incl. 6% ABB" klopt dan niet meer voor de hele bon.
@@ -396,7 +417,7 @@ export function generateReceiptPDF({
   };
 
   // Kop
-  centre(s(salon.business_name || salon.name || "Vellu"), 12, "bold", [26, 23, 20], 14);
+  centre(ps(salon.business_name || salon.name || "Vellu"), 12, "bold", [26, 23, 20], 14);
   for (const h of head) centre(h, 7.5, "normal", [125, 125, 125], 10);
   if (ids.length) centre(ids.join("   "), 7, "normal", [150, 150, 150], 12);
   else y += 2;
@@ -412,7 +433,7 @@ export function generateReceiptPDF({
   pair(`${fmtDate(sale.date, lang)}  ${s(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${docNo}`, 7.5, "normal", [125, 125, 125], 11);
   if (sale.client_name) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(125, 125, 125);
-    doc.text(s(sale.client_name), m, y); y += 11;
+    doc.text(ps(sale.client_name), m, y); y += 11;
   }
   rule();
 
@@ -471,7 +492,7 @@ export function generateReceiptPDF({
     pair(T("Ontvangen", "Cash received", "Recibido"), money(ontvangen), 8, "normal", [40, 40, 40], 11);
     pair(T("Wisselgeld", "Change", "Cambio"), money(Math.max(0, ontvangen - grandTotal)), 8, "normal", [40, 40, 40], 11);
   }
-  if (sale.staff_name) pair(T("Verkocht door", "Sold by", "Vendido por"), String(sale.staff_name).split(",")[0].trim(), 7.5, "normal", [125, 125, 125], 11);
+  if (sale.staff_name) pair(T("Verkocht door", "Sold by", "Vendido por"), ps(String(sale.staff_name).split(",")[0].trim()), 7.5, "normal", [125, 125, 125], 11);
   y += 3;
   rule();
 
@@ -534,16 +555,19 @@ export function receiptHTML({
     qty: parseInt(l.qty) || 1,
     name: s(l.name) || T("Behandeling", "Treatment", "Tratamiento"),
     amount: Number(l.gross) || 0,
+    kind: l.kind,
   }));
-  const gross = items.filter((i) => i.amount > 0).reduce((n, i) => n + i.amount, 0);
-  const redeemed = items.filter((i) => i.amount < 0).reduce((n, i) => n + Math.abs(i.amount), 0);
+  // Zelfde regel als de PDF-bon: alleen een ingewisselde kadobon is een
+  // "Kadobon"-betaling; een korting blijft in het subtotaal.
+  const gross = items.filter((i) => i.kind !== "voucher").reduce((n, i) => n + i.amount, 0);
+  const redeemed = items.filter((i) => i.kind === "voucher").reduce((n, i) => n + Math.abs(i.amount), 0);
   const grandTotal = tax.grandTotal;
   // Blijft leeg op Aruba: het belastingbedrag mag daar niet op een klantdocument.
   const rateRows = tax.showTax ? tax.byRate : [];
 
   const head = [s(salon.address), s(salon.city), s(salon.phone)].filter(Boolean);
   const ids = [];
-  if (salon.kvk_number) ids.push(`KVK ${s(salon.kvk_number)}`);
+  if (salon.kvk_number) ids.push(`${companyNumberLabel(salon, lang)} ${s(salon.kvk_number)}`);
   if (tax.showTax && salon.btw_id) ids.push(`${taxIdLabel} ${s(salon.btw_id)}`);
 
   const shortId = String(sale.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();

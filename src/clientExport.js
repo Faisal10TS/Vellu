@@ -13,17 +13,31 @@
 import { supabase } from "./supabase.js";
 import { curSym, fetchAllRows } from "./shared.jsx";
 
+// Puntkomma als scheidingsteken en een decimale komma, zoals de product-CSV
+// (exportProductsCsv) en het importsjabloon: Excel met Nederlandse, Belgische
+// of Spaanse instellingen gebruikt ";" als lijstscheiding, en een komma-CSV
+// opende daar als één kolom ("Voornaam,Achternaam,E-mail,...").
+const SEP = ";";
+
 // RFC 4180: wrap in double quotes, escape embedded quotes by doubling.
-function csvCell(v) {
+// Formule-injectie: een naam als =HYPERLINK(...) die via de openbare
+// boekingspagina binnenkomt, wordt in Excel/Sheets anders uitgevoerd. Een cel
+// die met = + - @ tab of CR begint krijgt een apostrof ervoor (OWASP) —
+// behalve een kaal getal of telefoonnummer ("+599 717 1234", "-12,50"): dat
+// kan hooguit als rekensom gelezen worden, nooit een functie of een andere cel
+// aanroepen, en de apostrof bleef bij een import in Google Contacts of
+// Mailchimp in het nummer staan.
+export function csvCell(v) {
   if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  let s = String(v);
+  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?[\d\s().,/-]+$/.test(s)) s = "'" + s;
+  if (/[;"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 
 function rowsToCsv(rows, columns) {
-  const header = columns.map(c => csvCell(c.label)).join(",");
-  const body = rows.map(r => columns.map(c => csvCell(typeof c.value === "function" ? c.value(r) : r[c.value])).join(",")).join("\r\n");
+  const header = columns.map(c => csvCell(c.label)).join(SEP);
+  const body = rows.map(r => columns.map(c => csvCell(typeof c.value === "function" ? c.value(r) : r[c.value])).join(SEP)).join("\r\n");
   // UTF-8 BOM so Excel opens with correct encoding for names with accents.
   return "\uFEFF" + header + "\r\n" + body;
 }
@@ -35,11 +49,15 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   // Why go through appointments: `clients` is a shared table across all salons
   // (email is globally unique). So the *authoritative* list of "clients of
   // this salon" is "people who have booked here at least once."
+  // Alle rijen via fetchAllRows (PostgREST geeft er per verzoek hooguit 1000):
+  // zonder paginering viel een salon met meer afspraken stil klanten kwijt en
+  // klopten bezoeken en bestedingen niet.
   const [apptRes, manualRes] = await Promise.all([
-    supabase
+    fetchAllRows(() => supabase
       .from("appointments")
-      .select("id, date, time, service_name, service_price, staff_name, client_id, client_email, client_name, client_phone, status, clients(first_name, last_name, email, phone, allergies, created_at)")
-      .eq("owner_id", ownerId),
+      .select("id, date, time, service_name, service_price, staff_name, client_id, client_email, client_name, client_phone, status, is_sale, clients(first_name, last_name, email, phone, allergies, created_at)")
+      .eq("owner_id", ownerId)
+      .order("id")),
     // Imported / manually-added clients — they may not have booked an
     // appointment yet (e.g. a salon that just imported its list), but must
     // still be part of the export.
@@ -57,11 +75,37 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   // Aggregate per email (clients.email is globally unique so email ==
   // canonical key). Falls back to appointment fields if the joined clients
   // row is missing (shouldn't happen but defends against partial data).
+  // Klanten zonder e-mail (door de salon ingevoerd of geïmporteerd met alleen
+  // een telefoonnummer) horen er ook in — de export heet "al je klanten" en
+  // dient als back-up en AVG-antwoord. Die krijgen naam + telefooncijfers als
+  // sleutel. Een losse kassaverkoop zonder e-mail ("Losse verkoop") is geen
+  // klant en blijft eruit.
+  const digits = (v) => String(v || "").replace(/\D/g, "");
+  const nameKey = (name, phone) => {
+    const n = String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return n ? `naam:${n}|${digits(phone)}` : "";
+  };
   const byEmail = new Map();
-  for (const a of appts) {
+  // Dezelfde persoon kan rijen mét en zonder e-mail hebben (eerst door de
+  // salon met alleen een telefoonnummer ingevoerd, later online geboekt, of
+  // andersom). Elk klantblok is daarom ook te vinden op naam +
+  // telefooncijfers, zodat zo'n rij bij het bestaande blok komt in plaats van
+  // als tweede regel. Alleen mét telefooncijfers: twee verschillende "Anna"s
+  // zonder nummer komen nooit bij een klant met e-mail terecht.
+  const byName = new Map();
+  const remember = (agg, name, phone) => {
+    const k = nameKey(name, phone);
+    if (k && digits(phone) && !byName.has(k)) byName.set(k, agg);
+  };
+  // Eerst de rijen mét e-mail, dan die zonder: anders hangt het van de
+  // volgorde af of een rij zonder e-mail het blok mét e-mail al kan vinden.
+  const hasEmail = (a) => !!(a.clients?.email || a.client_email);
+  for (const a of [...appts.filter(hasEmail), ...appts.filter((a) => !hasEmail(a))]) {
     const email = (a.clients?.email || a.client_email || "").toLowerCase();
-    if (!email) continue;
-    let agg = byEmail.get(email);
+    const nk = (email || a.is_sale) ? "" : nameKey(a.client_name, a.client_phone);
+    const key = email || nk;
+    if (!key) continue;
+    let agg = byEmail.get(key) || (nk && digits(a.client_phone) ? byName.get(nk) : null);
     if (!agg) {
       agg = {
         first_name: a.clients?.first_name || (a.client_name || "").split(" ")[0] || "",
@@ -79,8 +123,10 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
         services: {},
         staff: {},
       };
-      byEmail.set(email, agg);
+      byEmail.set(key, agg);
     }
+    remember(agg, a.client_name, a.client_phone);
+    if (a.clients) remember(agg, `${a.clients.first_name || ""} ${a.clients.last_name || ""}`, a.clients.phone);
     agg.total_appointments++;
     if (a.status === "completed") { agg.completed_count++; agg.total_spent += parseFloat(a.service_price || 0); }
     if (a.status === "cancelled") agg.cancelled_count++;
@@ -97,26 +143,44 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   // any email that's already aggregated.
   for (const m of manual) {
     if (m.hidden) continue;
-    const email = String(m.email || "").toLowerCase();
-    if (!email || byEmail.has(email)) continue;
+    const email = String(m.email || "").trim().toLowerCase();
+    if (email && byEmail.has(email)) continue;
+    const nk = nameKey(m.name, m.phone);
+    // Zelfde naam + telefoon als een klant die er al in staat: geen tweede
+    // regel. Had dat blok nog geen e-mail (alleen afspraken zonder adres), dan
+    // krijgt het het adres uit de klantenlijst. Een ANDER e-mailadres bij
+    // dezelfde naam blijft een eigen regel, zoals altijd.
+    const known = nk && digits(m.phone) ? byName.get(nk) : null;
+    if (known && (!email || !known.email)) {
+      if (email) { known.email = email; byEmail.set(email, known); }
+      continue;
+    }
+    const key = email || nk;
+    if (!key || byEmail.has(key)) continue;
     const nm = String(m.name || "").trim();
-    byEmail.set(email, {
+    const agg = {
       first_name: nm.split(" ")[0] || "",
       last_name: nm.split(" ").slice(1).join(" ") || "",
       email, phone: m.phone || "", allergies: "",
       first_visit: "", last_visit: "",
       total_appointments: 0, completed_count: 0, cancelled_count: 0, no_show_count: 0,
       total_spent: 0, services: {}, staff: {},
-    });
+    };
+    byEmail.set(key, agg);
+    remember(agg, m.name, m.phone);
   }
 
   if (byEmail.size === 0) return { count: 0, csv: null };
 
-  const rows = Array.from(byEmail.values()).map(r => ({
+  // Een blok kan onder twee sleutels staan (naam + telefoon én het e-mailadres
+  // uit de klantenlijst): elk blok één keer.
+  const rows = Array.from(new Set(byEmail.values())).map(r => ({
     ...r,
     favorite_service: Object.entries(r.services).sort((a, b) => b[1] - a[1])[0]?.[0] || "",
     favorite_staff: Object.entries(r.staff).sort((a, b) => b[1] - a[1])[0]?.[0] || "",
-    total_spent: r.total_spent.toFixed(2),
+    // Decimale komma: bij ";" als scheidingsteken leest NL/BE/ES-Excel "45,50"
+    // als getal (een punt werd tekst of 4550).
+    total_spent: r.total_spent.toFixed(2).replace(".", ","),
   }));
 
   // Sort alphabetically by last name for predictable output.
@@ -162,7 +226,9 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Pas later vrijgeven: iOS Safari leest de blob na de klik, en een directe
+  // revoke kan de download afbreken (zelfde vertraging als saveXlsx).
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 
   return { count: rows.length, filename };
 }

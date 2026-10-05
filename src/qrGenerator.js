@@ -40,7 +40,9 @@ export function triggerDownload(filename, data, mimeType) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Pas later vrijgeven: iOS Safari leest de blob na de klik, en een directe
+  // revoke kan de download afbreken (zelfde vertraging als saveXlsx).
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 // Convert a data URL ("data:image/png;base64,...") to a Blob for download.
