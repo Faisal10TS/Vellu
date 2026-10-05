@@ -4583,6 +4583,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (salonDay === dev) return;
     setCalDate(d => (d === dev ? salonDay : d));
     setKassaDay(d => (d === dev ? salonDay : d));
+    // Ook de begindatum van het + Afspraak-formulier (useState verderop).
+    setAddApptForm(f => (f.date === dev ? { ...f, date: salonDay } : f));
   }, [salonData?.owner_id, salonData?.country_code]);
 
   // Rapporten en periodetotalen mogen niet stilzwijgend ophouden bij het
@@ -5151,12 +5153,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // dagtotaal van het dubbele. In de database stond hij altijd maar één
           // keer — het was puur het scherm.
           // Staat hij er al (eigen kassaverkoop of + Afspraak), dan op id
-          // VERVANGEN in plaats van overslaan of nog eens vooraan zetten: zo
-          // blijft er altijd precies één kopie, ongeacht wie het eerst was.
+          // samenvoegen in plaats van nog eens vooraan zetten: zo blijft er
+          // altijd precies één kopie, ongeacht wie het eerst was. De LOKALE
+          // waarden winnen: die zijn nooit ouder dan het invoegen (was de rij
+          // intussen al afgerond, dan zette de echo hem anders even terug op
+          // "bevestigd"); de echo vult alleen ontbrekende velden aan.
           let wasNieuw = false;
           update(d => {
             if (d.appointments.some(a => a.id === payload.new.id)) {
-              d.appointments = d.appointments.map(a => (a.id === payload.new.id ? { ...a, ...payload.new } : a));
+              d.appointments = d.appointments.map(a => (a.id === payload.new.id ? { ...payload.new, ...a } : a));
               return d;
             }
             wasNieuw = true;
@@ -6072,9 +6077,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       );
       let restPay = null;
       if (splitRest) {
+        // Notitie "Restbetaling": in de betaalhistorie staat dan niet alleen
+        // "Contant" maar ook dat het het restant na de vooruitbetaling was.
         const { data: pay, error: payErr } = await supabase.from("client_payments").insert({
           owner_id: salonData.owner_id, appointment_id: id, amount: rest, method,
-          paid_on: fmt(salonNow(salonData.country_code)), note: null,
+          paid_on: fmt(salonNow(salonData.country_code)),
+          note: lang === "nl" ? "Restbetaling" : lang === "es" ? "Pago restante" : "Remaining payment",
           client_name: apptRow.client_name || null, label: apptRow.service_name || null,
         }).select().single();
         if (payErr || !pay) { console.error("restbetaling vastleggen mislukt:", payErr); toast.show(t.errorCompleting, "error"); return; }
@@ -6139,7 +6147,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
         return;
       }
-      update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+      const withPatch = (x) => (x.id === a.id ? { ...x, ...patch } : x);
+      update(d => { d.appointments = d.appointments.map(withPatch); return d; });
+      // Ook de rijen van buiten het 90-dagenvenster (periodebalk, kassadag).
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
       toast.show(first
         ? (lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed")
         : (lang === "nl" ? "Restbetaling vastgelegd, alles is betaald" : lang === "es" ? "Pago restante registrado, todo pagado" : "Remaining payment recorded, fully paid"));
@@ -6189,7 +6201,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const patch = { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() };
       const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
-      update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+      const withPatch = (x) => (x.id === a.id ? { ...x, ...patch } : x);
+      update(d => { d.appointments = d.appointments.map(withPatch); return d; });
+      // Ook de rijen van buiten het 90-dagenvenster (periodebalk, kassadag).
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
       toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
       if (a.client_email) {
         sendEmails("refund_sent", {
@@ -6299,6 +6315,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const noShowPatch = (a) => (a.id === id ? { ...a, status: "no_show", no_show_fee: noShowFee } : a);
       update(d => { d.appointments = d.appointments.map(noShowPatch); return d; });
       setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(noShowPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(noShowPatch) } : prev));
     } finally { setProcessingApptId(null); }
   };
 
@@ -6584,6 +6601,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setClientPayments(p => p.filter(x => x.appointment_id !== a.id));
       setPayFor(f => (f && f.id === a.id ? null : f));
       setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.filter(x => x.id !== a.id) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.filter(x => x.id !== a.id) } : prev));
       toast.show(lang === "nl" ? "Afspraak verwijderd" : lang === "es" ? "Cita eliminada" : "Appointment deleted");
     } finally { setProcessingApptId(null); }
   };
@@ -6806,7 +6824,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // afspraakbedrag). De kale catalogusschatting hieronder is alleen nog het
     // vangnet — die zag extra's en teamprijzen niet, zodat weghalen of
     // wisselen van een deel het totaal met het verkeerde bedrag verschoof.
-    const storedParts = partPricesOf(a, salonData.services || [], salonData.staff || []);
+    // Zonder service_breakdown (één behandeling) is dat deel het hele bedrag
+    // minus de producten. partPricesOf rekent NA korting, het prijsveld van
+    // dit formulier staat VÓÓR korting (finalPrice + storedDiscount): de korting
+    // dus naar rato terug bij de delen, anders verschoof wisselen of weghalen
+    // het totaal met (een deel van) de korting.
+    const productsSum = (Array.isArray(a.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
+    const partsAfterDiscount = partPricesOf(a, salonData.services || [], salonData.staff || [])
+      || (breakdown.length === 1 && !(Array.isArray(a.service_breakdown) && a.service_breakdown.length > 0) && finalPrice != null
+        ? [Math.max(0, finalPrice - productsSum)] : null);
+    const partsSum = partsAfterDiscount ? partsAfterDiscount.reduce((s, v) => s + (Number(v) || 0), 0) : 0;
+    const storedParts = partsAfterDiscount && storedDiscount > 0
+      ? partsAfterDiscount.map(v => Math.round((v + storedDiscount * (partsSum > 0 ? v / partsSum : 1 / partsAfterDiscount.length)) * 100) / 100)
+      : partsAfterDiscount;
     const estRowPrice = (bRow, i) => {
       if (storedParts && Number.isFinite(storedParts[i])) return storedParts[i];
       if (Number.isFinite(parseFloat(bRow.price))) return parseFloat(bRow.price);
