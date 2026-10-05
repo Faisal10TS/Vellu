@@ -62,7 +62,8 @@ declare
   pid uuid; pid_null uuid; pid_hidden uuid; pid_starter uuid;
   blk_own uuid; blk_col uuid; wl1 uuid;
   inv_row uuid; inv_row2 uuid; tok text; tok_hash text; hu_staffrow uuid;
-  hu1 uuid := gen_random_uuid(); hu2 uuid := gen_random_uuid(); hu3 uuid := gen_random_uuid();
+  tm1 uuid; tm2 uuid; tm3 uuid; a_full uuid; a_free uuid; self_row uuid; self_row2 uuid; inv_self uuid; inv_row3 uuid;
+  hu1 uuid := gen_random_uuid(); hu2 uuid := gen_random_uuid(); hu3 uuid := gen_random_uuid(); hu4 uuid := gen_random_uuid();
   zzref uuid := gen_random_uuid(); zzold uuid := gen_random_uuid();
   chu1 jsonb;
   czzref jsonb;
@@ -161,6 +162,45 @@ begin
   values (bloom, svc, 'ZZ canc', 25, 30, current_date + 3, '11:00', 'ZZ Canc', 'zz-canc@example.test', noorrow, 'cancelled', 'on-arrival') returning id into a_canc;
   insert into public.appointments (owner_id, date, time, client_name, client_email, service_name, status)
   values (bloom, current_date + 5, '10:00', 'Lure', 'zz-foreign@example.test', 'ZZ lure', 'confirmed') returning id into a_lure;
+  -- Volledig vooruitbetaald (45 van 45) en gratis (0, niets betaald).
+  insert into public.appointments (owner_id, service_id, service_name, service_price, service_duration, date, time, client_name, client_email, staff_id, status, payment_method, amount_paid, paid_at)
+  values (bloom, svc, 'ZZ full', 45, 30, current_date + 2, '16:00', 'ZZ Full', 'zz-full@example.test', noorrow, 'confirmed', 'prepaid', 45, '2026-01-01 10:00+00') returning id into a_full;
+  insert into public.appointments (owner_id, service_id, service_name, service_price, service_duration, date, time, client_name, client_email, staff_id, status, payment_method)
+  values (bloom, svc, 'ZZ free', 0, 30, current_date + 2, '17:00', 'ZZ Free', 'zz-free@example.test', noorrow, 'confirmed', 'on-arrival') returning id into a_free;
+
+  -- ── bezette tijden: verlengde duur, deel zonder stylist ─────────────────
+  -- tm1: duur 120, delen Noor 0-30 en collega 30-60 (de eigenaar verlengde
+  --      alleen de duur) -> het laatste deel loopt door tot het eind: 13:30, 90.
+  insert into public.appointments (owner_id, service_id, service_name, service_price, service_duration, date, time, client_name, client_email, staff_id, status, service_breakdown)
+  values (bloom, svc, 'ZZ team long', 80, 120, current_date + 9, '13:00', 'ZZ Team', 'zz-team@example.test', noorrow, 'confirmed',
+          jsonb_build_array(jsonb_build_object('duration', 30, 'staff_id', noorrow, 'offset_min', 0, 'service_id', svc),
+                            jsonb_build_object('duration', 30, 'staff_id', colrow, 'offset_min', 30, 'service_id', svc)))
+  returning id into tm1;
+  -- tm2: deel 1 zonder stylist maar in staff_assignments (collega), deel 2
+  --      Noor, deel 3 zonder stylist en zonder toewijzing -> staff_id van de
+  --      afspraak (Noor), nooit NULL (dat zou de hele salon blokkeren).
+  insert into public.appointments (owner_id, service_id, service_name, service_price, service_duration, date, time, client_name, client_email, staff_id, status, staff_assignments, service_breakdown)
+  values (bloom, svc, 'ZZ team mixed', 90, 90, current_date + 10, '09:00', 'ZZ Team', 'zz-team@example.test', noorrow, 'confirmed',
+          jsonb_build_object(hidden_svc::text, colrow::text),
+          jsonb_build_array(jsonb_build_object('duration', 30, 'staff_id', null, 'offset_min', 0, 'service_id', hidden_svc),
+                            jsonb_build_object('duration', 30, 'staff_id', noorrow, 'offset_min', 30, 'service_id', svc),
+                            jsonb_build_object('duration', 30, 'staff_id', '', 'offset_min', 60, 'service_id', gen_random_uuid())))
+  returning id into tm2;
+  -- tm3: verdeling langer dan de duur (eigenaar verkortte de duur): de delen
+  --      blijven zoals ze zijn.
+  insert into public.appointments (owner_id, service_id, service_name, service_price, service_duration, date, time, client_name, client_email, staff_id, status, service_breakdown)
+  values (bloom, svc, 'ZZ team short', 80, 30, current_date + 11, '15:00', 'ZZ Team', 'zz-team@example.test', noorrow, 'confirmed',
+          jsonb_build_array(jsonb_build_object('duration', 30, 'staff_id', noorrow, 'offset_min', 0, 'service_id', svc),
+                            jsonb_build_object('duration', 30, 'staff_id', colrow, 'offset_min', 30, 'service_id', svc)))
+  returning id into tm3;
+  r := r || pg_temp.t('GB08 extended duration: first part as is', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 9) g where g.time = '13:00' and g.service_duration = 30 and g.staff_id = %L$q$, noorrow), 'ok') || nl;
+  r := r || pg_temp.t('GB08b extended duration: last part runs to the end', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 9) g where g.time = '13:30' and g.service_duration = 90 and g.staff_id = %L$q$, colrow), 'ok') || nl;
+  r := r || pg_temp.t('GB08c no short 30-min row left', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 9) g where g.time = '13:30' and g.service_duration = 30 and g.staff_id = %L$q$, colrow), 'zero') || nl;
+  r := r || pg_temp.t('GB09 staff-less part -> staff_assignments', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 10) g where g.time = '09:00' and g.service_duration = 30 and g.staff_id = %L$q$, colrow), 'ok') || nl;
+  r := r || pg_temp.t('GB09b own stylist part', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 10) g where g.time = '09:30' and g.service_duration = 30 and g.staff_id = %L$q$, noorrow), 'ok') || nl;
+  r := r || pg_temp.t('GB09c staff-less, unassigned part -> appointment stylist', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 10) g where g.time = '10:00' and g.service_duration = 30 and g.staff_id = %L$q$, noorrow), 'ok') || nl;
+  r := r || pg_temp.t('GB09d no NULL-staff row from the mixed booking', 'anon', ca, $q$select 1 from public.get_booked_slots('bloomstudio', current_date + 10) g where g.time in ('09:00', '09:30', '10:00') and g.staff_id is null$q$, 'zero') || nl;
+  r := r || pg_temp.t('GB10 parts longer than duration stay', 'anon', ca, format($q$select 1 from public.get_booked_slots('bloomstudio', current_date + 11) g where (g.time, g.service_duration, g.staff_id) in (('15:00', 30, %L::uuid), ('15:30', 30, %L::uuid)) having count(*) = 2$q$, noorrow, colrow), 'ok') || nl;
 
   -- ── 1. producten ────────────────────────────────────────────────────────
   insert into public.products (owner_id, name_nl, price, stock, visible_online, purchase_price) values (bloom, 'ZZ stock', 9, 5, true, 3) returning id into pid;
@@ -214,6 +254,10 @@ begin
   r := r || pg_temp.t('SL08 ordered by date, id', 'authenticated', cn, $q$with g as (select (x->>'date')::date d, (x->>'id')::uuid i, o from public.staff_list_appointments('2000-01-01') with ordinality as t(x, o)) select 1 where (select count(*) from g) > 3 and not exists (select 1 from g g1 join g g2 on g2.o = g1.o + 1 where (g2.d, g2.i) < (g1.d, g1.i))$q$, 'ok') || nl;
   r := r || pg_temp.t('SL09 old call with p_from only', 'authenticated', cn, $q$select 1 from public.staff_list_appointments(p_from => '2000-01-01')$q$, 'ok') || nl;
   r := r || pg_temp.t('SL10 anon cannot list', 'anon', ca, 'select public.staff_list_appointments()', 'err') || nl;
+  r := r || pg_temp.t('SL13 pay_state paid (fully prepaid 45/45)', 'authenticated', cn, format($q$select 1 from public.staff_list_appointments() x where x->>'id' = %L and x->>'pay_state' = 'paid'$q$, a_full), 'ok') || nl;
+  -- Gratis en niets betaald: 'open', zoals de knop "Voltooid" in Owner- en
+  -- StaffApp (paidAmountOf > 0 vereist) -> ook hier "Hoe is er betaald?".
+  r := r || pg_temp.t('SL14 pay_state open for a free unpaid appointment', 'authenticated', cn, format($q$select 1 from public.staff_list_appointments() x where x->>'id' = %L and x->>'pay_state' = 'open'$q$, a_free), 'ok') || nl;
   update public.profiles set staff_view_revenue = true, staff_view_client_contact = false where id = bloom;
   r := r || pg_temp.t('SL11 revenue on: amounts present, no pay_state', 'authenticated', cn, format($q$select 1 from public.staff_list_appointments() x where x->>'id' = %L and (x->>'service_price')::numeric = 50 and (x->'products'->0 ? 'price') and not (x ? 'pay_state')$q$, a1), 'ok') || nl;
   r := r || pg_temp.t('SL12 contact off: no e-mail/phone', 'authenticated', cn, format($q$select 1 from public.staff_list_appointments() x where x->>'id' = %L and not (x ?| array['client_email','client_phone','client_allergies'])$q$, a1), 'ok') || nl;
@@ -225,6 +269,9 @@ begin
   r := r || pg_temp.t('RC03 complete prepaid remainder with pin', 'authenticated', cn, format($q$select 1 where (public.staff_complete_appointment(%L, 'pin'))->>'payment_method' = 'prepaid'$q$, a1), 'ok') || nl;
   r := r || pg_temp.t('RC03b prepaid kept, amount = price', 'postgres', '{}', format($q$select 1 from public.appointments where id = %L and status = 'completed' and payment_method = 'prepaid' and amount_paid = 50$q$, a1), 'ok') || nl;
   r := r || pg_temp.t('RC03c remainder 30 by pin in client_payments', 'postgres', '{}', format($q$select 1 from public.client_payments where appointment_id = %L and amount = 30 and method = 'pin' and owner_id = %L$q$, a1, bloom), 'ok') || nl;
+  r := r || pg_temp.t('RC13 complete fully prepaid with cash', 'authenticated', cn, format($q$select 1 where (public.staff_complete_appointment(%L, 'cash'))->>'payment_method' = 'prepaid'$q$, a_full), 'ok') || nl;
+  r := r || pg_temp.t('RC13b payment untouched, only status', 'postgres', '{}', format($q$select 1 from public.appointments where id = %L and status = 'completed' and payment_method = 'prepaid' and amount_paid = 45 and paid_at = '2026-01-01 10:00+00'$q$, a_full), 'ok') || nl;
+  r := r || pg_temp.t('RC13c no cash payment recorded', 'postgres', '{}', format('select 1 from public.client_payments where appointment_id = %L', a_full), 'zero') || nl;
   r := r || pg_temp.t('RC04 other salon owner completes', 'authenticated', cv, format($q$select public.staff_complete_appointment(%L, 'cash')$q$, a4), 'err') || nl;
   r := r || pg_temp.t('RC05 invalid method', 'authenticated', cn, format($q$select public.staff_complete_appointment(%L, 'bitcoin')$q$, a4), 'err') || nl;
   r := r || pg_temp.t('RC06 complete later/invoice (on-arrival -> null)', 'authenticated', cn, format($q$select 1 where (public.staff_complete_appointment(%L, null))->>'status' = 'completed'$q$, a4), 'ok') || nl;
@@ -307,6 +354,18 @@ begin
   r := r || pg_temp.t('SV06 mywhimsandmore query: same services', 'anon', ca, format('select 1 where (select count(*) from public.services s left join public.service_categories c on c.id = s.category_id where s.owner_id = %L and s.visible = true) = %s and %s > 0', mw, mwcount, mwcount), 'ok') || nl;
   r := r || pg_temp.t('SV07 mywhimsandmore query: same variants', 'anon', ca, format('select 1 where (select count(*) from public.service_variants v join public.services s on s.id = v.service_id where s.owner_id = %L and s.visible = true) = %s', mw, mwvar), 'ok') || nl;
   r := r || pg_temp.t('SV08 staff updates salon service', 'authenticated', cn, format($q$update public.services set price = price where id = %L$q$, hidden_svc), 'ok') || nl;
+  insert into public.service_extras (service_id, name_nl, price) values (hidden_svc, 'ZZ hidden extra', 5);
+  r := r || pg_temp.t('SV09 anon reads variant of hidden service', 'anon', ca, format('select 1 from public.service_variants where service_id = %L', hidden_svc), 'zero') || nl;
+  r := r || pg_temp.t('SV09b anon reads extra of hidden service', 'anon', ca, format('select 1 from public.service_extras where service_id = %L', hidden_svc), 'zero') || nl;
+  r := r || pg_temp.t('SV10 anon reads variant of visible service', 'anon', ca, format($q$select 1 from public.service_variants where service_id = %L and name_nl = 'ZZ var'$q$, svc), 'ok') || nl;
+  r := r || pg_temp.t('SV11 owner reads variant of own hidden service', 'authenticated', cb, format('select 1 from public.service_variants where service_id = %L', hidden_svc), 'ok') || nl;
+  r := r || pg_temp.t('SV12 staff reads variant + extra of hidden salon service', 'authenticated', cn, format('select 1 where exists (select 1 from public.service_variants where service_id = %L) and exists (select 1 from public.service_extras where service_id = %L)', hidden_svc, hidden_svc), 'ok') || nl;
+  r := r || pg_temp.t('SV13 other owner reads variant of Bloom hidden service', 'authenticated', cv, format('select 1 from public.service_variants where service_id = %L', hidden_svc), 'zero') || nl;
+  r := r || pg_temp.t('SV14 staff updates variant of hidden service', 'authenticated', cn, format($q$update public.service_variants set price = price where service_id = %L$q$, hidden_svc), 'ok') || nl;
+  select count(*) into n1 from public.service_extras e join public.services s on s.id = e.service_id where s.visible is not false;
+  r := r || pg_temp.t('SV15 anon sees every extra of visible services', 'anon', ca, format('select 1 where (select count(*) from public.service_extras) = %s', n1), 'ok') || nl;
+  select count(*) into n1 from public.service_variants v join public.services s on s.id = v.service_id where s.visible is not false;
+  r := r || pg_temp.t('SV16 anon sees every variant of visible services', 'anon', ca, format('select 1 where (select count(*) from public.service_variants) = %s and %s > 0', n1, n1), 'ok') || nl;
 
   -- ── blokkades ───────────────────────────────────────────────────────────
   insert into public.staff_day_overrides (owner_id, staff_id, date, block_time_start, block_time_end, reason)
@@ -353,6 +412,15 @@ begin
   r := r || pg_temp.t('O05 owner inserts row bound to other user', 'authenticated', cb, format($q$insert into public.staff_members (owner_id, name, user_id) values (%L, 'ZZ evil', %L)$q$, bloom, victim), 'err') || nl;
   r := r || pg_temp.t('O06 owner inserts row in other salon', 'authenticated', cb, format($q$insert into public.staff_members (owner_id, name) values (%L, 'ZZ evil')$q$, victim), 'err') || nl;
   r := r || pg_temp.t('O07 owner adds herself as stylist', 'authenticated', cb, format($q$insert into public.staff_members (owner_id, name, user_id) values (%L, 'ZZ self', %L)$q$, bloom, bloom), 'ok') || nl;
+  r := r || pg_temp.t('O11 owner adds herself a second time', 'authenticated', cb, format($q$insert into public.staff_members (owner_id, name, user_id) values (%L, 'ZZ self 2', %L)$q$, bloom, bloom), 'err') || nl;
+  insert into public.staff_members (owner_id, name, email) values (bloom, 'ZZ selfrow', 'demo@bloomstudio.example') returning id into self_row;
+  r := r || pg_temp.t('O12 owner links 2nd own row while on roster', 'authenticated', cb, format('update public.staff_members set user_id = %L where id = %L', bloom, self_row), 'err') || nl;
+  delete from public.staff_members where owner_id = bloom and name = 'ZZ self';
+  r := r || pg_temp.t('O13 owner links herself to own unlinked row', 'authenticated', cb, format('update public.staff_members set user_id = %L where id = %L', bloom, self_row), 'ok') || nl;
+  r := r || pg_temp.t('O13b booking page shows her as owner', 'anon', ca, format('select 1 from public.public_staff where id = %L and is_owner', self_row), 'ok') || nl;
+  insert into public.staff_members (owner_id, name) values (bloom, 'ZZ selfrow 2') returning id into self_row2;
+  r := r || pg_temp.t('O14 owner links a second own row', 'authenticated', cb, format('update public.staff_members set user_id = %L where id = %L', bloom, self_row2), 'err') || nl;
+  r := r || pg_temp.t('O15 staff links herself to a salon row', 'authenticated', cn, format('update public.staff_members set user_id = %L where id = %L', noor, self_row2), 'zero') || nl;
   r := r || pg_temp.t('O09 owner inserts row with invite hash', 'authenticated', cb, format($q$insert into public.staff_members (owner_id, name, invite_token_hash, invite_expires_at) values (%L, 'ZZ evil', 'abc', now() + interval '1 day')$q$, bloom), 'err') || nl;
   select id into inv_row from public.staff_members where owner_id = bloom and name = 'ZZ invite 1';
   r := r || pg_temp.t('O10 owner sets invite hash on row', 'authenticated', cb, format($q$update public.staff_members set invite_token_hash = 'abc', invite_expires_at = now() + interval '7 days' where id = %L$q$, inv_row), 'err') || nl;
@@ -378,6 +446,21 @@ begin
          invite_expires_at = now() - interval '1 minute' where id = inv_row2;
   r := r || pg_temp.t('IN11 expired token', 'authenticated', cc3, format($q$select 1 where (public.claim_staff_invite(%L))->>'error' = 'invalid_or_expired'$q$, tok), 'ok') || nl;
   r := r || pg_temp.t('IN12 service_role links login (Login aanmaken)', 'service_role', cs, format('update public.staff_members set user_id = %L, email = %L where id = %L', cl3, 'zz3@example.test', inv_row2), 'ok') || nl;
+  -- Uitnodiging voor een rij van de eigen salon (eigenaar op haar rooster).
+  tok := encode(extensions.gen_random_bytes(32), 'hex');
+  insert into public.staff_members (owner_id, name, email, invite_token_hash, invite_expires_at)
+  values (bloom, 'ZZ invite self', 'demo@bloomstudio.example', encode(extensions.digest(tok, 'sha256'), 'hex'), now() + interval '7 days')
+  returning id into inv_self;
+  r := r || pg_temp.t('IN13 owner already on roster claims own-salon invite', 'authenticated', cb, format($q$select 1 where (public.claim_staff_invite(%L))->>'error' = 'already_staff'$q$, tok), 'ok') || nl;
+  update public.staff_members set user_id = null where id = self_row;
+  r := r || pg_temp.t('IN14 owner claims own-salon invite (no has_salon)', 'authenticated', cb, format($q$select 1 where (public.claim_staff_invite(%L))->>'success' = 'true'$q$, tok), 'ok') || nl;
+  r := r || pg_temp.t('IN14b own row linked to owner', 'postgres', '{}', format('select 1 from public.staff_members where id = %L and user_id = %L and invite_token_hash is null', inv_self, bloom), 'ok') || nl;
+  tok := encode(extensions.gen_random_bytes(32), 'hex');
+  insert into public.staff_members (owner_id, name, email, invite_token_hash, invite_expires_at)
+  values (bloom, 'ZZ invite 3', 'zzclaim@example.test', encode(extensions.digest(tok, 'sha256'), 'hex'), now() + interval '7 days')
+  returning id into inv_row3;
+  r := r || pg_temp.t('IN15 linked stylist claims a second invite', 'authenticated', cc1, format($q$select 1 where (public.claim_staff_invite(%L))->>'error' = 'already_staff'$q$, tok), 'ok') || nl;
+  r := r || pg_temp.t('IN15b second row stays unclaimed', 'postgres', '{}', format('select 1 from public.staff_members where id = %L and user_id is null and invite_token_hash is not null', inv_row3), 'ok') || nl;
 
   -- handle_new_user
   insert into auth.users (id, email, raw_user_meta_data, created_at)
@@ -391,6 +474,9 @@ begin
   insert into auth.users (id, email, raw_user_meta_data, created_at)
   values (hu3, 'zz-hu3@example.test', '{"business_name": "ZZ hu3", "slug": "zz-hu3-salon"}'::jsonb, now());
   r := r || pg_temp.t('HU03 plain signup gets profile', 'postgres', '{}', format($q$select 1 from public.profiles where id = %L and slug = 'zz-hu3-salon'$q$, hu3), 'ok') || nl;
+  insert into auth.users (id, email, raw_user_meta_data, created_at)
+  values (hu4, 'zz-hu4@example.test', '{"business_name": "ZZ hu4", "slug": "Admin"}'::jsonb, now());
+  r := r || pg_temp.t('HU04 reserved slug at signup gets a suffix', 'postgres', '{}', format($q$select 1 from public.profiles where id = %L and slug ~ '^Admin-[0-9a-f]{4}$' and not public.slug_is_reserved(slug)$q$, hu4), 'ok') || nl;
 
   -- ── 8. verwijzingen ─────────────────────────────────────────────────────
   select referral_code into bcode from public.profiles where id = bloom;
@@ -421,6 +507,7 @@ begin
   update public.profiles set created_at = now() - interval '3 hours' where id = zzold;
   r := r || pg_temp.t('RF11 account older than 2 hours', 'authenticated', czzold, format('select 1 from public.redeem_referral_code(%L, %L) x where x.success = false', zzold, vcode), 'ok') || nl;
   r := r || pg_temp.t('RF12 existing redemptions back-filled', 'postgres', '{}', format('select 1 from public.referral_redemptions where referrer_credited_at is null and new_profile_id <> %L', zzref), 'zero') || nl;
+  r := r || pg_temp.t('RF13 no default on referrer_credited_at after part B', 'postgres', '{}', $q$select 1 from information_schema.columns where table_schema = 'public' and table_name = 'referral_redemptions' and column_name = 'referrer_credited_at' and column_default is null$q$, 'ok') || nl;
 
   -- ── 10. cron-geheim ─────────────────────────────────────────────────────
   select decrypted_secret into v_secret from vault.decrypted_secrets where name = 'cron_secret';
@@ -517,6 +604,9 @@ begin
   r := r || pg_temp.t('PG06 slug to admin', 'authenticated', cb, format($q$update public.profiles set slug = 'admin' where id = %L$q$, bloom), 'err') || nl;
   r := r || pg_temp.t('PG07 slug to Contact (case)', 'authenticated', cb, format($q$update public.profiles set slug = 'Contact' where id = %L$q$, bloom), 'err') || nl;
   r := r || pg_temp.t('PG08 slug to robots.txt', 'authenticated', cb, format($q$update public.profiles set slug = 'robots.txt' where id = %L$q$, bloom), 'err') || nl;
+  r := r || pg_temp.t('PG10 slug to rate', 'authenticated', cb, format($q$update public.profiles set slug = 'rate' where id = %L$q$, bloom), 'err') || nl;
+  r := r || pg_temp.t('PG11 slug to Beoordeel', 'authenticated', cb, format($q$update public.profiles set slug = 'Beoordeel' where id = %L$q$, bloom), 'err') || nl;
+  r := r || pg_temp.t('PG12 slug to integrations', 'authenticated', cb, format($q$update public.profiles set slug = 'integrations' where id = %L$q$, bloom), 'err') || nl;
   r := r || pg_temp.t('PG09 slug to a normal name', 'authenticated', cb, format($q$update public.profiles set slug = 'zz-bloom-new' where id = %L$q$, bloom), 'ok') || nl;
   r := r || pg_temp.t('P21 setup: Bloom on trial (server)', 'postgres', '{}', format($q$update public.profiles set subscription_status = 'trialing', plan = 'starter' where id = %L$q$, bloom), 'ok') || nl;
   r := r || pg_temp.t('P22 trial upgrade to Professional', 'authenticated', cb, format($q$update public.profiles set plan = 'professional' where id = %L$q$, bloom), 'ok') || nl;
@@ -530,7 +620,7 @@ begin
   r := r || pg_temp.t('AD03 non-admin user still blocked inside', 'authenticated', cb, 'select public.admin_cron_summary()', 'err') || nl;
 
   -- ── rechten op de nieuwe functies ───────────────────────────────────────
-  r := r || pg_temp.t('FN01 internal helpers not callable', 'postgres', '{}', $q$select 1 where not has_function_privilege('authenticated', 'public.staff_can_handle_appointment(uuid)', 'execute') and not has_function_privilege('anon', 'public.grant_referral_credit(uuid)', 'execute') and not has_function_privilege('authenticated', 'public.release_codes_on_cancel()', 'execute') and not has_function_privilege('anon', 'public.claim_staff_invite(text)', 'execute') and has_function_privilege('authenticated', 'public.claim_staff_invite(text)', 'execute')$q$, 'ok') || nl;
+  r := r || pg_temp.t('FN01 internal helpers not callable', 'postgres', '{}', $q$select 1 where not has_function_privilege('authenticated', 'public.staff_can_handle_appointment(uuid)', 'execute') and not has_function_privilege('anon', 'public.grant_referral_credit(uuid)', 'execute') and not has_function_privilege('authenticated', 'public.release_codes_on_cancel()', 'execute') and not has_function_privilege('anon', 'public.claim_staff_invite(text)', 'execute') and has_function_privilege('authenticated', 'public.claim_staff_invite(text)', 'execute') and not has_function_privilege('authenticated', 'public.staff_hide_money(jsonb)', 'execute') and not has_function_privilege('authenticated', 'public.staff_pay_state(jsonb)', 'execute')$q$, 'ok') || nl;
 
   raise exception E'REPORT\n%', r;
 end $$;
