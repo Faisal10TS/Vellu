@@ -21,9 +21,16 @@ function plain(status: number, body: string) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain" } });
 }
 
+// Elke Mollie-aanroep krijgt een tijdslimiet. Een hangende aanroep gooit dan een
+// fout: de claim gaat vrij en Mollie / check-pending-payments proberen het
+// opnieuw, in plaats van dat een tweede aanroep de verlopen claim overneemt
+// terwijl de eerste nog loopt (en ze allebei een abonnement aanmaken).
+const MOLLIE_TIMEOUT_MS = 20_000;
+
 async function mollieFetch(path: string, init?: RequestInit) {
   const r = await fetch(`${MOLLIE_BASE_URL}${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(MOLLIE_TIMEOUT_MS),
     headers: {
       "Authorization": `Bearer ${MOLLIE_API_KEY}`,
       "Content-Type": "application/json",
@@ -148,6 +155,51 @@ async function cancelOtherSubscriptions(customerId: string, keepId: string | nul
   return failed;
 }
 
+// Een verlenging die Mollie al had aangemaakt toen de salon opzegde. Opzeggen
+// (cancel-subscription, standaard "aan het einde van de periode") stopt het
+// abonnement bij Mollie en wist profiles.mollie_subscription_id, maar een
+// SEPA-incasso die toen al liep, wordt 2 tot 5 dagen later gewoon betaald. Die
+// betaling hoort bij het abonnement dat de salon op dat moment had, dus:
+// verlengen en factureren. Herkenbaar aan: geen abonnement meer in het profiel,
+// opgezegd aan het einde van de periode, betaling aangemaakt vóór het opzeggen,
+// en het abonnement van de betaling is van deze salon en is bij dat opzeggen
+// gestopt (canceledAt bij Mollie rond cancelled_at). Die laatste controle houdt
+// abonnementen buiten die de webhook zelf stopte bij een nieuwe eerste betaling
+// of jaarbetaling; die betalingen blijven genegeerd. "retry" = Mollie kon het
+// abonnement nu niet laten zien.
+const SOFT_CANCEL_MATCH_MS = 15 * 60 * 1000;
+
+async function paidBeforeSoftCancel(p: MolliePayment, profile: Record<string, unknown>, ownerId: string): Promise<boolean | "retry"> {
+  if (profile.mollie_subscription_id || profile.cancel_at_period_end !== true) return false;
+  const subId = p.subscriptionId || "";
+  const customerId = p.customerId || String(profile.mollie_customer_id || "");
+  const createdMs = p.createdAt ? new Date(p.createdAt).getTime() : NaN;
+  const cancelledMs = profile.cancelled_at ? new Date(String(profile.cancelled_at)).getTime() : NaN;
+  if (!subId || !customerId || isNaN(createdMs) || isNaN(cancelledMs) || createdMs > cancelledMs) return false;
+  let r: Awaited<ReturnType<typeof mollieFetch>>;
+  try {
+    r = await mollieFetch(`/customers/${customerId}/subscriptions/${subId}`);
+  } catch (e) {
+    console.error("subscription lookup error:", subId, e);
+    return "retry";
+  }
+  if (!r.ok || !r.data || typeof r.data !== "object") {
+    console.error("subscription lookup failed:", subId, r.status, r.raw);
+    return r.status >= 500 ? "retry" : false;
+  }
+  const sub = r.data as { status?: string; canceledAt?: string; metadata?: { owner_id?: string } | null };
+  const canceledMs = sub.canceledAt ? new Date(sub.canceledAt).getTime() : NaN;
+  return sub.metadata?.owner_id === ownerId
+    && sub.status === "canceled"
+    && !isNaN(canceledMs)
+    && Math.abs(canceledMs - cancelledMs) <= SOFT_CANCEL_MATCH_MS;
+}
+
+// Regel voor elke beheerdersmelding over een abonnement dat met de hand moet
+// worden (her)aangemaakt: zonder het id in het profiel negeert de webhook de
+// afschrijvingen ervan (zie de recurring-tak).
+const MANUAL_SUB_ID_NOTE = "Zet daarna het nieuwe abonnement-id (sub_...) in profiles.mollie_subscription_id, anders worden de afschrijvingen ervan genegeerd.";
+
 // Referral (sinds 05-10-2026): de uitnodigende salon krijgt haar tegoed pas als
 // de nieuwe salon voor het eerst betaalt, niet meer bij het aanmelden. De rpc is
 // idempotent (hooguit één keer per uitnodiging); een fout mag een betaling nooit
@@ -258,7 +310,9 @@ async function notifyPaymentFailed(
 //     toepast en nooit twee keer verlengt of twee abonnementen aanmaakt.
 // Een rij zonder claimed_at komt van de versie van vóór deze wijziging en is
 // toen al afgehandeld.
-const CLAIM_STALE_MS = 3 * 60 * 1000;          // langer dan een functie kan draaien
+// Langer dan een aanroep kan duren: elke Mollie-aanroep stopt na 20 s en een
+// edge function mag hooguit 400 s lopen.
+const CLAIM_STALE_MS = 7 * 60 * 1000;
 const CLAIM_RELEASED = "1970-01-01T00:00:00Z";  // vrijgegeven: een herhaling mag meteen
 type Outcome = Record<string, unknown>;
 type Claim =
@@ -428,6 +482,15 @@ const OUTSIDE_EU_VAT = ["BQ", "AW", "CW", "SX"];
 //  - zonder btw-nummer blijft het 21% Nederlandse btw (zoals altijd);
 //  - elk land BUITEN de EU (de Caribische delen hierboven, maar ook bijv. het
 //    Verenigd Koninkrijk) valt buiten de Nederlandse btw: null.
+//
+// Verleggen staat nog UIT: een factuur met verlegde btw moet "btw verlegd" en
+// het btw-nummer van de afnemer vermelden (art. 35a Wet OB), en de factuurmail
+// (send-emails, subscription_invoice) toont vat_reverse_charge/customer_btw_id
+// nog niet: bij vat_rate null drukt hij de Caribische "buiten de EU"-tekst af.
+// Tot dat sjabloon het toont en de boekhouder akkoord is, krijgt zo'n salon de
+// 21% van vroeger. Daarna REVERSE_CHARGE_READY op true. (Er is nu geen salon
+// buiten NL/BQ/CW, dus niemand merkt het verschil.)
+const REVERSE_CHARGE_READY = false;
 const EU_COUNTRIES = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"];
 function vatForCustomer(countryCode: unknown, btwId: unknown): { rate: number | null; reverseCharge: boolean; btwId: string } {
   const cc = String(countryCode || "NL").toUpperCase();
@@ -438,7 +501,7 @@ function vatForCustomer(countryCode: unknown, btwId: unknown): { rate: number | 
   const prefix = cc === "GR" ? "EL" : cc;
   let id = String(btwId || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (/^[0-9]/.test(id)) id = prefix + id;
-  if (id.length >= 8 && id.startsWith(prefix)) return { rate: null, reverseCharge: true, btwId: id };
+  if (REVERSE_CHARGE_READY && id.length >= 8 && id.startsWith(prefix)) return { rate: null, reverseCharge: true, btwId: id };
   return { rate: NL_VAT, reverseCharge: false, btwId: "" };
 }
 
@@ -535,7 +598,14 @@ serve(async (req) => {
     console.log("Subscription event received:", paymentId);
     return plain(200, "ok");
   }
-  const fetched = await mollieFetch(`/payments/${paymentId}`);
+  let fetched: Awaited<ReturnType<typeof mollieFetch>>;
+  try {
+    fetched = await mollieFetch(`/payments/${paymentId}`);
+  } catch (e) {
+    // Time-out of netwerkfout: Mollie probeert het later opnieuw.
+    console.error("mollie payment fetch error:", paymentId, e);
+    return plain(503, "mollie unavailable");
+  }
   if (!fetched.ok || !fetched.data) {
     console.error("mollie payment fetch failed:", fetched.status, fetched.raw);
     // Mollie zelf even onbereikbaar: een foutcode laat Mollie het later opnieuw
@@ -601,7 +671,7 @@ async function processEvent(
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (profErr) {
@@ -792,6 +862,9 @@ async function processEvent(
           access_end: firstEnd.toISOString(),
           credits_used: firstCreditsUsed,
           updates: firstUpdates,
+          // Het abonnement van vóór deze betaling; bij een herhaling is het
+          // profiel misschien al bijgewerkt.
+          old_subscription_id: profile.mollie_subscription_id || null,
         };
         if (!(await saveOutcome(eventId, out))) return retryLater("outcome save error");
       }
@@ -804,10 +877,22 @@ async function processEvent(
       let subscriptionId = String(out.subscription_id || "");
       let subFailed = false;
       if (customerId && mandateId) {
+        const oldSub = String(("old_subscription_id" in out ? out.old_subscription_id : profile.mollie_subscription_id) || "");
+        // 0. Handmatig herstel: mislukte het abonnement eerder (seintje
+        //    "Abonnement niet aangemaakt") en staat er nu een ander id in het
+        //    profiel dan vóór deze betaling, dan maakte de beheerder het met de
+        //    hand aan (of wisselde de salon intussen van plan). Dat abonnement
+        //    overnemen; anders zou deze herhaling er nog een aanmaken en het
+        //    hare in stap 3 stoppen.
+        const profileSub = String(profile.mollie_subscription_id || "");
+        if (!subscriptionId && out.subscription_alerted && profileSub && profileSub !== oldSub) {
+          subscriptionId = profileSub;
+          out = { ...out, subscription_id: subscriptionId, subscription_adopted: true };
+          await saveOutcome(eventId, out);
+        }
         // 1. Het vorige abonnement eerst stoppen (salon kwam uit past_due, of
         //    betaalt opnieuw na opzeggen). Zonder dit bleef het oude naast het
         //    nieuwe afschrijven.
-        const oldSub = String(profile.mollie_subscription_id || "");
         if (oldSub && oldSub !== subscriptionId && !(await cancelMollieSubscription(customerId, oldSub))) {
           await alertAdmin(`Oud Mollie-abonnement niet gestopt: ${profile.business_name || ownerId}`, [
             `Salon: ${salonLabel}`,
@@ -850,7 +935,8 @@ async function processEvent(
                 `Salon: ${salonLabel}`,
                 `Eerste betaling: ${payment.id} (EUR ${payment.amount.value}) is betaald.`,
                 `Mollie antwoordde ${subRes.status}: ${String(subRes.raw || "").slice(0, 300)}`,
-                "De toegang staat open, maar er loopt (nog) geen automatische verlenging. Mollie en check-pending-payments proberen het opnieuw; lukt het niet, maak het abonnement dan met de hand aan.",
+                "De toegang staat open, maar er loopt (nog) geen automatische verlenging. Mollie en check-pending-payments proberen het opnieuw; lukt het niet, maak het abonnement dan met de hand aan (startdatum " + startDate + ").",
+                MANUAL_SUB_ID_NOTE + " De volgende herhaling neemt het dan over (maakt er geen tweede aan) en stuurt de factuur.",
               ]);
             }
           }
@@ -879,6 +965,7 @@ async function processEvent(
             `Salon: ${salonLabel}`,
             `Betaling: ${payment.id} (EUR ${payment.amount.value})`,
             "Er is geen Mollie-machtiging, dus geen automatische verlenging. Regel het abonnement met de hand.",
+            MANUAL_SUB_ID_NOTE,
           ]);
         }
       }
@@ -992,8 +1079,21 @@ async function processEvent(
     // (Heeft deze gebeurtenis al een outcome, dan is de controle bij de eerste
     // poging al gedaan; een herschikking door tegoed kan het id sindsdien
     // veranderd hebben.)
+    // Uitzondering: een betaalde verlenging die al liep toen de salon opzegde
+    // (paidBeforeSoftCancel). Die verlengt wel, maar raakt het (gestopte)
+    // abonnement verder niet aan. Mislukt zo'n laatste incasso, dan blijft het
+    // bij de melding: de salon had al opgezegd en houdt gewoon de toegang tot
+    // plan_expires_at.
     const currentSub = String(profile.mollie_subscription_id || "");
+    let cancelledInFlight = false;
     if (!savedOutcome && (!payment.subscriptionId || payment.subscriptionId !== currentSub)) {
+      if (payment.status === "paid") {
+        const inFlight = await paidBeforeSoftCancel(payment, profile as Record<string, unknown>, ownerId);
+        if (inFlight === "retry") return retryLater("subscription lookup failed");
+        cancelledInFlight = inFlight;
+      }
+    }
+    if (!savedOutcome && !cancelledInFlight && (!payment.subscriptionId || payment.subscriptionId !== currentSub)) {
       if (terminal) {
         await alertAdmin(`Betaling van een ander abonnement genegeerd: ${profile.business_name || ownerId}`, [
           `Salon: ${salonLabel}`,
@@ -1003,6 +1103,9 @@ async function processEvent(
           payment.status === "paid"
             ? "Er is geld afgeschreven, maar de toegang is NIET verlengd. Stop dit abonnement in Mollie en betaal zo nodig terug."
             : "De abonnementsstatus is niet aangepast.",
+          payment.status === "paid"
+            ? "Hoort dit abonnement wel bij de salon (bijv. met de hand aangemaakt)? Zet het id in profiles.mollie_subscription_id, maak processed_at van deze gebeurtenis in payment_events leeg (claimed_at laten staan) en stuur de webhook na 7 minuten opnieuw aan met dit betaling-id."
+            : "",
         ]);
       }
       return { status: 200, body: "ok (other subscription)", done: terminal };
@@ -1053,6 +1156,8 @@ async function processEvent(
           access_end: extraEnd.toISOString(),
           credits_used: creditsUsed,
           updates,
+          // Laatste verlenging van een opgezegd abonnement: niet herplannen.
+          ...(cancelledInFlight ? { cancelled_in_flight: true } : {}),
         };
         if (!(await saveOutcome(eventId, out))) return retryLater("outcome save error");
       }
@@ -1068,8 +1173,11 @@ async function processEvent(
       // recreate fails the customer keeps access until extraEnd and we miss
       // at most one renewal (alert to the admin for manual repair); the reverse
       // order could double-charge them, which is worse. Done once per event
-      // (outcome.reschedule_done), so a retry never reschedules twice.
-      if (creditsUsed > 0 && payment.customerId && !out.reschedule_done) {
+      // (outcome.reschedule_done), so a retry never reschedules twice. Never
+      // for the last renewal of a cancelled subscription (cancelled_in_flight):
+      // the salon cancelled, so nothing may be recreated; the credit only
+      // extends the expiry.
+      if (creditsUsed > 0 && payment.customerId && !out.reschedule_done && !out.cancelled_in_flight) {
         const oldSubId = payment.subscriptionId || profile.mollie_subscription_id || "";
         const mandateId = payment.mandateId || profile.mollie_mandate_id || "";
         let reschedule: Outcome = { reschedule_done: true };
@@ -1104,6 +1212,7 @@ async function processEvent(
                 `Mollie-klant: ${payment.customerId}, machtiging: ${mandateId}, startdatum: ${extraEnd.toISOString().slice(0, 10)}`,
                 `Mollie antwoordde ${subRes.status}: ${String(subRes.raw || "").slice(0, 300)}`,
                 "Maak het abonnement met de hand aan; de toegang loopt tot de startdatum.",
+                MANUAL_SUB_ID_NOTE,
               ]);
               reschedule = { ...reschedule, new_subscription_id: null };
             }

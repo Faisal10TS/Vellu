@@ -19,6 +19,7 @@
 //    In de database staat alleen de sha256 van het token; claim_staff_invite
 //    koppelt het account dat die link opent. Zo bewijst het teamlid dat ze de
 //    mailbox heeft; koppelen op alleen een gelijk e-mailadres bestaat niet meer.
+//    Hooguit INVITES_PER_DAY uitnodigingen per salon per dag (429 too_many_invites).
 //  - zonder action (knop "Uitnodigen" bij "Maak een login aan"): de eigenaar
 //    maakt zelf een login met wachtwoord. Vereist nu staff_id, controleert de
 //    rij VOOR het aanmaken, en ruimt het account weer op als koppelen mislukt.
@@ -79,6 +80,9 @@ async function sha256Hex(s: string): Promise<string> {
 }
 
 const INVITE_DAYS = 7;
+// Uitnodigingsmails per salon per (UTC-)dag, geteld in de database
+// (bump_staff_invite_usage). Ruim genoeg voor een heel team plus opnieuw mailen.
+const INVITES_PER_DAY = 20;
 
 async function verifyUserToken(tok: string): Promise<string | null> {
   if (!tok) return null;
@@ -126,6 +130,15 @@ serve(async (req) => {
       if (!row || row.owner_id !== callerId) return reply(403, { error: "forbidden" });
       const inviteEmail = String(row.email || "").trim().toLowerCase();
       if (!inviteEmail || row.user_id) return reply(400, { error: "not_invitable" });
+
+      // Daglimiet per salon: elke uitnodiging is een Vellu-mail met de salonnaam
+      // erin, naar een adres dat de eigenaar zelf invult.
+      const { data: sentToday, error: capErr } = await supabase.rpc("bump_staff_invite_usage", { p_owner_id: callerId });
+      if (capErr) {
+        console.error("staff invite counter error:", capErr);
+        return reply(500, { error: "invite_failed" });
+      }
+      if (Number(sentToday) > INVITES_PER_DAY) return reply(429, { error: "too_many_invites" });
 
       // 32 willekeurige bytes als hex; in de database alleen de sha256 ervan.
       const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))

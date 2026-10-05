@@ -1,8 +1,19 @@
--- E3 (05-10-2026): billing-webhook, support-chat en translate-text.
+-- E3 (05-10-2026): billing-webhook, support-chat, translate-text en de daglimiet
+-- voor uitnodigingsmails aan teamleden.
 -- Pending: de orchestrator voegt dit samen in één migratie. Idempotent.
--- VOLGORDE: deze SQL vóór de nieuwe versies van mollie-webhook, support-chat en
--- translate-text deployen (de functies gebruiken de kolommen en rpc's hieronder;
--- mollie-webhook schrijft claimed_at bij elke gebeurtenis).
+-- VOLGORDE: eerst de samengevoegde migratie (deze SQL + DB.sql), dan E2
+-- send-emails (mailtype staff_invite), dan pas de E3-functies. Wie wat nodig heeft:
+--  - mollie-webhook: claimed_at/outcome/processed_at hieronder (schrijft claimed_at
+--    bij elke gebeurtenis) + grant_referral_credit (DB.sql);
+--  - support-chat, translate-text: tabellen en rpc's hieronder;
+--  - change-plan: profiles.plan_change_started_at (DB.sql), anders 500 lock_failed
+--    bij elke planwissel;
+--  - send-renewal-reminder: cron_secret_ok + de cron-job met x-cron-secret
+--    (DB.sql), anders 401 bij elke dagelijkse run;
+--  - create-staff-account: staff_members.invite_token_hash/invite_expires_at en
+--    handle_new_user met user_metadata.staff_invite (DB.sql), staff_invite_usage
+--    hieronder, en het mailtype staff_invite in send-emails (E2);
+--  - check-pending-payments (E1) leest processed_at hieronder.
 
 -- ── 1. payment_events: verwerkt pas na alle bijwerkingen (E3-11) ──────────
 -- mollie-webhook claimt een gebeurtenis (claimed_at), bewaart wat hij berekende
@@ -15,7 +26,7 @@ alter table public.payment_events add column if not exists outcome jsonb;
 comment on column public.payment_events.processed_at is
   'Gezet door mollie-webhook als alle bijwerkingen van deze gebeurtenis gelukt zijn. Leeg = (nog) niet afgerond; check-pending-payments trapt de webhook dan opnieuw aan.';
 comment on column public.payment_events.claimed_at is
-  'Wanneer mollie-webhook deze gebeurtenis in behandeling nam (claim, 3 minuten geldig). Leeg op een uitkomstrij = rij van de webhookversie van vóór 05-10-2026 (toen al afgehandeld).';
+  'Wanneer mollie-webhook deze gebeurtenis in behandeling nam (claim, 7 minuten geldig). Leeg op een uitkomstrij = rij van de webhookversie van vóór 05-10-2026 (toen al afgehandeld).';
 comment on column public.payment_events.outcome is
   'Wat mollie-webhook bij de eerste poging berekende (periode, profielwijziging, abonnement-id), zodat een herhaling exact hetzelfde toepast.';
 -- Alles van vóór deze wijziging is door de oude webhook al afgehandeld.
@@ -145,3 +156,44 @@ end;
 $function$;
 revoke all on function public.consume_translate_budget(uuid, integer, integer, integer) from public, anon, authenticated;
 grant execute on function public.consume_translate_budget(uuid, integer, integer, integer) to service_role;
+
+-- ── 5. create-staff-account: uitnodigingsmails per salon per dag ──────────
+-- Elke uitnodiging is een mail van Vellu met de salonnaam erin, naar een adres
+-- dat de eigenaar zelf invult. De grens van 5 per minuut per IP zit alleen in
+-- het geheugen van één functie-instantie; deze teller begrenst per salon per dag.
+create table if not exists public.staff_invite_usage (
+  owner_id uuid not null,
+  day date not null,
+  count integer not null default 0,
+  primary key (owner_id, day)
+);
+alter table public.staff_invite_usage enable row level security;
+revoke all on table public.staff_invite_usage from anon, authenticated;
+
+-- Telt één uitnodiging voor deze salon op de huidige UTC-dag en geeft de
+-- dagstand terug (inclusief deze).
+create or replace function public.bump_staff_invite_usage(p_owner_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_day date := (now() at time zone 'utc')::date;
+  v_count integer;
+begin
+  if p_owner_id is null then
+    raise exception 'owner required';
+  end if;
+  insert into public.staff_invite_usage (owner_id, day, count) values (p_owner_id, v_day, 1)
+    on conflict (owner_id, day) do update set count = public.staff_invite_usage.count + 1
+    returning count into v_count;
+  -- Eerste uitnodiging van deze salon vandaag: oude dagen opruimen.
+  if v_count = 1 then
+    delete from public.staff_invite_usage where day < v_day - 30;
+  end if;
+  return v_count;
+end;
+$function$;
+revoke all on function public.bump_staff_invite_usage(uuid) from public, anon, authenticated;
+grant execute on function public.bump_staff_invite_usage(uuid) to service_role;

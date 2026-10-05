@@ -75,5 +75,15 @@ begin
   r := r || pg_temp.t('D10 zero chars always ok', 'service_role', cs, format('select 1 where public.consume_translate_budget(%L, 0, 100, 0)', u2), 'ok') || nl;
   r := r || pg_temp.t('D11 null user refused', 'service_role', cs, 'select 1 where public.consume_translate_budget(null, 10, 100, 1000)', 'zero') || nl;
 
+  -- 5. staff_invite_usage + bump_staff_invite_usage
+  r := r || pg_temp.t('V01 anon cannot read invite usage', 'anon', ca, 'select 1 from public.staff_invite_usage', 'err') || nl;
+  r := r || pg_temp.t('V02 authenticated cannot write invite usage', 'authenticated', cb, format('insert into public.staff_invite_usage (owner_id, day, count) values (%L, current_date, -999)', bloom), 'err') || nl;
+  r := r || pg_temp.t('V03 authenticated cannot call invite bump', 'authenticated', cb, format('select public.bump_staff_invite_usage(%L)', bloom), 'err') || nl;
+  r := r || pg_temp.t('V04 anon cannot call invite bump', 'anon', ca, format('select public.bump_staff_invite_usage(%L)', u1), 'err') || nl;
+  r := r || pg_temp.t('V05 service_role invite bump: first = 1', 'service_role', cs, format('select 1 where public.bump_staff_invite_usage(%L) = 1', u1), 'ok') || nl;
+  r := r || pg_temp.t('V06 service_role invite bump: second = 2', 'service_role', cs, format('select 1 where public.bump_staff_invite_usage(%L) = 2', u1), 'ok') || nl;
+  r := r || pg_temp.t('V07 other salon has own count', 'service_role', cs, format('select 1 where public.bump_staff_invite_usage(%L) = 1', u2), 'ok') || nl;
+  r := r || pg_temp.t('V08 null owner refused', 'service_role', cs, 'select public.bump_staff_invite_usage(null)', 'err') || nl;
+
   raise exception E'REPORT\n%', r;
 end $$;
