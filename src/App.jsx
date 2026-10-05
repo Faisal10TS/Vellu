@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, Component, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLocation, useNavigationType } from "react-router-dom";
-import { supabase } from "./supabase.js";
+import { supabase, rememberStaffInviteFromUrl, readStaffInvite, claimStaffInvite } from "./supabase.js";
 import {
-  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, Layout, curSym, fmtAmt,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin
+  ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, parseDate, Layout, curSym, fmtAmt,
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, useToast, ToastContainer
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -82,46 +82,90 @@ function PlanSelectionGate(props) {
 //
 // The staff-link flow works like this:
 //   1. Owner creates a staff_members row with an `email` field (but no user_id yet).
-//   2. Staff member signs up / logs in at /owner with that email.
-//   3. On first login we find the staff row by email + user_id IS NULL, and claim it
-//      by setting its user_id to session.user.id. Subsequent logins match by user_id.
+//   2. Vellu mails that address an invite link: /owner?invite=<token>
+//      (create-staff-account, action 'invite'). OwnerEntryPage keeps the
+//      token in sessionStorage (src/supabase.js).
+//   3. The stylist signs up or logs in; with a stored token we call
+//      claim_staff_invite, which binds the row to session.user.id in the
+//      database. Subsequent logins match by user_id.
+//   Matching on e-mail alone is gone (R-02): signup is auto-confirmed, so an
+//   e-mail address proves nothing — anyone who knew a pending stylist's
+//   address could take her place. The owner-created login ("Login aanmaken")
+//   still links the row server-side and matches by user_id here.
 //
 // Precedence: a staff link to ANOTHER salon wins over the owner path — that
 // catches the invite race where handle_new_user leaves a ghost profile behind
 // before staff_members.user_id is set. But a staff row where
 // owner_id === user.id is the owner listing themselves as staff of their own
 // team-account salon (very common); that must stay routed to the owner app.
+// inviteOutcome: uitkomst van een claim met een bewaard uitnodigingstoken
+// ('claimed' | 'invalid_or_expired' | 'has_salon' | 'failed'), of null als er
+// niets te claimen viel. OwnerEntryPage toont bij de laatste twee echte
+// weigeringen een melding.
 async function resolveUserRole(user) {
-  if (!user) return { role: null };
-  const email = (user.email || "").toLowerCase();
+  if (!user) return { role: null, inviteOutcome: null };
   const [{ data: staffByUserId }, { data: ownerProfile }] = await Promise.all([
     supabase.from("staff_members").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("profiles").select("id, business_name").eq("id", user.id).maybeSingle()
   ]);
 
   let staffMember = staffByUserId;
-  if (!staffMember && email) {
-    // Try to claim an unlinked staff row that matches our email.
-    const { data: staffByEmail } = await supabase.from("staff_members").select("*").eq("email", email).is("user_id", null).maybeSingle();
-    if (staffByEmail) {
-      const { data: claimed } = await supabase.from("staff_members").update({ user_id: user.id }).eq("id", staffByEmail.id).is("user_id", null).select("*").maybeSingle();
-      if (claimed) staffMember = claimed;
+  let inviteOutcome = null;
+  if (!staffMember) {
+    // Uitnodiging uit de mail (token in sessionStorage, zie supabase.js):
+    // de database koppelt de rij aan deze login, daarna lezen we hem gewoon
+    // op user_id. Geen token = geen koppeling meer op e-mailadres.
+    const invite = readStaffInvite();
+    if (invite) {
+      inviteOutcome = await claimStaffInvite(invite);
+      if (inviteOutcome === "claimed") {
+        const { data: claimed } = await supabase.from("staff_members").select("*").eq("user_id", user.id).maybeSingle();
+        if (claimed) staffMember = claimed;
+      }
     }
   }
   // Self-staff (owner_id === user.id) means the owner added themselves to
   // their own team-account roster — don't hijack their owner dashboard.
   if (staffMember && staffMember.owner_id !== user.id) {
-    const { data: salonProfile } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
+    // Salonprofiel via de rpc staff_salon_profile: hetzelfde object als de
+    // profielrij, maar zonder geheimen (agenda-feedtoken, Google-token,
+    // Mollie-id's, facturatieprofielen…). Een medewerker mag de profielrij
+    // van de salon niet meer zelf lezen (S1-12).
+    const { data: salonProfile } = await supabase.rpc("staff_salon_profile");
     if (salonProfile) {
-      return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email } };
+      return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email }, inviteOutcome };
     }
   }
 
   // No cross-salon staff link → owner path. Any profile row is enough to
   // route into the owner app; PlanSelection / onboarding handle the
   // empty-profile case.
-  if (ownerProfile) return { role: "owner" };
-  return { role: null };
+  if (ownerProfile) return { role: "owner", inviteOutcome };
+  return { role: null, inviteOutcome };
+}
+
+// ─── PUSH BIJ UITLOGGEN ──────────────────────────────────────
+// Uitloggen = dit apparaat krijgt geen pushmeldingen van dit account meer
+// (O8-21). Voorheen bleef een baliecomputer of -iPad na uitloggen
+// boekingsmeldingen (klantnaam, dienst, tijd, bedrag) tonen, en zag een
+// volgende eigenaar op hetzelfde apparaat "aan" terwijl de pushes nog naar
+// de vorige gingen. Eerst de eigen rij weg (kan alleen nog met de sessie),
+// dan het abonnement in de browser opzeggen; dat laatste maakt het endpoint
+// ook ongeldig voor een rij die niet van ons is. Altijd best effort en met
+// een tijdslimiet: uitloggen mag hier nooit op blijven hangen.
+async function forgetPushOnThisDevice() {
+  const limit = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
+  const run = async () => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    // getRegistration i.p.v. .ready: .ready wacht eeuwig als er geen
+    // service worker is.
+    const reg = await limit(navigator.serviceWorker.getRegistration(), 1500);
+    const sub = reg?.pushManager ? await limit(reg.pushManager.getSubscription(), 1500) : null;
+    if (!sub) return;
+    await limit(supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint), 2000);
+    await limit(sub.unsubscribe(), 1500);
+  };
+  try { await limit(run().catch(() => {}), 4000); } catch { /* uitloggen gaat altijd door */ }
 }
 
 function OwnerEntryPage({ lang, setLang }) {
@@ -130,6 +174,29 @@ function OwnerEntryPage({ lang, setLang }) {
   const [owner, setOwner] = useState(null);
   const [staffUser, setStaffUser] = useState(null); // { staffMember, salonData }
   const [loading, setLoading] = useState(true);
+  // Melding als een uitnodiging niet (meer) kan: één keer per bezoek, ook al
+  // lopen de sessie-check en het inlogformulier tegelijk.
+  // Alleen refs en de (stabiele) toast-setter: de sessie-check hieronder
+  // draait in een effect dat maar één keer wordt opgezet en houdt dus de
+  // versie van de eerste render vast; de taal komt daarom uit een ref.
+  const { toasts, show: showToast } = useToast();
+  const inviteNoticeShown = useRef(false);
+  const langRef = useRef(lang);
+  useEffect(() => { langRef.current = lang; });
+  const noteInvite = (outcome) => {
+    if (inviteNoticeShown.current) return;
+    if (outcome !== "invalid_or_expired" && outcome !== "has_salon") return;
+    inviteNoticeShown.current = true;
+    const lang = langRef.current;
+    const msg = outcome === "has_salon"
+      ? (lang === "nl" ? "Dit account heeft al een eigen salon. Gebruik een ander e-mailadres voor je teamaccount."
+        : lang === "es" ? "Esta cuenta ya tiene su propio salón. Usa otro correo electrónico para tu cuenta de equipo."
+        : "This account already has its own salon. Use a different email address for your team account.")
+      : (lang === "nl" ? "Deze uitnodiging is verlopen of al gebruikt."
+        : lang === "es" ? "Esta invitación ha caducado o ya se ha usado."
+        : "This invitation has expired or was already used.");
+    showToast(msg, "error");
+  };
 
   // Wachtwoord-herstel. De reset-mail landt hier met een hash: bij een geldig
   // token #access_token=…&type=recovery, bij een verlopen of al gebruikt token
@@ -155,6 +222,10 @@ function OwnerEntryPage({ lang, setLang }) {
   // callbacks / magic links don't race the initial mount).
   useEffect(() => {
     let cancelled = false;
+    // Uitnodigingslink (?invite=<token>, R-02): bewaren vóór de sessie-check
+    // hieronder, die hem bij een bestaande sessie meteen gebruikt. Het
+    // inlogformulier verschijnt pas ná die check, dus ziet hem ook.
+    rememberStaffInviteFromUrl();
     // Hard stop on the spinner. Every exit path below must clear `loading`,
     // including the ones nobody plans for: a throw, or a supabase call that
     // neither resolves nor rejects (a hung request leaves the finally-block
@@ -169,6 +240,7 @@ function OwnerEntryPage({ lang, setLang }) {
         if (session?.user) {
           const resolved = await resolveUserRole(session.user);
           if (cancelled) return;
+          noteInvite(resolved.inviteOutcome);
           if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
           if (resolved.role === "owner") {
             // Rebuild the owner view-model from the full profile.
@@ -215,9 +287,13 @@ function OwnerEntryPage({ lang, setLang }) {
   }, []);
 
   const handleLogin = async (u) => {
+    // Het aanmeldformulier claimt een uitnodiging zelf en geeft de uitkomst
+    // mee (u.inviteOutcome); bij inloggen claimt resolveUserRole hieronder.
+    noteInvite(u?.inviteOutcome);
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       const resolved = await resolveUserRole(session.user);
+      noteInvite(resolved.inviteOutcome);
       if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
       if (resolved.role === "owner") { setOwner(u); return; }
     }
@@ -225,6 +301,7 @@ function OwnerEntryPage({ lang, setLang }) {
   };
 
   const handleLogout = async () => {
+    await forgetPushOnThisDevice();
     await supabase.auth.signOut();
     setOwner(null);
     setStaffUser(null);
@@ -258,14 +335,14 @@ function OwnerEntryPage({ lang, setLang }) {
   const hasPlan = planIsActive(owner);
 
   if (owner && !hasPlan) {
-    return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} />;
+    return <><PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} /><ToastContainer toasts={toasts} /></>;
   }
 
   if (owner) {
-    return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} />;
+    return <><OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} /><ToastContainer toasts={toasts} /></>;
   }
 
-  return <OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} />;
+  return <><OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} /><ToastContainer toasts={toasts} /></>;
 }
 
 // ─── NIEUW WACHTWOORD INSTELLEN (herstel-link uit de mail) ──────────────────
@@ -350,8 +427,8 @@ function SetPasswordScreen({ lang, c, expired, onDone }) {
                 </>
               )
             ) : klaar ? (
-              <div style={{ fontSize: 14, textAlign: "center", color: c.textSub }}>
-                ✓ {T3("Wachtwoord opgeslagen — je wordt ingelogd…", "Contraseña guardada — iniciando sesión…", "Password saved — signing you in…")}
+              <div style={{ fontSize: 14, textAlign: "center", color: c.textSub, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <NavIcon name="check" size={16} color={AT.EARTH} /> {T3("Wachtwoord opgeslagen — je wordt ingelogd…", "Contraseña guardada — iniciando sesión…", "Password saved — signing you in…")}
               </div>
             ) : (
               <>
@@ -514,6 +591,48 @@ function SalonRouteWrapper({ lang, setLang }) {
   return <SalonRoute lang={lang} setLang={setLang} />;
 }
 
+// ─── NIET GEVONDEN ───────────────────────────────────────────
+// Onbekende salon (/bestaat-niet) én elke URL die geen route heeft
+// (/bloomstudio/extra/pad gaf een helemaal leeg scherm, L3-11). Binnen
+// <Layout>, anders had de knop geen stijl. En noindex (L3-05): de SPA geeft
+// hier status 200, dus zonder deze regel zag Google een "soft 404" als
+// gewone pagina met de canonical van de homepage.
+function NotFoundView({ lang, path }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const shown = path || location.pathname.replace(/^\/+/, "");
+  useSEO({ title: lang === "nl" ? "Niet gevonden | Vellu" : lang === "es" ? "No encontrado | Vellu" : "Not found | Vellu" });
+  useEffect(() => {
+    let el = document.querySelector('meta[name="robots"]');
+    const prev = el ? el.getAttribute("content") : null;
+    const created = !el;
+    if (created) { el = document.createElement("meta"); el.setAttribute("name", "robots"); document.head.appendChild(el); }
+    el.setAttribute("content", "noindex");
+    return () => { if (created) el.remove(); else el.setAttribute("content", prev || "index, follow"); };
+  }, []);
+  return (
+    <Layout accent={ACCENT}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16, padding: 24, textAlign: "center" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : lang === "es" ? "Salón no encontrado" : "Salon not found"}</div>
+        <div style={{ fontSize: 12, color: c.textLabel, wordBreak: "break-all" }}>vellu.cc/{shown} {lang === "nl" ? "bestaat niet" : lang === "es" ? "no existe" : "does not exist"}</div>
+        <button className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 8 }} onClick={() => navigate("/")}>
+          <ArrowLeft /> {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+        </button>
+      </div>
+    </Layout>
+  );
+}
+
+// Pijl naar links als inline SVG (currentColor), i.p.v. het teken "←".
+function ArrowLeft({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" style={{ flexShrink: 0 }}>
+      <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+    </svg>
+  );
+}
+
 // ─── SALON ROUTE (vellu.cc/salon-naam) ───────────────────────
 function SalonRoute({ lang, setLang }) {
   const { colors: c } = useTheme();
@@ -559,25 +678,36 @@ function SalonRoute({ lang, setLang }) {
       // longer read the base table, so financial/private columns never reach
       // the wire. discount_codes arrives pre-filtered to active codes and
       // payment_configured is already a boolean.
-      // products.visible_online: de eigenaar kan een product wel verkopen aan
-      // de kassa maar NIET online tonen. Het filter zit in de query zelf
-      // (PostgREST filtert de embedded rows) zodat verborgen producten nooit
-      // over de lijn gaan — RLS filtert al op active, dit filtert daarbovenop.
-      // services.visible: dezelfde gedachte als products.visible_online. Een
+      // Producten komen NIET meer als embed uit public_salons: de tabel
+      // products is niet meer publiek leesbaar (inkoopprijs, voorraad,
+      // leverancier en barcode lagen open, audit L4-01). De view
+      // public_products hieronder geeft alleen actieve, online zichtbare
+      // producten van Professional-salons, met alleen de kolommen die de
+      // boekingspagina toont — dezelfde regel als book-appointment (E1-27).
+      // services.visible: een eigenaar kan een dienst verbergen. Een
       // dienst "on hold" (nog niet gestart, seizoenspauze, verlof) blijft in de
       // agenda en de rapporten van de eigenaar staan, maar hoort niet op de
       // boekingspagina. Ook dit filter zit in de query zelf, zodat een verborgen
       // dienst niet eens over de lijn gaat. De echte grens staat in
       // book-appointment: die weigert een verborgen service_id.
-      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)), products(*)").eq("slug", slug).eq("products.visible_online", true).eq("services.visible", true).single();
+      const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*))").eq("slug", slug).eq("services.visible", true).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
+      // Ondergrens voor de eenmalige blokkades: GISTEREN op de klok van de
+      // salon. Met de datum van het apparaat viel bij een bezoeker die verder
+      // in de tijd zit (NL 's nachts, salon op Bonaire nog 's avonds) de
+      // blokkade van de salon-dag van vandaag weg, en leken geblokkeerde
+      // tijden vrij (C1-13). Een dag extra kost niets: de boekingsmotor kijkt
+      // toch alleen naar vandaag en later.
+      const salonToday = salonNow(data.country_code || "NL");
+      const blocksFrom = fmt(new Date(salonToday.getFullYear(), salonToday.getMonth(), salonToday.getDate() - 1));
       // Load related data in parallel for faster page load
       const [
         { data: reviews },
         { data: staffData },
         { data: categories },
         { data: locData },
-        { data: staffBlocksData }
+        { data: staffBlocksData },
+        { data: productsData }
       ] = await Promise.all([
         // public_reviews is een kolom-veilige VIEW over reviews. select("*") op
         // de tabel zelf stuurde client_email en appointment_id mee naar iedere
@@ -594,11 +724,15 @@ function SalonRoute({ lang, setLang }) {
         supabase.from("public_staff").select("*, staff_services(service_id), staff_service_prices(service_id, variant_id, price)").eq("owner_id", data.id).eq("active", true).order("position"),
         supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
         supabase.from("locations").select("*").eq("owner_id", data.id).eq("active", true).order("position"),
-        // fmt = LOCAL date. toISOString() is UTC: late-evening in a UTC-negative
-        // timezone it says "tomorrow" and silently drops TODAY's staff blocks.
+        // public_staff_day_overrides is een VIEW zonder de vrije-tekstkolom
+        // reason ("Prive", "tandarts", klantnamen…): die las iedere bezoeker
+        // mee uit de tabel zelf (C1-07). De boekingsmotor gebruikt alleen
+        // datum, weekdag, soort en tijden.
         // Ook terugkerende blokkades (weekday gezet) meenemen — hun anker-
         // datum kan in het verleden liggen en zou anders uit de gte vallen.
-        supabase.from("staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${fmt(new Date())},weekday.not.is.null`),
+        supabase.from("public_staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${blocksFrom},weekday.not.is.null`),
+        // Winkelproducten (Professional): zie de uitleg bij public_salons hierboven.
+        supabase.from("public_products").select("*").eq("owner_id", data.id).order("position"),
       ]);
       setSalon({
         id: data.slug,
@@ -620,8 +754,12 @@ function SalonRoute({ lang, setLang }) {
         // Boekingspagina opent in dark (oude gedrag) | light | auto (apparaat).
         booking_theme: data.booking_theme || "dark",
         // Uitnodigingscode van de salon: de "Powered by Vellu"-link onderaan
-        // de pagina draagt hem mee (zie ClientApp, profile-footer).
+        // de pagina draagt hem mee (zie ClientApp, profile-footer). De view
+        // geeft NULL voor de demo-salon, dan gaat de link zonder code.
         referral_code: data.referral_code || null,
+        // Annuleringstermijn in uren (0 = altijd annuleerbaar): de
+        // bevestigingsstap noemt de echte termijn van de salon.
+        cancel_deadline_hours: data.cancel_deadline_hours ?? 0,
         slot_interval_minutes: data.slot_interval_minutes || 30,
         show_owner_on_booking: !!data.show_owner_on_booking,
         booking_policy: data.booking_policy || "",
@@ -679,9 +817,9 @@ function SalonRoute({ lang, setLang }) {
             // (geen rijen = iedereen doet hem, net als service_ids leeg = alles).
             extras: (s.service_extras || []).sort((a, b) => (a.position || 0) - (b.position || 0)).map(e => ({ ...e, excluded_staff_ids: (e.staff_extra_exclusions || []).map(x => x.staff_id) }))
           })),
-        // Retail products (Professional plan). Anonymous visitors only get
-        // active rows (RLS); sort mirrors the owner's list order.
-        products: (data.products || [])
+        // Retail products (Professional plan). public_products levert alleen
+        // actieve, online zichtbare rijen; sort mirrors the owner's list order.
+        products: (productsData || [])
           .slice()
           .sort((a, b) => ((a.position ?? 0) - (b.position ?? 0)) || ((a.created_at || "") < (b.created_at || "") ? -1 : 1)),
         appointments: [],
@@ -720,14 +858,7 @@ function SalonRoute({ lang, setLang }) {
     </div>
   );
 
-  if (notFound) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16 }}>
-
-      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{lang === "nl" ? "Salon niet gevonden" : lang === "es" ? "Salón no encontrado" : "Salon not found"}</div>
-      <div style={{ fontSize: 12, color: c.textLabel }}>vellu.cc/{slug} {lang === "nl" ? "bestaat niet" : lang === "es" ? "no existe" : "does not exist"}</div>
-      <button className="btn-ghost" onClick={() => navigate("/")}>← {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}</button>
-    </div>
-  );
+  if (notFound) return <NotFoundView lang={lang} path={slug} />;
 
   // Security: never trust an ?email= URL param for reviews — anyone can craft a URL to
   // impersonate a victim. Die identiteit komt nu uit het token in ?review=…, dat
@@ -763,7 +894,7 @@ function SalonRoute({ lang, setLang }) {
         }
       `}</style>
       <a className="vl-preview-back" href="/owner">
-        ← {lang === "nl" ? "Terug naar dashboard" : lang === "es" ? "Volver al panel" : "Back to dashboard"}
+        <ArrowLeft /> {lang === "nl" ? "Terug naar dashboard" : lang === "es" ? "Volver al panel" : "Back to dashboard"}
       </a>
     </>)}
   </>);
@@ -782,6 +913,28 @@ function CancelRoute({ lang }) {
   // "bel de salon"-uitleg, gevuld door het check-antwoord of door een 403 op
   // het annuleren zelf (pagina stond al open toen de grens verstreek).
   const [lateInfo, setLateInfo] = useState(null);
+  // Naam en slug van de salon (uit het check- en cancel-antwoord): de pagina
+  // noemt de salon en "terug" gaat naar haar boekingspagina i.p.v. naar de
+  // Vellu-homepage.
+  const [salonInfo, setSalonInfo] = useState({ name: "", slug: "" });
+  // Bezig met annuleren: de knop staat dan uit, zodat een dubbele tik niet
+  // twee keer annuleert (en twee keer mailt).
+  const [cancelling, setCancelling] = useState(false);
+  const noteSalon = (d) => {
+    if (d && (d.salon_name || d.salon_slug)) setSalonInfo({ name: d.salon_name || "", slug: d.salon_slug || "" });
+  };
+  const backTo = salonInfo.slug ? `/${salonInfo.slug}` : "/";
+  const backLabel = salonInfo.slug
+    ? (lang === "nl" ? `Naar ${salonInfo.name || "de salon"}` : lang === "es" ? `Ir a ${salonInfo.name || "el salón"}` : `Go to ${salonInfo.name || "the salon"}`)
+    : (lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home");
+  // "dinsdag 6 oktober" i.p.v. de kale ISO-datum.
+  const dateLabel = (ds) => {
+    try {
+      const d = parseDate(ds);
+      if (isNaN(d.getTime())) return ds || "";
+      return d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long" });
+    } catch { return ds || ""; }
+  };
 
   useEffect(() => {
     const checkToken = async () => {
@@ -791,10 +944,23 @@ function CancelRoute({ lang }) {
         body: { action: "check", token },
       });
       if (error || !data) {
+        // De afspraak is al geweest of als no-show afgesloten (410
+        // not_cancellable): dezelfde uitleg als een verlopen link.
+        let body = null;
+        try { body = await error?.context?.json?.(); } catch { /* geen json-body */ }
+        if (body?.error === "not_cancellable" || body?.error === "expired") { setStatus("expired"); return; }
         setStatus("error");
         return;
       }
-      if (data.status === "already_cancelled") { setStatus("cancelled"); return; }
+      noteSalon(data);
+      // Al geannuleerd (door de klant zelf, door de salon, of een niet op tijd
+      // betaalde reservering): een eigen scherm, zonder te beloven dat er nu
+      // een bevestigingsmail komt.
+      if (data.status === "already_cancelled") {
+        if (data.appointment) setAppointment({ ...data.appointment, country_code: data.country_code || "NL" });
+        setStatus("already_cancelled");
+        return;
+      }
       if (data.status === "expired") { setStatus("expired"); return; }
       if (data.status === "too_late") {
         setLateInfo({ hours: data.deadline_hours, phone: data.salon_phone || "", salon: data.salon_name || "" });
@@ -813,6 +979,8 @@ function CancelRoute({ lang }) {
   }, [token]);
 
   const handleCancel = async () => {
+    if (cancelling) return;
+    setCancelling(true);
     try {
       const { data, error } = await supabase.functions.invoke("cancel-appointment", {
         body: { action: "cancel", token, reason: reason || null },
@@ -828,32 +996,35 @@ function CancelRoute({ lang }) {
           setStatus("too_late");
           return;
         }
+        // Link intussen al gebruikt (tweede tabblad, of een eerdere tik die
+        // net klaar was): de afspraak ís geannuleerd, geen "Link ongeldig".
+        if (body?.error === "already_used") { setStatus("already_cancelled"); return; }
+        if (body?.error === "expired" || body?.error === "not_cancellable") { setStatus("expired"); return; }
         throw new Error(body?.error || error.message || "cancel_failed");
       }
+      noteSalon(data);
+      // De server annuleert atomair: was de afspraak al geannuleerd, dan
+      // verstuurt hij niets en zegt hij dat. Dan ook hier geen belofte van
+      // een bevestigingsmail.
+      if (data?.status === "already_cancelled") { setStatus("already_cancelled"); return; }
       if (!data || data.status !== "cancelled") {
         throw new Error(data?.error || "cancel_failed");
       }
-
-      const a = data.appointment;
 
       // All cancellation messaging is now sent SERVER-SIDE inside the
       // cancel-appointment edge function: the client's "afspraak geannuleerd"
       // email + SMS, and the owner/staff notification. This page is used by the
       // anonymous customer, whose browser can't authenticate to send-emails/
       // send-sms (they 401), so doing it here never worked. Nothing to send
-      // client-side anymore.
-
-      // Delete Google Calendar event if it exists (best effort)
-      if (a.owner_id) {
-        supabase.functions.invoke("google-calendar", {
-          body: { action: "delete", owner_id: a.owner_id, appointment_id: a.id }
-        }).catch(e => console.error("Google Calendar delete error:", e));
-      }
+      // client-side anymore. Ook de Google Agenda-aanroep is weg: die functie
+      // accepteert alleen nog server-aanroepen (R-06).
 
       setStatus("cancelled");
     } catch (err) {
       console.error("Cancel error:", err);
       setStatus("error");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -875,13 +1046,19 @@ function CancelRoute({ lang }) {
             <p style={{ color: c.textSub, marginBottom: 30 }}>{t.cancelBookingDesc}</p>
             
             <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 16, padding: 20, marginBottom: 24, textAlign: "left" }}>
+              {salonInfo.name && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{lang === "es" ? "Salón" : "Salon"}</div>
+                  <div style={{ fontWeight: 500 }}>{salonInfo.name}</div>
+                </div>
+              )}
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.treatment}</div>
                 <div style={{ fontWeight: 500 }}>{appointment.service_name}</div>
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.date}</div>
-                <div style={{ fontWeight: 500 }}>{appointment.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}</div>
+                <div style={{ fontWeight: 500 }}>{dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.total}</div>
@@ -897,16 +1074,18 @@ function CancelRoute({ lang }) {
               style={{ minHeight: 80, marginBottom: 16, resize: "none" }}
             />
             
-            <button className="btn-primary" style={{ background: "#ef4444", color: "#fff", width: "100%" }} onClick={handleCancel}>
-              {t.confirmCancel}
+            {/* Uit tijdens het verzoek: de server wacht op alle mails voor hij
+                antwoordt, en een tweede tik annuleerde vroeger nog een keer. */}
+            <button className="btn-primary" style={{ background: "#ef4444", color: "#fff", width: "100%", opacity: cancelling ? 0.7 : 1, cursor: cancelling ? "wait" : "pointer" }} onClick={handleCancel} disabled={cancelling} aria-busy={cancelling}>
+              {cancelling ? "…" : t.confirmCancel}
             </button>
-            
-            <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => navigate("/")}>
+
+            <button className="btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => navigate(backTo)} disabled={cancelling}>
               {t.back}
             </button>
           </div>
         )}
-        
+
         {status === "cancelled" && (
           <div className="fade-up">
             <div style={{ marginBottom: 20 }}><NavIcon name="check" size={48} color="#86efac" /></div>
@@ -916,28 +1095,51 @@ function CancelRoute({ lang }) {
             <p style={{ color: c.textSub, marginBottom: 30 }}>
               {lang === "nl" ? "Je ontvangt een bevestiging per e-mail." : lang === "es" ? "Recibirás un correo de confirmación." : "You will receive a confirmation email."}
             </p>
-            <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+            <button className="btn-ghost" onClick={() => navigate(backTo)}>
+              {backLabel}
             </button>
           </div>
         )}
-        
+
+        {/* Link opnieuw geopend, of de afspraak was al geannuleerd (door de
+            salon, of een niet op tijd betaalde reservering): geen nieuwe
+            belofte van een mail, en ook niet "jij hebt geannuleerd". */}
+        {status === "already_cancelled" && (
+          <div className="fade-up">
+            <div style={{ marginBottom: 20 }}><NavIcon name="check" size={48} color={c.textLabel} /></div>
+            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
+              {lang === "nl" ? "Deze afspraak is al geannuleerd" : lang === "es" ? "Esta cita ya está cancelada" : "This appointment has already been cancelled"}
+            </h1>
+            <p style={{ color: c.textSub, marginBottom: appointment ? 12 : 30 }}>
+              {lang === "nl" ? "Je hoeft niets meer te doen." : lang === "es" ? "No tienes que hacer nada más." : "There's nothing more you need to do."}
+            </p>
+            {appointment && (
+              <p style={{ color: c.textLabel, fontSize: 12, marginBottom: 24 }}>
+                {[salonInfo.name, appointment.service_name].filter(Boolean).join(" · ")} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
+              </p>
+            )}
+            <button className="btn-ghost" onClick={() => navigate(backTo)}>
+              {backLabel}
+            </button>
+          </div>
+        )}
+
         {status === "expired" && (
           <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>⏰</div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={ACCENT} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {t.cannotCancel}
             </h1>
             <p style={{ color: c.textSub, marginBottom: 30 }}>{t.cancelBeforeTime}</p>
-            <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+            <button className="btn-ghost" onClick={() => navigate(backTo)}>
+              {backLabel}
             </button>
           </div>
         )}
 
         {status === "too_late" && (
           <div className="fade-up">
-            <div style={{ fontSize: 48, marginBottom: 20 }}>⏰</div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={ACCENT} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {lang === "nl" ? "Online annuleren kan niet meer" : lang === "es" ? "Ya no se puede cancelar en línea" : "Online cancellation has closed"}
             </h1>
@@ -950,7 +1152,7 @@ function CancelRoute({ lang }) {
             </p>
             {appointment && (
               <p style={{ color: c.textLabel, fontSize: 12, marginBottom: 24 }}>
-                {appointment.service_name} — {appointment.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
+                {appointment.service_name} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
               </p>
             )}
             {lateInfo?.phone && (
@@ -959,8 +1161,8 @@ function CancelRoute({ lang }) {
                 {lang === "nl" ? `Bel ${lateInfo.salon || "de salon"}` : lang === "es" ? `Llamar a ${lateInfo.salon || "el salón"}` : `Call ${lateInfo.salon || "the salon"}`}
               </a>
             )}
-            <button className="btn-ghost" style={{ width: "100%" }} onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+            <button className="btn-ghost" style={{ width: "100%" }} onClick={() => navigate(backTo)}>
+              {backLabel}
             </button>
           </div>
         )}
@@ -974,8 +1176,8 @@ function CancelRoute({ lang }) {
             <p style={{ color: c.textSub, marginBottom: 30 }}>
               {lang === "nl" ? "Deze annuleringslink is niet geldig." : lang === "es" ? "Este enlace de cancelación no es válido." : "This cancellation link is not valid."}
             </p>
-            <button className="btn-ghost" onClick={() => navigate("/")}>
-              {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+            <button className="btn-ghost" onClick={() => navigate(backTo)}>
+              {backLabel}
             </button>
           </div>
         )}
@@ -1027,8 +1229,8 @@ function AppInner({ lang, setLang }) {
       {screen === "owner" && (() => {
         // Zelfde regel als in OwnerEntryPage, incl. verlengingscoulance.
         const hasPlan = planIsActive(owner);
-        if (!hasPlan) return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
-        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
+        if (!hasPlan) return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={async () => { await forgetPushOnThisDevice(); await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
+        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await forgetPushOnThisDevice(); await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
       })()}
     </>
   );
@@ -1125,7 +1327,9 @@ class ErrorBoundary extends Component {
 
 export default function VelluApp() {
   // Language priority: (1) explicit user choice saved to localStorage on any
-  // pill flip, (2) browser preference (nl-*, otherwise en), (3) nl default.
+  // pill flip, (2) browser preference (nl-* → nl, es-* → es, otherwise en),
+  // (3) nl default. Spaans kwam er later bij en viel hier eerst op Engels
+  // terug (L3-10).
   const [lang, setLang] = useState(() => {
     try {
       const saved = localStorage.getItem("vellu_lang");
@@ -1134,6 +1338,7 @@ export default function VelluApp() {
     if (typeof navigator !== "undefined") {
       const nav = (navigator.language || navigator.languages?.[0] || "").toLowerCase();
       if (nav.startsWith("nl")) return "nl";
+      if (nav.startsWith("es")) return "es";
       if (nav) return "en";
     }
     return "nl";
@@ -1170,6 +1375,9 @@ export default function VelluApp() {
                   non-admins. Real enforcement sits in the DB (app_admins). */}
               <Route path="/admin" element={<AdminRoute />} />
               <Route path="/:slug" element={<SalonRouteWrapper lang={lang} setLang={setLangPersist} />} />
+              {/* Alles wat hierboven niet past (bijv. /salon/extra/pad): de
+                  niet-gevonden-pagina i.p.v. een leeg scherm (L3-11). */}
+              <Route path="*" element={<NotFoundView lang={lang} />} />
             </Routes>
           </Suspense>
             <CookieConsent lang={lang} />

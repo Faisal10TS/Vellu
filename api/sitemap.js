@@ -7,7 +7,12 @@ export default async function handler(req, res) {
   let profiles = [];
 
   try {
-    const url = `${SUPABASE_URL}/rest/v1/profiles?select=slug`;
+    // public_salons (de publieke view), niet profiles: die tabel is voor de
+    // anon-sleutel onleesbaar, dus de sitemap had nul salonpagina's (AP-02).
+    // Alleen salons die in de zoeker mogen staan, met een lopend abonnement,
+    // en nooit de demo-salon. (public/sitemap.xml is weg: dat statische
+    // bestand ging vóór deze functie en had geen enkele salon.)
+    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=slug&directory_visible=eq.true&subscription_status=in.(active,trialing)&is_demo=eq.false`;
 
     const response = await fetch(url, {
       headers: {

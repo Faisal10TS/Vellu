@@ -18,7 +18,12 @@ export default async function handler(req, res) {
   try {
     const r = await fetch(`${process.env.VITE_SUPABASE_URL}/functions/v1/send-reminders`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // De edge function draait alleen nog voor wie het cron-geheim kent
+        // (audit E2-04): zelfde waarde als send-birthday-emails gebruikt.
+        'x-cron-secret': process.env.CRON_SECRET,
+      },
       body: JSON.stringify({}),
     })
     const data = await r.json().catch(() => ({}))

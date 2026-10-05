@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "./supabase.js";
+import { supabase, readStaffInvite, claimStaffInvite } from "./supabase.js";
 import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
+  fetchAllRows, fmtAmt
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -617,12 +618,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 }
 
 // ─── SALON FINDER ───────────────────────────────────────────
-// Country code → flag emoji ("NL" → 🇳🇱). Empty string when the code is
-// missing/malformed so the row just renders without a flag.
-const flagOf = (cc) => {
-  if (!cc || cc.length !== 2) return "";
-  try { return cc.toUpperCase().replace(/./g, ch => String.fromCodePoint(127397 + ch.charCodeAt(0))); } catch { return ""; }
-};
+// Landnaam voor het zoeken ("curacao" vindt ook een salon in Boka Sami, CW).
+// Op de kaart staat de landcode als tekst: vlag-emoji's werden op Windows
+// letters en braken de regel "geen emoji in de site".
+const countryNameOf = (cc) => (COUNTRIES.find(x => x.code === cc)?.name) || "";
+// Pijltje als inline SVG in de tekstkleur (currentColor). Letterlijke pijlen
+// en sterren in de tekst breken de huisregel "geen glyphs in de site": iOS
+// maakt er soms emoji van. Ook gebruikt door LandingAtelier.jsx.
+function ArrowIcon({ dir = "right", size = 12, style }) {
+  const rot = { right: 0, down: 90, left: 180, up: 270 }[dir] || 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"
+      style={{ display: "inline-block", verticalAlign: "-0.125em", flexShrink: 0, transform: rot ? `rotate(${rot}deg)` : undefined, ...style }}>
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
 // Category label in the visitor's language, falling back across languages.
 const catLabel = (cat, lang) => (lang === "nl"
   ? (cat.name_nl || cat.name_en || cat.name_es)
@@ -657,13 +668,17 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // Alle zichtbare salons (geen limiet meer: vanaf de 25e salon verscheen
+      // een salon anders nooit, ook niet bij zoeken). fetchAllRows pagineert
+      // voorbij de 1000-rijengrens van PostgREST; id als tweede sortering
+      // houdt de pagina's stabiel.
+      const { data } = await fetchAllRows(() => supabase
         .from("public_salons")
         .select("id,slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
         .eq("directory_visible", true)
         .in("subscription_status", ["active", "trialing"])
         .order("created_at", { ascending: true })
-        .limit(24);
+        .order("id", { ascending: true }));
       const rows = data || [];
       // Treatment search + category chips: pull services and categories of
       // every listed business in one go (both publicly readable), so
@@ -676,9 +691,11 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
         const [{ data: svcs }, { data: cats }] = await Promise.all([
           // visible=true: een verborgen dienst ("on hold") mag een salon niet in
           // de zoekresultaten trekken — de bezoeker klikt dan door en vindt hem
-          // nergens op de boekingspagina terug.
-          supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids).eq("visible", true),
-          supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", ids).order("position", { ascending: true }),
+          // nergens op de boekingspagina terug. fetchAllRows: met meer salons
+          // passeren de diensten samen de 1000 rijen, en dan miste het zoeken
+          // stilletjes salons.
+          fetchAllRows(() => supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids).eq("visible", true).order("id", { ascending: true })),
+          fetchAllRows(() => supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", ids).order("position", { ascending: true }).order("id", { ascending: true })),
         ]);
         for (const s of (svcs || [])) {
           svcByOwner[s.owner_id] = (svcByOwner[s.owner_id] || "") + " " +
@@ -697,7 +714,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
 
   const list = (salons || []).filter(s => {
     if (!q.trim()) return true;
-    const hay = normStr(`${s.business_name} ${s.city || ""} ${s.slug} ${s.svc || ""}`);
+    const hay = normStr(`${s.business_name} ${s.city || ""} ${countryNameOf(s.country_code)} ${s.slug} ${s.svc || ""}`);
     return q.trim().split(/\s+/).every(w => hay.includes(normStr(w)));
   });
   const searching = !!q.trim();
@@ -779,16 +796,21 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               return (
                 <button key={s.slug} className={atelier ? "salon-card salon-card-float vl-glow" : "salon-card"} data-salon-card onMouseMove={atelier ? glowMove : undefined} onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
-                  {/* Cover / brand band — the salon's own colours, not ours */}
-                  <div style={{ height: 66, background: s.cover_image_url ? `url(${s.cover_image_url}) center/cover` : `linear-gradient(120deg, ${acc}55, ${acc}18 60%, transparent), linear-gradient(160deg, ${acc}22, transparent)` }} />
-                  <div style={{ padding: "0 14px 14px" }}>
+                  {/* Cover / brand band — the salon's own colours, not ours.
+                      Als <img loading="lazy"> i.p.v. een CSS-achtergrond: de
+                      volle omslagfoto's (tot ~390 KB) laden zo pas als de
+                      zoeker in beeld komt, niet al bij de eerste verf. */}
+                  <div style={{ height: 66, position: "relative", overflow: "hidden", background: s.cover_image_url ? c.bgCard : `linear-gradient(120deg, ${acc}55, ${acc}18 60%, transparent), linear-gradient(160deg, ${acc}22, transparent)` }}>
+                    {s.cover_image_url && <img src={s.cover_image_url} alt="" loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />}
+                  </div>
+                  <div style={{ padding: "0 14px 14px", position: "relative" }}>
                     <div style={{ display: "flex", alignItems: "flex-end", marginTop: -17 }}>
                       {s.logo_url
-                        ? <img src={s.logo_url} alt="" style={{ width: 40, height: 40, borderRadius: 13, objectFit: "cover", border: `2.5px solid ${c.bgCard}`, background: c.bgCard, flexShrink: 0 }} />
+                        ? <img src={s.logo_url} alt="" loading="lazy" decoding="async" style={{ width: 40, height: 40, borderRadius: 13, objectFit: "cover", border: `2.5px solid ${c.bgCard}`, background: c.bgCard, flexShrink: 0 }} />
                         : <div style={{ width: 40, height: 40, borderRadius: 13, background: `linear-gradient(135deg, ${acc}, ${acc}88)`, border: `2.5px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: "#1a1713", flexShrink: 0 }}>{(s.business_name || "?").trim().slice(0, 1).toUpperCase()}</div>}
                     </div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, marginTop: 8, color: c.text, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.business_name}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>{flagOf(s.country_code)} {cityOf(s)}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>{[cityOf(s), s.country_code].filter(Boolean).join(" · ")}</div>
                     {/* What this business does — its own first categories,
                         in the visitor's language, truncated to one line. */}
                     {(s.cats || []).length > 0 && (
@@ -797,14 +819,14 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
                       </div>
                     )}
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, padding: "5px 11px", borderRadius: smallRadius, border: `1px solid ${accPillEdge !== "transparent" ? accPillEdge : `${accInk}55`}`, fontSize: 10, color: accInk, fontWeight: 600 }}>
-                      {t.findSalonBook} →
+                      {t.findSalonBook} <ArrowIcon size={11} />
                     </div>
                   </div>
                 </button>
               );
             })}
             {/* "Your salon here?" — acquisition card, always last */}
-            <button className="salon-card" data-salon-cta onClick={() => navigate("/owner")} aria-label={t.findSalonCta}
+            <button className="salon-card" data-salon-cta onClick={() => navigate("/owner?signup=1")} aria-label={t.findSalonCta}
               style={{ border: `1.5px dashed ${accent}66`, background: `${accent}08`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 168, padding: "18px 14px", textAlign: "center" }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", border: `1.5px dashed ${accent}88`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 18, marginBottom: 10 }}>+</div>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: c.text }}>{t.findSalonCta}</div>
@@ -822,10 +844,13 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
             <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
               <div style={{ flex: 1, position: "relative", maxWidth: 260 }}>
                 <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: c.textMuted, pointerEvents: "none" }}>vellu.cc/</div>
-                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : "salon-name"} value={slugFallback} onChange={e => setSlugFallback(e.target.value)}
+                <input className="input-field" placeholder={lang === "nl" ? "salon-naam" : lang === "es" ? "nombre-del-salon" : "salon-name"} value={slugFallback} onChange={e => setSlugFallback(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && goToSlug(slugFallback)} style={{ paddingLeft: 70, borderRadius: 10, fontSize: 12, padding: "9px 12px 9px 70px", width: "100%" }} />
               </div>
-              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13 }} onClick={() => goToSlug(slugFallback)}>→</button>
+              <button className="btn-primary" style={{ width: "auto", padding: "9px 16px", flexShrink: 0, fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center" }} onClick={() => goToSlug(slugFallback)}
+                aria-label={lang === "nl" ? "Ga naar salon" : lang === "es" ? "Ir al salón" : "Go to salon"}>
+                <ArrowIcon size={14} />
+              </button>
             </div>
           </div>
         )}
@@ -1227,9 +1252,16 @@ function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
   // CSS mockup below.
   const [shots, setShots] = useState(HERO_SHOTS);
   const [shotIdx, setShotIdx] = useState(0);
+  // Alleen de shots die al aan de beurt waren plus de volgende staan in de
+  // DOM: eerst laadden alle zeven (~610 KB) meteen, terwijl er één zichtbaar
+  // is. Elke tik schuift het venster één op; na één rondje staan ze er alle.
+  const [shotsUpTo, setShotsUpTo] = useState(0);
   useEffect(() => {
     if (shots.length <= 1) return;
-    const id = setInterval(() => setShotIdx(i => (i + 1) % shots.length), 4000);
+    const id = setInterval(() => {
+      setShotIdx(i => (i + 1) % shots.length);
+      setShotsUpTo(m => Math.min(m + 1, shots.length - 1));
+    }, 4000);
     return () => clearInterval(id);
   }, [shots.length]);
   const check = (sz, col) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
@@ -1262,10 +1294,11 @@ function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
                  bar, so we don't overlay anything. All layers are stacked; the
                  active one fades in over the others. */
               <div style={{ position: "relative", width: "100%", aspectRatio: "254 / 552", background: c.bgCard }}>
-                {shots.map((src, i) => (
+                {shots.map((src, i) => i > shotsUpTo + 1 ? null : (
                   <img
                     key={src}
                     src={src}
+                    decoding="async"
                     alt={lang === "nl" ? "Vellu salon-app" : lang === "es" ? "App de salón Vellu" : "Vellu salon app"}
                     onError={() => setShots(s => s.filter(x => x !== src))}
                     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center", display: "block", opacity: i === (shotIdx % shots.length) ? 1 : 0, transition: "opacity 0.9s ease" }}
@@ -1296,7 +1329,7 @@ function HeroPhoneMockup({ lang, c, accent = ACCENT }) {
               <div style={{ width: 46, height: 46, borderRadius: 15, background: `linear-gradient(135deg, ${ACCENT}, ${ACCENT}88)`, border: `2.5px solid ${c.bg}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: darkOnGold, flexShrink: 0, boxShadow: "0 8px 18px -8px rgba(0,0,0,0.6)" }}>SN</div>
               <div style={{ minWidth: 0, paddingBottom: 2 }}>
                 <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1, color: c.text }}>Studio Nova</div>
-                <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>Amsterdam · <span style={{ color: ACCENT }}>★ 4.9</span> · 127 reviews</div>
+                <div style={{ fontSize: 8.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.03em" }}>Amsterdam · <span style={{ color: ACCENT, display: "inline-flex", alignItems: "center", gap: 2 }}><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>4.9</span> · 127 reviews</div>
               </div>
             </div>
 
@@ -1361,7 +1394,10 @@ function SavingsCalculator({ lang, t, c, accent = ACCENT, atelier = false }) {
   const treatwellMonthly = revenue * 0.08;
   const velluMonthly = 19;
   const savingsYear = Math.max(0, (treatwellMonthly - velluMonthly) * 12);
-  const fmt = (n) => "€" + Math.round(n).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US");
+  // Huisnotatie in alle drie de talen: "€2.250" (punt voor duizendtallen),
+  // via fmtAmt en zonder de centen. toLocaleString gaf "€2,250" (en) en
+  // "€2250" (es, groepeert geen vier cijfers).
+  const fmt = (n) => fmtAmt("€", Math.round(n)).replace(/,\d+$/, "");
   const slider = {
     width: "100%", appearance: "none", WebkitAppearance: "none",
     height: 4, borderRadius: 100, background: atelier ? AT.PUTTY : c.border, outline: "none", cursor: "pointer",
@@ -1454,6 +1490,18 @@ function Row({ label, value, c, negative }) {
 }
 
 // ─── OWNER AUTH ───────────────────────────────────────────────
+// Namen die Vellu zelf als route gebruikt. Zelfde lijst als de slug-editor in
+// de app (RESERVED_SLUGS) en de database-controle op profiles.slug; houd ze
+// gelijk. Hier een eigen kopie zodat het aanmeldscherm niet van de rest
+// afhangt (de punt-namen kunnen uit een bedrijfsnaam niet ontstaan, maar wel
+// in de lijst blijven voor de gelijkheid).
+const RESERVED_SIGNUP_SLUGS = new Set([
+  "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
+  "voorwaarden", "contact", "api", "assets", "public", "static",
+  "auth", "login", "signup", "signin", "logout", "reset", "review",
+  "_", "app", "www", "sitemap.xml", "robots.txt", "manifest.json",
+]);
+
 function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // Vaste Atelier-huid (27-08): de login hoort bij de bone-merkwereld van de
   // landing, niet bij het licht/donker-thema van de app erachter.
@@ -1475,7 +1523,10 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const effRef = (urlRef || storedRef() || "").toUpperCase();
   // Referral-beloning van dit moment (14 dagen, of meer tijdens een actie).
   const refPromo = useReferralPromo();
-  const [mode, setMode] = useState(urlRef || urlSignup ? "signup" : "signin");
+  // Uitnodiging als teamlid (link uit de mail, token bewaard door /owner):
+  // opent op Registreren en toont een korte uitleg; inloggen kan ook.
+  const [staffInvite] = useState(() => !!readStaffInvite());
+  const [mode, setMode] = useState(urlRef || urlSignup || staffInvite ? "signup" : "signin");
   // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
   // email field so they only type their password. Supabase itself already
   // persists the session (localStorage) — this flag only controls whether we
@@ -1521,18 +1572,31 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
     if (mode === "signup") {
       let slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
+      // Gereserveerde namen (routes van Vellu zelf, zoals /contact of /admin)
+      // krijgen net als een bezette naam een achtervoegsel: anders opent
+      // vellu.cc/contact nooit de salon maar Vellu's eigen pagina (L3-19).
+      const reserved = RESERVED_SIGNUP_SLUGS.has(slug);
       // Check slug uniqueness
-      const { data: existing } = await supabase.from("public_salons").select("id").eq("slug", slug).maybeSingle();
-      if (existing) {
+      const { data: existing } = reserved ? { data: null } : await supabase.from("public_salons").select("id").eq("slug", slug).maybeSingle();
+      if (reserved || existing) {
         const originalSlug = slug;
         slug = slug + "-" + Math.random().toString(36).slice(2, 6);
-        setError(lang === "nl"
-          ? `vellu.cc/${originalSlug} is al bezet. Je krijgt: vellu.cc/${slug}`
-          : `vellu.cc/${originalSlug} is taken. You'll get: vellu.cc/${slug}`);
+        setError(reserved
+          ? (lang === "nl" ? `vellu.cc/${originalSlug} is gereserveerd. Je krijgt: vellu.cc/${slug}`
+            : lang === "es" ? `vellu.cc/${originalSlug} está reservado. Tendrás: vellu.cc/${slug}`
+            : `vellu.cc/${originalSlug} is reserved. You'll get: vellu.cc/${slug}`)
+          : (lang === "nl" ? `vellu.cc/${originalSlug} is al bezet. Je krijgt: vellu.cc/${slug}`
+            : lang === "es" ? `vellu.cc/${originalSlug} ya está ocupado. Tendrás: vellu.cc/${slug}`
+            : `vellu.cc/${originalSlug} is taken. You'll get: vellu.cc/${slug}`));
         setLoading(false);
         setForm(f => ({...f, slug}));
         return;
       }
+      // Uitnodiging als teamlid (R-02): met een bewaard token maakt de
+      // database geen salonprofiel aan (staff_invite in de metadata) en
+      // koppelen we de teamlid-rij via het token. Lukt dat niet (verlopen,
+      // al gebruikt), dan wordt het gewoon een eigen salon zoals altijd.
+      const inviteToken = readStaffInvite();
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -1540,20 +1604,21 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
           data: {
             business_name: form.businessName,
             slug: slug,
-            city: form.city || "Nederland"
+            city: form.city || "Nederland",
+            ...(inviteToken ? { staff_invite: true } : {})
           }
         }
       });
       if (error) { setError(error.message); setLoading(false); return; }
-      // If this email was invited as staff somewhere, claim that staff row instead of
-      // creating an owner profile. resolveUserRole will route them to the staff dashboard.
-      const inviteEmail = form.email.toLowerCase().trim();
-      const { data: staffInvite } = await supabase.from("staff_members").select("id").eq("email", inviteEmail).is("user_id", null).maybeSingle();
-      if (staffInvite) {
-        await supabase.from("staff_members").update({ user_id: data.user.id }).eq("id", staffInvite.id).is("user_id", null);
-        onLogin({ email: form.email, id: data.user.id });
-        setLoading(false);
-        return;
+      let inviteOutcome = null;
+      if (inviteToken) {
+        inviteOutcome = await claimStaffInvite(inviteToken);
+        if (inviteOutcome === "claimed") {
+          // resolveUserRole vindt de rij nu op user_id en stuurt door naar /staff.
+          onLogin({ email: form.email, id: data.user.id });
+          setLoading(false);
+          return;
+        }
       }
       // Otherwise upsert an owner profile.
       const { error: profileError } = await supabase.from("profiles").upsert({
@@ -1591,7 +1656,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         }
       }
 
-      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType });
+      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType, inviteOutcome });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(t.wrongCredentials); setLoading(false); return; }
@@ -1640,7 +1705,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
         {/* Back button — top offset accounts for iOS Dynamic Island / notch. */}
         <div style={{ position: "absolute", top: "calc(32px + env(safe-area-inset-top, 0px))", left: 32 }}>
-          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12 }} onClick={onBack}>← {t.back}</button>
+          <button className="btn-ghost" style={{ padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={onBack}><ArrowIcon dir="left" size={12} /> {t.back}</button>
         </div>
 
         {/* Taalkeuze — same safe-area offset. Geen thema-toggle: deze pagina
@@ -1680,6 +1745,17 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 }}>{label}</button>
               ))}
             </div>
+
+            {staffInvite && (
+              <div data-staff-invite-note style={{
+                background: `${AT.EARTH}12`, border: `1px solid ${AT.EARTH}33`, borderRadius: 12,
+                padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center", lineHeight: 1.5,
+              }}>
+                {lang === "nl" ? "Je bent uitgenodigd als teamlid. Maak een account aan of log in om de uitnodiging te accepteren."
+                  : lang === "es" ? "Te han invitado como miembro del equipo. Crea una cuenta o inicia sesión para aceptar la invitación."
+                  : "You've been invited as a team member. Create an account or sign in to accept the invitation."}
+              </div>
+            )}
 
             {mode === "signup" && referrerName && (
               <div style={{
@@ -1726,12 +1802,14 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                   <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
                     {lang === "nl"
                       ? <>Bepaalt je <strong style={{ color: c.text }}>valuta en belasting</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Later te wijzigen in Instellingen.</>
+                      : lang === "es"
+                      ? <>Define tu <strong style={{ color: c.text }}>moneda e impuestos</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Puedes cambiarlo después en Ajustes.</>
                       : <>Sets your <strong style={{ color: c.text }}>currency and tax</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Changeable later in Settings.</>}
                   </div>
                 </div>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 17, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: c.textLabel, fontFamily: "'Jost',sans-serif", pointerEvents: "none" }}>vellu.cc/</div>
-                  <input className="input-field" placeholder={lang === "nl" ? "jouw-salon-naam" : "your-salon-name"} value={form.slug} onChange={e => setForm(f => ({...f, slug: e.target.value.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}))} style={{ paddingLeft: 85 }} />
+                  <input className="input-field" placeholder={lang === "nl" ? "jouw-salon-naam" : lang === "es" ? "nombre-de-tu-salon" : "your-salon-name"} value={form.slug} onChange={e => setForm(f => ({...f, slug: e.target.value.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}))} style={{ paddingLeft: 85 }} />
                 </div>
                 {/* Account type */}
                 <div>
@@ -1787,7 +1865,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               </label>
             )}
             {error && <div style={{ fontSize: 12, color: "#a8564a", marginBottom: 16, textAlign: "center" }}>{error}</div>}
-            {resetSent && <div style={{ fontSize: 12, color: "#86efac", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
+            {/* Atelier-groen op de bone-kaart (contrast ruim boven 4,5:1); het
+                oude lichtgroen was er nauwelijks te lezen. */}
+            {resetSent && <div style={{ fontSize: 12, color: "#4f6b3a", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
             {mode === "signin" && (
               <button style={{ display: "block", width: "100%", marginTop: 12, background: "none", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}
@@ -1809,7 +1889,7 @@ export { LandingScreen, OwnerAuth };
 // werkende onderdelen en bewegingslaag, andere huid. De componenten nemen hun
 // kleuren als prop (`c`), dus de ivoor-pagina geeft gewoon zijn eigen palet mee.
 export {
-  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
+  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, SectionHead, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 };

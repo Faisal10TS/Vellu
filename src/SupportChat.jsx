@@ -8,11 +8,36 @@ import { supabase } from "./supabase.js";
 // and renders the reply. Knowledge-only: it can explain how Vellu works but
 // can't read or change the salon's data.
 
+// Antwoorden van het model komen soms in Markdown ("# Kop", "**vet**",
+// "- lijstje"). De bubbel toont platte tekst (pre-wrap), dus die tekens
+// stonden er letterlijk (L3-08). Hier gaan ze eruit: koppen worden gewone
+// regels, vet/cursief/code verliest de tekens, lijstjes krijgen een
+// middenpunt, [tekst](url) wordt "tekst (url)". Geen HTML, dus niets om te
+// ontsnappen: React toont het als tekst.
+function plainText(s) {
+  return String(s || "")
+    .split("\n")
+    .map(line => line
+      .replace(/^\s{0,3}#{1,6}\s+/, "")
+      .replace(/^(\s*)[-*+]\s+/, "$1· ")
+      .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/, ""))
+    .join("\n")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/(^|[\s(])\*(?!\s)([^*\n]+?)\*(?=[\s).,!?:;]|$)/g, "$1$2")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting: greetingOverride, subtitle: subtitleOverride, side = "right", launcherBottom }) {
   const [open, setOpen] = useState(false);
-  const greeting = greetingOverride || (lang === "nl"
-    ? "Hoi! Ik ben de Vellu-assistent. Vraag me hoe iets werkt — bijvoorbeeld je openingstijden instellen, een medewerker toevoegen, of waarom een klant geen mail kreeg. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc."
-    : "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email. Can't get the answer from me? Email Mirah Ventures at mirahventures@vellu.cc.");
+  // Drie talen voor alle teksten van het venster (Spaans kreeg eerst Engels).
+  const tr = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const greeting = greetingOverride || tr(
+    "Hoi! Ik ben de Vellu-assistent. Vraag me hoe iets werkt — bijvoorbeeld je openingstijden instellen, een medewerker toevoegen, of waarom een klant geen mail kreeg. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc.",
+    "Hi! I'm the Vellu assistant. Ask me how something works — like setting your hours, adding a staff member, or why a client didn't get an email. Can't get the answer from me? Email Mirah Ventures at mirahventures@vellu.cc.",
+    "¡Hola! Soy el asistente de Vellu. Pregúntame cómo funciona algo: por ejemplo, configurar tu horario, añadir a alguien a tu equipo o por qué un cliente no recibió un correo. ¿No encuentras la respuesta conmigo? Escribe a Mirah Ventures en mirahventures@vellu.cc.");
   const [messages, setMessages] = useState([{ role: "assistant", content: greeting }]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,31 +65,36 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
       if (error) throw error;
       if (data?.error === "not_configured") {
         setNotConfigured(true);
-        setMessages(m => [...m, { role: "assistant", content: lang === "nl"
-          ? "De assistent is nog niet ingesteld. Neem contact op via mirahventures@vellu.cc."
-          : "The assistant isn't set up yet. Contact us at mirahventures@vellu.cc." }]);
+        setMessages(m => [...m, { role: "assistant", content: tr(
+          "De assistent is nog niet ingesteld. Neem contact op via mirahventures@vellu.cc.",
+          "The assistant isn't set up yet. Contact us at mirahventures@vellu.cc.",
+          "El asistente aún no está configurado. Escríbenos a mirahventures@vellu.cc.") }]);
         return;
       }
       if (data?.error === "rate_limited") {
-        setMessages(m => [...m, { role: "assistant", content: lang === "nl"
-          ? "Even rustig aan — probeer het over een minuutje opnieuw."
-          : "Slow down a moment — try again in a minute." }]);
+        setMessages(m => [...m, { role: "assistant", content: tr(
+          "Even rustig aan — probeer het over een minuutje opnieuw.",
+          "Slow down a moment — try again in a minute.",
+          "Un momento, por favor. Vuelve a intentarlo en un minuto.") }]);
         return;
       }
       if (data?.error === "busy") {
-        setMessages(m => [...m, { role: "assistant", content: lang === "nl"
-          ? "Het is nu erg druk met vragen. Probeer het later opnieuw, of mail mirahventures@vellu.cc."
-          : "It's very busy right now. Please try again later, or email mirahventures@vellu.cc." }]);
+        setMessages(m => [...m, { role: "assistant", content: tr(
+          "Het is nu erg druk met vragen. Probeer het later opnieuw, of mail mirahventures@vellu.cc.",
+          "It's very busy right now. Please try again later, or email mirahventures@vellu.cc.",
+          "Ahora mismo hay muchas preguntas. Inténtalo más tarde o escribe a mirahventures@vellu.cc.") }]);
         return;
       }
-      const reply = data?.reply || (lang === "nl"
-        ? "Sorry, dat lukte niet. Probeer het opnieuw of mail mirahventures@vellu.cc."
-        : "Sorry, that didn't work. Try again or email mirahventures@vellu.cc.");
+      const reply = data?.reply || tr(
+        "Sorry, dat lukte niet. Probeer het opnieuw of mail mirahventures@vellu.cc.",
+        "Sorry, that didn't work. Try again or email mirahventures@vellu.cc.",
+        "Lo siento, no ha funcionado. Inténtalo de nuevo o escribe a mirahventures@vellu.cc.");
       setMessages(m => [...m, { role: "assistant", content: reply }]);
     } catch {
-      setMessages(m => [...m, { role: "assistant", content: lang === "nl"
-        ? "Er ging iets mis. Probeer het opnieuw of mail mirahventures@vellu.cc."
-        : "Something went wrong. Try again or email mirahventures@vellu.cc." }]);
+      setMessages(m => [...m, { role: "assistant", content: tr(
+        "Er ging iets mis. Probeer het opnieuw of mail mirahventures@vellu.cc.",
+        "Something went wrong. Try again or email mirahventures@vellu.cc.",
+        "Algo ha fallado. Inténtalo de nuevo o escribe a mirahventures@vellu.cc.") }]);
     } finally {
       setBusy(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -87,7 +117,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
       {!open && (
         <button
           onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100); }}
-          aria-label={lang === "nl" ? "Hulp" : "Help"}
+          aria-label={tr("Hulp", "Help", "Ayuda")}
           style={{
             position: "fixed", bottom: bottomOffset, zIndex: 480, ...anchorX,
             width: 52, height: 52, borderRadius: "50%", border: "none", cursor: "pointer",
@@ -118,10 +148,10 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, lineHeight: 1 }}>{lang === "nl" ? "Vellu-assistent" : "Vellu assistant"}</div>
-              <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.04em" }}>{subtitleOverride || (lang === "nl" ? "Hulp bij het gebruik van Vellu" : "Help using Vellu")}</div>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, fontWeight: 400, lineHeight: 1 }}>{tr("Vellu-assistent", "Vellu assistant", "Asistente de Vellu")}</div>
+              <div style={{ fontSize: 9.5, color: c.textMuted, marginTop: 3, letterSpacing: "0.04em" }}>{subtitleOverride || tr("Hulp bij het gebruik van Vellu", "Help using Vellu", "Ayuda para usar Vellu")}</div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label={lang === "nl" ? "Sluiten" : "Close"}
+            <button onClick={() => setOpen(false)} aria-label={tr("Sluiten", "Close", "Cerrar")}
               style={{ background: "transparent", border: `1px solid ${c.border}`, borderRadius: 9, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: c.textSub, padding: 0, flexShrink: 0 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
@@ -138,7 +168,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
                   border: m.role === "user" ? "none" : `1px solid ${c.border}`,
                   borderBottomRightRadius: m.role === "user" ? 4 : 14,
                   borderBottomLeftRadius: m.role === "user" ? 14 : 4,
-                }}>{m.content}</div>
+                }}>{m.role === "assistant" ? plainText(m.content) : m.content}</div>
               </div>
             ))}
             {busy && (
@@ -160,7 +190,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder={notConfigured ? (lang === "nl" ? "Assistent niet beschikbaar" : "Assistant unavailable") : (lang === "nl" ? "Stel je vraag…" : "Ask a question…")}
+                placeholder={notConfigured ? tr("Assistent niet beschikbaar", "Assistant unavailable", "Asistente no disponible") : tr("Stel je vraag…", "Ask a question…", "Haz tu pregunta…")}
                 disabled={notConfigured}
                 rows={1}
                 style={{
@@ -169,7 +199,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
                   fontSize: 12.5, fontFamily: "'Jost', sans-serif", lineHeight: 1.4, outline: "none",
                 }} />
               <button onClick={send} disabled={busy || !input.trim() || notConfigured}
-                aria-label={lang === "nl" ? "Verstuur" : "Send"}
+                aria-label={tr("Verstuur", "Send", "Enviar")}
                 style={{
                   width: 38, height: 38, borderRadius: 11, border: "none", flexShrink: 0,
                   background: (busy || !input.trim() || notConfigured) ? c.inputBorder : accent,
@@ -182,9 +212,9 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
             {/* Altijd zichtbaar, ook als het gesprek al loopt: waar je heen kunt
                 als de assistent het niet weet (Faisal, 08-09). */}
             <div style={{ fontSize: 9, color: c.textMuted, marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
-              {lang === "nl" ? "AI-assistent · kan af en toe iets missen" : "AI assistant · may occasionally be wrong"}
+              {tr("AI-assistent · kan af en toe iets missen", "AI assistant · may occasionally be wrong", "Asistente de IA · a veces puede equivocarse")}
               <br />
-              {lang === "nl" ? "Geen antwoord? Mail Mirah Ventures: " : "No answer? Email Mirah Ventures: "}
+              {tr("Geen antwoord? Mail Mirah Ventures: ", "No answer? Email Mirah Ventures: ", "¿Sin respuesta? Escribe a Mirah Ventures: ")}
               <a href="mailto:mirahventures@vellu.cc" style={{ color: c.textSub, textDecoration: "underline" }}>mirahventures@vellu.cc</a>
             </div>
           </div>
