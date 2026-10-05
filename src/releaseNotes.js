@@ -14,6 +14,57 @@
 
 export const RELEASES = [
   {
+    // Nazorg op de TTNB-melding van 05-10-2026 (zelfde dag, daarom "b"): alle
+    // WhatsApp-knoppen van de SALON naar een klant nagelopen. Nummers zonder
+    // landcode kregen altijd +31, het betaalverzoek zei bij een vooruitbetaling
+    // "Bedankt voor je bezoek", en de herinnering zei altijd "morgen".
+    id: "2026-10-05b",
+    date: "2026-10-05",
+    title: { nl: "WhatsApp-berichten aan klanten", en: "WhatsApp messages to clients", es: "Mensajes de WhatsApp a clientes" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "WhatsApp naar een klant: een nummer zonder landcode krijgt nu de landcode van jouw salon (795 1501 op Bonaire wordt +599 795 1501). Eerst werd dat een Nederlands nummer. Geldt voor de afspraakkaart, de klantenlijst, de klantkaart, de wachtlijst, verjaardagscodes en het betaalverzoek bij Facturen.",
+          en: "WhatsApp to a client: a number without a country code now gets your salon's country code (795 1501 on Bonaire becomes +599 795 1501). It used to become a Dutch number. Applies to the appointment card, the client list, the client card, the waitlist, birthday codes and the payment request under Invoices.",
+          es: "WhatsApp a una clienta: un número sin prefijo de país recibe ahora el prefijo del país de tu salón (795 1501 en Bonaire pasa a ser +599 795 1501). Antes se convertía en un número neerlandés. Vale para la tarjeta de la cita, la lista de clientes, la ficha de la clienta, la lista de espera, los códigos de cumpleaños y la solicitud de pago en Facturas.",
+        },
+      },
+      {
+        kind: "fix", audience: ["staff"],
+        text: {
+          nl: "WhatsApp naar een klant: een nummer zonder landcode krijgt nu de landcode van de salon (795 1501 op Bonaire wordt +599 795 1501). Eerst werd dat een Nederlands nummer.",
+          en: "WhatsApp to a client: a number without a country code now gets the salon's country code (795 1501 on Bonaire becomes +599 795 1501). It used to become a Dutch number.",
+          es: "WhatsApp a una clienta: un número sin prefijo de país recibe ahora el prefijo del país del salón (795 1501 en Bonaire pasa a ser +599 795 1501). Antes se convertía en un número neerlandés.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Betaalverzoek via WhatsApp past nu bij het moment. Bij een reservering die op de vooruitbetaling wacht noemt de tekst de afspraak en het bedrag van de vooruitbetaling; bij een restbedrag staat wat er nog openstaat en wat al betaald is. Eerst stond er altijd Bedankt voor je bezoek met het totaalbedrag. Bij Facturen staat het bedrag nu in je eigen munt.",
+          en: "The WhatsApp payment request now fits the moment. For a reservation waiting for its prepayment the text names the appointment and the prepayment amount; for a remainder it states what is still outstanding and what has been paid. It used to always say Thank you for visiting with the total. Under Invoices the amount is now in your own currency.",
+          es: "La solicitud de pago por WhatsApp se ajusta ahora al momento. En una reserva pendiente del pago por adelantado, el texto menciona la cita y el importe del adelanto; en un resto, lo que queda por pagar y lo ya pagado. Antes siempre decía Gracias por tu visita con el importe total. En Facturas el importe aparece ahora en tu propia moneda.",
+        },
+      },
+      {
+        kind: "fix", audience: ["staff"],
+        text: {
+          nl: "WhatsApp-herinnering op de afspraakkaart: zegt nu vandaag, morgen of de datum voluit (eerst altijd morgen) en spreekt de klant aan met haar voornaam. Is de afspraak al begonnen of voorbij, dan staat alleen de aanhef klaar.",
+          en: "WhatsApp reminder on the appointment card: it now says today, tomorrow or the full date (it used to always say tomorrow) and addresses the client by her first name. If the appointment has already started or passed, only the greeting is filled in.",
+          es: "Recordatorio por WhatsApp en la tarjeta de la cita: ahora dice hoy, mañana o la fecha completa (antes siempre decía mañana) y se dirige a la clienta por su nombre de pila. Si la cita ya ha empezado o ha pasado, solo aparece el saludo.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner", "staff"],
+        text: {
+          nl: "Gebruik je Vellu in het Spaans, dan staan de WhatsApp-teksten voor bevestiging, betaalverzoek en herinnering nu ook in het Spaans (eerst Engels).",
+          en: "If you use Vellu in Spanish, the WhatsApp texts for confirmation, payment request and reminder are now in Spanish too (they used to be English).",
+          es: "Si usas Vellu en español, los textos de WhatsApp de confirmación, solicitud de pago y recordatorio ahora también están en español (antes salían en inglés).",
+        },
+      },
+    ],
+  },
+  {
     // TTNB 05-10-2026: de WhatsApp-knop na het boeken liet de KLANT de
     // salontekst ("Hoi Firdaouss! Je afspraak is bevestigd") naar de salon
     // sturen; het leek alsof de salon haar eigen bevestiging kreeg.

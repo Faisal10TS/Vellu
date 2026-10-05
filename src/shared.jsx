@@ -579,9 +579,21 @@ function getWhatsAppUrl(phone, message, countryCode) {
   return `https://wa.me/${clean}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
 }
 
+// Datum voor in een WhatsApp-tekst: "dinsdag 6 oktober" in de taal van het
+// bericht. Alleen een kale ISO-datum (YYYY-MM-DD) wordt opgemaakt; een datum
+// die de aanroeper al heeft opgemaakt gaat ongewijzigd door.
+function waDateLabel(lang, date) {
+  const s = String(date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return parseDate(s).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" });
+}
+
 function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
   if (lang === "nl") {
     return `Hoi ${clientName}! ✨\n\nJe afspraak bij ${salonName} is bevestigd:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nTot dan! 🙏`;
+  }
+  if (lang === "es") {
+    return `¡Hola ${clientName}! ✨\n\nTu cita en ${salonName} está confirmada:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\n¡Hasta entonces! 🙏`;
   }
   return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nSee you then! 🙏`;
 }
@@ -624,20 +636,60 @@ function getPaymentLinkWithAmount(link, price) {
   }
 }
 
-// Payment request after the visit — sent manually by the owner/staff from a
-// completed appointment. Includes the pay link when the salon has one,
-// otherwise the IBAN transfer details.
-function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder, countryCode }) {
+// Payment request — sent manually by the owner from an appointment. Includes
+// the pay link when the salon has one, otherwise the IBAN transfer details.
+// Drie momenten, elk met een eigen tekst. Tot 05-10-2026 kreeg alles de tekst
+// van ná het bezoek ("Bedankt voor je bezoek… Het totaalbedrag is…"), ook een
+// reservering die nog op haar vooruitbetaling wachtte:
+//   kind "visit"     (standaard) na het bezoek: bedankt + totaalbedrag;
+//   kind "prepay"    reservering die op de vooruitbetaling wacht
+//                    (pending_payment): welke afspraak, welk bedrag;
+//   kind "remainder" het verschil na een vooruitbetaling: `price` is wat er
+//                    nog openstaat, `paid` wat er al binnen is, `visited` of
+//                    de afspraak al is afgerond.
+// `date` is de ISO-datum van de afspraak (alleen prepay/remainder).
+function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder, countryCode, kind = "visit", date, time, paid, visited }) {
   const firstName = (clientName || "").split(" ")[0] || clientName || "";
   const amount = fmtMoney(price, countryCode);
   const linkWithAmount = getPaymentLinkWithAmount(paymentLink, price);
   const payVia = linkWithAmount
-    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
+    ? (lang === "nl" ? `Je kunt betalen via: ${linkWithAmount}` : lang === "es" ? `Puedes pagar aquí: ${linkWithAmount}` : `You can pay via: ${linkWithAmount}`)
     : (lang === "nl"
       ? `Je kunt het overmaken naar ${iban}${ibanHolder ? ` t.n.v. ${ibanHolder}` : ""}.`
+      : lang === "es"
+      ? `Puedes transferirlo a ${iban}${ibanHolder ? ` (a nombre de ${ibanHolder})` : ""}.`
       : `You can transfer it to ${iban}${ibanHolder ? ` (${ibanHolder})` : ""}.`);
+  const day = waDateLabel(lang, date);
+  if (kind === "prepay") {
+    if (lang === "nl") {
+      return `Hoi ${firstName}! 💛\n\nJe reservering bij ${salonName}${day ? ` voor ${day}${time ? ` om ${time}` : ""}` : ""} wacht nog op de vooruitbetaling van ${amount}. Zodra die binnen is, bevestigen we je afspraak.\n\n${payVia}\n\nTot dan! ✨`;
+    }
+    if (lang === "es") {
+      return `¡Hola ${firstName}! 💛\n\nTu reserva en ${salonName}${day ? ` para el ${day}${time ? ` a las ${time}` : ""}` : ""} sigue pendiente del pago por adelantado de ${amount}. En cuanto lo recibamos, confirmaremos tu cita.\n\n${payVia}\n\n¡Hasta entonces! ✨`;
+    }
+    return `Hi ${firstName}! 💛\n\nYour reservation at ${salonName}${day ? ` for ${day}${time ? ` at ${time}` : ""}` : ""} is still waiting for the prepayment of ${amount}. As soon as we receive it, we will confirm your appointment.\n\n${payVia}\n\nSee you then! ✨`;
+  }
+  if (kind === "remainder") {
+    const got = parseFloat(paid || 0) > 0 ? fmtMoney(paid, countryCode) : "";
+    if (lang === "nl") {
+      return visited
+        ? `Hoi ${firstName}! 💛\n\nBedankt voor je bezoek bij ${salonName}. Er staat nog ${amount} open${got ? `; je hebt al ${got} betaald` : ""}.\n\n${payVia}\n\nTot de volgende keer! ✨`
+        : `Hoi ${firstName}! 💛\n\nVoor je afspraak bij ${salonName}${day ? ` op ${day}${time ? ` om ${time}` : ""}` : ""} staat nog ${amount} open${got ? `; je hebt al ${got} betaald` : ""}.\n\n${payVia}\n\nAlvast bedankt! ✨`;
+    }
+    if (lang === "es") {
+      return visited
+        ? `¡Hola ${firstName}! 💛\n\nGracias por tu visita a ${salonName}. Quedan ${amount} por pagar${got ? `; ya has pagado ${got}` : ""}.\n\n${payVia}\n\n¡Hasta la próxima! ✨`
+        : `¡Hola ${firstName}! 💛\n\nPara tu cita en ${salonName}${day ? ` el ${day}${time ? ` a las ${time}` : ""}` : ""} quedan ${amount} por pagar${got ? `; ya has pagado ${got}` : ""}.\n\n${payVia}\n\n¡Gracias de antemano! ✨`;
+    }
+    return visited
+      ? `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. ${amount} is still outstanding${got ? `; you have already paid ${got}` : ""}.\n\n${payVia}\n\nSee you next time! ✨`
+      : `Hi ${firstName}! 💛\n\nFor your appointment at ${salonName}${day ? ` on ${day}${time ? ` at ${time}` : ""}` : ""}, ${amount} is still outstanding${got ? `; you have already paid ${got}` : ""}.\n\n${payVia}\n\nThank you in advance! ✨`;
+  }
   if (lang === "nl") {
     return `Hoi ${firstName}! 💛\n\nBedankt voor je bezoek bij ${salonName}. Het totaalbedrag is ${amount}.\n\n${payVia}\n\nTot de volgende keer! ✨`;
+  }
+  if (lang === "es") {
+    return `¡Hola ${firstName}! 💛\n\nGracias por tu visita a ${salonName}. El importe total es ${amount}.\n\n${payVia}\n\n¡Hasta la próxima! ✨`;
   }
   return `Hi ${firstName}! 💛\n\nThank you for visiting ${salonName}. The total is ${amount}.\n\n${payVia}\n\nSee you next time! ✨`;
 }
@@ -680,11 +732,35 @@ function getWhatsAppRefundMsg(lang, { clientName, salonName, amount, countryCode
 // destructureren op undefined klappen — een TypeError in render trekt via de
 // ErrorBoundary de HELE app naar "Er ging iets mis". Liever een bericht met
 // "undefined" erin dan een salon die niet meer bij haar agenda kan.
-function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName } = {}) {
-  if (lang === "nl") {
-    return `Hoi ${clientName}! 👋\n\nHerinnering: je hebt morgen een afspraak bij ${salonName}.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nTot morgen! ✨`;
+//
+// `date` is de ISO-datum van de afspraak. De knop staat op ELKE bevestigde
+// afspraak, niet alleen die van morgen: de tekst zei tot 05-10-2026 altijd
+// "morgen" met de kale ISO-datum erachter. Nu vandaag / morgen / de datum
+// voluit, gerekend op de klok van de salon (salonNow). Is de afspraak al
+// begonnen of geweest, dan is een herinnering onzin en blijft alleen de aanhef
+// over, zodat de medewerker zelf verder typt.
+function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName, countryCode } = {}) {
+  const firstName = (clientName || "").split(" ")[0] || clientName || "";
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(date || "")) ? String(date) : "";
+  const now = salonNow(countryCode);
+  const today = fmt(now);
+  const tomorrow = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  if (iso && (iso < today || (iso === today && time && String(time).slice(0, 5) <= clock))) {
+    return lang === "nl" ? `Hoi ${firstName}! ` : lang === "es" ? `¡Hola ${firstName}! ` : `Hi ${firstName}! `;
   }
-  return `Hi ${clientName}! 👋\n\nReminder: you have an appointment at ${salonName} tomorrow.\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n\nSee you tomorrow! ✨`;
+  const when = iso === today ? "today" : iso === tomorrow ? "tomorrow" : "date";
+  const details = `📅 ${waDateLabel(lang, date)}\n🕐 ${time}\n💅 ${serviceName}`;
+  if (lang === "nl") {
+    const zin = when === "today" ? `je hebt vandaag een afspraak bij ${salonName}` : when === "tomorrow" ? `je hebt morgen een afspraak bij ${salonName}` : `je hebt een afspraak bij ${salonName}`;
+    return `Hoi ${firstName}! 👋\n\nHerinnering: ${zin}.\n${details}\n\n${when === "today" ? "Tot straks!" : when === "tomorrow" ? "Tot morgen!" : "Tot dan!"} ✨`;
+  }
+  if (lang === "es") {
+    const frase = when === "today" ? `hoy tienes una cita en ${salonName}` : when === "tomorrow" ? `mañana tienes una cita en ${salonName}` : `tienes una cita en ${salonName}`;
+    return `¡Hola ${firstName}! 👋\n\nRecordatorio: ${frase}.\n${details}\n\n${when === "today" ? "¡Hasta luego!" : when === "tomorrow" ? "¡Hasta mañana!" : "¡Hasta entonces!"} ✨`;
+  }
+  const line = when === "today" ? `you have an appointment at ${salonName} today` : when === "tomorrow" ? `you have an appointment at ${salonName} tomorrow` : `you have an appointment at ${salonName}`;
+  return `Hi ${firstName}! 👋\n\nReminder: ${line}.\n${details}\n\n${when === "today" ? "See you later!" : when === "tomorrow" ? "See you tomorrow!" : "See you then!"} ✨`;
 }
 
 const getToday = () => new Date();
