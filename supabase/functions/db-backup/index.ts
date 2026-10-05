@@ -43,6 +43,53 @@ const FALLBACK_TABLES = [
 const BACKUP_BUCKET = "db-backups";
 const RETENTION_DAYS = 30;
 
+// Vaste volgorde per pagina (E2-18). Zonder ORDER BY garandeert Postgres geen
+// gelijke volgorde tussen de losse .range()-vragen: een rij die tijdens de
+// back-up wijzigt, kan dubbel of helemaal niet in het bestand belanden. We
+// sorteren op de primaire sleutel; de meeste tabellen hebben "id", de
+// uitzonderingen staan hier (nagekeken in pg_index op 05-10-2026).
+// newsletter_opt_outs heeft geen id; token is daar uniek. support_chat_user_usage
+// en translate_usage (nieuw in dezelfde migratie, pakket E3) hebben als sleutel
+// (user_id, day). public_chat_usage (sleutel bucket) en cron_health slaat
+// backup_table_list() over.
+const ORDER_COLUMNS: Record<string, string[]> = {
+  app_admins: ["user_id"],
+  app_rating_invites: ["owner_id"],
+  app_ratings: ["owner_id"],
+  app_source_requests: ["owner_id"],
+  client_no_shows: ["client_email", "owner_id"],
+  location_services: ["location_id", "service_id"],
+  location_staff: ["location_id", "staff_id"],
+  newsletter_opt_outs: ["token"],
+  referral_redemptions: ["new_profile_id"],
+  renewal_reminder_log: ["owner_id", "plan_expires_at", "kind"],
+  review_tokens: ["token"],
+  salon_digest_log: ["owner_id", "sent_on"],
+  support_chat_user_usage: ["user_id", "day"],
+  translate_usage: ["user_id", "day"],
+};
+// Bovengrens per tabel. Een tabel die hem haalt is NIET volledig weggeschreven
+// en telt als mislukt, in plaats van stil als "gelukt" (E2-18).
+const MAX_ROWS_PER_TABLE = 100_000;
+
+// Alleen de planner mag deze functie starten (audit E2-04, 05-10-2026). Tot dan
+// schreef elke anonieme aanroep een volledige dump naar de bucket en kreeg hij
+// de rijtellingen per tabel terug (aantal salons, betalingen, …). Toegestaan:
+// x-internal-secret (service-role), x-cron-secret = CRON_SECRET-env, of een
+// x-cron-secret dat de database bevestigt (cron_secret_ok, pg_cron uit de vault).
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+async function cronAuthorized(req) {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && SUPABASE_SERVICE_KEY && internal === SUPABASE_SERVICE_KEY) return true;
+  const cs = req.headers.get("x-cron-secret") || "";
+  if (!cs) return false;
+  if (CRON_SECRET && cs === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cs });
+    return !error && data === true;
+  } catch { return false; }
+}
+
 async function recordHealth(status, ms, processed, err) {
   try {
     await supabase.from("cron_health").insert({
@@ -97,7 +144,10 @@ async function rotateOldBackups() {
   return deleted;
 }
 
-serve(async () => {
+serve(async (req) => {
+  if (!(await cronAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  }
   const t0 = Date.now();
   try {
     const { tables: TABLES, degraded } = await resolveTables();
@@ -118,11 +168,20 @@ serve(async () => {
       let from = 0;
       const pageSize = 1000;
       let ok = true;
-      while (from < 100_000) {
-        const { data, error } = await supabase
-          .from(table)
-          .select("*")
-          .range(from, from + pageSize - 1);
+      let complete = false;
+      // Sorteren op de primaire sleutel (zie ORDER_COLUMNS). Bestaat de kolom
+      // niet (een nieuwe tabel zonder "id" die hier nog niet in de lijst staat),
+      // dan lezen we hem zonder volgorde — goed zolang hij in één pagina past;
+      // past hij daar niet in, dan meldt de back-up dat als probleem.
+      let orderCols = ORDER_COLUMNS[table] || ["id"];
+      while (from < MAX_ROWS_PER_TABLE) {
+        let q = supabase.from(table).select("*");
+        for (const c of orderCols) q = q.order(c, { ascending: true });
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error && from === 0 && orderCols.length && /column .* does not exist|42703/i.test(`${error.code || ""} ${error.message || ""}`)) {
+          orderCols = [];
+          continue;
+        }
         if (error) {
           snapshot.tables[table] = { error: error.message };
           snapshot.counts[table] = -1;
@@ -131,8 +190,14 @@ serve(async () => {
           break;
         }
         rows.push(...(data || []));
-        if (!data || data.length < pageSize) break;
+        if (!data || data.length < pageSize) { complete = true; break; }
         from += pageSize;
+      }
+      if (ok && !complete) {
+        // Bovengrens bereikt: het bestand bevat niet alle rijen.
+        failed.push(`${table}: afgekapt op ${MAX_ROWS_PER_TABLE} rijen`);
+      } else if (ok && orderCols.length === 0 && rows.length >= pageSize) {
+        failed.push(`${table}: geen sorteerkolom bekend (voeg hem toe aan ORDER_COLUMNS), pagina's mogelijk onvolledig`);
       }
       if (ok) {
         snapshot.tables[table] = rows;
@@ -169,17 +234,12 @@ serve(async () => {
       problems.length ? problems.join(" | ") : null,
     );
 
-    return new Response(JSON.stringify({
-      success: problems.length === 0,
-      path,
-      rows: totalRows,
-      tables_backed_up: TABLES.length,
-      table_source: snapshot.table_source,
-      failed_tables: failed,
-      size_bytes: json.length,
-      tables: snapshot.counts,
-      rotated_old_files: rotated,
-    }), { headers: { "Content-Type": "application/json" } });
+    // Geen rijtellingen of details meer in het antwoord: die staan in het
+    // back-upbestand zelf, in cron_health en in de functielog hieronder. Ook met
+    // het cron-geheim hoeft het antwoord niets over de omvang van het bedrijf te
+    // vertellen.
+    console.log(`db-backup: ${path}, ${TABLES.length} tabellen, ${totalRows} rijen, ${rotated} oude bestanden opgeruimd${failed.length ? `, mislukt: ${failed.join("; ")}` : ""}`);
+    return new Response(JSON.stringify({ ok: problems.length === 0 }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     await recordHealth("error", Date.now() - t0, 0, String(err));
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });

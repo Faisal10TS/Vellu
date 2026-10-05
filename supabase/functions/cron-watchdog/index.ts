@@ -61,7 +61,28 @@ const MONITORED = [
   // afgedwongen. Vercel Hobby plant op het uur, niet de minuut: 11:30 kan tot
   // ~12:29 uitlopen, maar blijft binnen 25 uur.
   { name: "vercel-cron-health-check", schedule: "daily 11:30 UTC (Vercel)", maxAgeHours: 25 },
+  // Verjaardagsmails (Vercel-cron 09:10 UTC, api/send-birthday-emails.js).
+  // Schreef tot 05-10-2026 geen hartslag en stond hier niet: een stilstand
+  // was onzichtbaar (E2-09). Vercel plant op het uur, dus ±09:10-09:59.
+  { name: "send-birthday-emails", schedule: "daily 09:10 UTC (Vercel)", maxAgeHours: 25 },
 ];
+
+// Alleen de planner (pg_cron met x-cron-secret uit de vault, of Vercel's
+// api/cron-health-check.js met de CRON_SECRET-env) of een handmatige aanroep met
+// x-internal-secret mag dit starten (audit E2-04). Zelfde check als de andere
+// cron-functies.
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+async function cronAuthorized(req) {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && SUPABASE_SERVICE_KEY && internal === SUPABASE_SERVICE_KEY) return true;
+  const cs = req.headers.get("x-cron-secret") || "";
+  if (!cs) return false;
+  if (CRON_SECRET && cs === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cs });
+    return !error && data === true;
+  } catch { return false; }
+}
 
 async function emailAdmin(subject, html) {
   if (!RESEND_API_KEY) return;
@@ -75,7 +96,10 @@ async function emailAdmin(subject, html) {
   });
 }
 
-serve(async () => {
+serve(async (req) => {
+  if (!(await cronAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  }
   const issues = [];
   const nowMs = Date.now();
 
@@ -106,6 +130,28 @@ serve(async () => {
         job: job.name,
         type: "errored",
         detail: `Last run failed: ${lastRow.error_message || "(no error message)"}`,
+      });
+      continue;
+    }
+    // Niet alleen de laatste rij: send-reminders draait elk uur, en een run om
+    // 10:00 waarin elke herinnering mislukte verdween achter een latere run
+    // zonder werk ('success', 0 verstuurd). Daarom ook een fout of gedeeltelijke
+    // fout ('degraded') ergens in het bewaakte venster melden (E2-09).
+    const sinceIso = new Date(nowMs - job.maxAgeHours * 3_600_000).toISOString();
+    const { data: bad } = await supabase
+      .from("cron_health")
+      .select("ran_at, status, error_message")
+      .eq("job_name", job.name)
+      .in("status", ["error", "degraded"])
+      .gte("ran_at", sinceIso)
+      .order("ran_at", { ascending: false })
+      .limit(1);
+    const badRow = bad?.[0];
+    if (badRow) {
+      issues.push({
+        job: job.name,
+        type: badRow.status === "error" ? "errored" : "degraded",
+        detail: `${badRow.status === "error" ? "A run failed" : "A run partly failed"} at ${badRow.ran_at}: ${badRow.error_message || "(no error message)"}`,
       });
     }
   }

@@ -47,6 +47,32 @@ async function recordHealth(status: string, ms: number, processed: number, err?:
   } catch { /* health-logging mag de mail nooit tegenhouden */ }
 }
 
+// Alleen de planner mag deze functie starten (audit E2-04): pg_cron stuurt
+// x-cron-secret uit de vault (bevestigd door cron_secret_ok()), Vercel de
+// CRON_SECRET-env, een handmatige aanroep x-internal-secret (service-role).
+// Anders 401 zonder werk. Zelfde check als send-reminders.
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+async function cronAuthorized(req: Request): Promise<boolean> {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && SUPABASE_SERVICE_KEY && internal === SUPABASE_SERVICE_KEY) return true;
+  const cs = req.headers.get("x-cron-secret") || "";
+  if (!cs) return false;
+  if (CRON_SECRET && cs === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cs });
+    return !error && data === true;
+  } catch { return false; }
+}
+
+// Alles wat de klant zelf intikte (naam bij het boeken) of de salon (naam,
+// dienst, teamleden) gaat ge-escapet de HTML in, net als in send-emails. Een
+// voornaam als <a href=…> werd anders een klikbare phishinglink in een mail
+// van Vellu (E2-10).
+function esc(s: unknown): string {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // Hoeveel dagen terug we kijken. 1 = alleen gisteren; meer is puur inhaalmarge
 // voor een dag dat de cron niet liep.
 const GRACE_DAYS = 3;
@@ -120,7 +146,10 @@ const isSaleRow = (a: any) =>
   (!a?.service_id && (parseInt(a?.service_duration) || 0) === 0 &&
     Array.isArray(a?.products) && a.products.length > 0);
 
-serve(async () => {
+serve(async (req) => {
+  if (!(await cronAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  }
   const t0 = Date.now();
   try {
     const todayStr = ymd(new Date());
@@ -130,7 +159,8 @@ serve(async () => {
     const { data: appointments, error } = await supabase
       .from("appointments")
       .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff)")
-      .eq("followup_sent", false)
+      // IS NOT TRUE: de kolom mag NULL zijn (default false).
+      .not("followup_sent", "is", true)
       .gte("date", fromStr)
       .lte("date", untilStr)
       .not("status", "in", '("cancelled","no_show")');
@@ -141,7 +171,7 @@ serve(async () => {
       return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
 
-    let sent = 0, skipped = 0;
+    let sent = 0, skipped = 0, failed = 0;
     for (const appt of appointments || []) {
       if (!appt.client_email) { skipped++; continue; }
       // Geen adres-vorm (Eydy zette "." in het e-mailveld, 02-09): Resend
@@ -153,8 +183,22 @@ serve(async () => {
       if (!appt.date || appt.date >= todayStr) { skipped++; continue; }
       if (isSaleRow(appt)) { skipped++; continue; }
 
+      // Eerst claimen, dan pas mailen (E2-04): twee runs tegelijk lazen
+      // dezelfde rij en stuurden allebei. Alleen wie de vlag omzet, mailt; een
+      // mislukte mail geeft de claim verderop terug.
+      const { data: claimed, error: claimErr } = await supabase
+        .from("appointments")
+        .update({ followup_sent: true })
+        .eq("id", appt.id)
+        .not("followup_sent", "is", true)
+        .select("id");
+      if (claimErr) { console.error("followup claim failed:", appt.id, claimErr.message); skipped++; continue; }
+      if (!claimed || claimed.length === 0) { skipped++; continue; }
+
       const p: any = appt.profiles || {};
       const salonName = p.business_name || "de salon";
+      // Ge-escapete varianten voor in de HTML (E2-10).
+      const eSalon = esc(salonName);
       const slug = p.slug || "";
       const accent = /^#[0-9a-f]{6}$/i.test(String(p.accent_color || "")) ? p.accent_color : "#c9a96e";
       const lang = langFor(appt.lang, p.country_code);
@@ -206,14 +250,14 @@ serve(async () => {
       const reviewBlock = reviewUrl
         ? `<p style="font-size: 14px; color: #555; line-height: 1.6;">${t.ask}</p>
                 <div style="text-align: center; margin: 24px 0;">
-                  <a href="${reviewUrl}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">${t.cta}</a>
+                  <a href="${esc(reviewUrl)}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">${t.cta}</a>
                 </div>`
         : "";
       // Heeft de salon een Google-vestiging gekoppeld, dan komt daar een TWEEDE
       // knop bij. Niet in plaats van de eigen review: die komt op de
       // boekingspagina te staan en werkt ook voor salons zonder Google-profiel.
       const googleBlock = p.google_place_id
-        ? `<div style="text-align:center;margin:12px 0 24px;"><a href="https://search.google.com/local/writereview?placeid=${encodeURIComponent(p.google_place_id)}" style="display:inline-block;border:1px solid #4285f4;color:#4285f4;padding:12px 28px;border-radius:100px;text-decoration:none;font-weight:500;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">${t.ctaGoogle}</a><div style="font-size:11px;color:#999;margin-top:8px;">${t.googleHint(salonName)}</div></div>`
+        ? `<div style="text-align:center;margin:12px 0 24px;"><a href="https://search.google.com/local/writereview?placeid=${encodeURIComponent(p.google_place_id)}" style="display:inline-block;border:1px solid #4285f4;color:#4285f4;padding:12px 28px;border-radius:100px;text-decoration:none;font-weight:500;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">${t.ctaGoogle}</a><div style="font-size:11px;color:#999;margin-top:8px;">${t.googleHint(eSalon)}</div></div>`
         : "";
       // Stempelkaart: de klant ziet na elk bezoek waar ze staat. Zelfde telling
       // als de trigger appointments_loyalty_stamp (afgerond, geen kassaverkoop,
@@ -245,7 +289,7 @@ serve(async () => {
         }
         const blocks = cards.map(({ name, visits }) => {
           const inCycle = visits % need; // 0 = zojuist vol
-          const bij = name ? (lang === "nl" ? ` bij ${name}` : lang === "es" ? ` con ${name}` : ` with ${name}`) : "";
+          const bij = name ? (lang === "nl" ? ` bij ${esc(name)}` : lang === "es" ? ` con ${esc(name)}` : ` with ${esc(name)}`) : "";
           const line = inCycle === 0
             ? (lang === "nl" ? `Je stempelkaart${bij} is vol — je code voor ${pct}% korting staat in je mail.` : lang === "es" ? `Tu tarjeta de fidelidad${bij} está completa: tu código de ${pct}% de descuento está en tu correo.` : `Your loyalty card${bij} is full — your ${pct}% code is in your inbox.`)
             : (lang === "nl" ? `Stempelkaart${bij}: ${inCycle} van ${need} bezoeken — nog ${need - inCycle} tot ${pct}% korting.` : lang === "es" ? `Tarjeta de fidelidad${bij}: ${inCycle} de ${need} visitas — faltan ${need - inCycle} para ${pct}% de descuento.` : `Loyalty card${bij}: ${inCycle} of ${need} visits — ${need - inCycle} more to ${pct}% off.`);
@@ -272,20 +316,20 @@ serve(async () => {
                   <div style="font-size: 24px; font-weight: 300; letter-spacing: 0.18em; color: ${accent};">vellu</div>
                 </div>
 
-                <p style="font-size: 16px; margin-bottom: 8px;">${t.hi(appt.client_name?.split(" ")[0] || "")}</p>
+                <p style="font-size: 16px; margin-bottom: 8px;">${t.hi(esc(appt.client_name?.split(" ")[0] || ""))}</p>
 
-                <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.intro(salonName)}</p>
+                <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.intro(eSalon)}</p>
 
                 <div style="background: #f8f7f5; border-radius: 12px; padding: 16px; margin: 16px 0;">
-                  <div style="font-weight: 500;">${appt.service_name || ""}</div>
-                  <div style="font-size: 13px; color: #888; margin-top: 4px;">${appt.date} ${t.at} ${appt.time || ""}</div>
+                  <div style="font-weight: 500;">${esc(appt.service_name || "")}</div>
+                  <div style="font-size: 13px; color: #888; margin-top: 4px;">${esc(appt.date)} ${t.at} ${esc(appt.time || "")}</div>
                 </div>
 
                 ${loyaltyBlock}
                 ${reviewBlock}
                 ${googleBlock}
                 <div style="text-align: center; margin: 16px 0;">
-                  <a href="${rebookUrl}" style="display: inline-block; border: 1px solid ${accent}; color: ${accent}; padding: 12px 28px; border-radius: 100px; text-decoration: none; font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;">
+                  <a href="${esc(rebookUrl)}" style="display: inline-block; border: 1px solid ${accent}; color: ${accent}; padding: 12px 28px; border-radius: 100px; text-decoration: none; font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;">
                     ${t.rebook}
                   </a>
                 </div>
@@ -293,7 +337,7 @@ serve(async () => {
                 <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
 
                 <p style="font-size: 11px; color: #bbb; text-align: center;">
-                  ${salonName} via Vellu · <a href="https://vellu.cc" style="color: ${accent}; text-decoration: none;">vellu.cc</a>
+                  ${eSalon} via Vellu · <a href="https://vellu.cc" style="color: ${accent}; text-decoration: none;">vellu.cc</a>
                 </p>
               </div>
             `,
@@ -308,9 +352,14 @@ serve(async () => {
           sent++;
         } else {
           console.error("Resend error:", await res.text());
+          failed++;
+          // Claim teruggeven: de volgende run (binnen GRACE_DAYS) probeert opnieuw.
+          await supabase.from("appointments").update({ followup_sent: false }).eq("id", appt.id);
         }
       } catch (emailError) {
         console.error("Email send error:", emailError);
+        failed++;
+        await supabase.from("appointments").update({ followup_sent: false }).eq("id", appt.id);
       }
     }
 
@@ -325,9 +374,17 @@ serve(async () => {
       if (!r.ok) console.error("loyalty-notify sweep:", r.status, await r.text().catch(() => ""));
     } catch (e) { console.error("loyalty-notify sweep failed:", e); }
 
-    await recordHealth("success", Date.now() - t0, sent, null);
+    // Alles mislukt = 'error' (cron-watchdog mailt), een deel = 'degraded'
+    // (E2-09). Tot 05-10-2026 altijd 'success', ook als Resend alles weigerde.
+    const attempts = sent + failed;
+    await recordHealth(
+      attempts > 0 && failed === attempts ? "error" : failed > 0 ? "degraded" : "success",
+      Date.now() - t0,
+      sent,
+      failed > 0 ? `${failed} van ${attempts} reviewmails mislukt` : null,
+    );
     return new Response(
-      JSON.stringify({ success: true, sent, skipped, window: `${fromStr}..${untilStr}`, total: appointments?.length || 0 }),
+      JSON.stringify({ success: true, sent, skipped, failed, window: `${fromStr}..${untilStr}`, total: appointments?.length || 0 }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {

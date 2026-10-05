@@ -73,15 +73,43 @@ function txt(lang: string, nl: string, en: string, es: string) {
   return lang === "en" ? en : lang === "es" ? es : nl;
 }
 
-// Taal per ontvanger. clients en manual_clients hebben geen lang-kolom
-// (gecheckt in information_schema op 2026-08-13), dus er valt per klant niets
-// te kiezen: het salon-land bepaalt de taal, zoals bij de owner-mails in
-// send-reminders/send-followups. NL/BE/AW/CW/BQ is de vaste DUTCH_COUNTRIES-
-// lijst; SX (Sint Maarten, ook Nederlands-Caribisch) doet hier mee. Krijgt de
-// klant ooit een eigen taalveld, dan hoort dat hier vóór het salon-land te gaan.
+// Taal per ontvanger. clients en manual_clients hebben geen lang-kolom, maar
+// appointments wel: de taal waarin de klant boekte. Sinds 05-10-2026 (E2-06)
+// krijgt de jarige de taal van haar LAATSTE afspraak bij deze salon (met een
+// taal); pas zonder zo'n afspraak beslist het salon-land, zoals bij de
+// owner-mails in send-reminders/send-followups. Daarvoor kreeg elke klant van
+// een salon op Bonaire Nederlands, terwijl bij Eydy driekwart in het Engels boekt.
+// NL/BE/AW/CW/BQ is de vaste DUTCH_COUNTRIES-lijst; SX doet hier mee.
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 function langFor(countryCode: unknown): string {
   return DUTCH_COUNTRIES.has(String(countryCode || "NL").toUpperCase()) ? "nl" : "en";
+}
+
+// Elke run landt in cron_health; cron-watchdog bewaakt 'send-birthday-emails'
+// sinds 05-10-2026 (E2-09). Daarvoor schreef deze functie niets en viel een
+// stilstand niemand op.
+async function recordHealth(status: string, ms: number, processed: number, err: unknown) {
+  try {
+    await supabase.from("cron_health").insert({
+      job_name: "send-birthday-emails",
+      status, duration_ms: ms, items_processed: processed,
+      error_message: err ? String(err).slice(0, 500) : null,
+    });
+  } catch { /* monitoring mag de job nooit laten vallen */ }
+}
+
+// Alle rijen, niet de eerste 1000 (PostgREST-limiet, E2-12): pagina voor pagina
+// met een vaste volgorde, zoals fetchAllRows in de app. build() levert elke
+// keer een NIEUWE query met .order("id").
+async function fetchAll(build: () => any, pageSize = 1000): Promise<{ data: any[]; error: any }> {
+  const out: any[] = [];
+  for (let page = 0; page < 200; page++) {
+    const { data, error } = await build().range(page * pageSize, page * pageSize + pageSize - 1);
+    if (error) return { data: out, error };
+    out.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return { data: out, error: null };
 }
 
 // Geen Math.random(): hier hangt een korting aan, dus dezelfde crypto-bron als
@@ -189,11 +217,16 @@ async function reserveCode(
   // de geldigheid oprekken tot het eind van deze maand. limit(1) in plaats van
   // maybeSingle(): een afgebroken run uit het verleden kan meer dan één rij
   // hebben achtergelaten en daar mag de mail van vandaag niet op stuklopen.
+  // Alleen een ONGEBRUIKTE VERJAARDAGScode (O1-08): zonder kind-filter kon
+  // hier een stempelkaartcode van dezelfde klant worden hergebruikt (en ingekort
+  // tot het eind van de maand), en zonder used_at-filter een al ingewisselde code.
   const { data: mine } = await supabase
     .from("birthday_discount_codes")
     .select("id, code, discount_pct")
     .eq("owner_id", ownerId)
     .eq("client_email", email)
+    .eq("kind", "birthday")
+    .is("used_at", null)
     .order("expires_on", { ascending: false })
     .limit(1);
   const existing = (mine || [])[0];
@@ -318,10 +351,16 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
   }
 
+  const t0 = Date.now();
   const today = new Date();
   const mm = String(today.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(today.getUTCDate()).padStart(2, "0");
   const sentOn = today.toISOString().slice(0, 10);
+  // 29 februari bestaat drie van de vier jaar niet; wie dan jarig is, krijgt de
+  // mail op 28 februari (E2-20). Daarvoor kreeg zo iemand drie jaar lang niets.
+  const yr = today.getUTCFullYear();
+  const isLeap = (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0;
+  const alsoFeb29 = !isLeap && mm === "02" && dd === "28";
 
   // Eerst opruimen, dan pas versturen — en bewust vóór (en buiten) de gefilterde
   // salon-query hieronder, zodat ook salons die de verjaardagsmail hebben
@@ -345,6 +384,7 @@ serve(async (req) => {
     .or("birthday_email_enabled.eq.true,birthday_notify_owner.eq.true");
   if (salonErr) {
     console.error("Load salons failed:", salonErr);
+    await recordHealth("error", Date.now() - t0, 0, `load salons: ${salonErr.message}`);
     return new Response(JSON.stringify({ error: "db_error" }), { status: 500 });
   }
 
@@ -366,9 +406,8 @@ serve(async (req) => {
     const logo = safeImg(salon.logo_url);
     const replyTo = String(salon.salon_email || salon.email || "") || undefined;
     const slug = String(salon.slug || "");
-    // Zie langFor: zonder taalkolom op de klant geldt het salon-land voor
-    // iedere jarige van deze salon.
-    const lang = langFor(salon.country_code);
+    // Terugvaltaal (salon-land) voor jarigen zonder afspraak met een taal. Zie langFor.
+    const countryLang = langFor(salon.country_code);
 
     // Collect all birthday-matching client contacts this salon has ever seen.
     // Manual clients live under manual_clients; appointment-derived contacts
@@ -376,21 +415,53 @@ serve(async (req) => {
     // We just take the union and dedupe by email.
 
     // Manual clients: filter server-side using extract() to keep the payload small.
-    const { data: manuals } = await supabase
+    // Alle pagina's (E2-12), niet alleen de eerste 1000.
+    const { data: manuals, error: manErr } = await fetchAll(() => supabase
       .from("manual_clients")
-      .select("email, name, birthday")
+      .select("id, email, name, birthday")
       .eq("owner_id", salon.id)
       .eq("hidden", false)
       .not("email", "is", null)
-      .not("birthday", "is", null);
+      .not("birthday", "is", null)
+      .order("id"));
 
     // Appointment-derived: appointments hold a client_email + client_name and
     // a client_id linking to public.clients where we now store birthday too.
-    const { data: apptRows } = await supabase
+    // Ook hier alle pagina's; date/time/lang erbij voor de taal van de klant.
+    const { data: apptRows, error: apptErr } = await fetchAll(() => supabase
       .from("appointments")
-      .select("client_email, client_name, clients(first_name, last_name, birthday)")
+      .select("id, client_email, client_name, date, time, lang, clients(first_name, last_name, birthday)")
       .eq("owner_id", salon.id)
-      .not("client_email", "is", null);
+      .not("client_email", "is", null)
+      .order("id"));
+    if (manErr || apptErr) {
+      // Een halve lijst zou jarigen stil overslaan: tel het als fout en ga
+      // door met de volgende salon.
+      console.error("Load birthday contacts failed:", salon.id, manErr?.message || apptErr?.message);
+      totalErrors++;
+      continue;
+    }
+
+    // Taal van de klant: die van haar laatste afspraak bij deze salon die een
+    // taal heeft (E2-06).
+    const langByEmail: Record<string, { at: string; lang: string }> = {};
+    for (const a of apptRows) {
+      const l = String(a.lang || "").toLowerCase();
+      if (l !== "nl" && l !== "en" && l !== "es") continue;
+      const em = String(a.client_email || "").trim().toLowerCase();
+      if (!em) continue;
+      const at = `${a.date || ""} ${String(a.time || "").slice(0, 5)}`;
+      if (!langByEmail[em] || at > langByEmail[em].at) langByEmail[em] = { at, lang: l };
+    }
+
+    // De verjaardag die de salon ZELF in haar klantenlijst heeft staan
+    // (manual_clients) wint van de gedeelde clients-rij (O2-10). Heeft een
+    // klant hier een eigen verjaardag, dan telt de clients-verjaardag niet mee —
+    // anders stuurde een verbeterde datum in de klantkaart alsnog een mail op
+    // de oude, verkeerde dag.
+    const manualBdayEmails = new Set(
+      manuals.map((m: any) => String(m.email || "").trim().toLowerCase()).filter(Boolean),
+    );
 
     type Contact = { email: string; name: string; birthday: string };
     const byEmail: Record<string, Contact> = {};
@@ -402,13 +473,15 @@ serve(async (req) => {
       if (bstr.length < 10) return;
       const bmm = bstr.slice(5, 7);
       const bdd = bstr.slice(8, 10);
-      if (bmm !== mm || bdd !== dd) return;
+      const isToday = (bmm === mm && bdd === dd) || (alsoFeb29 && bmm === "02" && bdd === "29");
+      if (!isToday) return;
       if (!byEmail[em]) byEmail[em] = { email: em, name: name || "", birthday: bstr };
     };
-    for (const m of manuals || []) takeIfBdayToday(String(m.email), String(m.name || ""), m.birthday as string);
-    for (const a of apptRows || []) {
+    for (const m of manuals) takeIfBdayToday(String(m.email), String(m.name || ""), m.birthday as string);
+    for (const a of apptRows) {
       const cliRow = a as { client_email: string; client_name?: string; clients?: { first_name?: string; last_name?: string; birthday?: string } };
       const email = String(cliRow.client_email || "");
+      if (manualBdayEmails.has(email.trim().toLowerCase())) continue;
       const client = cliRow.clients;
       const fullName = cliRow.client_name || [client?.first_name, client?.last_name].filter(Boolean).join(" ");
       takeIfBdayToday(email, fullName, client?.birthday);
@@ -467,6 +540,7 @@ serve(async (req) => {
 
     for (const t of targets) {
       if (doneSet.has(t.email)) { totalSkipped++; continue; }
+      const lang = langByEmail[t.email]?.lang || countryLang;
       const firstName = String(t.name || "").split(/\s+/)[0] || "";
       // Eerst de code vastleggen, dan pas mailen: de mail moet exact de string
       // bevatten die in de database staat. Andersom kon de klant een code in
@@ -505,6 +579,15 @@ serve(async (req) => {
       }
     }
   }
+
+  // Alles mislukt = 'error' (cron-watchdog mailt), een deel = 'degraded'.
+  const attempts = totalSent + totalErrors;
+  await recordHealth(
+    attempts > 0 && totalErrors === attempts ? "error" : totalErrors > 0 ? "degraded" : "success",
+    Date.now() - t0,
+    totalSent,
+    totalErrors > 0 ? `${totalErrors} van ${attempts} verjaardagsmails mislukt` : null,
+  );
 
   return new Response(JSON.stringify({
     success: true,
