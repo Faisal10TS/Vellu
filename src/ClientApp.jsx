@@ -3469,7 +3469,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
           return (
             <div className="profile-team-modal-backdrop" data-team-modal role="dialog" aria-modal="true" aria-label={m.name} onClick={() => setTeamDetail(null)}>
               <div className="profile-team-modal" onClick={e => e.stopPropagation()}>
-                <button type="button" className="profile-team-modal-close" aria-label={t.close} onClick={() => setTeamDetail(null)}>&times;</button>
+                <button type="button" className="profile-team-modal-close" aria-label={t.close} onClick={() => setTeamDetail(null)}><NavIcon name="xmark" size={16} color="currentColor" /></button>
                 <div className="profile-team-card-top" style={{ paddingRight: 40 }}>
                   <TeamPhoto src={m.avatar_url} name={m.name} accent={accent} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -3548,7 +3548,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
   const payChoice = form.payment === "prepay" && !prepayOffered ? "on-arrival" : form.payment;
   const toConfirmStep = () => {
     if (form.payment === "prepay" && !prepayOffered) setForm(f => ({ ...f, payment: "on-arrival" }));
-    setStep(4);
+    goToStep(4);
   };
   // Bevestigen: is de 4-uursgrens intussen gepasseerd (pagina bleef open op
   // stap 4), dan terug naar stap 3 met uitleg in plaats van een serverfout.
@@ -3577,10 +3577,6 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); }
   };
-  // Eerste letter hoofdletter, de rest zoals de locale het schrijft ("dinsdag 6
-  // oktober" -> "Dinsdag 6 oktober"); CSS capitalize maakte er "6 Oktober" en
-  // "6 De Octubre" van.
-  const capFirst = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
   // Summary component
   const Summary = () => (
@@ -3691,8 +3687,10 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
     const openGoogleCal = () => window.open(getGoogleCalUrl({ title: calTitle, date, time, duration: getDuration(), description: calDetails, location: calLocation, tz: calTz }), "_blank");
     // RFC 5545: tekst escapen (\ ; , en regeleinden) en regels langer dan 75
     // octets vouwen (vervolgregel begint met een spatie). UID is vast per
-    // boeking (salon + moment + klant + behandelingen), zodat een tweede download
-    // dezelfde afspraak bijwerkt in plaats van hem dubbel te zetten.
+    // boeking: <afspraak-id>@vellu.cc (bookedAppointmentId, zoals de owner- en
+    // staff-export), zodat een tweede download dezelfde afspraak bijwerkt in
+    // plaats van hem dubbel te zetten. Zonder id (oude server-respons) een hash
+    // van salon + moment + klant + behandelingen.
     const icsText = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
     const icsFold = (line) => {
       const enc = new TextEncoder();
@@ -3708,6 +3706,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       return parts.join("\r\n ");
     };
     const icsUid = () => {
+      if (bookedAppointmentId) return `${bookedAppointmentId}@vellu.cc`;
       const key = `${String(form.email || "").trim().toLowerCase()}|${selectedServices.map(i => `${i.service.id}:${i.variant?.id || ""}:${i.staff?.id || ""}`).join(",")}`;
       let h = 0x811c9dc5; // FNV-1a, 32 bit
       for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
@@ -5093,7 +5092,7 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
                         // the customer can select it and join that day's waitlist.
                         const isFull = !isClosed && dayAvailability[ds] === "full";
                         return (
-                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} data-month={ds.slice(0, 7)} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
+                          <div key={i} className={`day-chip ${isSel ? "sel" : ""}`} data-month={ds.slice(0, 7)} role="button" tabIndex={isClosed ? -1 : 0} aria-label={`${DAY[d.getDay()]} ${d.getDate()}${isClosed ? (lang === "nl" ? " gesloten" : lang === "es" ? " cerrado" : " closed") : isFull ? (lang === "nl" ? " volgeboekt" : lang === "es" ? " completo" : " fully booked") : ""}`} aria-disabled={isClosed} onClick={() => { if (!isClosed) { setDate(ds); setTime(null); } }} onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isClosed) { e.preventDefault(); setDate(ds); setTime(null); } }} style={isClosed ? { opacity: 0.35, cursor: "not-allowed" } : isFull ? { opacity: 0.5 } : {}}>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : c.textLabel }}>{DAY[d.getDay()]}</span>
                             <span style={{ fontSize: 15, fontWeight: 600, color: isSel ? c.btnOnDark : c.text, marginTop: 2 }}>{d.getDate()}</span>
                             <span style={{ fontSize: 10, color: isSel ? c.btnOnDark : isFull ? c.danger : c.textMuted, fontWeight: isFull ? 700 : undefined }}>{isClosed ? (lang === "nl" ? "gesloten" : lang === "es" ? "cerrado" : "closed") : isFull ? (lang === "nl" ? "vol" : lang === "es" ? "completo" : "full") : MON[d.getMonth()]}</span>
